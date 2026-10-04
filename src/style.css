@@ -3,6 +3,7 @@
 :root { font-family: 'DM Sans', sans-serif; color: #e9e7de; background: #090d13; font-synthesis: none; --muted: #879097; --orange: #f79568; --line: #ffffff20; }
 * { box-sizing: border-box; }
 body { margin: 0; overflow: hidden; }
+body::before { content: ''; position: fixed; inset: 0; pointer-events: none; z-index: 1; background: linear-gradient(90deg, #080c13c9, transparent 28%, transparent 78%, #080c1355), linear-gradient(0deg, #080c13 0%, #080c1380 18%, transparent 40%); }
 canvas { position: fixed; inset: 0; width: 100%; height: 100%; }
 button, input { font: inherit; }
 button { cursor: pointer; color: inherit; }
@@ -46,6 +47,42 @@ header { top: 0; left: 0; right: 0; height: 88px; margin: 0 40px; border-bottom:
 .tiny-cross { color: #92a6b5; font-size: 19px; }
 .enter-play { left: 50%; bottom: 260px; transform: translateX(-50%); background: #eae5d8; border: none; color: #16191c; border-radius: 3px; padding: 17px 24px; font-size: 10px; font-weight: 700; letter-spacing: 1px; }
 .enter-play span { margin-left: 25px; }
+.enter-play:disabled { opacity: .5; cursor: wait; }
+.enter-play:hover:not(:disabled) { background: #f7a177; }
+.title-copy { display: none; position: fixed; z-index: 2; left: 65px; top: 23%; }
+.eyebrow { color: var(--orange); font-size: 9px; letter-spacing: 2.2px; }
+.title-copy h1 { font: 500 clamp(48px, 5.1vw, 82px)/1.06 'Space Grotesk', sans-serif; letter-spacing: -4px; margin: 27px 0 22px; }
+.title-copy h1 em { color: var(--orange); font-style: normal; }
+.title-copy p { font-size: 13px; line-height: 1.9; color: #acb6bc; }
+.title-quote { color: #667580; font-size: 8px; letter-spacing: 1.5px; margin-top: 24px; }
+.title-quote span { color: #a2afb8; margin-left: 6px; }
+#worlds { position: fixed; z-index: 2; right: 40px; top: 360px; width: 210px; }
+#worlds .section-label { font-size: 8px; }
+#worlds button { display: flex; width: 100%; align-items: center; gap: 12px; text-align: left; background: #0e151caa; border: 1px solid #ffffff13; border-radius: 4px; margin-top: 9px; padding: 14px; }
+#worlds button[aria-pressed=true] { background: #f795680a; border-color: #f7956855; }
+#worlds button:hover { border-color: #f79568; }
+.world-icon { color: #d7a489; font-size: 24px; }
+#worlds small { font-size: 7px; color: #8898a2; letter-spacing: .7px; }
+#worlds b { display: block; font-weight: 500; font-size: 12px; margin-top: 5px; }
+#worlds em { display: none; font-size: 10px; font-style: normal; color: #8c9ba5; margin-top: 6px; }
+.world-arrow { margin-left: auto; color: #a7826c; font-size: 13px; }
+.session-tools { position: fixed; z-index: 2; right: 40px; bottom: 98px; display: grid; justify-items: end; gap: 13px; }
+.session-tools button { border: 0; background: none; font-size: 13px; color: #c4a38a; padding: 2px; }
+.session-tools button span { color: #9ca9b1; font-size: 8px; letter-spacing: 1px; margin-left: 7px; }
+#fps { color: #657783; font-size: 8px; letter-spacing: 1px; }
+.title-screen .title-copy { display: block; }
+.title-screen #laws, .title-screen .score-panel, .title-screen .command-dock, .title-screen .session-tools, .title-screen .reticle { display: none; }
+.title-screen .enter-play { left: 65px; bottom: 27%; transform: none; }
+.title-screen #worlds { top: auto; bottom: 90px; left: 65px; right: 65px; width: auto; display: grid; grid-template-columns: repeat(3, 1fr); gap: 16px; }
+.title-screen #worlds .section-label { grid-column: 1 / -1; border: 0; padding: 0; }
+.title-screen #worlds button { margin-top: 0; padding: 20px 22px; }
+.title-screen #worlds b { font-size: 16px; }
+.title-screen #worlds em { display: block; }
+.title-screen #worlds .world-icon { font-size: 33px; margin-right: 12px; }
+.title-screen::before { background: linear-gradient(90deg, #080c13ef, #080c13a0 32%, transparent 65%), linear-gradient(0deg, #080c13 0%, transparent 55%); }
+.title-screen .planet-label { left: 73%; top: 34%; }
+.pointer-locked .planet-label { display: none; }
+.mobile-note { display: none; }
 footer { bottom: 0; left: 40px; right: 40px; height: 68px; border-top: 1px solid var(--line); display: flex; align-items: center; justify-content: space-between; color: #959fa6; font-size: 10px; letter-spacing: 0; }
 .controls { display: flex; gap: 24px; }
 kbd { font-family: inherit; font-size: 9px; border: 1px solid #ffffff26; padding: 4px 6px; border-radius: 3px; margin-right: 7px; color: #c4c9cb; }
@@ -89,5 +126,7 @@ input::placeholder { color: #687984; }
 .examples button span:last-child { margin-left: auto; }
 .dialog-footer { display: flex; justify-content: space-between; margin-top: 25px; padding-top: 22px; border-top: 1px solid var(--line); color: #6f838f; font-size: 8px; letter-spacing: 1px; }
 @media (max-height: 800px) { #laws { top: 165px; } .law { padding: 12px 0; } .law p { margin: 5px 0; font-size: 12px; } .command-dock { bottom: 88px; } }
+@media (max-height: 800px) { .title-copy { top: 170px; } .title-copy h1 { font-size: 53px; margin: 16px 0; } .title-quote { display: none; } .title-screen .enter-play { bottom: 220px; } .title-screen #worlds button { padding: 14px 20px; } #worlds { top: 310px; } }
 @media (max-width: 1000px) { .command-dock { width: min(540px, calc(100% - 40px)); } #laws { width: 205px; } .law { gap: 10px; } .law p { max-width: 165px; } }
 @media (max-width: 800px) { header { margin: 0 20px; } .edition, .header-right, .footer-note, .planet-label { display: none; } .topline { left: 20px; right: 20px; } #laws { left: 20px; width: 190px; } .score-panel { right: 20px; } footer { left: 20px; right: 20px; } .controls { gap: 10px; flex-wrap: wrap; } }
+@media (max-width: 700px) { .title-copy { left: 25px; top: 180px; } .title-copy h1 { font-size: 54px; } .title-screen #worlds { left: 25px; right: 25px; bottom: 90px; gap: 7px; } .title-screen #worlds button { padding: 12px; } .title-screen #worlds .world-icon, .title-screen #worlds em, .title-screen #worlds small, .world-arrow { display: none; } .title-screen #worlds b { font-size: 11px; line-height: 1.5; margin: 0; } .title-screen .enter-play { display: none; } .mobile-note { display: block; position: fixed; z-index: 2; left: 25px; bottom: 205px; font-size: 11px; line-height: 1.8; color: var(--orange); } .topline > span:last-child { display: none; } .title-copy p { font-size: 12px; } footer { height: 65px; } .controls span:nth-child(n+3) { display: none; } }

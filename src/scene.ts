@@ -9,6 +9,8 @@ export class ArenaView {
   meshes = new Map<number, THREE.Group>();
   trails = new Map<number, { line: THREE.Line; points: THREE.Vector3[] }>();
   droneGeometry = new THREE.OctahedronGeometry(0.45);
+  debrisGeometry = new THREE.IcosahedronGeometry(0.15);
+  debrisMaterial = new THREE.MeshStandardMaterial({ color: 0x95a8ae, roughness: 0.7 });
   shotGeometry = new THREE.SphereGeometry(0.08, 8, 6);
   droneMaterial = new THREE.MeshStandardMaterial({ color: 0xf69864, emissive: 0xff6834, emissiveIntensity: 0.8, metalness: 0.6, roughness: 0.3 });
   shotMaterial = new THREE.MeshBasicMaterial({ color: 0xc9f8ff });
@@ -16,6 +18,8 @@ export class ArenaView {
   ringGeometry = new THREE.TorusGeometry(0.64, 0.014, 4, 24);
   slowLight = new SlowLight();
   velocity = new THREE.Vector3();
+  weapon = new THREE.Group();
+  recoil = 0;
   frame = 0;
 
   constructor(container: HTMLElement) {
@@ -27,6 +31,13 @@ export class ArenaView {
     this.camera.position.set(0, 2.3, 19);
     this.camera.lookAt(0, 0, 0);
     this.camera.rotation.order = 'YXZ';
+    this.scene.add(this.camera);
+    const receiver = new THREE.Mesh(new THREE.BoxGeometry(0.16, 0.15, 0.4), new THREE.MeshStandardMaterial({ color: 0x28363e, roughness: 0.3, metalness: 0.8 }));
+    const barrel = new THREE.Mesh(new THREE.BoxGeometry(0.09, 0.075, 0.4), new THREE.MeshStandardMaterial({ color: 0x526978, metalness: 0.9, roughness: 0.3 }));
+    barrel.position.set(0, 0.055, -0.23);
+    const rail = new THREE.Mesh(new THREE.BoxGeometry(0.022, 0.015, 0.3), this.ringMaterial); rail.position.set(0, 0.09, -0.17);
+    this.weapon.add(receiver, barrel, rail); this.weapon.position.set(0.38, -0.31, -0.7);
+    this.weapon.visible = false; this.camera.add(this.weapon);
     this.scene.add(new THREE.AmbientLight(0x7394ae, 1.3));
     const sun = new THREE.DirectionalLight(0xbcdeff, 4);
     sun.position.set(-8, 12, 8);
@@ -81,6 +92,7 @@ export class ArenaView {
 
   render(sim: Simulation) {
     this.frame++;
+    this.recoil *= 0.8; this.weapon.position.z = -0.7 + this.recoil;
     const live = new Set(sim.entities.map(e => e.id));
     for (const [id, mesh] of this.meshes) if (!live.has(id)) {
       this.scene.remove(mesh); this.meshes.delete(id);
@@ -91,7 +103,7 @@ export class ArenaView {
       let mesh = this.meshes.get(entity.id);
       if (!mesh) {
         mesh = new THREE.Group();
-        mesh.add(new THREE.Mesh(entity.kind === 'drone' ? this.droneGeometry : this.shotGeometry, entity.kind === 'drone' ? this.droneMaterial : this.shotMaterial));
+        mesh.add(new THREE.Mesh(entity.kind === 'drone' ? this.droneGeometry : entity.kind === 'debris' ? this.debrisGeometry : this.shotGeometry, entity.kind === 'drone' ? this.droneMaterial : entity.kind === 'debris' ? this.debrisMaterial : this.shotMaterial));
         if (entity.kind === 'drone') {
           const ring = new THREE.Mesh(this.ringGeometry, this.ringMaterial); ring.rotation.x = Math.PI / 2; mesh.add(ring);
           const line = new THREE.Line(new THREE.BufferGeometry(), new THREE.LineBasicMaterial({ color: 0xf99966, transparent: true, opacity: 0.35 }));

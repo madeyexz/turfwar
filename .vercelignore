@@ -1,0 +1,6 @@
+.git
+.amp
+spacetimedb/node_modules
+spacetimedb/dist
+node_modules
+dist

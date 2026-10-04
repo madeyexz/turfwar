@@ -39,7 +39,7 @@ export class Simulation {
   constructor() {
     this.world.integrationParameters.numSolverIterations = 16;
     const floor = this.world.createRigidBody(RAPIER.RigidBodyDesc.fixed().setTranslation(0, -3.5, 0));
-    this.world.createCollider(RAPIER.ColliderDesc.cuboid(25, 0.25, 25), floor);
+    this.world.createCollider(RAPIER.ColliderDesc.cylinder(0.25, 24), floor);
     this.reset();
   }
 
@@ -68,6 +68,10 @@ export class Simulation {
       const tilt = 0.25;
       this.spawn('drone', { x: Math.cos(angle) * radius, y: Math.sin(angle) * radius * Math.sin(tilt), z: Math.sin(angle) * radius * Math.cos(tilt) },
         { x: -Math.sin(angle) * speed, y: Math.cos(angle) * speed * Math.sin(tilt), z: Math.cos(angle) * speed * Math.cos(tilt) });
+    }
+    for (let i = 0; i < 5; i++) {
+      const angle = i * Math.PI * 2 / 5;
+      this.spawn('debris', { x: Math.cos(angle) * 10, y: 0, z: Math.sin(angle) * 10 }, { x: -Math.sin(angle) * 2.8, y: 0, z: Math.cos(angle) * 2.8 });
     }
     this.score = 0;
     this.history.fill(undefined); this.historyHead = 0; this.historyLength = 0; this.rewindTicks = 0;
