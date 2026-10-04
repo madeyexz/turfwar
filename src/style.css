@@ -116,7 +116,7 @@ body.menu-open #hud, body.menu-open #hud * { visibility: hidden; }
 
 /* Laws */
 .laws { position: absolute; left: 22px; top: 222px; width: 232px; padding: 8px 10px; font-size: 12px; text-transform: none; letter-spacing: 0.01em; background: rgba(8, 16, 22, 0.45) !important; }
-.laws h4 { margin: 0 0 6px; font-size: 12px; letter-spacing: 0.2em; color: var(--accent); text-transform: uppercase; display: flex; justify-content: space-between; }
+.laws h4 { margin: 0 0 6px; font-size: 11px; letter-spacing: 0.14em; color: var(--accent); text-transform: uppercase; display: flex; justify-content: space-between; white-space: nowrap; }
 .law { display: grid; grid-template-columns: 18px 1fr; gap: 6px; padding: 4px 0; border-top: 1px solid rgba(255, 255, 255, 0.06); }
 .law .icon { color: var(--accent); font-size: 15px; }
 .law p { margin: 0; font-weight: 600; line-height: 1.15; }

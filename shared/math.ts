@@ -1,6 +1,9 @@
 // Small allocation-light vector helpers shared by the browser, tests and the SpacetimeDB module.
 export type Vec3 = { x: number; y: number; z: number };
 
+/** Deep copy for plain JSON data (structuredClone is not available in every runtime). */
+export const cloneData = <T>(value: T): T => JSON.parse(JSON.stringify(value)) as T;
+
 export const v3 = (x = 0, y = 0, z = 0): Vec3 => ({ x, y, z });
 export const clamp = (value: number, min: number, max: number) => Math.max(min, Math.min(max, value));
 export const lerp = (a: number, b: number, t: number) => a + (b - a) * t;

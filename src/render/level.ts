@@ -287,7 +287,7 @@ export class LevelView {
     ring.rotation.x = Math.PI / 2; ring.position.set(x, y + 0.2, z);
     this.group.add(ring);
     const beam = new THREE.Mesh(new THREE.CylinderGeometry(3.6, 3.6, 6, 48, 1, true), new THREE.MeshBasicMaterial({
-      color: color.clone().multiplyScalar(0.6), transparent: true, opacity: 0.12, side: THREE.DoubleSide, depthWrite: false, blending: THREE.AdditiveBlending,
+      color: color.clone().multiplyScalar(0.6), transparent: true, opacity: 0.12, side: THREE.FrontSide, depthWrite: false, blending: THREE.AdditiveBlending,
     }));
     beam.position.set(x, y + 3.2, z);
     this.group.add(beam);

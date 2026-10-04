@@ -10,17 +10,135 @@ import {
   type Infer as __Infer,
 } from "spacetimedb";
 
-export const PlayerState = __t.object("PlayerState", {
-  identity: __t.identity(),
-  lawsJson: __t.string(),
-  latestCommandJson: __t.string(),
-  historyJson: __t.string(),
-  commandCount: __t.u32(),
-  sessions: __t.u32(),
-  scoreReports: __t.u32(),
-  lastReportedScore: __t.u32(),
-  bestReportedScore: __t.u32(),
-  updatedAt: __t.timestamp(),
+export const Body = __t.object("Body", {
+  id: __t.u32(),
+  kind: __t.string(),
+  x: __t.f32(),
+  y: __t.f32(),
+  z: __t.f32(),
+  vx: __t.f32(),
+  vy: __t.f32(),
+  vz: __t.f32(),
+  age: __t.f32(),
+  owner: __t.i32(),
+  team: __t.i8(),
+  hp: __t.f32(),
+  timer: __t.f32(),
 });
-export type PlayerState = __Infer<typeof PlayerState>;
+export type Body = __Infer<typeof Body>;
+
+export const BotBrain = __t.object("BotBrain", {
+  id: __t.u32(),
+  json: __t.string(),
+});
+export type BotBrain = __Infer<typeof BotBrain>;
+
+export const History = __t.object("History", {
+  slot: __t.u32(),
+  json: __t.string(),
+});
+export type History = __Infer<typeof History>;
+
+export const Match = __t.object("Match", {
+  id: __t.u8(),
+  mapId: __t.string(),
+  phase: __t.string(),
+  phaseLeft: __t.f64(),
+  time: __t.f64(),
+  worldTime: __t.f64(),
+  tick: __t.u32(),
+  score0: __t.u32(),
+  score1: __t.u32(),
+  scoreTimer: __t.f64(),
+  lawsJson: __t.string(),
+  lawAuthor: __t.i32(),
+  lawText: __t.string(),
+  lawLeft: __t.f64(),
+  rewindLeft: __t.u32(),
+  nextId: __t.u32(),
+  droneTimer: __t.f64(),
+  winner: __t.i8(),
+  configJson: __t.string(),
+  historyHead: __t.u32(),
+  historyLength: __t.u32(),
+  lastTickMicros: __t.u64(),
+  humans: __t.u32(),
+});
+export type Match = __Infer<typeof Match>;
+
+export const MatchEvent = __t.object("MatchEvent", {
+  seq: __t.u32(),
+  json: __t.string(),
+});
+export type MatchEvent = __Infer<typeof MatchEvent>;
+
+export const Player = __t.object("Player", {
+  identity: __t.identity(),
+  soldierId: __t.u32(),
+  lastReportMicros: __t.u64(),
+});
+export type Player = __Infer<typeof Player>;
+
+export const Point = __t.object("Point", {
+  id: __t.string(),
+  progress: __t.f32(),
+  owner: __t.i8(),
+  contested: __t.bool(),
+  capturing: __t.i8(),
+});
+export type Point = __Infer<typeof Point>;
+
+export const Soldier = __t.object("Soldier", {
+  id: __t.u32(),
+  name: __t.string(),
+  team: __t.u8(),
+  bot: __t.bool(),
+  loadout: __t.string(),
+  x: __t.f32(),
+  y: __t.f32(),
+  z: __t.f32(),
+  vx: __t.f32(),
+  vy: __t.f32(),
+  vz: __t.f32(),
+  yaw: __t.f32(),
+  pitch: __t.f32(),
+  crouch: __t.f32(),
+  grounded: __t.bool(),
+  slideTime: __t.f32(),
+  slideCooldown: __t.f32(),
+  airTime: __t.f32(),
+  prevCrouch: __t.bool(),
+  prevJump: __t.bool(),
+  alive: __t.bool(),
+  health: __t.f32(),
+  shield: __t.f32(),
+  weapon: __t.u8(),
+  ammo0: __t.u16(),
+  ammo1: __t.u16(),
+  reloadLeft: __t.f32(),
+  fireCooldown: __t.f32(),
+  switchLeft: __t.f32(),
+  grenades: __t.u8(),
+  respawnLeft: __t.f32(),
+  protectLeft: __t.f32(),
+  sinceHit: __t.f32(),
+  lastAttacker: __t.i32(),
+  kills: __t.u32(),
+  deaths: __t.u32(),
+  score: __t.u32(),
+  captures: __t.u32(),
+  lawCooldown: __t.f32(),
+  sprint: __t.bool(),
+  ads: __t.bool(),
+  sinceShot: __t.f32(),
+  corrections: __t.u32(),
+  idle: __t.f32(),
+});
+export type Soldier = __Infer<typeof Soldier>;
+
+export const TickSchedule = __t.object("TickSchedule", {
+  scheduledId: __t.u64(),
+  scheduledAt: __t.scheduleAt(),
+});
+export type TickSchedule = __Infer<typeof TickSchedule>;
 

@@ -1,4 +1,5 @@
 import { defaultLaws } from '../laws';
+import { cloneData } from '../math';
 import { MapBuilder } from './builder';
 import type { MapDef } from './types';
 
@@ -12,7 +13,7 @@ export function cinderBasin(): MapDef {
     id: 'cinder', name: 'Cinder Basin', region: 'INDAR-CLASS DESERT / TECH OUTPOST',
     description: 'Three lanes, two bunkers, one reactor. Long sightlines over the ridge.',
     theme: 'desert', halfX: 86, halfZ: 58, seed: 7, roll: 1.2, ridge: 16,
-    laws: structuredClone(defaultLaws), sun: { x: -0.55, y: 0.62, z: 0.36 },
+    laws: cloneData(defaultLaws), sun: { x: -0.55, y: 0.62, z: 0.36 },
   });
 
   // ---- Terrain shaping (pads must exist before the heightfield is sampled) ----

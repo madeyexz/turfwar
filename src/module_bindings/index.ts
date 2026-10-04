@@ -34,23 +34,106 @@ import {
 } from "spacetimedb";
 
 // Import all reducer arg schemas
-import RecordLawReducer from "./record_law_reducer";
-import RecordScoreReducer from "./record_score_reducer";
+import ChooseLoadoutReducer from "./choose_loadout_reducer";
+import FireReducer from "./fire_reducer";
+import GrenadeReducer from "./grenade_reducer";
+import JoinReducer from "./join_reducer";
+import LeaveReducer from "./leave_reducer";
+import ReloadWeaponReducer from "./reload_weapon_reducer";
+import ReportReducer from "./report_reducer";
+import RewriteLawReducer from "./rewrite_law_reducer";
+import SwitchSlotReducer from "./switch_slot_reducer";
 
 // Import all procedure arg schemas
 
 // Import all table schema definitions
+import BodyRow from "./body_table";
+import MatchRow from "./match_table";
+import MatchEventRow from "./match_event_table";
+import PlayerRow from "./player_table";
+import PointRow from "./point_table";
+import SoldierRow from "./soldier_table";
 
 /** Type-only namespace exports for generated type groups. */
 
 /** The schema information for all tables in this module. This is defined the same was as the tables would have been defined in the server. */
 const tablesSchema = __schema({
+  body: __table({
+    name: 'body',
+    indexes: [
+      { accessor: 'id', name: 'body_id_idx_btree', algorithm: 'btree', columns: [
+        'id',
+      ] },
+    ],
+    constraints: [
+      { name: 'body_id_key', constraint: 'unique', columns: ['id'] },
+    ],
+  }, BodyRow),
+  match: __table({
+    name: 'match',
+    indexes: [
+      { accessor: 'id', name: 'match_id_idx_btree', algorithm: 'btree', columns: [
+        'id',
+      ] },
+    ],
+    constraints: [
+      { name: 'match_id_key', constraint: 'unique', columns: ['id'] },
+    ],
+  }, MatchRow),
+  matchEvent: __table({
+    name: 'match_event',
+    indexes: [
+    ],
+    constraints: [
+    ],
+    event: true,
+  }, MatchEventRow),
+  player: __table({
+    name: 'player',
+    indexes: [
+      { accessor: 'identity', name: 'player_identity_idx_btree', algorithm: 'btree', columns: [
+        'identity',
+      ] },
+    ],
+    constraints: [
+      { name: 'player_identity_key', constraint: 'unique', columns: ['identity'] },
+    ],
+  }, PlayerRow),
+  point: __table({
+    name: 'point',
+    indexes: [
+      { accessor: 'id', name: 'point_id_idx_btree', algorithm: 'btree', columns: [
+        'id',
+      ] },
+    ],
+    constraints: [
+      { name: 'point_id_key', constraint: 'unique', columns: ['id'] },
+    ],
+  }, PointRow),
+  soldier: __table({
+    name: 'soldier',
+    indexes: [
+      { accessor: 'id', name: 'soldier_id_idx_btree', algorithm: 'btree', columns: [
+        'id',
+      ] },
+    ],
+    constraints: [
+      { name: 'soldier_id_key', constraint: 'unique', columns: ['id'] },
+    ],
+  }, SoldierRow),
 });
 
 /** The schema information for all reducers in this module. This is defined the same way as the reducers would have been defined in the server, except the body of the reducer is omitted in code generation. */
 const reducersSchema = __reducers(
-  __reducerSchema("record_law", RecordLawReducer),
-  __reducerSchema("record_score", RecordScoreReducer),
+  __reducerSchema("choose_loadout", ChooseLoadoutReducer),
+  __reducerSchema("fire", FireReducer),
+  __reducerSchema("grenade", GrenadeReducer),
+  __reducerSchema("join", JoinReducer),
+  __reducerSchema("leave", LeaveReducer),
+  __reducerSchema("reload_weapon", ReloadWeaponReducer),
+  __reducerSchema("report", ReportReducer),
+  __reducerSchema("rewrite_law", RewriteLawReducer),
+  __reducerSchema("switch_slot", SwitchSlotReducer),
 );
 
 /** The schema information for all procedures in this module. This is defined the same way as the procedures would have been defined in the server. */

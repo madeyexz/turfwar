@@ -1,0 +1,14 @@
+services:
+  spacetime:
+    command: ./scripts/dev-spacetime.sh
+    port: 3000
+  game:
+    command: bun run dev --port "$PORT" --strictPort
+    env:
+      VITE_SPACETIMEDB_URI: same-origin
+      VITE_SPACETIMEDB_DATABASE: lawbreaker
+    agent: control
+    portal:
+      url: /
+      title: Lawbreaker
+      description: Live preview. Solo skirmish runs in the browser; Online joins the orb's SpacetimeDB match.

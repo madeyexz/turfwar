@@ -11,5 +11,5 @@ import {
 } from "spacetimedb";
 
 export default {
-  score: __t.f64(),
+  slot: __t.u8(),
 };

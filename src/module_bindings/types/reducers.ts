@@ -6,9 +6,23 @@
 import { type Infer as __Infer } from "spacetimedb";
 
 // Import all reducer arg schemas
-import RecordLawReducer from "../record_law_reducer";
-import RecordScoreReducer from "../record_score_reducer";
+import ChooseLoadoutReducer from "../choose_loadout_reducer";
+import FireReducer from "../fire_reducer";
+import GrenadeReducer from "../grenade_reducer";
+import JoinReducer from "../join_reducer";
+import LeaveReducer from "../leave_reducer";
+import ReloadWeaponReducer from "../reload_weapon_reducer";
+import ReportReducer from "../report_reducer";
+import RewriteLawReducer from "../rewrite_law_reducer";
+import SwitchSlotReducer from "../switch_slot_reducer";
 
-export type RecordLawParams = __Infer<typeof RecordLawReducer>;
-export type RecordScoreParams = __Infer<typeof RecordScoreReducer>;
+export type ChooseLoadoutParams = __Infer<typeof ChooseLoadoutReducer>;
+export type FireParams = __Infer<typeof FireReducer>;
+export type GrenadeParams = __Infer<typeof GrenadeReducer>;
+export type JoinParams = __Infer<typeof JoinReducer>;
+export type LeaveParams = __Infer<typeof LeaveReducer>;
+export type ReloadWeaponParams = __Infer<typeof ReloadWeaponReducer>;
+export type ReportParams = __Infer<typeof ReportReducer>;
+export type RewriteLawParams = __Infer<typeof RewriteLawReducer>;
+export type SwitchSlotParams = __Infer<typeof SwitchSlotReducer>;
 

@@ -11,5 +11,10 @@ import {
 } from "spacetimedb";
 
 export default {
-  commandJson: __t.string(),
+  ox: __t.f32(),
+  oy: __t.f32(),
+  oz: __t.f32(),
+  dx: __t.f32(),
+  dy: __t.f32(),
+  dz: __t.f32(),
 };

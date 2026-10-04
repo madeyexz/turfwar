@@ -1,7 +1,7 @@
 import { chestPoint, hitShape } from '../hitbox';
 import { parseLawCommand, type LawCommand, type Laws } from '../laws';
 import { loadMap, loadNav } from '../maps/index';
-import { clamp, dist3, normalize3, segmentPointDistance, type Vec3 } from '../math';
+import { clamp, cloneData, dist3, normalize3, segmentPointDistance, type Vec3 } from '../math';
 import { MOVE, createMoveState } from '../movement';
 import { HEALTH, LOADOUTS, WEAPONS, type LoadoutId } from '../weapons';
 import { BODY_RADIUS, History, PHYSICS_STEP, circularSpeed, stepBodies, timeFactor, type Body } from '../world';
@@ -30,7 +30,7 @@ export function createMatch(mapId: string, config: MatchConfig, random: () => nu
   const { def } = loadMap(mapId);
   const state: MatchState = {
     mapId, phase: 'warmup', phaseLeft: config.warmup, time: 0, worldTime: 0, tick: 0, scores: [0, 0], scoreTimer: 0,
-    laws: structuredClone(def.laws), lawAuthor: -1, lawText: '', lawLeft: -1, rewindLeft: 0,
+    laws: cloneData(def.laws), lawAuthor: -1, lawText: '', lawLeft: -1, rewindLeft: 0,
     soldiers: [], points: def.points.map(p => ({ id: p.id, progress: 0, owner: -1, contested: false, capturing: -1 })),
     bodies: [], nextId: 1, droneTimer: 0, winner: -1, config,
   };
@@ -248,7 +248,7 @@ export function describeGravity(g: Laws['gravity']) {
 export function resetMatch(state: MatchState, ctx: SimContext) {
   state.phase = 'warmup'; state.phaseLeft = state.config.warmup; state.scores = [0, 0]; state.scoreTimer = 0;
   state.time = 0; state.worldTime = 0; state.winner = -1; state.rewindLeft = 0;
-  state.laws = structuredClone(ctx.map.laws); state.lawAuthor = -1; state.lawText = ''; state.lawLeft = -1;
+  state.laws = cloneData(ctx.map.laws); state.lawAuthor = -1; state.lawText = ''; state.lawLeft = -1;
   state.points = ctx.map.points.map(p => ({ id: p.id, progress: 0, owner: -1, contested: false, capturing: -1 }));
   state.bodies = [];
   ctx.history.clear();
@@ -288,7 +288,7 @@ export function tickMatch(state: MatchState, ctx: SimContext, dt: number) {
   if (state.lawLeft > 0) {
     state.lawLeft -= dt;
     if (state.lawLeft <= 0) {
-      state.lawLeft = -1; state.laws = { ...structuredClone(ctx.map.laws), rewind: state.laws.rewind }; state.lawAuthor = -1; state.lawText = '';
+      state.lawLeft = -1; state.laws = { ...cloneData(ctx.map.laws), rewind: state.laws.rewind }; state.lawAuthor = -1; state.lawText = '';
       ctx.emit({ type: 'lawRevert' });
     }
   }
