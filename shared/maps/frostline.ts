@@ -108,6 +108,15 @@ export function frostlineReach(): MapDef {
     b.box(-27, b.ground(-27, -10), -10, 0.8, 2.6, 5, 'wall');
     b.solidProp('Prop_Crate_Tarp', -20, 'ground', -18, 0.7, 1.4, 1.05, 1.4);
     b.box(-50, b.ground(-50, -12), -12, 3, 2, 3, 'rock');
+
+    // ---- Cover pass: break up the open snowfields on every approach ----
+    b.box(-52, b.ground(-52, -20), -20, 3.2, 1.8, 2.4, 'rock');                 // spawn → trench
+    b.crystal(-45, -27, 0.9, 1.7);
+    b.solidProp('Prop_Crate_Tarp_Large', -40, 'ground', -3, 0.3, 2.2, 1.6, 2.2); // spawn → courtyard lane
+    b.box(-10, b.ground(-10, -22), -22, 0.8, 1.25, 4.2, 'concrete');             // trench → courtyard
+    b.solidProp('Prop_Crate_Large', -3.5, 'ground', -24.5, 0.2, 1.9, 1.3, 1.9);
+    b.box(-46, b.ground(-46, 29), 29, 2.6, 1.6, 2.2, 'rock');                    // tower A → ridge
+    b.box(-34, b.ground(-34, 27), 27, 3.6, 1.25, 0.8, 'concrete');
   });
   return b.build();
 }
