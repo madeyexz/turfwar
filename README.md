@@ -136,7 +136,7 @@ Development pages (dev server only): `/dev/level.html?map=verdant` (battlefield 
 
 Production: https://lawbreaker.vercel.app. The private GitHub repository
 `madeyexz/lawbreaker` is connected to Vercel project `madeyexzs-projects/lawbreaker`, with
-`rebuild-preview` as its production branch. Maincloud database: `3d-game-c4lhd`
+`main` as its shared development and production branch. Maincloud database: `3d-game-c4lhd`
 (dashboard: https://spacetimedb.com/3d-game-c4lhd).
 
 Vercel production build variables are `VITE_SPACETIMEDB_URI=wss://maincloud.spacetimedb.com`
@@ -154,7 +154,7 @@ spacetime publish -s maincloud -p spacetimedb --delete-data=never --yes=remote,s
 Stop if schema changes require deletion; never use the local development script for cloud
 publication. On an existing empty starter database, the first valid join initializes the match
 atomically; subsequent joins preserve its state. Publish the compatible module before pushing
-the matching commit to `rebuild-preview`, which triggers Vercel's GitHub deployment.
+the matching commit to `main`, which triggers Vercel's GitHub deployment.
 Verify the production URL and two separate Online clients after each release.
 
 ## Assets and licenses

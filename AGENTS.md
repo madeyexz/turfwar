@@ -91,12 +91,12 @@ spacetime generate --lang typescript --out-dir src/module_bindings --module-path
 ## Git, environments, and release safety
 
 - Source of truth: `https://github.com/madeyexz/lawbreaker` (private).
-- Shared/default and Vercel production branch: **`rebuild-preview`**, not `main`.
+- Shared development/default and Vercel production branch: **`main`**.
 - GitHub-backed Amp project: `https://ampcode.com/@ianhsiao/lawbreaker`.
 - Mac development checkout: `/Users/ianhsiao/Developer/lawbreaker-release`.
 - Mac and orbs are separate clones. Check `git status`, fetch/pull before work, and
   preserve uncommitted changes. Files are not automatically mirrored between machines.
-- Pushing `rebuild-preview` triggers Vercel production deployment. Do not push or
+- Pushing `main` triggers Vercel production deployment. Do not push or
   publish merely to test; obtain authorization for releases and shared-state changes.
 - Frontend: `https://lawbreaker.vercel.app`.
 - Maincloud database: **`3d-game-c4lhd`**, URI `wss://maincloud.spacetimedb.com`.
