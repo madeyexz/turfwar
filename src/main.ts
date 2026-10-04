@@ -1,5 +1,5 @@
 import * as THREE from 'three';
-import { initPhysics, Simulation, STEP } from './physics';
+import { initPhysics, Simulation, STEP, timeFactor } from './physics';
 import { ArenaView } from './scene';
 import { HUD } from './hud';
 import { parseLawCommand } from '../shared/laws';
@@ -9,7 +9,7 @@ import './style.css';
 const app = document.querySelector<HTMLDivElement>('#app')!;
 app.innerHTML = `
   <header><a class="brand" href="/" aria-label="Lawbreaker home"><span class="brand-icon">◉</span> LAWBREAKER<span class="edition">EXPERIMENT 001</span></a><div class="header-right"><span class="status-dot"></span> PHYSICS PLAYGROUND <span class="separator">/</span> <span id="backend-status">LOCAL SESSION</span></div></header>
-  <div class="topline"><span>OBSERVATORY <b>01</b> <span class="muted">/ THE NEWTONIAN WORLD</span></span><span><i class="live-dot"></i> SIMULATION LIVE</span></div>
+  <div class="topline"><span>OBSERVATORY <b>01</b> <span class="muted">/ THE NEWTONIAN WORLD</span></span><span><i class="live-dot"></i> <span id="simulation-state">SIMULATION LIVE</span></span></div>
   <aside id="laws"><div class="section-label">THE LAWS OF THIS WORLD <span>↗</span></div><div class="law"><span class="law-icon">◎</span><div><small>01 / GRAVITY</small><p id="gravity-label">Gravity follows the inverse square of distance.</p><code id="gravity-value">F ∝ 1/r²</code></div></div></aside>
   <div class="reticle"><span></span><span></span></div>
   <div class="planet-label"><span class="tiny-cross">+</span><div>KEPLER–01<small>CENTRAL MASS / 80 μ</small></div></div>
@@ -30,7 +30,7 @@ async function boot() {
       case 'gravity': sim.laws.gravity = command.gravity; break;
       case 'time': sim.laws.time = command.time; break;
       case 'lightSpeed': sim.laws.lightSpeed = command.lightSpeed; break;
-      case 'rewind': sim.laws.rewind = command.rewind; break;
+      case 'rewind': sim.laws.rewind = command.rewind; sim.startRewind(command.rewind.seconds); break;
     }
     hud.update(sim.laws); hud.toast(`${source} / ${command.kind} law changed`);
     void recordLaw(command);
@@ -62,6 +62,7 @@ async function boot() {
   window.addEventListener('blur', () => keys.clear());
   view.renderer.domElement.addEventListener('click', () => {
     if (!document.pointerLockElement) { start(); return; }
+    if (sim.rewindTicks > 0 || sim.entities.filter(e => e.kind === 'shot').length >= 48) return;
     const direction = view.camera.getWorldDirection(new THREE.Vector3());
     const position = player.clone().addScaledVector(direction, 0.6);
     sim.spawn('shot', position, direction.multiplyScalar(24));
@@ -70,6 +71,7 @@ async function boot() {
   let previous = performance.now(), accumulator = 0;
   function frame(now: number) {
     const dt = Math.min((now - previous) / 1000, 0.05); previous = now;
+    const oldPosition = player.clone();
     if (playing && document.pointerLockElement) {
       const forward = Number(keys.has('KeyW')) - Number(keys.has('KeyS'));
       const right = Number(keys.has('KeyD')) - Number(keys.has('KeyA'));
@@ -79,10 +81,13 @@ async function boot() {
       if (keys.has('Space') && player.y <= 2.3) jumpVelocity = 5;
       jumpVelocity -= 12 * dt; player.y = Math.max(2.3, player.y + jumpVelocity * dt);
     }
+    const playerSpeed = dt > 0 ? player.distanceTo(oldPosition) / dt : 0;
     view.camera.position.copy(player); view.camera.rotation.set(pitch, yaw, 0);
     accumulator += dt;
-    while (accumulator >= STEP) { sim.step(); accumulator -= STEP; }
+    while (accumulator >= STEP) { sim.tick(playerSpeed); accumulator -= STEP; }
     view.render(sim);
+    document.querySelector('#simulation-state')!.textContent = sim.rewindTicks > 0 ? `REWINDING / ${(sim.rewindTicks * STEP).toFixed(1)}s` : timeFactor(sim.laws.time, playerSpeed) === 0 ? 'TIME FROZEN / MOVE TO ADVANCE' : 'SIMULATION LIVE';
+    document.body.classList.toggle('rewinding', sim.rewindTicks > 0);
     document.querySelector('#score')!.textContent = String(sim.score).padStart(4, '0');
     document.querySelector('#hits')!.textContent = String(sim.score / 100).padStart(2, '0');
     requestAnimationFrame(frame);

@@ -5,6 +5,12 @@ export const STEP = 1 / 120;
 export type Vec = { x: number; y: number; z: number };
 export type BodyKind = 'drone' | 'shot' | 'debris';
 export interface Entity { id: number; kind: BodyKind; body: RAPIER.RigidBody; age: number }
+interface Snapshot { score: number; bodies: { id: number; kind: BodyKind; age: number; position: Vec; velocity: Vec }[] }
+const HISTORY_CAPACITY = 1201;
+
+export function timeFactor(time: Laws['time'], playerSpeed: number) {
+  return time.scale * (time.mode === 'playerMotion' ? Math.min(1, Math.max(0, playerSpeed) / 6) : 1);
+}
 
 export function gravityAt(p: Vec, gravity: Laws['gravity']): Vec {
   if (gravity.mode === 'uniform') {
@@ -24,6 +30,10 @@ export class Simulation {
   entities: Entity[] = [];
   nextId = 0;
   score = 0;
+  history: (Snapshot | undefined)[] = new Array(HISTORY_CAPACITY);
+  historyHead = 0;
+  historyLength = 0;
+  rewindTicks = 0;
   onHit: (() => void) | undefined;
 
   constructor() {
@@ -60,6 +70,46 @@ export class Simulation {
         { x: -Math.sin(angle) * speed, y: Math.cos(angle) * speed * Math.sin(tilt), z: Math.cos(angle) * speed * Math.cos(tilt) });
     }
     this.score = 0;
+    this.history.fill(undefined); this.historyHead = 0; this.historyLength = 0; this.rewindTicks = 0;
+    this.save();
+  }
+
+  save() {
+    this.history[this.historyHead] = {
+      score: this.score,
+      bodies: this.entities.map(e => ({ id: e.id, kind: e.kind, age: e.age, position: { ...e.body.translation() }, velocity: { ...e.body.linvel() } })),
+    };
+    this.historyHead = (this.historyHead + 1) % HISTORY_CAPACITY;
+    this.historyLength = Math.min(HISTORY_CAPACITY, this.historyLength + 1);
+  }
+
+  startRewind(seconds: number) {
+    this.rewindTicks = Math.min(Math.round(Math.max(0, seconds) / STEP), this.historyLength - 1);
+    return this.rewindTicks * STEP;
+  }
+
+  tick(playerSpeed: number) {
+    if (this.rewindTicks > 0) {
+      this.historyHead = (this.historyHead - 1 + HISTORY_CAPACITY) % HISTORY_CAPACITY;
+      this.history[this.historyHead] = undefined;
+      this.historyLength--; this.rewindTicks--;
+      const snapshot = this.history[(this.historyHead - 1 + HISTORY_CAPACITY) % HISTORY_CAPACITY]!;
+      const ids = new Set(snapshot.bodies.map(b => b.id));
+      for (const entity of [...this.entities]) if (!ids.has(entity.id)) this.remove(entity);
+      for (const saved of snapshot.bodies) {
+        let entity = this.entities.find(e => e.id === saved.id);
+        if (!entity) { entity = this.spawn(saved.kind, saved.position, saved.velocity); entity.id = saved.id; }
+        entity.age = saved.age;
+        entity.body.setTranslation(saved.position, true);
+        entity.body.setLinvel(saved.velocity, true);
+        entity.body.resetForces(true);
+      }
+      this.score = snapshot.score;
+      return;
+    }
+    const dt = STEP * timeFactor(this.laws.time, playerSpeed);
+    if (dt > 0) this.step(dt);
+    this.save();
   }
 
   step(dt = STEP) {

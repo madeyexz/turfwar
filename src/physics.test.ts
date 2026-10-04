@@ -39,3 +39,39 @@ test('inverse-square ellipse closes after its Kepler period, inverse-cube escape
   expect(Math.abs(Math.atan2(escaped.z, escaped.x))).toBeGreaterThan(0.5);
   expect(Math.hypot(escaped.x, escaped.z)).toBeGreaterThan(25);
 });
+
+test('playerMotion freezes every body at rest, and half-speed movement advances half as far', () => {
+  const sim = new Simulation();
+  sim.laws.time.mode = 'playerMotion';
+  sim.laws.gravity.strength = 0;
+  for (const entity of [...sim.entities]) sim.remove(entity);
+  const body = sim.spawn('debris', { x: 0, y: 4, z: 0 }, { x: 2, y: 0, z: 0 }).body;
+  for (let i = 0; i < 240; i++) sim.tick(0);
+  expect(body.translation()).toEqual({ x: 0, y: 4, z: 0 });
+  for (let i = 0; i < 120; i++) sim.tick(3);
+  expect(body.translation().x).toBeCloseTo(1, 3);
+  sim.world.free();
+});
+
+test('rewind restores positions, velocities, destroyed bodies and score across ring wrap', () => {
+  const sim = new Simulation();
+  for (let i = 0; i < 1300; i++) sim.tick(6);
+  const recorded = sim.entities.map(e => ({ id: e.id, p: { ...e.body.translation() }, v: { ...e.body.linvel() } }));
+  sim.remove(sim.entities[2]); sim.score = 100;
+  sim.spawn('shot', { x: 20, y: 7, z: 13 }, { x: -1, y: 2, z: 3 });
+  for (let i = 0; i < 240; i++) sim.tick(6);
+  expect(sim.startRewind(2)).toBe(2);
+  for (let i = 0; i < 240; i++) sim.tick(0);
+  expect(sim.entities).toHaveLength(recorded.length);
+  expect(sim.score).toBe(0);
+  for (const expected of recorded) {
+    const body = sim.entities.find(e => e.id === expected.id)!.body;
+    expect(body.translation()).toEqual(expected.p);
+    expect(body.linvel()).toEqual(expected.v);
+  }
+  expect(sim.historyLength).toBe(961);
+  // Resuming creates a new branch rather than replaying the discarded future.
+  sim.tick(6);
+  expect(sim.entities.find(e => e.id === recorded[0].id)!.body.translation()).not.toEqual(recorded[0].p);
+  sim.world.free();
+});
