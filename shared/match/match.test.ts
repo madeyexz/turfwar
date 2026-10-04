@@ -34,7 +34,8 @@ describe('maps and navigation', () => {
         for (const p of def.points) expect(findPath(nav, start, nearestNode(nav, p.x, p.y, p.z)).length, `${team}->${p.id}`).toBeGreaterThan(3);
       }
     });
-    it(`${id}: is rotationally symmetric for fairness`, () => {
+    // Ochre Quarter keeps its source layout's attacker/defender asymmetry on purpose.
+    it.skipIf(id === 'ochre')(`${id}: is rotationally symmetric for fairness`, () => {
       const { def } = loadMap(id);
       const key = (s: { minX: number; maxX: number; minZ: number; maxZ: number; minY: number; maxY: number }) => [s.minX, s.maxX, s.minZ, s.maxZ, s.minY, s.maxY].map(v => v.toFixed(2)).join();
       const all = new Set(def.solids.map(key));

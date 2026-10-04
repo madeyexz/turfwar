@@ -31,6 +31,8 @@ export interface BuilderOptions {
   roll: number; ridge: number;
   laws: Laws;
   sun: { x: number; y: number; z: number };
+  /** Hand-authored base ground; replaces the mirrored noise and boundary ridges. */
+  ground?: (x: number, z: number) => number;
 }
 
 /**
@@ -81,7 +83,7 @@ export class MapBuilder {
     // Average with the 180°-rotated sample so both teams fight on identical ground.
     const noise = (fbm(x * 0.035, z * 0.035, o.seed) + fbm(-x * 0.035, -z * 0.035, o.seed)) / 2;
     const ridgeNoise = (fbm(x * 0.05, z * 0.05, o.seed + 9) + fbm(-x * 0.05, -z * 0.05, o.seed + 9)) / 2;
-    let h = noise * o.roll + edge * (o.ridge + ridgeNoise * o.ridge * 0.6);
+    let h = o.ground ? o.ground(x, z) : noise * o.roll + edge * (o.ridge + ridgeNoise * o.ridge * 0.6);
     for (const b of this.bumps) {
       const d = Math.hypot(x - b.x, z - b.z) / b.r;
       if (d < 1) h += b.h * (1 - smooth(d));
@@ -265,7 +267,7 @@ export type Side = 'n' | 's' | 'e' | 'w';
 
 function surfaceFor(style: BlockStyle): Surface {
   switch (style) {
-    case 'concrete': case 'pillar': return 'concrete';
+    case 'concrete': case 'pillar': case 'sandstone': return 'concrete';
     case 'rock': return 'rock';
     case 'glass': return 'glass';
     case 'shield': return 'energy';

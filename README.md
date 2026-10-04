@@ -2,7 +2,7 @@
 
 A browser-first, keyboard-and-mouse sci-fi infantry shooter in the spirit of PlanetSide-style base
 fights and fast browser FPS games — with one unfair advantage: you can **rewrite the laws of
-physics with a sentence**. Capture three objectives across three original battlefields, against
+physics with a sentence**. Capture three objectives across four original battlefields, against
 bots or real players through SpacetimeDB, and when the fight turns, bend gravity around the
 reactor, make time move only when you move, slow light to walking speed, or rewind the world
 while you stay free.
@@ -16,7 +16,7 @@ runner (`bun` / `bunx`, never npm/npx).
 | --- | --- |
 | Modes | **Solo skirmish** (6v6, bots fill both teams, three difficulties), **Online match** (SpacetimeDB-authoritative; humans replace bots; maps rotate between rounds), **Law Lab** (no bots, passive sentinels — a sandbox for experimenting with laws). |
 | Objective | Domination: capture A, B and C (8 s solo capture, faster with more teammates, frozen while contested). Owned points tick team score; kills add score; first to 200 or most after 10 min wins, then a new round starts. |
-| Battlefields | **Cinder Basin** (desert outpost: reactor plaza, comm bunkers, ridge watchtower, cargo yard), **Frostline Reach** (arctic relay: walled reactor courtyard with gates and wall-top catwalks, rooftop towers, frozen trench with a bridge, crystal ridge), **Verdant Divide** (jungle uplink: reactor plateau, clearing bunkers, creek bed, tree cover). All three lanes-and-flanks layouts are rotationally symmetric for fairness (tested), with team warpgate spawns protected by one-way energy shields. |
+| Battlefields | **Cinder Basin** (desert outpost: reactor plaza, comm bunkers, ridge watchtower, cargo yard), **Frostline Reach** (arctic relay: walled reactor courtyard with gates and wall-top catwalks, rooftop towers, frozen trench with a bridge, crystal ridge), **Verdant Divide** (jungle uplink: reactor plateau, clearing bunkers, creek bed, tree cover). **Ochre Quarter** (desert old town: an original homage to the classic two-site layout of CS:GO's Dust II — Long with its doors, corner and pit, Mid with the crate and doors, Catwalk up to Short, roofed Tunnels — built from our own geometry and CC0 assets). The first three lanes-and-flanks layouts are rotationally symmetric for fairness (tested); Ochre Quarter keeps its source's attacker/defender asymmetry on purpose (team 0 attacks from the south, A and C are the defenders' sites, B is Mid). Team spawns are protected by one-way energy shields. |
 | Gunplay | Hitscan weapons with fire rate, magazines, timed reloads, hip/ADS/moving/air spread, per-shot bloom, recoil climb with partial recovery, view punch, damage falloff and head/leg multipliers. Kits: **Assault** (VX-7 pulse carbine + P-12 sidearm) and **Recon** (L-90 scoped rail rifle + R-6 magnum). Grenades (G) are physical bodies that obey the laws. |
 | Movement | Shared deterministic controller: walk, sprint (with sprint-to-fire delay), crouch, slide (crouch while sprinting), jump with coyote time, step-up, ramps/stairs, team shields. |
 | Feel | First-person rigged arms (cut from the soldier rig) posed by IK onto CC0 weapon models; procedural sway, figure-eight bob, kick, sprint carry, ADS with red-dot reticle, scope overlay, reload choreography with a magazine in hand, equip and grenade throw; muzzle flash, tracers, impact sparks and dust, bullet marks, explosions; hit markers, headshot/kill confirms, damage-direction arcs, kill feed, procedural WebAudio gunshots, reloads, footsteps and cues; a looping 60-second menu theme sequenced from those same effects. |
@@ -237,7 +237,7 @@ shared/        Pure TypeScript shared by browser, tests and the SpacetimeDB modu
   collision.ts   AABB/ramp/heightfield world, raycasts, cylinder resolution
   movement.ts    Infantry controller        hitbox.ts  hit volumes      weapons.ts  tuning
   world.ts       Lawful bodies, gravity/time integration, rewind ring
-  maps/          Builder + Cinder Basin, Frostline Reach, Verdant Divide
+  maps/          Builder + Cinder Basin, Frostline Reach, Verdant Divide, Ochre Quarter
   match/         State, simulation tick, combat validation, bots, navigation
 src/           Browser client: game loop, prediction, rendering, view model, soldiers, HUD, audio, net
 spacetimedb/   SpacetimeDB module (tables, scheduled tick, validated reducers)

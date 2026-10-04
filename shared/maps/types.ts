@@ -13,6 +13,7 @@ export type BlockStyle =
   | 'floor'       // catwalk / roof slabs
   | 'container'   // cargo containers
   | 'rock'
+  | 'sandstone'   // plastered desert town masonry
   | 'pillar'
   | 'shield'      // team spawn shield (energy)
   | 'glass'
