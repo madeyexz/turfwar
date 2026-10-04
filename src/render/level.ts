@@ -334,7 +334,7 @@ export class LevelView {
         const crown = new THREE.IcosahedronGeometry((1.8 + r() * 1.2) * scale, 1);
         crown.scale(1.2, 0.65, 1.2);
         crown.translate(x + (r() - 0.5) * 2.6 * scale, y + height * (0.72 + r() * 0.2), z + (r() - 0.5) * 2.6 * scale);
-        this.add('leaves', colorize(crown.toNonIndexed(), greens[Math.floor(r() * greens.length)]));
+        this.add('leaves', colorize(nonIndexed(crown), greens[Math.floor(r() * greens.length)]));
       }
     } else {
       // Tall conifer: stacked tiers that taper upward.
@@ -344,7 +344,7 @@ export class LevelView {
         const cone = new THREE.ConeGeometry((2.6 - t * 1.9) * scale, (3.2 - t * 0.8) * scale, 8);
         cone.rotateY(r() * 3);
         cone.translate(x, y + height * (0.3 + t * 0.62), z);
-        this.add('leaves', colorize(cone.toNonIndexed(), greens[Math.floor(r() * greens.length)]));
+        this.add('leaves', colorize(nonIndexed(cone), greens[Math.floor(r() * greens.length)]));
       }
     }
   }
@@ -358,7 +358,7 @@ export class LevelView {
       shard.rotateZ((r() - 0.5) * 0.9); shard.rotateX((r() - 0.5) * 0.9);
       shard.rotateY(rotY + r() * 6);
       shard.translate(x + (r() - 0.5) * 1.2 * scale, y - 0.1, z + (r() - 0.5) * 1.2 * scale);
-      this.add('crystal', shard.toNonIndexed());
+      this.add('crystal', nonIndexed(shard));
     }
   }
 
@@ -437,7 +437,7 @@ function rockGeometry(seed: number, detail = 3) {
     v.y = Math.max(v.y * 0.85, -0.55);
     p.setXYZ(i, v.x, (v.y + 0.55) / 1.55, v.z);
   }
-  const ng = g.toNonIndexed();
+  const ng = nonIndexed(g);
   ng.computeVertexNormals();
   return ng;
 }
@@ -575,3 +575,6 @@ function bannerTexture(team: 0 | 1) {
   const tex = new THREE.CanvasTexture(canvas); tex.colorSpace = THREE.SRGBColorSpace;
   return tex;
 }
+
+/** Polyhedra are already non-indexed; only expand geometries that share vertices. */
+function nonIndexed(g: THREE.BufferGeometry) { return g.index ? g.toNonIndexed() : g; }
