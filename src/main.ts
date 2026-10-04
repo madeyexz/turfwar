@@ -1,4 +1,5 @@
 import * as THREE from 'three';
+import { inject } from '@vercel/analytics';
 import { loadMap, mapSummaries } from '../shared/maps/index';
 import type { Team } from '../shared/match/state';
 import { LOADOUTS, type LoadoutId } from '../shared/weapons';
@@ -15,6 +16,8 @@ import { THEMES } from './render/materials';
 import { QUALITY, Renderer } from './render/renderer';
 import { renderTheme, THEME_START } from './theme';
 import './style.css';
+
+inject();
 
 const app = document.querySelector<HTMLDivElement>('#app')!;
 const params = new URLSearchParams(location.search);

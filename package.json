@@ -13,6 +13,7 @@
     "typecheck:module": "bun run --cwd spacetimedb typecheck"
   },
   "dependencies": {
+    "@vercel/analytics": "^2.0.1",
     "spacetimedb": "2.10.2",
     "three": "^0.180.0",
     "zod": "^4.0.0"
