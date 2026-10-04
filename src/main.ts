@@ -7,7 +7,7 @@ const app = document.querySelector<HTMLDivElement>('#app')!;
 app.innerHTML = `
   <header><a class="brand" href="/" aria-label="Lawbreaker home"><span class="brand-icon">◉</span> LAWBREAKER<span class="edition">EXPERIMENT 001</span></a><div class="header-right"><span class="status-dot"></span> PHYSICS PLAYGROUND <span class="separator">/</span> <span id="backend-status">LOCAL SESSION</span></div></header>
   <div class="topline"><span>OBSERVATORY <b>01</b> <span class="muted">/ THE NEWTONIAN WORLD</span></span><span><i class="live-dot"></i> SIMULATION LIVE</span></div>
-  <aside id="laws"><div class="section-label">THE LAWS OF THIS WORLD <span>↗</span></div><div class="law"><span class="law-icon">↓</span><div><small>01 / GRAVITY</small><p id="gravity-label">Gravity pulls everything down.</p><code id="gravity-value">g = 1.5 m/s²</code></div></div></aside>
+  <aside id="laws"><div class="section-label">THE LAWS OF THIS WORLD <span>↗</span></div><div class="law"><span class="law-icon">◎</span><div><small>01 / GRAVITY</small><p id="gravity-label">Gravity follows the inverse square of distance.</p><code id="gravity-value">F ∝ 1/r²</code></div></div></aside>
   <div class="reticle"><span></span><span></span></div>
   <div class="planet-label"><span class="tiny-cross">+</span><div>KEPLER–01<small>CENTRAL MASS / 80 μ</small></div></div>
   <div class="score-panel"><small>TARGETS HIT</small><div><span id="hits">00</span><span class="score-slash">/</span><span id="target-count">08</span></div><p><span id="score">0000</span> <span class="muted">PTS</span></p></div>
