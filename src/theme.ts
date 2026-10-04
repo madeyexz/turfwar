@@ -45,7 +45,6 @@ const KIT = {
   ui: { seconds: 0.1, play: (s: Audio) => s.ui() },
   law: { seconds: 1, play: (s: Audio) => s.law() },
   rewind: { seconds: 1.4, play: (s: Audio) => s.rewind() },
-  wind: { seconds: 8, play: (s: Audio) => s.wind(8) },
 } satisfies Record<string, { seconds: number; play: (s: Audio) => void; pitch?: number }>;
 type Voice = keyof typeof KIT;
 
@@ -55,13 +54,14 @@ type Note = {
   hz?: number; pan?: number; wet?: number;
   /** Seconds into the recording to start from (skips a voice's lead-in). */
   offset?: number;
-  /** Cut after this many seconds, releasing over `fadeOut`. */
+  /** Cut after this many seconds with a short release. */
   length?: number;
-  fadeIn?: number; fadeOut?: number;
 };
 
 const hz = (midi: number) => 440 * 2 ** ((midi - 69) / 12);
 const at = (bar: number, beat = 0) => (bar * 4 + beat) * BEAT;
+/** Playback opens on the reload fill into the first drop; the quiet intro returns as the loop's breather. */
+export const THEME_START = at(3);
 
 /** Am – F – C – G, two bars each. Roots and triads as MIDI notes. */
 const CHORDS = [
@@ -93,16 +93,13 @@ function score() {
     const intro = bar < 4, groove = bar >= 4 && bar < 12, build = bar >= 12 && bar < 16;
     const theme = bar >= 16 && bar < 28, outro = bar >= 28;
 
-    // Wind bed, overlapping every four bars.
-    if (bar % 4 === 0) add('wind', at(bar), intro ? 7 : 4.5, { fadeIn: 0.5, fadeOut: 0.5, length: at(4) + 0.5 });
-
     // Objective-timer arpeggio: chord tones climbing in sixteenths.
-    const tickGain = intro ? 0.12 + bar * 0.05 : build ? 0.3 : outro ? 0.32 - (bar - 28) * 0.06 : 0.22;
+    const tickGain = intro ? 0.35 + bar * 0.06 : build ? 0.3 : outro ? 0.32 - (bar - 28) * 0.06 : 0.22;
     const arp = [triad[0], triad[1], triad[2], triad[1] + 12, triad[2], triad[1], triad[0] + 12, triad[2]];
     for (let i = 0; i < 16; i++) add('tick', at(bar, i / 4), tickGain * (i % 4 === 0 ? 1 : 0.7), { hz: hz(arp[i % 8] + 12), pan: i % 2 ? 0.35 : -0.35, wet: 0.35 });
 
-    // Chord bell on each change.
-    if (bar % 2 === 0) add('kill', at(bar), intro ? 0.6 : 0.45, { hz: hz(root + 24), offset: 0.05, wet: 0.7 });
+    // Chord bell on each change (every intro bar).
+    if (bar % 2 === 0 || intro) add('kill', at(bar), intro ? 0.6 : 0.45, { hz: hz(root + 24), offset: 0.05, wet: 0.7 });
 
     // Bass: hitmarker plucks on a syncopated root figure.
     if (groove || build || theme || bar === 28 || bar === 29) {
@@ -183,7 +180,7 @@ function mix(dry: Float32Array[], wet: Float32Array[], n: Note, buffer: AudioBuf
   const rate = n.hz && pitch ? n.hz / pitch : 1;
   const from = (n.offset ?? 0) * RATE, last = buffer.length - 1;
   const frames = Math.min(Math.floor((last - from) / rate), n.length ? Math.floor(n.length * RATE) : Infinity);
-  const first = Math.round(start * RATE), fadeIn = (n.fadeIn ?? 0) * RATE, fadeOut = n.length ? (n.fadeOut ?? 0.04) * RATE : 0;
+  const first = Math.round(start * RATE), release = n.length ? 0.04 * RATE : 0;
   const angle = ((n.pan ?? 0) + 1) * Math.PI / 4, sends = n.wet ?? 0;
   const channels = [buffer.getChannelData(0), buffer.getChannelData(1)];
   for (let c = 0; c < 2; c++) {
@@ -195,7 +192,7 @@ function mix(dry: Float32Array[], wet: Float32Array[], n: Note, buffer: AudioBuf
       if (at < 0 || at >= out.length) continue;
       const x = from + i * rate, k = Math.floor(x), f = x - k;
       let v = src[k] + (src[Math.min(k + 1, last)] - src[k]) * f;
-      v *= g * Math.min(1, fadeIn ? i / fadeIn : 1, fadeOut ? (frames - i) / fadeOut : 1);
+      v *= g * (release ? Math.min(1, (frames - i) / release) : 1);
       out[at] += v;
       if (sends) send[at] += v * sends;
     }

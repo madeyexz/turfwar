@@ -13,7 +13,7 @@ import { onlineAvailable, connectOnline } from './net/online';
 import { LevelView } from './render/level';
 import { THEMES } from './render/materials';
 import { QUALITY, Renderer } from './render/renderer';
-import { renderTheme } from './theme';
+import { renderTheme, THEME_START } from './theme';
 import './style.css';
 
 const app = document.querySelector<HTMLDivElement>('#app')!;
@@ -134,7 +134,7 @@ let gestured = false;
 function menuMusic() {
   if (!inMenu || !gestured || !theme) return;
   audio.start();
-  void theme.then(buffer => { if (inMenu) audio.playMusic(buffer); }, () => undefined);
+  void theme.then(buffer => { if (inMenu) audio.playMusic(buffer, THEME_START); }, () => undefined);
 }
 for (const type of ['pointerdown', 'keydown'] as const) document.addEventListener(type, () => { gestured = true; menuMusic(); });
 

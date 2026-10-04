@@ -54,15 +54,15 @@ export class Audio {
     return ctx.startRendering();
   }
 
-  /** Loops a rendered music buffer on its own bus (bypassing the effects compressor), fading in. */
-  playMusic(buffer: AudioBuffer, fadeIn = 2) {
+  /** Loops a rendered music buffer on its own bus (bypassing the effects compressor), starting `from` seconds in. */
+  playMusic(buffer: AudioBuffer, from = 0, fadeIn = 0.4) {
     const ctx = this.ctx;
     if (!(ctx instanceof AudioContext) || this.music) return;
     const src = ctx.createBufferSource(); src.buffer = buffer; src.loop = true;
     const gain = ctx.createGain();
     gain.gain.setValueAtTime(0.0001, ctx.currentTime);
     gain.gain.linearRampToValueAtTime(this.muted ? 0 : this.musicVolume, ctx.currentTime + fadeIn);
-    src.connect(gain).connect(ctx.destination); src.start();
+    src.connect(gain).connect(ctx.destination); src.start(0, from);
     this.music = { src, gain };
   }
 
@@ -229,8 +229,8 @@ export class Audio {
 
   ui() { if (!this.ready) return; const t = this.now(); this.tone(this.out(0.2, undefined, undefined, 0.05), t, 'sine', 900, 1100, 0.05, 0.2); }
 
-  /** Low filtered-noise wind bed: endless live, or `seconds` long when recording. */
-  wind(seconds?: number) {
+  /** Endless low filtered-noise wind bed. */
+  private wind() {
     const ctx = this.ctx!, t = this.now();
     const src = ctx.createBufferSource(); src.buffer = this.noise; src.loop = true;
     const f = ctx.createBiquadFilter(); f.type = 'lowpass'; f.frequency.value = 380;
@@ -239,7 +239,6 @@ export class Audio {
     const lfoGain = ctx.createGain(); lfoGain.gain.value = 140;
     lfo.connect(lfoGain).connect(f.frequency); lfo.start(t);
     src.connect(f).connect(g).connect(this.master); src.start(t);
-    if (seconds) { src.stop(t + seconds); lfo.stop(t + seconds); }
   }
 }
 
