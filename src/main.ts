@@ -40,7 +40,7 @@ menu.innerHTML = `
       <button class="choice" data-mode="online"><b>Online match</b><small id="online-note">Real players via SpacetimeDB; bots fill empty slots.</small></button>
       <button class="choice" data-mode="lab"><b>Law Lab</b><small>No bots, passive sentinels. Experiment with the laws in peace.</small></button>
     </div></div>
-    <div class="field"><label class="field">Battlefield</label><div class="choices" id="maps">${maps.map(m => `<button class="choice" data-map="${m.id}"><b>${m.name}</b><small>${m.description}</small></button>`).join('')}</div></div>
+    <div class="field"><label class="field">Battlefield</label><div class="choices" id="maps">${maps.map(m => `<button class="choice" data-map="${m.id}"><b>${m.name}</b><small>${m.description}</small>${m.attribution ? `<small class="credit">${m.attribution}</small>` : ''}</button>`).join('')}</div></div>
     <div class="field"><label class="field">Kit</label><div class="choices" id="loadouts">${Object.entries(LOADOUTS).map(([id, l]) => `<button class="choice" data-loadout="${id}"><b>${l.name}</b><small>${l.role}</small></button>`).join('')}</div></div>
     <div class="field"><label class="field">Faction</label><div class="choices" id="teams" style="grid-template-columns:1fr 1fr 1fr">
       <button class="choice" data-team="auto"><b>Auto</b></button><button class="choice" data-team="0"><b style="color:var(--aegis)">Aegis</b></button><button class="choice" data-team="1"><b style="color:var(--crimson)">Crimson</b></button>
@@ -243,7 +243,9 @@ async function boot() {
     if (game) game.frame(dt, render);
     else {
       angle += dt * 0.04;
-      renderer.camera.position.set(Math.cos(angle) * 70, 26, Math.sin(angle) * 52);
+      // City canyons are too tight to orbit: glide along the avenue instead.
+      if (backdrop?.city) renderer.camera.position.set(Math.cos(angle * 2) * 85, 15, Math.sin(angle * 2) * 6);
+      else renderer.camera.position.set(Math.cos(angle) * 70, 26, Math.sin(angle) * 52);
       renderer.camera.lookAt(0, 2, 0);
       renderer.camera.fov = 60; renderer.camera.updateProjectionMatrix();
       backdrop?.update(now / 1000);

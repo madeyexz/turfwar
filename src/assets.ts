@@ -1,6 +1,7 @@
 import * as THREE from 'three';
 import { GLTFLoader, type GLTF } from 'three/examples/jsm/loaders/GLTFLoader.js';
 import { MeshoptDecoder } from 'three/examples/jsm/libs/meshopt_decoder.module.js';
+import { VOXEL_TILES } from './render/voxel';
 
 /** Runtime asset registry. All models are CC0 (see public/assets/LICENSE.txt). */
 export interface Assets {
@@ -13,7 +14,7 @@ export interface Assets {
 }
 
 const BASE = import.meta.env.BASE_URL + 'assets/';
-const TEXTURE_SETS = ['sand', 'cliff', 'dirt', 'snow', 'icerock', 'moss', 'lichen', 'path', 'concrete', 'metalplate', 'container'];
+const TEXTURE_SETS = ['sand', 'cliff', 'dirt', 'snow', 'icerock', 'moss', 'lichen', 'path', 'concrete', 'metalplate', 'container', 'asphalt', 'pavement'];
 
 export async function loadAssets(onProgress: (fraction: number) => void): Promise<Assets> {
   const manager = new THREE.LoadingManager();
@@ -28,6 +29,13 @@ export async function loadAssets(onProgress: (fraction: number) => void): Promis
     tex.anisotropy = 8;
     if (kind === 'diff') tex.colorSpace = THREE.SRGBColorSpace;
     textures.set(`${set}_${kind}`, tex);
+  }));
+  // Kenney voxel tiles (CC0) for the block battlefield: crisp when magnified, like block games.
+  texturePromises.push(...VOXEL_TILES.map(async tile => {
+    const tex = await texLoader.loadAsync(`${BASE}voxel/${tile}.webp`);
+    tex.wrapS = tex.wrapT = THREE.RepeatWrapping;
+    tex.magFilter = THREE.NearestFilter; tex.anisotropy = 8; tex.colorSpace = THREE.SRGBColorSpace;
+    textures.set(`voxel_${tile}`, tex);
   }));
   const [weapons, props, drone, soldier, anims] = await Promise.all([
     gltf('weapons.glb'), gltf('props.glb'), gltf('drone.glb'), gltf('soldier.glb'), gltf('anims.glb'), ...texturePromises,

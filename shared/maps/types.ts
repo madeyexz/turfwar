@@ -2,7 +2,12 @@ import type { Heightfield, Ramp, Solid } from '../collision';
 import type { Laws } from '../laws';
 import type { Vec3 } from '../math';
 
-export type ThemeId = 'desert' | 'snow' | 'forest';
+export type ThemeId = 'desert' | 'snow' | 'forest' | 'voxel' | 'city';
+
+/** Block materials of the voxel battlefield; each maps to Kenney Voxel Pack tiles. */
+export type VoxelId =
+  | 'grass' | 'dirt' | 'stone' | 'cobble' | 'gravel' | 'sand' | 'planks' | 'planksRed' | 'log' | 'leaves'
+  | 'stonebrick' | 'brick' | 'glass' | 'coal' | 'gold' | 'diamond' | 'woolBlue' | 'woolRed' | 'snow';
 
 /** Visual treatment of a solid. Collision is identical regardless of style. */
 export type BlockStyle =
@@ -17,6 +22,9 @@ export type BlockStyle =
   | 'pillar'
   | 'shield'      // team spawn shield (energy)
   | 'glass'
+  | 'facade'      // city building: windowed walls, tinted per building
+  | 'facadeGlass' // glass curtain-wall tower
+  | `voxel:${VoxelId}`
   | 'invisible';
 
 export type PointId = 'A' | 'B' | 'C';
@@ -36,7 +44,15 @@ export type Decor =
   | { kind: 'banner'; team: 0 | 1; x: number; y: number; z: number; rotY: number }
   | { kind: 'tree'; x: number; y: number; z: number; scale: number; variant: number }
   | { kind: 'crystal'; x: number; y: number; z: number; scale: number; rotY: number }
-  | { kind: 'mast'; x: number; y: number; z: number; height: number };
+  | { kind: 'mast'; x: number; y: number; z: number; height: number }
+  /** Render-only voxel scenery beyond the playable bounds (no collision cost). */
+  | { kind: 'voxel'; id: VoxelId; minX: number; maxX: number; minY: number; maxY: number; minZ: number; maxZ: number }
+  /** Non-solid water surface. */
+  | { kind: 'water'; minX: number; maxX: number; minZ: number; maxZ: number; y: number }
+  /** Parked or wrecked vehicle drawn over its collision box (rotY is a small visual skew). */
+  | { kind: 'vehicle'; model: 'taxi' | 'car' | 'bus' | 'van'; x: number; y: number; z: number; rotY: number; seed: number }
+  /** Glowing advertising screen; normal points along rotY. */
+  | { kind: 'billboard'; x: number; y: number; z: number; w: number; h: number; rotY: number; seed: number };
 
 export interface MapDef {
   id: string;
@@ -57,4 +73,8 @@ export interface MapDef {
   laws: Laws;
   /** Sun direction and environment tint used by the renderer. */
   sun: Vec3;
+  /** Real-world layouts and authored attacker/defender maps are not rotationally symmetric. */
+  asymmetric?: boolean;
+  /** Credit line shown with the map, for layouts derived from open data. */
+  attribution?: string;
 }

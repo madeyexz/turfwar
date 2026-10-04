@@ -189,6 +189,7 @@ body.rewinding #hud::after { content: ''; position: fixed; inset: 0; background:
 .choice { border: 1px solid var(--line); background: rgba(255, 255, 255, 0.04); padding: 10px 12px; text-align: left; display: flex; flex-direction: column; gap: 2px; }
 .choice b { font-size: 18px; letter-spacing: 0.06em; text-transform: uppercase; }
 .choice small { color: var(--muted); font-size: 13px; font-weight: 500; line-height: 1.2; }
+.choice small.credit { margin-top: 4px; font-size: 11px; opacity: 0.75; }
 .choice[aria-pressed='true'] { border-color: var(--accent); background: rgba(127, 246, 255, 0.08); box-shadow: inset 3px 0 0 var(--accent); }
 .choice:disabled { opacity: 0.45; cursor: not-allowed; }
 .deploy { margin-top: 6px; padding: 14px 18px; font-size: 22px; font-weight: 700; letter-spacing: 0.18em; text-transform: uppercase; border: 1px solid var(--accent); color: #031014; background: var(--accent); clip-path: polygon(0 0, calc(100% - 16px) 0, 100% 16px, 100% 100%, 0 100%); }

@@ -1,14 +1,16 @@
 import { CollisionWorld } from '../collision';
 import { buildNav, type NavGraph } from '../match/nav';
+import { blocklands } from './blocklands';
 import { cinderBasin } from './cinder';
 import { frostlineReach } from './frostline';
 import { ochreQuarter } from './ochre';
+import { timesSquareMap } from './timessquare';
 import { verdantDivide } from './verdant';
 import type { MapDef } from './types';
 
-export const MAP_IDS = ['cinder', 'frostline', 'verdant', 'ochre'] as const;
+export const MAP_IDS = ['cinder', 'frostline', 'verdant', 'ochre', 'times', 'blocks'] as const;
 export type MapId = (typeof MAP_IDS)[number];
-const factories: Record<string, () => MapDef> = { cinder: cinderBasin, frostline: frostlineReach, verdant: verdantDivide, ochre: ochreQuarter };
+const factories: Record<string, () => MapDef> = { cinder: cinderBasin, frostline: frostlineReach, verdant: verdantDivide, ochre: ochreQuarter, times: timesSquareMap, blocks: blocklands };
 
 export interface LoadedMap { def: MapDef; world: CollisionWorld; nav?: NavGraph }
 const cache = new Map<string, LoadedMap>();
@@ -34,5 +36,5 @@ export function loadNav(id: string): NavGraph {
 }
 
 export function mapSummaries() {
-  return MAP_IDS.map(id => { const d = loadMap(id).def; return { id, name: d.name, region: d.region, description: d.description, theme: d.theme }; });
+  return MAP_IDS.map(id => { const d = loadMap(id).def; return { id, name: d.name, region: d.region, description: d.description, theme: d.theme, attribution: d.attribution }; });
 }

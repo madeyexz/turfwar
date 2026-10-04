@@ -33,6 +33,20 @@ export const THEMES: Record<ThemeId, Theme> = {
     sunColor: new THREE.Color(0xfff0d0), sunIntensity: 3.1, hemiSky: new THREE.Color(0xb8e0d8), hemiGround: new THREE.Color(0x4f5f3d), hemiIntensity: 1.35,
     planet: new THREE.Color(0x9fd6c6), exposure: 0.98,
   },
+  voxel: {
+    id: 'voxel', ground: 'moss', rock: 'lichen', dirt: 'path',
+    groundTint: new THREE.Color(0.72, 1.0, 0.55), rockTint: new THREE.Color(0.8, 0.84, 0.8), dirtTint: new THREE.Color(0.9, 0.84, 0.72),
+    skyTop: new THREE.Color(0x4f8fe6), skyHorizon: new THREE.Color(0xbfd9f2), fog: new THREE.Color(0xb4d0ec), fogDensity: 0.0045,
+    sunColor: new THREE.Color(0xfff6e0), sunIntensity: 3.0, hemiSky: new THREE.Color(0xc4dcf4), hemiGround: new THREE.Color(0x6a7a4a), hemiIntensity: 1.6,
+    planet: new THREE.Color(0xf0f0f0), exposure: 1.0,
+  },
+  city: {
+    id: 'city', ground: 'asphalt', rock: 'concrete', dirt: 'pavement',
+    groundTint: new THREE.Color(0.62, 0.62, 0.66), rockTint: new THREE.Color(0.85, 0.85, 0.85), dirtTint: new THREE.Color(0.95, 0.93, 0.9),
+    skyTop: new THREE.Color(0x3d6da0), skyHorizon: new THREE.Color(0xd8d4cc), fog: new THREE.Color(0xbcc0c4), fogDensity: 0.0038,
+    sunColor: new THREE.Color(0xfff0dc), sunIntensity: 3.3, hemiSky: new THREE.Color(0xc0d2e6), hemiGround: new THREE.Color(0x5c5a58), hemiIntensity: 1.4,
+    planet: new THREE.Color(0xc8c8d0), exposure: 1.0,
+  },
 };
 
 /** Terrain: world-space planar ground with triplanar rock on slopes and dirt along a splat channel. */

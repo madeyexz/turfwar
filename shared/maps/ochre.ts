@@ -76,7 +76,7 @@ export function ochreQuarter(): MapDef {
   const b = new MapBuilder({
     id: 'ochre', name: 'Ochre Quarter', region: 'INDAR-CLASS DESERT / OLD TOWN',
     description: 'Asymmetric two-site old town: Long, Mid, Catwalk and Tunnels.',
-    theme: 'desert', halfX: HALF_X, halfZ: HALF_Z, seed: 2, roll: 0, ridge: 0,
+    theme: 'desert', halfX: HALF_X, halfZ: HALF_Z, seed: 2, roll: 0, ridge: 0, asymmetric: true,
     laws: cloneData(defaultLaws), sun: { x: 0.45, y: 0.7, z: 0.4 },
     ground: (x, z) => floorAt(x, z) ?? 0,
   });

@@ -4,10 +4,12 @@ import { RoundedBoxGeometry } from 'three/examples/jsm/geometries/RoundedBoxGeom
 import type { Assets } from '../assets';
 import { terrainHeight, type Ramp, type Solid } from '../../shared/collision';
 import { fbm } from '../../shared/maps/builder';
-import type { BlockStyle, MapDef } from '../../shared/maps/types';
+import type { BlockStyle, MapDef, VoxelId } from '../../shared/maps/types';
 import { rng } from '../../shared/math';
 import { shieldMaterial, surfaceMaterial, terrainMaterial, type Theme } from './materials';
 import { ReactorView } from './reactor';
+import { AD_COUNT, cityMaterials, facadeGeometry, vehicleGeometry } from './city';
+import { voxelBox, voxelMaterials } from './voxel';
 
 const TEAM_COLORS = [new THREE.Color(0x3aa0ff), new THREE.Color(0xff4a3a)];
 
@@ -16,6 +18,7 @@ export class LevelView {
   readonly group = new THREE.Group();
   readonly shields: THREE.ShaderMaterial[] = [];
   readonly reactor?: ReactorView;
+  get city() { return this.theme.id === 'city'; }
   private parts = new Map<string, THREE.BufferGeometry[]>();
   private materials: Record<string, THREE.Material>;
   private animated: { object: THREE.Object3D; update: (t: number) => void }[] = [];
@@ -40,11 +43,13 @@ export class LevelView {
       glass: new THREE.MeshStandardMaterial({ color: 0x6fa8c8, roughness: 0.05, metalness: 0.9, transparent: true, opacity: 0.35 }),
       panel: trimMaterial(assets, 'T_Trim_02_BaseColor', 0xd4dade),
       panelDark: trimMaterial(assets, 'T_Trim_01_BaseColor', 0xa8b0b6),
+      ...(theme.id === 'city' ? cityMaterials() : {}),
+      ...(theme.id === 'voxel' ? voxelMaterials(assets) : {}),
     };
     this.buildTerrain();
     map.decor.forEach(d => {
       switch (d.kind) {
-        case 'block': this.block(map.solids[d.solid], d.style, d.solid); break;
+        case 'block': this.block(map.solids[d.solid], d.style, d.solid, d.color); break;
         case 'ramp': this.ramp(map.ramps[d.ramp], d.style); break;
         case 'prop': this.prop(d.model, d.x, d.y, d.z, d.rotY, d.scale ?? 1); break;
         case 'light': this.light(d.x, d.y, d.z, d.color, d.intensity, d.distance); break;
@@ -54,6 +59,10 @@ export class LevelView {
         case 'tree': this.tree(d.x, d.y, d.z, d.scale, d.variant); break;
         case 'crystal': this.crystal(d.x, d.y, d.z, d.scale, d.rotY); break;
         case 'mast': this.mast(d.x, d.y, d.z, d.height); break;
+        case 'voxel': voxelBox(d.id, d.minX, d.minY, d.minZ, d.maxX, d.maxY, d.maxZ, (key, g) => this.add(key, g)); break;
+        case 'water': this.water(d.minX, d.maxX, d.minZ, d.maxZ, d.y); break;
+        case 'vehicle': for (const p of vehicleGeometry(d.model, d.x, d.y, d.z, d.rotY, d.seed)) this.add(p.key, p.g); break;
+        case 'billboard': this.billboard(d.x, d.y, d.z, d.w, d.h, d.rotY, d.seed); break;
         default: break;
       }
     });
@@ -85,7 +94,8 @@ export class LevelView {
       const geometry = mergeGeometries(list, false);
       if (!geometry) continue;
       const mesh = new THREE.Mesh(geometry, this.materials[name]);
-      mesh.castShadow = name !== 'glow' && name !== 'glowWarm' && name !== 'glass';
+      mesh.castShadow = !['glow', 'glowWarm', 'glass', 'voxel:water', 'voxel:glass'].includes(name) && !name.startsWith('ad');
+      if ((this.materials[name] as THREE.Material).transparent) mesh.renderOrder = 2;
       mesh.receiveShadow = true;
       mesh.name = `level:${name}`;
       this.group.add(mesh);
@@ -122,18 +132,35 @@ export class LevelView {
     geometry.setAttribute('splat', new THREE.BufferAttribute(splat, 1));
     geometry.setIndex(indices);
     geometry.computeVertexNormals();
-    const mesh = new THREE.Mesh(geometry, terrainMaterial(this.assets, this.theme));
+    let material: THREE.Material = terrainMaterial(this.assets, this.theme);
+    if (this.theme.id === 'voxel') {
+      // Block world: the open ground is plain grass tiles, one per metre.
+      worldUV(geometry, 1);
+      material = new THREE.MeshStandardMaterial({ map: this.assets.textures.get('voxel_grass_top'), roughness: 0.95 });
+    }
+    const mesh = new THREE.Mesh(geometry, material);
     mesh.receiveShadow = true;
     mesh.name = 'terrain';
     this.group.add(mesh);
   }
 
   // ---- Architecture ----------------------------------------------------------------------
-  private block(s: Solid, style: BlockStyle, index: number) {
+  private block(s: Solid, style: BlockStyle, index: number, color?: number) {
     const w = s.maxX - s.minX, h = s.maxY - s.minY, d = s.maxZ - s.minZ;
     const cx = (s.minX + s.maxX) / 2, cy = (s.minY + s.maxY) / 2, cz = (s.minZ + s.maxZ) / 2;
     const r = rng(index * 977 + 13);
+    if (style.startsWith('voxel:')) {
+      voxelBox(style.slice(6) as VoxelId, s.minX, s.minY, s.minZ, s.maxX, s.maxY, s.maxZ, (key, g) => this.add(key, g));
+      return;
+    }
     switch (style) {
+      case 'facade': case 'facadeGlass': {
+        for (const part of facadeGeometry(s.minX, s.minY, s.minZ, s.maxX, s.maxY, s.maxZ)) {
+          tint(part.g, color ?? 0xd0c8bc, s.minY, Math.min(h, 14));
+          this.add(part.key === 'storefront' ? 'storefront' : style, part.g);
+        }
+        return;
+      }
       case 'shield': {
         const mat = shieldMaterial(TEAM_COLORS[s.team ?? 0]);
         this.shields.push(mat);
@@ -243,8 +270,11 @@ export class LevelView {
         const len = run / steps;
         const cx = alongX ? center : (r.minX + r.maxX) / 2, cz = alongX ? (r.minZ + r.maxZ) / 2 : center;
         const h = top - (r.y0 - 0.05);
-        this.add('floor', boxGeo(cx, r.y0 - 0.05 + h / 2, cz, alongX ? len : width, h, alongX ? width : len));
+        const sx = alongX ? len : width, sz = alongX ? width : len;
+        if (this.theme.id === 'voxel') voxelBox('planks', cx - sx / 2, r.y0 - 0.05, cz - sz / 2, cx + sx / 2, top, cz + sz / 2, (key, g) => this.add(key, g));
+        else this.add('floor', boxGeo(cx, r.y0 - 0.05 + h / 2, cz, sx, h, sz));
       }
+      if (this.theme.id === 'voxel') return;
       // Side stringers follow the slope.
       const lowX = r.dir === 0 ? r.minX : r.dir === 2 ? r.maxX : 0, lowZ = r.dir === 1 ? r.minZ : r.dir === 3 ? r.maxZ : 0;
       const highX = r.dir === 0 ? r.maxX : r.dir === 2 ? r.minX : 0, highZ = r.dir === 1 ? r.maxZ : r.dir === 3 ? r.minZ : 0;
@@ -399,8 +429,31 @@ export class LevelView {
     this.animated.push({ object: beacon, update: t => { beacon.visible = Math.sin(t * 3 + x) > -0.2; } });
   }
 
+  private water(minX: number, maxX: number, minZ: number, maxZ: number, y: number) {
+    const g = new THREE.PlaneGeometry(maxX - minX, maxZ - minZ);
+    g.rotateX(-Math.PI / 2);
+    g.translate((minX + maxX) / 2, y, (minZ + maxZ) / 2);
+    worldUV(g, 1);
+    const tex = (this.materials['voxel:water'] as THREE.MeshStandardMaterial | undefined)?.map;
+    if (tex) this.animated.push({ object: this.group, update: t => { tex.offset.set(t * 0.05, t * 0.12); } });
+    this.add('voxel:water', g);
+  }
+
+  private billboard(x: number, y: number, z: number, w: number, h: number, rotY: number, seed: number) {
+    const screen = new THREE.PlaneGeometry(w, h);
+    screen.rotateY(rotY);
+    screen.translate(x + Math.sin(rotY) * 0.15, y + h / 2, z + Math.cos(rotY) * 0.15);
+    this.add(`ad${seed % AD_COUNT}`, screen);
+    const frame = new THREE.BoxGeometry(w + 0.5, h + 0.5, 0.25);
+    frame.rotateY(rotY);
+    frame.translate(x, y + h / 2, z);
+    worldUV(frame, 2);
+    this.add('steelDark', frame);
+  }
+
   // ---- Dressing --------------------------------------------------------------------------
   private scatter() {
+    if (this.theme.id === 'city' || this.theme.id === 'voxel') return;
     const r = rng(91);
     const rocks: THREE.BufferGeometry[] = [];
     const b = this.map.bounds;
@@ -422,6 +475,8 @@ export class LevelView {
   }
 
   private horizon() {
+    if (this.theme.id === 'city') { this.skyline(); return; }
+    if (this.theme.id === 'voxel') { this.blockHills(); return; }
     // A ring of distant mountains so the arena sits inside a landscape, not on a table.
     const segments = 160, rings = 6;
     const positions: number[] = [], indices: number[] = [];
@@ -442,9 +497,64 @@ export class LevelView {
     mesh.name = 'horizon';
     this.group.add(mesh);
   }
+
+  /** Base plane under the whole scene so the far skyline or hills never float over the void. */
+  private underlay(material: THREE.Material, y: number) {
+    const g = new THREE.PlaneGeometry(1400, 1400);
+    g.rotateX(-Math.PI / 2); g.translate(0, y, 0);
+    worldUV(g, 6);
+    const mesh = new THREE.Mesh(g, material);
+    mesh.receiveShadow = true; mesh.name = 'underlay';
+    this.group.add(mesh);
+  }
+
+  /** City horizon: a ring of generic towers beyond the real blocks, fading into the haze. */
+  private skyline() {
+    const r = rng(77), b = this.map.bounds;
+    const inner = Math.hypot(b.maxX, b.maxZ) + 120;
+    for (let ring = 0; ring < 3; ring++) {
+      const radius = inner + ring * 70, count = Math.round(radius * Math.PI * 2 / 48);
+      for (let i = 0; i < count; i++) {
+        const a = (i + r() * 0.5) / count * Math.PI * 2, rr = radius + (r() - 0.5) * 30;
+        const x = Math.cos(a) * rr, z = Math.sin(a) * rr, w = 22 + r() * 22, d = 22 + r() * 22;
+        const h = 30 + Math.pow(r(), 2) * 190 + (fbm(x * 0.01, z * 0.01, 4) + 0.5) * 60;
+        const glass = h > 120 || r() < 0.3;
+        for (const part of facadeGeometry(x - w / 2, 0, z - d / 2, x + w / 2, h, z + d / 2)) {
+          tint(part.g, glass ? [0x7d9cb8, 0x5f7f94, 0x8fb2c4][i % 3] : [0xd9cdb8, 0xa65a42, 0xb9b2a6, 0x8a6a52][i % 4], 0, 14);
+          this.add(part.key === 'storefront' ? 'storefront' : glass ? 'facadeGlass' : 'facade', part.g);
+        }
+      }
+    }
+    this.flush();
+    this.underlay(surfaceMaterial(this.assets, 'asphalt', { color: 0x8a8a90 }), -0.03);
+  }
+
+  /** Block-world horizon: stepped grass and stone hills of 4 m blocks, merged along each row. */
+  private blockHills() {
+    const b = this.map.bounds, cell = 4, reach = 300;
+    const sample = (x: number, z: number) => {
+      const out = Math.max(Math.abs(x + cell / 2) - b.maxX, Math.abs(z + cell / 2) - b.maxZ);
+      if (out < 22 || Math.hypot(x, z) > reach) return 0;
+      const rise = Math.min(1, (out - 22) / 60);
+      return Math.max(0, Math.round((4 + rise * 26 + fbm(x * 0.012, z * 0.012, 8) * 30 * rise) / cell) * cell);
+    };
+    const kind = (h: number): VoxelId => h > 30 ? 'snow' : h > 18 ? 'stone' : 'grass';
+    for (let z = -reach; z < reach; z += cell) {
+      let start = -reach, h = sample(start, z);
+      for (let x = -reach + cell; x <= reach; x += cell) {
+        const next = x < reach ? sample(x, z) : -1;
+        if (next === h) continue;
+        if (h > 0) voxelBox(kind(h), start, -2, z, x, h, z + cell, (key, g) => this.add(key, g), cell);
+        start = x; h = next;
+      }
+    }
+    this.flush();
+    this.underlay(new THREE.MeshStandardMaterial({ map: this.assets.textures.get('voxel_grass_top'), roughness: 0.95 }), -0.6);
+  }
 }
 
 // ---- Geometry helpers -------------------------------------------------------------------
+
 
 /** Smooth boulder: low-frequency displaced sphere with a flattened base, unit size, base at y=0. */
 function rockGeometry(seed: number, detail = 3) {

@@ -16,7 +16,7 @@ runner (`bun` / `bunx`, never npm/npx).
 | --- | --- |
 | Modes | **Solo skirmish** (6v6, bots fill both teams, three difficulties), **Online match** (SpacetimeDB-authoritative; humans replace bots; maps rotate between rounds), **Law Lab** (no bots, passive sentinels — a sandbox for experimenting with laws). |
 | Objective | Domination: capture A, B and C (8 s solo capture, faster with more teammates, frozen while contested). Owned points tick team score; kills add score; first to 200 or most after 10 min wins, then a new round starts. |
-| Battlefields | **Cinder Basin** (desert outpost: reactor plaza, comm bunkers, ridge watchtower, cargo yard), **Frostline Reach** (arctic relay: walled reactor courtyard with gates and wall-top catwalks, rooftop towers, frozen trench with a bridge, crystal ridge), **Verdant Divide** (jungle uplink: reactor plateau, clearing bunkers, creek bed, tree cover). **Ochre Quarter** (desert old town: an original homage to the classic two-site layout of CS:GO's Dust II — Long with its doors, corner and pit, Mid with the crate and doors, Catwalk up to Short, roofed Tunnels — built from our own geometry and CC0 assets). The first three lanes-and-flanks layouts are rotationally symmetric for fairness (tested); Ochre Quarter keeps its source's attacker/defender asymmetry on purpose (team 0 attacks from the south, A and C are the defenders' sites, B is Mid). Team spawns are protected by one-way energy shields. |
+| Battlefields | **Cinder Basin** (desert outpost: reactor plaza, comm bunkers, ridge watchtower, cargo yard), **Frostline Reach** (arctic relay: walled reactor courtyard with gates and wall-top catwalks, rooftop towers, frozen trench with a bridge, crystal ridge), **Verdant Divide** (jungle uplink: reactor plateau, clearing bunkers, creek bed, tree cover). **Ochre Quarter** (desert old town: an original homage to the classic two-site layout of CS:GO's Dust II — Long with its doors, corner and pit, Mid with the crate and doors, Catwalk up to Short, roofed Tunnels — built from our own geometry and CC0 assets). The first three lanes-and-flanks layouts are rotationally symmetric for fairness (tested); Ochre Quarter keeps its source's attacker/defender asymmetry on purpose (team 0 attacks from the south, A and C are the defenders' sites, B is Mid). **Times Square** (the real Broadway bowtie in Midtown Manhattan between 44th and 46th Streets: every footprint and height is OpenStreetMap data baked by `tools/fetch-osm.ts`, plus wrecked taxis and buses, sidewalk sheds, bleachers, ground-floor arcades cut through the blocks for flanks, and fictional ad screens). **Blocklands** (a block-game voxel valley built from 1 m blocks with Kenney's CC0 Voxel Pack tiles: a river ford fort at B, farm villages at A and C, a mine tunnel flank, a watchtower and solid blocky trees; slopes step in half blocks so bots can walk them). Times Square follows the real street grid, so like Ochre Quarter it is close to but not exactly symmetric; Blocklands is mirrored. Team spawns are protected by one-way energy shields. |
 | Gunplay | Hitscan weapons with fire rate, magazines, timed reloads, hip/ADS/moving/air spread, per-shot bloom, recoil climb with partial recovery, view punch, damage falloff and head/leg multipliers. Kits: **Assault** (VX-7 pulse carbine + P-12 sidearm) and **Recon** (L-90 scoped rail rifle + R-6 magnum). Grenades (G) are physical bodies that obey the laws. |
 | Movement | Shared deterministic controller: walk, sprint (with sprint-to-fire delay), crouch, slide (crouch while sprinting), jump with coyote time, step-up, ramps/stairs, team shields. |
 | Feel | First-person rigged arms (cut from the soldier rig) posed by IK onto CC0 weapon models; procedural sway, figure-eight bob, kick, sprint carry, ADS with red-dot reticle, scope overlay, reload choreography with a magazine in hand, equip and grenade throw; muzzle flash, tracers, impact sparks and dust, bullet marks, explosions; hit markers, headshot/kill confirms, damage-direction arcs, kill feed, procedural WebAudio gunshots, reloads, footsteps and cues; a looping 60-second menu theme sequenced from those same effects. |
@@ -168,6 +168,11 @@ No proprietary game assets are used. Everything is original code or CC0/OFL:
   meshopt-compressed); see `public/assets/LICENSE.txt`.
 - Terrain and surface textures: Poly Haven, CC0 1.0, fetched by `tools/fetch-textures.ts`; see
   `public/assets/tex/LICENSE.txt`.
+- Voxel block tiles: Kenney's *Voxel Pack*, CC0 1.0 (https://kenney.nl/assets/voxel-pack), fetched by
+  `tools/fetch-voxel.ts`; see `public/assets/voxel/LICENSE.txt`.
+- Times Square building footprints, heights and streets: © OpenStreetMap contributors, Open Database
+  License 1.0 (https://www.openstreetmap.org/copyright). `shared/maps/data/times-square.ts` is a derived
+  database baked by `tools/fetch-osm.ts` and stays under the ODbL; the credit line is shown on the map.
 - Font: Rajdhani by Indian Type Foundry, SIL Open Font License 1.1 (`public/fonts/OFL.txt`).
 - Sky, planets, terrain, architecture, armor, effects and audio are procedural.
 - Engine/libraries: Three.js (MIT), Zod (MIT), Vite (MIT). The `spacetimedb` npm package declares ISC
@@ -237,12 +242,13 @@ shared/        Pure TypeScript shared by browser, tests and the SpacetimeDB modu
   collision.ts   AABB/ramp/heightfield world, raycasts, cylinder resolution
   movement.ts    Infantry controller        hitbox.ts  hit volumes      weapons.ts  tuning
   world.ts       Lawful bodies, gravity/time integration, rewind ring
-  maps/          Builder + Cinder Basin, Frostline Reach, Verdant Divide, Ochre Quarter
+  maps/          Builder + Cinder Basin, Frostline Reach, Verdant Divide, Ochre Quarter, Times Square
+                 (city.ts + data/ baked from OpenStreetMap), Blocklands (voxels)
   match/         State, simulation tick, combat validation, bots, navigation
 src/           Browser client: game loop, prediction, rendering, view model, soldiers, HUD, audio, net
 spacetimedb/   SpacetimeDB module (tables, scheduled tick, validated reducers)
 api/law.ts     Server-only natural-language → typed law route
-tools/         Reproducible CC0 asset import and texture fetch scripts
+tools/         Reproducible CC0 asset import, texture/voxel fetch and OpenStreetMap bake scripts
 dev/           Development preview pages
 ```
 
@@ -252,4 +258,5 @@ dev/           Development preview pages
 [Bertrand's theorem](https://en.wikipedia.org/wiki/Bertrand%27s_theorem) ·
 [MIT: A Slower Speed of Light](https://gamelab.mit.edu/games/a-slower-speed-of-light/) ·
 [SpacetimeDB](https://spacetimedb.com/docs/) · [Three.js](https://threejs.org) ·
-[Quaternius](https://quaternius.com) · [Poly Haven](https://polyhaven.com)
+[Quaternius](https://quaternius.com) · [Poly Haven](https://polyhaven.com) · [Kenney](https://kenney.nl) ·
+[OpenStreetMap](https://www.openstreetmap.org/copyright)

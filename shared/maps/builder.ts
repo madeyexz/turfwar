@@ -1,6 +1,6 @@
 import { terrainHeight, type Heightfield, type Ramp, type Solid, type Surface } from '../collision';
 import type { Laws } from '../laws';
-import type { BlockStyle, CapturePointDef, Decor, MapDef, PointId, SpawnDef, ThemeId } from './types';
+import type { BlockStyle, CapturePointDef, Decor, MapDef, PointId, SpawnDef, ThemeId, VoxelId } from './types';
 
 // Deterministic value noise so the server and every client generate identical terrain.
 function hash(ix: number, iz: number, seed: number) {
@@ -33,6 +33,8 @@ export interface BuilderOptions {
   sun: { x: number; y: number; z: number };
   /** Hand-authored base ground; replaces the mirrored noise and boundary ridges. */
   ground?: (x: number, z: number) => number;
+  asymmetric?: boolean;
+  attribution?: string;
 }
 
 /**
@@ -159,6 +161,12 @@ export class MapBuilder {
   }
 
   raw(decor: Decor) { this.decor.push(decor); }
+
+  /** Render-only voxel box (scenery outside the bounds), placed like box(). */
+  scenery(x: number, y: number, z: number, w: number, h: number, d: number, id: VoxelId) {
+    const cx = this.tx(x), cz = this.tz(z);
+    this.decor.push({ kind: 'voxel', id, minX: cx - w / 2, maxX: cx + w / 2, minY: y, maxY: y + h, minZ: cz - d / 2, maxZ: cz + d / 2 });
+  }
   at(x: number, z: number) { return { x: this.tx(x), z: this.tz(z) }; }
   rotation(r: number) { return this.rot(r); }
 
@@ -216,12 +224,11 @@ export class MapBuilder {
   }
 
   /** Team warpgate: walled spawn room whose energy shield only its own team can cross. */
-  warpgate(x: number, z: number) {
-    const sy = this.ground(x, z);
-    this.box(x - 7, sy, z, 1.2, 7, 24, 'wall');
-    this.box(x - 1, sy, z - 12, 13, 7, 1.2, 'wall');
-    this.box(x - 1, sy, z + 12, 13, 7, 1.2, 'wall');
-    this.box(x - 1, sy + 7, z, 13, 0.5, 25, 'floor');
+  warpgate(x: number, z: number, style: { wall: BlockStyle; roof: BlockStyle } = { wall: 'wall', roof: 'floor' }, sy = this.ground(x, z)) {
+    this.box(x - 7, sy, z, 1.2, 7, 24, style.wall);
+    this.box(x - 1, sy, z - 12, 13, 7, 1.2, style.wall);
+    this.box(x - 1, sy, z + 12, 13, 7, 1.2, style.wall);
+    this.box(x - 1, sy + 7, z, 13, 0.5, 25, style.roof);
     this.box(x + 5.4, sy, z, 0.3, 7, 22.8, 'shield', 'energy', this.team(0));
     for (const dz of [-7, -2.5, 2.5, 7]) this.spawn(0, x - 3, sy, z + dz, -Math.PI / 2);
     this.raw({ kind: 'spawnPad', team: this.team(0), ...this.at(x - 2, z), y: sy, rotY: this.rotation(-Math.PI / 2) });
@@ -259,6 +266,7 @@ export class MapBuilder {
       bounds: { minX: -o.halfX, maxX: o.halfX, minZ: -o.halfZ, maxZ: o.halfZ },
       terrain: this.terrain, solids: this.solids, ramps: this.ramps, points: this.points, spawns: this.spawns,
       anomaly: { x: anomaly.x, y: anomaly.y + 5, z: anomaly.z }, decor: this.decor, laws: o.laws, sun: o.sun,
+      ...(o.asymmetric ? { asymmetric: true } : {}), ...(o.attribution ? { attribution: o.attribution } : {}),
     };
   }
 }
@@ -266,7 +274,14 @@ export class MapBuilder {
 export type Side = 'n' | 's' | 'e' | 'w';
 
 function surfaceFor(style: BlockStyle): Surface {
+  if (style.startsWith('voxel:')) {
+    const v = style.slice(6);
+    if (v === 'glass') return 'glass';
+    return ['grass', 'dirt', 'sand', 'gravel', 'planks', 'planksRed', 'log', 'leaves', 'woolBlue', 'woolRed', 'snow'].includes(v) ? 'dirt' : 'rock';
+  }
   switch (style) {
+    case 'facade': return 'concrete';
+    case 'facadeGlass': return 'glass';
     case 'concrete': case 'pillar': case 'sandstone': return 'concrete';
     case 'rock': return 'rock';
     case 'glass': return 'glass';

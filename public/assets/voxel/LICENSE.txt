@@ -1,0 +1,27 @@
+Block tiles from Kenney's Voxel Pack (https://kenney.nl/assets/voxel-pack), CC0 1.0 Universal.
+Resized to 64px lossless WebP by tools/fetch-voxel.ts.
+
+grass_top: PNG/Tiles/grass_top.png
+grass_side: PNG/Tiles/dirt_grass.png
+dirt: PNG/Tiles/dirt.png
+stone: PNG/Tiles/stone.png
+cobble: PNG/Tiles/greystone.png
+gravel: PNG/Tiles/gravel_stone.png
+sand: PNG/Tiles/sand.png
+planks: PNG/Tiles/wood.png
+log_side: PNG/Tiles/trunk_side.png
+log_top: PNG/Tiles/trunk_top.png
+leaves: PNG/Tiles/leaves.png
+stonebrick: PNG/Tiles/brick_grey.png
+brick: PNG/Tiles/brick_red.png
+glass: PNG/Tiles/glass_frame.png
+water: PNG/Tiles/water.png
+ore_coal: PNG/Tiles/stone_coal.png
+ore_gold: PNG/Tiles/stone_gold.png
+ore_diamond: PNG/Tiles/stone_diamond.png
+wool_blue: PNG/Tiles/cotton_blue.png
+wool_red: PNG/Tiles/cotton_red.png
+snow: PNG/Tiles/snow.png
+snow_side: PNG/Tiles/dirt_snow.png
+wheat: PNG/Tiles/wheat_stage4.png
+planks_red: PNG/Tiles/wood_red.png

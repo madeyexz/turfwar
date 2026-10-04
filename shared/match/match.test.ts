@@ -34,8 +34,8 @@ describe('maps and navigation', () => {
         for (const p of def.points) expect(findPath(nav, start, nearestNode(nav, p.x, p.y, p.z)).length, `${team}->${p.id}`).toBeGreaterThan(3);
       }
     });
-    // Ochre Quarter keeps its source layout's attacker/defender asymmetry on purpose.
-    it.skipIf(id === 'ochre')(`${id}: is rotationally symmetric for fairness`, () => {
+    // Ochre Quarter and the real-world city maps keep their source layout's asymmetry on purpose.
+    it.skipIf(!!loadMap(id).def.asymmetric)(`${id}: is rotationally symmetric for fairness`, () => {
       const { def } = loadMap(id);
       const key = (s: { minX: number; maxX: number; minZ: number; maxZ: number; minY: number; maxY: number }) => [s.minX, s.maxX, s.minZ, s.maxZ, s.minY, s.maxY].map(v => v.toFixed(2)).join();
       const all = new Set(def.solids.map(key));
@@ -65,6 +65,21 @@ describe('bot match', () => {
       if (s.alive) expect(ctx.world.overlapsSolid(s.m, 0.2, 1.2)).toBe(false);
     }
   });
+});
+
+describe('bots on every battlefield', () => {
+  for (const id of MAP_IDS.filter(m => m !== 'cinder')) {
+    it(`${id}: bots fight and capture objectives`, () => {
+      const events: MatchEvent[] = [];
+      const random = rng(11);
+      const ctx = createContext(id, random, e => events.push(e));
+      const state = createMatch(id, { ...OFFLINE_CONFIG, teamSize: 5 }, random);
+      balanceTeams(state, ctx);
+      tick(state, ctx, 90);
+      expect(events.filter(e => e.type === 'capture').length).toBeGreaterThan(1);
+      expect(events.filter(e => e.type === 'kill').length).toBeGreaterThan(2);
+    });
+  }
 });
 
 describe('server-side validation', () => {
