@@ -1,0 +1,9 @@
+node_modules/
+dist/
+.env*
+!.env.example
+.vercel/
+.amp/in/
+.amp/portals/
+spacetimedb/target/
+spacetimedb/.spacetime/
