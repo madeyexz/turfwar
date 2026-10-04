@@ -107,6 +107,14 @@ describe('server-side validation', () => {
     expect(fireShot(state, ctx, a.id, claimAt(a, b))).toBe(true);
     expect(fireShot(state, ctx, a.id, claimAt(a, b))).toBe(true);
     expect(fireShot(state, ctx, a.id, claimAt(a, b))).toBe(false);
+    // Slow weapons get no burst: a second instant rail shot is refused, a timely one accepted.
+    a.loadout = 'recon'; a.ammo = [5, 6]; a.fireCooldown = 0; b.health = 1000;
+    expect(fireShot(state, ctx, a.id, claimAt(a, b))).toBe(true);
+    expect(fireShot(state, ctx, a.id, claimAt(a, b))).toBe(false);
+    a.fireCooldown -= 0.8;
+    expect(fireShot(state, ctx, a.id, claimAt(a, b))).toBe(true);
+    expect(b.health).toBeLessThan(1000 - 92);
+    a.loadout = 'assault'; a.ammo = [30, 14]; b.health = 100; b.shield = 50;
     // Empty magazine.
     a.fireCooldown = 0; a.ammo[0] = 0;
     expect(fireShot(state, ctx, a.id, claimAt(a, b))).toBe(false);
