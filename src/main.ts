@@ -4,7 +4,7 @@ import type { Team } from '../shared/match/state';
 import { LOADOUTS, type LoadoutId } from '../shared/weapons';
 import { loadAssets, type Assets } from './assets';
 import { Audio } from './audio';
-import { Game } from './game/game';
+import { Game, settings } from './game/game';
 import type { GameLink } from './game/link';
 import { OfflineLink } from './game/offline';
 import { Bench, BENCH_SECONDS, benchReport, type BenchResult } from './game/bench';
@@ -46,6 +46,10 @@ menu.innerHTML = `
     <div class="field"><label class="field">Graphics</label><div class="choices" id="qualities" style="grid-template-columns:1fr 1fr 1fr">
       <button class="choice" data-quality="low"><b>Low</b><small>No bloom, 1k shadows</small></button><button class="choice" data-quality="medium"><b>Medium</b><small>Bloom, 2k shadows</small></button><button class="choice" data-quality="high"><b>High</b><small>1.5× resolution</small></button>
     </div></div>
+    <div class="field sliders">
+      <label class="field"><span>Mouse sensitivity · <output id="sens-out"></output></span><input type="range" id="sens" min="0.2" max="3" step="0.05"></label>
+      <label class="field"><span>Field of view · <output id="fov-out"></output></span><input type="range" id="fov" min="60" max="95" step="1"></label>
+    </div>
     <button class="deploy" id="deploy" disabled>Loading…</button>
     <div class="status" id="status"></div>
     <button class="bench-link" id="bench">Run the ${BENCH_SECONDS}-second performance check</button>
@@ -91,6 +95,19 @@ menu.querySelectorAll<HTMLButtonElement>('[data-quality]').forEach(b => b.addEve
   quality = b.dataset.quality as keyof typeof QUALITY; select('qualities', 'quality', quality); store.set('quality', quality);
   renderer?.applyQuality(QUALITY[quality]);
 }));
+const sens = menu.querySelector<HTMLInputElement>('#sens')!, fov = menu.querySelector<HTMLInputElement>('#fov')!;
+settings.sensitivity = Math.max(0.2, Math.min(3, Number(store.get('sensitivity', '1')) || 1));
+settings.fov = Math.max(60, Math.min(95, Number(store.get('fov', '78')) || 78));
+sens.value = String(settings.sensitivity); fov.value = String(settings.fov);
+/** Vertical FOV (what three.js uses) with its 16:9 horizontal equivalent, which players usually quote. */
+const horizontal = (v: number) => Math.round(2 * Math.atan(Math.tan(v * Math.PI / 360) * 16 / 9) * 180 / Math.PI);
+const showSettings = () => {
+  menu.querySelector('#sens-out')!.textContent = `${settings.sensitivity.toFixed(2)}×`;
+  menu.querySelector('#fov-out')!.textContent = `${settings.fov}° vertical · ${horizontal(settings.fov)}° horizontal (16:9)`;
+};
+showSettings();
+sens.addEventListener('input', () => { settings.sensitivity = Number(sens.value); store.set('sensitivity', sens.value); showSettings(); });
+fov.addEventListener('input', () => { settings.fov = Number(fov.value); store.set('fov', fov.value); showSettings(); });
 menu.querySelector('#bench')!.addEventListener('click', () => { location.search = `?bench&map=${mapId}&quality=${quality}`; });
 const deploy = menu.querySelector<HTMLButtonElement>('#deploy')!;
 const status = menu.querySelector<HTMLElement>('#status')!;

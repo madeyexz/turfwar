@@ -26,7 +26,8 @@ import { LocalPlayer } from './player';
 type Sample = { x: number; y: number; z: number; vx: number; vy: number; vz: number; yaw: number; pitch: number; crouch: number };
 interface Remote { view: SoldierView; buffer: InterpBuffer<Sample>; pos: THREE.Vector3; crouch: number; yaw: number; stepDist: number; last?: THREE.Vector3; loadout: LoadoutId }
 
-const BASE_FOV = 78;
+/** Player settings shared by every Game instance (set from the deploy screen). */
+export const settings = { fov: 78, sensitivity: 1 };
 
 /** One deployed match: rendering, local prediction, effects, HUD and the link to the match host. */
 export class Game {
@@ -73,6 +74,7 @@ export class Game {
     this.bodies = new BodiesView(assets);
     renderer.scene.add(this.bodies.group);
     this.input = new Input(renderer.renderer.domElement);
+    this.input.sensitivity = settings.sensitivity;
     const me = link.state()?.soldiers.find(s => s.id === link.myId());
     this.myTeam = me?.team ?? 0;
     this.viewmodel = new ViewModel(assets, this.myTeam);
@@ -213,7 +215,8 @@ export class Game {
       const slideRoll = this.player.m.slideTime > 0 ? 0.06 : 0;
       cam.rotation.set(this.player.pitch + this.player.punchPitch * 0.01, this.player.yaw + this.player.punchYaw, slideRoll, 'YXZ');
       const w = this.player.weapon;
-      const targetFov = BASE_FOV + (w.adsFov - BASE_FOV) * this.player.ads + (this.player.sprinting ? 6 : 0) + (this.player.m.slideTime > 0 ? 4 : 0);
+      const base = settings.fov;
+      const targetFov = base + (w.adsFov - base) * this.player.ads + (this.player.sprinting ? 6 : 0) + (this.player.m.slideTime > 0 ? 4 : 0);
       cam.fov += (targetFov - cam.fov) * Math.min(1, dt * 14);
       cam.updateProjectionMatrix();
       this.renderer.viewCamera.fov = 58 - this.player.ads * (w.id === 'lancer' ? 0 : 10);
@@ -226,7 +229,7 @@ export class Game {
       this.deathCam.y += (this.player.m.y + 4 - this.deathCam.y) * Math.min(1, dt * 1.5);
       cam.position.lerp(this.deathCam, Math.min(1, dt * 3));
       cam.lookAt(killer ? killer.clone().setY(killer.y + 1.2) : new THREE.Vector3(this.player.m.x, this.player.m.y, this.player.m.z));
-      cam.fov += (BASE_FOV - cam.fov) * Math.min(1, dt * 5); cam.updateProjectionMatrix();
+      cam.fov += (settings.fov - cam.fov) * Math.min(1, dt * 5); cam.updateProjectionMatrix();
       this.viewmodel.root.visible = false;
     }
     this.hud.scope(this.viewmodel.scopeVisible);
