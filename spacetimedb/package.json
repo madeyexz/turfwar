@@ -2,6 +2,7 @@
   "name": "lawbreaker-module",
   "private": true,
   "type": "module",
+  "packageManager": "bun@1.3.10",
   "scripts": { "typecheck": "tsc --noEmit" },
   "dependencies": { "spacetimedb": "2.6.0", "zod": "^4.0.0" },
   "devDependencies": { "typescript": "^5.9.0" }

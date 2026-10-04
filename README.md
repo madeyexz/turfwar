@@ -33,14 +33,16 @@ The reactor is a visual marker for the softened force field, not a solid collide
 
 ## Run and test
 
-Node 22.12+ is recommended.
+Bun 1.3.10 is the project package manager. Node 22.12+ is recommended for the Vite and Vercel toolchain.
 
 ```sh
-npm ci
-npm run dev
-npm test
-npm run build
+bun install --frozen-lockfile
+bun run dev
+bun run test
+bun run build
 ```
+
+Use `bun run test` to run Vitest; `bun test` invokes Bun’s separate test runner.
 
 The Vite development server includes the `/api/law` route. Export `OPENAI_API_KEY` in the server environment to enable arbitrary sentence translation. For example, load a local `.env` with your shell before starting Vite; never commit it. Vercel serves `api/law.ts` as a serverless route.
 
@@ -55,7 +57,7 @@ The module stores private per-identity session counts, current law parameters, t
 Install the [SpacetimeDB CLI](https://spacetimedb.com/install), then:
 
 ```sh
-npm --prefix spacetimedb ci
+bun install --cwd spacetimedb --frozen-lockfile
 spacetime start                           # separate terminal
 spacetime publish lawbreaker-local --module-path spacetimedb --server local
 spacetime generate --lang typescript --out-dir src/module_bindings --module-path spacetimedb
@@ -72,7 +74,7 @@ For cloud persistence, log in with `spacetime login`, publish a uniquely named d
 
 ## Deploy
 
-Import this repository into Vercel as a Vite project, or run `npx vercel --prod` after login. `vercel.json` configures the app and server route. Configure optional server-only `OPENAI_API_KEY`, `OPENAI_MODEL`, and the two public SpacetimeDB variables. Before enabling the anonymous AI endpoint publicly, configure Vercel Firewall rate limits and an OpenAI project spend limit. The project does not pretend that an in-memory serverless counter is a durable rate limit.
+Import this repository into Vercel as a Vite project, or run `bunx vercel --prod` after login. `vercel.json` configures Bun installation, the build, and the server route. Configure optional server-only `OPENAI_API_KEY`, `OPENAI_MODEL`, and the two public SpacetimeDB variables. Before enabling the anonymous AI endpoint publicly, configure Vercel Firewall rate limits and an OpenAI project spend limit. The project does not pretend that an in-memory serverless counter is a durable rate limit.
 
 ## 60-second demo — one continuous shot
 
