@@ -4,6 +4,7 @@ import { MAP_IDS, loadMap, loadNav } from '../maps/index';
 import { rng } from '../math';
 import { eyeHeight } from '../movement';
 import { hitShape } from '../hitbox';
+import { WEAPONS } from '../weapons';
 import { findPath, nearestNode } from './nav';
 import { addSoldier, applyLaw, balanceTeams, createContext, createMatch, fireShot, reportState, tickMatch, TICK_RATE } from './sim';
 import { OFFLINE_CONFIG, ONLINE_CONFIG, type MatchEvent, type MatchState, type Soldier } from './state';
@@ -123,6 +124,19 @@ describe('server-side validation', () => {
     place(a, -8, 0, ctx); a.m.y = 0.1; place(b, 8, 0, ctx); b.m.y = 0.1;
     fireShot(state, ctx, a.id, claimAt(a, b));
     expect(b.shield).toBe(50);
+  });
+
+  it('accepts a full-auto magazine fired at the real rate despite network jitter', () => {
+    const { state, ctx, a, b } = duel();
+    const r = rng(7), interval = WEAPONS.carbine.interval;
+    // Shots leave the client evenly at 690 RPM and arrive up to ±60 ms early or late; the server ticks at 30 Hz.
+    const arrivals = Array.from({ length: 30 }, (_, i) => i * interval + 0.08 + (r() - 0.5) * 0.12).sort((x, y) => x - y);
+    let now = 0, accepted = 0;
+    for (const t of arrivals) {
+      while (now + 1 / TICK_RATE <= t) { tickMatch(state, ctx, 1 / TICK_RATE); now += 1 / TICK_RATE; }
+      if (fireShot(state, ctx, a.id, claimAt(a, b))) accepted++;
+    }
+    expect(accepted).toBe(30);
   });
 
   it('never applies friendly fire', () => {

@@ -49,6 +49,8 @@ export class Game {
   private fpsTime = 0;
   private wasAlive = false;
   private corrections = 0;
+  /** Online: times of hit markers shown on a predicted hit, so the server's confirmation doesn't repeat them. */
+  private predictedHits: number[] = [];
   private lastLook = { x: 0, y: 0 };
   private deathCam = new THREE.Vector3();
   private lawChanged?: string;
@@ -301,7 +303,16 @@ export class Game {
     this.effects.flash(muzzle, 0xffc070, 4, 0.05, 7);
     const end = new THREE.Vector3(point.x, point.y, point.z);
     if (Math.random() < (w.auto ? 0.5 : 1)) this.effects.tracer(muzzle, end, 0xffe2a0, w.id === 'lancer' ? 2.5 : 1);
-    if (target >= 0) this.effects.hitSpark(end, (state.soldiers.find(s => s.id === target)?.shield ?? 0) > 0);
+    if (target >= 0) {
+      this.effects.hitSpark(end, (state.soldiers.find(s => s.id === target)?.shield ?? 0) > 0);
+      // Online, waiting a round trip for the marker feels laggy: show it now; the server's damage
+      // event (validated) is then absorbed instead of repeated.
+      if (this.link.mode === 'online') {
+        this.hud.hit(zone === 'head' ? 'head' : 'body');
+        this.audio.hitmarker(zone === 'head', false);
+        this.predictedHits.push(performance.now());
+      }
+    }
     else if (drone) this.effects.hitSpark(end, true);
     else if (wall) this.effects.impact(end, new THREE.Vector3(wall.normal.x, wall.normal.y, wall.normal.z), wall.surface, true, cam.position);
   }
@@ -323,8 +334,13 @@ export class Game {
       }
       case 'damage': {
         if (e.attacker === myId && e.target !== myId) {
-          this.hud.hit(e.zone === 'head' ? 'head' : 'body');
-          this.audio.hitmarker(e.zone === 'head', false);
+          const now = performance.now();
+          while (this.predictedHits.length && now - this.predictedHits[0] > 800) this.predictedHits.shift();
+          if (this.predictedHits.length && e.zone !== 'blast') this.predictedHits.shift();
+          else {
+            this.hud.hit(e.zone === 'head' ? 'head' : 'body');
+            this.audio.hitmarker(e.zone === 'head', false);
+          }
         }
         if (e.target === myId) {
           const angle = Math.atan2(-(e.x - this.player.m.x), -(e.z - this.player.m.z));
