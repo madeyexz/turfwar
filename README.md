@@ -77,16 +77,21 @@ naming who changed what.
   scheduled `tick` reducer that runs bots, the lawful world, objectives, scoring, respawns, round
   resets and map rotation. With no humans connected the tick idles.
 - Clients send their own movement (`report`, 20 Hz) and shots (`fire`) with an optional claimed hit.
-  The server rejects implausible movement (speed, rise, bounds, solid geometry, enemy shields) and
-  validates each claim: alive shooter, weapon, magazine, token-bucket fire rate, origin near the
-  shooter, range, line of sight through static geometry, claimed point within a speed-scaled
-  tolerance of the target's hit volumes, friendly fire off. Damage, kills and scores are
-  authoritative. Drones and bot shots are simulated entirely on the server.
+  Movement spends a distance budget measured against server time (refills at 13 m/s, capped at
+  6 m ≈ 0.7 s of sprinting), so reports that bunch up after a network stall pass but sending reports
+  faster never buys distance; rising more than a jump above the last floor or hovering for 2.5 s
+  drops the soldier back down; bounds, solid geometry and enemy shields are enforced. Each shot
+  claim is checked for alive shooter, weapon, magazine, fire rate (a client's fire clock may run at
+  most 250 ms ahead, so slow weapons get no instant follow-up), origin near the shooter, range, line
+  of sight through static geometry, a claimed point within a speed-scaled tolerance of the target's
+  hit volumes, and no friendly fire. Damage, kills and scores are authoritative. Drones and bot shots
+  are simulated entirely on the server.
 - Client-side: own movement is predicted with the shared controller; remote soldiers and bodies are
   interpolated ~100 ms behind; a rejected position snaps the client back; dropped (idle) clients
   rejoin automatically. Online play was verified with two separate browser clients (different
-  identities) seeing each other move, trading damage through server validation, and receiving each
-  other's law changes and cooldown errors.
+  identities): they see each other move, receive each other's law changes and cooldown errors, and
+  fight through server validation — one client killed the other, both kill feeds showed it and the
+  victim's death screen named the killer.
 - Trust model and limits: movement is client-reported (validated, not simulated), hit detection is
   shooter-favoured within tolerances (no full lag compensation), one match per database, and the
   anonymous AI law route is not rate limited by this code (use Vercel Firewall + an OpenAI spend
@@ -156,17 +161,25 @@ committed.
 Targets 60 fps on an M-series MacBook at the default *medium* preset (DPR ≤ 1, 2048 shadow map,
 half-resolution bloom). Budgets: merged static geometry per material, one draw call set per soldier
 (body + 3-part armor + weapon), at most four dynamic point lights (reactor + three pooled flashes),
-pooled effects. A typical firefight frame is ~200–420 draw calls. **The 60 fps target has not been
-measured on Apple hardware**: development ran in a cloud sandbox whose browser renders with
-SwiftShader (CPU), where the game runs at a few frames per second, so no frame-rate claim is made.
-`?quality=low|medium|high` selects a preset.
+pooled effects. A typical firefight frame is ~150–420 draw calls and ~0.5 M triangles. **The 60 fps
+target has not been measured on Apple hardware**: development ran in a cloud sandbox whose browser
+renders with SwiftShader (CPU), where the game runs at about 3 fps, so no frame-rate claim is made.
+
+**Measure it yourself:** click *Run the 30-second performance check* on the deploy screen (or open
+`/?bench`, optionally `&map=frostline&quality=high`). A scripted soldier runs the objective route
+and fights through a solo skirmish for 30 s after a warm-up, then a panel reports average fps,
+1% low, frame-time median/p95/p99, frames slower than 60 Hz, main-thread time per frame, hitches
+over 100 ms, shader compiles during the run, draw calls, triangles, resolution and the GPU string,
+with a verdict (met = average ≥ 58 fps and p95 ≤ 18.2 ms) and a *Copy results* button (JSON).
+Browsers cap frames at the display refresh rate, so 120 Hz screens can exceed 60. The deploy screen
+also has Low / Medium / High graphics presets (`?quality=` works too).
 
 ## Known limitations and what remains
 
 - No full lag compensation or server-side rewind for hit validation; very high latency can make
   moving targets harder to hit or let claims fail validation.
 - Movement is client-reported (validated). A determined cheater could still play within the
-  physical limits the server allows (e.g. small speed boosts, aim assistance).
+  limits the server allows (up to ~1.5× sprint speed sustained, short 6 m bursts, aim assistance).
 - One match per database; no lobbies, parties, persistent progression or matchmaking.
 - First-person and third-person animation is code-driven on CC0 clips; there are no authored
   rifle-specific reload/hit animations, and fingers are posed procedurally.
