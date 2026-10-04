@@ -2,7 +2,7 @@ import { CollisionWorld } from '../../shared/collision';
 import { clamp, dirFromAngles, type Vec3 } from '../../shared/math';
 import { MOVE, createMoveState, eyeHeight, isSprinting, stepMovement, type MoveEvents, type MoveInput, type MoveState } from '../../shared/movement';
 import type { Soldier } from '../../shared/match/state';
-import { GRENADE, LOADOUTS, WEAPONS, type LoadoutId, type WeaponDef } from '../../shared/weapons';
+import { GRENADE, LOADOUTS, WEAPONS, pelletCone, type LoadoutId, type WeaponDef } from '../../shared/weapons';
 import type { Input } from './input';
 import { adsFov, settings } from './settings';
 
@@ -156,7 +156,9 @@ export class LocalPlayer {
         this.ammo[this.slot]--;
         this.fireCooldown += w.interval;
         if (this.fireCooldown < 0) this.fireCooldown = w.interval;
-        const spread = this.currentSpread() * DEG;
+        // Pellet weapons fire a fixed pattern around the exact aim (the server re-traces it), and
+        // launcher charges leave straight down the sights; everything else samples the spread cone.
+        const spread = w.pellets > 1 || w.projectile ? 0 : this.currentSpread() * DEG;
         // Uniform disc sampling inside the cone.
         const a = Math.random() * Math.PI * 2, r = Math.sqrt(Math.random()) * spread;
         const dir = dirFromAngles(this.yaw + Math.cos(a) * r, this.pitch + Math.sin(a) * r);
@@ -190,6 +192,7 @@ export class LocalPlayer {
 
   currentSpread() {
     const w = this.weapon;
+    if (w.pellets > 1) return pelletCone(w, this.ads > 0.5);
     const moving = Math.hypot(this.m.vx, this.m.vz) > 1.5;
     let s = w.spread.hip + (w.spread.ads - w.spread.hip) * this.ads;
     if (moving) s += w.spread.moving * (1 - this.ads * 0.65);

@@ -3,8 +3,8 @@ import { hitShape, raycastSoldier } from '../../shared/hitbox';
 import { parseLawCommand, type LawCommand } from '../../shared/laws';
 import { loadMap } from '../../shared/maps/index';
 import { raySphere, type Vec3 } from '../../shared/math';
-import type { MatchEvent, MatchState, ShotClaim, Soldier } from '../../shared/match/state';
-import { LOADOUTS, type HitZone, type LoadoutId } from '../../shared/weapons';
+import type { MatchEvent, MatchState, Soldier } from '../../shared/match/state';
+import { LOADOUTS, pelletCone, pelletDirs, type HitZone, type LoadoutId } from '../../shared/weapons';
 import { BODY_RADIUS } from '../../shared/world';
 import type { Assets } from '../assets';
 import { Audio } from '../audio';
@@ -58,6 +58,8 @@ export class Game {
   /** Remote gunshot sounds started this frame. */
   private shotVoices = 0;
   /** Online: hit markers already shown for predicted hits, so the server's confirmations don't repeat them. */
+  /** Last muzzle report per remote shooter (pellet events share one report). */
+  private lastReport = new Map<number, number>();
   private predictedHits: { at: number; target: number }[] = [];
   private lastLook = { x: 0, y: 0 };
   private deathCam = new THREE.Vector3();
@@ -304,6 +306,48 @@ export class Game {
   /** Client-side hitscan against what this player sees; the host validates the claim. */
   private shoot(origin: Vec3, dir: Vec3, range: number, state: MatchState) {
     const w = this.player.weapon;
+    // Feel: muzzle flash, recoil, sound.
+    this.viewmodel.fire();
+    this.audio.gunshot(w.id);
+    const cam = this.renderer.camera;
+    cam.updateMatrixWorld();
+    const muzzle = this.viewmodel.muzzleWorld(cam, this.renderer.viewCamera);
+    this.effects.flash(muzzle, w.projectile ? 0xb48cff : 0xffc070, 4, 0.05, 7);
+    if (w.projectile) {
+      // Charges are lawful bodies: the host launches one and it arrives with the next snapshot.
+      this.link.fire({ weapon: this.player.slot, origin, dir, target: -1, zone: '', point: origin });
+      return;
+    }
+    const traces = (w.pellets > 1 ? pelletDirs(dir, pelletCone(w, this.player.ads > 0.5), w.pellets) : [dir]).map(d => this.trace(origin, d, range, state));
+    // Claim the soldier most pellets hit; the host re-traces a pellet pattern from that claim.
+    const counts = new Map<number, number>();
+    for (const t of traces) if (t.target >= 0) counts.set(t.target, (counts.get(t.target) ?? 0) + 1);
+    const target = [...counts.entries()].sort((a, b) => b[1] - a[1])[0]?.[0] ?? -1;
+    const claimed = traces.find(t => t.target === target) ?? traces[0];
+    this.link.fire({ weapon: this.player.slot, origin, dir, target: claimed.target, zone: claimed.zone, point: claimed.point });
+    traces.forEach((t, i) => {
+      const end = new THREE.Vector3(t.point.x, t.point.y, t.point.z);
+      const tracer = w.pellets > 1 ? i % 3 === 0 : Math.random() < (w.auto ? 0.5 : 1);
+      if (tracer) this.effects.tracer(muzzle, end, 0xffe2a0, w.id === 'lancer' ? 2.5 : 1);
+      if (t.target >= 0) this.effects.hitSpark(end, (state.soldiers.find(s => s.id === t.target)?.shield ?? 0) > 0);
+      else if (t.drone) this.effects.hitSpark(end, true);
+      else if (t.wall) this.effects.impact(end, new THREE.Vector3(t.wall.normal.x, t.wall.normal.y, t.wall.normal.z), t.wall.surface, i < 3, cam.position);
+    });
+    if (target >= 0) {
+      const victim = state.soldiers.find(s => s.id === target);
+      const head = traces.some(t => t.target === target && t.zone === 'head');
+      // Online, waiting a round trip for the marker feels laggy: show it now; the server's damage
+      // event (validated) is then absorbed instead of repeated. Spawn-protected targets take no damage.
+      if (this.link.mode === 'online' && victim && victim.protectLeft <= 0) {
+        this.hud.hit(head ? 'head' : 'body');
+        this.audio.hitmarker(head, false);
+        this.predictedHits.push({ at: performance.now(), target });
+      }
+    }
+  }
+
+  /** One ray against the world, enemy soldiers as rendered, and hostile drones. */
+  private trace(origin: Vec3, dir: Vec3, range: number, state: MatchState) {
     const wall = this.map.world.raycast(origin, dir, range, this.myTeam);
     let best = wall ? wall.t : range;
     let target = -1, zone: HitZone | '' = '';
@@ -320,30 +364,7 @@ export class Game {
       if (t >= 0 && t < best) { best = t; target = -1; zone = ''; drone = true; }
     }
     const point = { x: origin.x + dir.x * best, y: origin.y + dir.y * best, z: origin.z + dir.z * best };
-    const claim: ShotClaim = { weapon: this.player.slot, origin, dir, target, zone, point };
-    this.link.fire(claim);
-    // Feel: muzzle flash, tracer, impact, recoil, sound.
-    this.viewmodel.fire();
-    this.audio.gunshot(w.id);
-    const cam = this.renderer.camera;
-    cam.updateMatrixWorld();
-    const muzzle = this.viewmodel.muzzleWorld(cam, this.renderer.viewCamera);
-    this.effects.flash(muzzle, 0xffc070, 4, 0.05, 7);
-    const end = new THREE.Vector3(point.x, point.y, point.z);
-    if (Math.random() < (w.auto ? 0.5 : 1)) this.effects.tracer(muzzle, end, 0xffe2a0, w.id === 'lancer' ? 2.5 : 1);
-    if (target >= 0) {
-      const victim = state.soldiers.find(s => s.id === target);
-      this.effects.hitSpark(end, (victim?.shield ?? 0) > 0);
-      // Online, waiting a round trip for the marker feels laggy: show it now; the server's damage
-      // event (validated) is then absorbed instead of repeated. Spawn-protected targets take no damage.
-      if (this.link.mode === 'online' && victim && victim.protectLeft <= 0) {
-        this.hud.hit(zone === 'head' ? 'head' : 'body');
-        this.audio.hitmarker(zone === 'head', false);
-        this.predictedHits.push({ at: performance.now(), target });
-      }
-    }
-    else if (drone) this.effects.hitSpark(end, true);
-    else if (wall) this.effects.impact(end, new THREE.Vector3(wall.normal.x, wall.normal.y, wall.normal.z), wall.surface, true, cam.position);
+    return { point, target, zone, drone, wall: target < 0 && !drone ? wall : null };
   }
 
   private handleEvent(e: MatchEvent, state: MatchState, myId: number) {
@@ -352,17 +373,21 @@ export class Game {
       case 'shot': {
         if (e.shooter === myId) break;
         const r = this.remotes.get(e.shooter);
-        r?.view.shoot();
         const cam = this.renderer.camera.position;
         const shooterDistance = Math.hypot(e.from.x - cam.x, e.from.y - cam.y, e.from.z - cam.z);
+        // A scattergun blast arrives as one event per pellet: one report and muzzle flash per trigger pull.
+        const now = performance.now(), pellet = now - (this.lastReport.get(e.shooter) ?? -1e9) < 40;
+        this.lastReport.set(e.shooter, now);
+        if (!pellet) r?.view.shoot();
         if (shooterDistance > SHOT_FX_RANGE && Math.hypot(e.to.x - cam.x, e.to.y - cam.y, e.to.z - cam.z) > SHOT_FX_RANGE) break;
         const from = r?.view.onScreen ? r.view.muzzleWorld() : new THREE.Vector3(e.from.x, e.from.y, e.from.z);
-        const to = new THREE.Vector3(e.to.x, e.to.y, e.to.z);
-        this.effects.tracer(from, to, find(e.shooter)?.team === 0 ? 0xa8dcff : 0xffb0a0, 1.2);
-        if (e.hit === 0) this.effects.impact(to, from.clone().sub(to).normalize(), e.surface, true);
-        else this.effects.hitSpark(to, false);
         // Cap remote gunshot voices per frame: each one is several WebAudio nodes.
-        if (e.weapon !== 'bolt' && shooterDistance < SHOT_AUDIO_RANGE && this.shotVoices++ < 6) this.audio.gunshot(e.weapon, this.listener(), from);
+        if (!pellet && e.weapon !== 'bolt' && shooterDistance < SHOT_AUDIO_RANGE && this.shotVoices++ < 6) this.audio.gunshot(e.weapon, this.listener(), from);
+        const to = new THREE.Vector3(e.to.x, e.to.y, e.to.z);
+        if (e.from.x === e.to.x && e.from.y === e.to.y && e.from.z === e.to.z) break;
+        if (!pellet || e.hit || Math.random() < 0.3) this.effects.tracer(from, to, find(e.shooter)?.team === 0 ? 0xa8dcff : 0xffb0a0, 1.2);
+        if (e.hit === 0) this.effects.impact(to, from.clone().sub(to).normalize(), e.surface, !pellet);
+        else this.effects.hitSpark(to, false);
         break;
       }
       case 'damage': {
@@ -419,7 +444,8 @@ export class Game {
       case 'rewind': break;
       case 'explosion': {
         const at = new THREE.Vector3(e.x, e.y, e.z);
-        this.effects.explosion(at);
+        if (e.weapon === 'graviton') { this.effects.explosion(at, 0.8); this.effects.burst(at, 0xb48cff); }
+        else this.effects.explosion(at);
         this.audio.explosion(this.listener(), at);
         const d = at.distanceTo(this.renderer.camera.position);
         if (d < 18) this.player.shake = Math.min(4, this.player.shake + (18 - d) * 0.25);

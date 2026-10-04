@@ -1,10 +1,13 @@
 import { chestPoint } from '../hitbox';
 import { clamp, dirFromAngles, wrapAngle, type Vec3 } from '../math';
 import { MOVE, eyeHeight, stepMovement, type MoveInput } from '../movement';
-import { GRENADE } from '../weapons';
-import { eyeOf, feetOf, resolveShot, spreadFor, throwGrenadeFrom, traceShot, weaponOf, type SimContext } from './combat';
+import { GRENADE, LOADOUTS, WEAPONS, type WeaponId } from '../weapons';
+import { eyeOf, feetOf, launchCharge, resolvePellets, resolveShot, spreadFor, throwGrenadeFrom, traceShot, weaponOf, type SimContext } from './combat';
 import { findPath, nearestNode } from './nav';
 import type { BotBrain, MatchState, Soldier } from './state';
+
+/** Distance each weapon's bot tries to fight from. */
+const PREFERRED_RANGE: Partial<Record<WeaponId, number>> = { lancer: 45, magnum: 18, scatter: 7, stinger: 12, graviton: 20 };
 
 const CALLSIGNS = [
   'Halcyon', 'Vex', 'Marrow', 'Kestrel', 'Onyx', 'Sable', 'Rook', 'Cinder', 'Talon', 'Wren', 'Juno', 'Brask',
@@ -155,11 +158,11 @@ export function updateBot(state: MatchState, ctx: SimContext, bot: Soldier, dt: 
     bot.yaw = wrapAngle(bot.yaw + clamp(wrapAngle(wantYaw - bot.yaw), -turn, turn));
     bot.pitch = clamp(bot.pitch + clamp(wantPitch - bot.pitch, -turn, turn), -1.3, 1.3);
     const aligned = Math.abs(wrapAngle(wantYaw - bot.yaw)) < 0.06 && Math.abs(wantPitch - bot.pitch) < 0.06;
-    wantAds = distance > 22 && w.id !== 'sidearm';
+    wantAds = distance > 22 && w.id !== 'sidearm' && w.id !== 'stinger' && w.pellets === 1;
 
     // Strafe and range-keeping while fighting.
     if (brain.strafeLeft <= 0) { brain.strafe = ctx.random() < 0.5 ? -1 : 1; brain.strafeLeft = 0.5 + ctx.random() * 0.9; }
-    const preferred = w.id === 'lancer' ? 45 : w.id === 'magnum' ? 18 : 20;
+    const preferred = PREFERRED_RANGE[w.id] ?? 20;
     const fx = -Math.sin(bot.yaw), fz = -Math.cos(bot.yaw), rx = Math.cos(bot.yaw), rz = -Math.sin(bot.yaw);
     const advance = distance > preferred * 1.4 ? 0.7 : distance < preferred * 0.5 ? -0.6 : 0;
     const pathWeight = distance > preferred ? 0.6 : 0.2;
@@ -167,14 +170,26 @@ export function updateBot(state: MatchState, ctx: SimContext, bot: Soldier, dt: 
     moveZ = moveZ * pathWeight + (fz * advance + rz * brain.strafe * 0.9);
     if (brain.crouchLeft < -2 && ctx.random() < dt * 0.25 * brain.skill && distance > 15) brain.crouchLeft = 0.8 + ctx.random();
 
+    // Launcher bots draw the sidearm when an enemy gets inside the blast, and the launcher back at range.
+    const [primary] = LOADOUTS[bot.loadout].weapons;
+    const blast = WEAPONS[primary].projectile?.radius;
+    if (blast && bot.switchLeft <= 0 && bot.reloadLeft <= 0 && (bot.weapon === 0 ? distance < blast + 2 : distance > blast + 6)) {
+      bot.weapon = bot.weapon === 0 ? 1 : 0; bot.switchLeft = weaponOf(bot).equipTime;
+    }
+
     // Fire in bursts once the reaction delay has passed.
     if (brain.reaction <= 0 && aligned && bot.reloadLeft <= 0 && bot.switchLeft <= 0 && bot.fireCooldown <= 0 && brain.burstPause <= 0 && distance < w.range * 0.6) {
       if (bot.ammo[bot.weapon] <= 0) { bot.reloadLeft = w.reload; }
       else {
-        const spread = spreadFor({ ...bot, ads: wantAds }, w) * (1.35 - brain.skill * 0.55) * Math.PI / 180;
+        const spread = (w.pellets > 1 ? 0.8 : spreadFor({ ...bot, ads: wantAds }, w)) * (1.35 - brain.skill * 0.55) * Math.PI / 180;
         const yaw = bot.yaw + (ctx.random() - 0.5) * 2 * spread, pitch = bot.pitch + (ctx.random() - 0.5) * 2 * spread;
-        const dir = dirFromAngles(yaw, pitch);
-        resolveShot(state, ctx, bot, w, eye, traceShot(state, ctx, bot, eye, dir, w.range));
+        if (w.projectile) {
+          // Lob over the drop.
+          const flight = distance / w.projectile.speed;
+          const lob = Math.atan2(0.5 * 9.8 * flight * flight, Math.max(1, distance));
+          launchCharge(state, ctx, bot, w, eye, dirFromAngles(yaw, pitch + lob));
+        } else if (w.pellets > 1) resolvePellets(state, ctx, bot, w, eye, dirFromAngles(yaw, pitch), wantAds);
+        else resolveShot(state, ctx, bot, w, eye, traceShot(state, ctx, bot, eye, dirFromAngles(yaw, pitch), w.range));
         bot.ammo[bot.weapon]--; bot.sinceShot = 0;
         bot.fireCooldown = w.auto ? w.interval : w.interval * (1.15 + ctx.random() * 0.6);
         brain.burst++;

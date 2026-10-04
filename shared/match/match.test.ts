@@ -5,7 +5,7 @@ import { rng, wrapAngle } from '../math';
 import { CollisionWorld } from '../collision';
 import { createMoveState, eyeHeight, stepMovement } from '../movement';
 import { hitShape } from '../hitbox';
-import { WEAPONS } from '../weapons';
+import { LOADOUTS, WEAPONS, pelletCone, pelletDirs } from '../weapons';
 import { findPath, nearestNode } from './nav';
 import { addSoldier, applyLaw, balanceTeams, createContext, createMatch, fireShot, reportState, teamSizeFor, tickMatch, TICK_RATE } from './sim';
 import { OFFLINE_CONFIG, ONLINE_CONFIG, type MatchEvent, type MatchState, type Soldier } from './state';
@@ -235,6 +235,88 @@ describe('server-side validation', () => {
   });
 });
 
+describe('new weapons', () => {
+  function duel(loadout: 'breacher' | 'grenadier', gap: number) {
+    const env = setup();
+    const a = addSoldier(env.state, env.ctx, { name: 'A', team: 0, bot: false, loadout });
+    const b = addSoldier(env.state, env.ctx, { name: 'B', team: 1, bot: false });
+    a.protectLeft = b.protectLeft = 0; a.alive = b.alive = true; a.health = b.health = 100; a.shield = b.shield = 50;
+    a.ammo = [WEAPONS[LOADOUTS[loadout].weapons[0]].magazine, 14];
+    place(a, -gap / 2, 22, env.ctx); place(b, gap / 2, 22, env.ctx);
+    a.yaw = -Math.PI / 2;
+    return { ...env, a, b };
+  }
+  const aimAt = (a: Soldier, b: Soldier, dy = 0) => {
+    const origin = { x: a.m.x, y: a.m.y + eyeHeight(a.m), z: a.m.z };
+    const point = { x: b.m.x, y: b.m.y + 1.2 + dy, z: b.m.z };
+    const d = Math.hypot(point.x - origin.x, point.y - origin.y, point.z - origin.z);
+    return { weapon: 0 as const, origin, dir: { x: (point.x - origin.x) / d, y: (point.y - origin.y) / d, z: (point.z - origin.z) / d }, target: b.id, zone: 'body' as const, point };
+  };
+  const health = (s: Soldier) => s.health + s.shield;
+
+  it('every kit pairs two known weapons', () => {
+    for (const l of Object.values(LOADOUTS)) for (const id of l.weapons) expect(WEAPONS[id].id).toBe(id);
+  });
+
+  it('pellets follow one fixed pattern inside the cone', () => {
+    const dir = { x: 0.6, y: -0.2, z: -0.77 }, cone = pelletCone(WEAPONS.scatter, false);
+    const a = pelletDirs(dir, cone, 9), b = pelletDirs(dir, cone, 9);
+    expect(a).toEqual(b);
+    expect(a).toHaveLength(9);
+    const len = Math.hypot(dir.x, dir.y, dir.z);
+    for (const d of a) {
+      const angle = Math.acos(Math.min(1, (d.x * dir.x + d.y * dir.y + d.z * dir.z) / len)) * 180 / Math.PI;
+      expect(angle).toBeLessThanOrEqual(cone + 1e-6);
+    }
+  });
+
+  it('the scattergun shreds up close, falls off at range, and is paced by its pump', () => {
+    const near = duel('breacher', 5);
+    expect(fireShot(near.state, near.ctx, near.a.id, aimAt(near.a, near.b))).toBe(true);
+    const closeDamage = 150 - health(near.b);
+    expect(closeDamage).toBeGreaterThan(80);
+    // One trigger pull is one claim: an instant second pull is refused.
+    expect(fireShot(near.state, near.ctx, near.a.id, aimAt(near.a, near.b))).toBe(false);
+    expect(near.a.ammo[0]).toBe(WEAPONS.scatter.magazine - 1);
+    const far = duel('breacher', 30);
+    fireShot(far.state, far.ctx, far.a.id, aimAt(far.a, far.b));
+    expect(150 - health(far.b)).toBeLessThan(closeDamage / 3);
+  });
+
+  it('moves a lagging pellet target to the validated claim, but no further', () => {
+    const { state, ctx, a, b } = duel('breacher', 6);
+    const claim = aimAt(a, b);
+    // The server sees the target 0.6 m behind where the shooter saw (and claimed) it.
+    b.m.z += 0.6;
+    fireShot(state, ctx, a.id, claim);
+    expect(150 - health(b)).toBeGreaterThan(60);
+    // A claim far from the target is ignored, and the pattern is traced against the real position.
+    const other = duel('breacher', 6);
+    const bogus = aimAt(other.a, other.b); bogus.point = { ...bogus.point, y: bogus.point.y + 3 };
+    other.b.m.z += 3;
+    fireShot(other.state, other.ctx, other.a.id, bogus);
+    expect(health(other.b)).toBe(150);
+  });
+
+  it('graviton charges are lawful bodies: they fly, bend with gravity laws and detonate', () => {
+    const { state, ctx, a, b, events } = duel('grenadier', 16);
+    expect(fireShot(state, ctx, a.id, aimAt(a, b))).toBe(true);
+    expect(state.bodies.filter(x => x.kind === 'charge')).toHaveLength(1);
+    tick(state, ctx, 1);
+    expect(state.bodies.some(x => x.kind === 'charge')).toBe(false);
+    expect(events.some(e => e.type === 'explosion' && e.weapon === 'graviton')).toBe(true);
+    expect(health(b)).toBeLessThan(150 - 40);
+
+    // Sideways gravity bends the next charge away from the line it was fired along.
+    const bent = duel('grenadier', 16);
+    bent.state.laws.gravity = { mode: 'uniform', direction: { x: 0, y: 0, z: 1 }, strength: 30, exponent: 0 };
+    fireShot(bent.state, bent.ctx, bent.a.id, aimAt(bent.a, bent.b));
+    tick(bent.state, bent.ctx, 0.2);
+    const charge = bent.state.bodies.find(x => x.kind === 'charge')!;
+    expect(charge.z - bent.a.m.z).toBeGreaterThan(0.3);
+  });
+});
+
 describe('laws in a match', () => {
   it('validates commands, enforces online cooldown and reverts after the law duration', () => {
     const { state, ctx } = setup({ ...ONLINE_CONFIG, warmup: 0 });
@@ -365,6 +447,7 @@ describe('100-soldier battles', () => {
     const { ctx, state } = city();
     balanceTeams(state, ctx);
     tick(state, ctx, 3);
+    state.bodies.push({ id: 999, kind: 'charge', x: 1, y: 2, z: 3, vx: 30, vy: 1, vz: 0, age: 0, owner: 1, team: 0, hp: 1, timer: 2 });
     const a = state.soldiers[3];
     a.yaw = -2.5; a.pitch = 0.4; a.reloadLeft = 1; a.sinceShot = 0;
     const shot = { type: 'shot' as const, shooter: a.id, weapon: 'lancer' as const, from: { x: 1.23, y: 2, z: -3 }, to: { x: 40.5, y: 1, z: -80.02 }, hit: 1 as const, surface: 'concrete' };
@@ -376,7 +459,7 @@ describe('100-soldier battles', () => {
     expect(Math.abs(wrapAngle(p.yaw - a.yaw))).toBeLessThan(0.001);
     expect(p.pitch).toBeCloseTo(0.4, 3);
     expect(p.reloading).toBe(true); expect(p.firing).toBe(true); expect(p.alive).toBe(a.alive);
-    expect(frame.bodies.length).toBe(state.bodies.length);
+    expect(frame.bodies.map(b => b.kind)).toEqual(state.bodies.map(b => b.kind));
     expect(frame.points.map(x => x.owner)).toEqual(state.points.map(x => x.owner));
     expect(frame.shots[0]).toMatchObject({ shooter: a.id, weapon: 'lancer', hit: 1, surface: 'concrete' });
     expect(frame.shots[0].to.z).toBeCloseTo(-80.02, 1);

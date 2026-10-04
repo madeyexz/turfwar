@@ -15,6 +15,9 @@ const RIGS: Record<WeaponId, Rig> = {
   lancer: { model: 'Gun_Sniper', grip: new THREE.Vector3(0.044, -0.048, 0), fore: new THREE.Vector3(-0.47, 0.012, 0), sight: 0.19, muzzle: new THREE.Vector3(-1.28, 0.077, 0), mag: new THREE.Vector3(-0.22, -0.06, 0), magModel: 'Gun_Sniper_Ammo', hip: new THREE.Vector3(0.14, -0.32, -0.38), adsZ: -0.4, scope: true },
   sidearm: { model: 'Gun_Pistol', grip: new THREE.Vector3(0.02, -0.024, 0), fore: new THREE.Vector3(0.025, -0.05, 0.03), sight: 0.192, muzzle: new THREE.Vector3(-0.37, 0.11, 0), mag: new THREE.Vector3(0.03, -0.09, 0), hip: new THREE.Vector3(0.13, -0.17, -0.4), adsZ: -0.38, pistol: true },
   magnum: { model: 'Gun_Revolver', grip: new THREE.Vector3(0.011, -0.024, 0), fore: new THREE.Vector3(0.02, -0.05, 0.03), sight: 0.17, muzzle: new THREE.Vector3(-0.45, 0.081, 0), mag: new THREE.Vector3(-0.08, 0.07, 0), hip: new THREE.Vector3(0.13, -0.17, -0.4), adsZ: -0.4, pistol: true },
+  scatter: { model: 'Gun_Scatter', grip: new THREE.Vector3(0.06, -0.03, 0), fore: new THREE.Vector3(-0.4, 0.02, 0), sight: 0.182, muzzle: new THREE.Vector3(-0.745, 0.095, 0), mag: new THREE.Vector3(-0.3, 0.03, 0), hip: new THREE.Vector3(0.15, -0.31, -0.36), adsZ: -0.38 },
+  stinger: { model: 'Gun_Stinger', grip: new THREE.Vector3(0.02, -0.024, 0), fore: new THREE.Vector3(0.03, -0.12, 0.03), sight: 0.192, muzzle: new THREE.Vector3(-0.44, 0.105, 0), mag: new THREE.Vector3(0.035, -0.2, 0), hip: new THREE.Vector3(0.13, -0.17, -0.4), adsZ: -0.38, pistol: true },
+  graviton: { model: 'Gun_Graviton', grip: new THREE.Vector3(0.08, -0.035, 0), fore: new THREE.Vector3(-0.25, -0.04, 0), sight: 0.24, muzzle: new THREE.Vector3(-0.68, 0.075, 0), mag: new THREE.Vector3(0.13, 0.1, 0), hip: new THREE.Vector3(0.15, -0.32, -0.38), adsZ: -0.38 },
 };
 
 const ease = (t: number) => t * t * (3 - 2 * t);

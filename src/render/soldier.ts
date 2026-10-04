@@ -13,6 +13,9 @@ const GUN_POINTS: Record<WeaponId, { model: string; grip: THREE.Vector3; fore: T
   lancer: { model: 'Gun_Sniper', grip: new THREE.Vector3(0.044, -0.048, 0), fore: new THREE.Vector3(-0.36, 0.012, 0), muzzle: new THREE.Vector3(-1.28, 0.077, 0), pistol: false },
   sidearm: { model: 'Gun_Pistol', grip: new THREE.Vector3(0.02, -0.024, 0), fore: new THREE.Vector3(0.01, -0.05, 0.02), muzzle: new THREE.Vector3(-0.37, 0.11, 0), pistol: true },
   magnum: { model: 'Gun_Revolver', grip: new THREE.Vector3(0.011, -0.024, 0), fore: new THREE.Vector3(0.0, -0.05, 0.02), muzzle: new THREE.Vector3(-0.45, 0.081, 0), pistol: true },
+  scatter: { model: 'Gun_Scatter', grip: new THREE.Vector3(0.06, -0.03, 0), fore: new THREE.Vector3(-0.4, 0.02, 0), muzzle: new THREE.Vector3(-0.745, 0.095, 0), pistol: false },
+  stinger: { model: 'Gun_Stinger', grip: new THREE.Vector3(0.02, -0.024, 0), fore: new THREE.Vector3(0.0, -0.05, 0.02), muzzle: new THREE.Vector3(-0.44, 0.105, 0), pistol: true },
+  graviton: { model: 'Gun_Graviton', grip: new THREE.Vector3(0.08, -0.035, 0), fore: new THREE.Vector3(-0.25, -0.04, 0), muzzle: new THREE.Vector3(-0.68, 0.075, 0), pistol: false },
 };
 
 export const TEAM_ARMOR = [

@@ -1,7 +1,7 @@
 import type { Surface } from '../collision';
 import type { CapturePointDef } from '../maps/types';
 import { WEAPONS, type WeaponId } from '../weapons';
-import type { Body, BodyKind } from '../world';
+import { BODY_RADIUS, type Body, type BodyKind } from '../world';
 import type { MatchEvent, MatchState, PointState, Team } from './state';
 
 /**
@@ -17,7 +17,7 @@ const VEL = 100;         // units per m/s
 const PITCH = 20000;     // units per radian
 const YAW = 65536 / (Math.PI * 2);
 
-const BODY_KINDS: BodyKind[] = ['drone', 'grenade', 'bolt', 'debris'];
+const BODY_KINDS = Object.keys(BODY_RADIUS) as BodyKind[];
 const SURFACES: (Surface | undefined)[] = [undefined, 'metal', 'concrete', 'rock', 'dirt', 'glass', 'energy'];
 const SHOT_WEAPONS: (WeaponId | 'bolt')[] = [...Object.keys(WEAPONS) as WeaponId[], 'bolt'];
 

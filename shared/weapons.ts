@@ -1,6 +1,8 @@
 /** Weapon tuning shared by client feel, bots and server-side damage validation. */
-export type WeaponId = 'carbine' | 'lancer' | 'sidearm' | 'magnum';
-export type LoadoutId = 'assault' | 'recon';
+import type { Vec3 } from './math';
+
+export type WeaponId = 'carbine' | 'lancer' | 'sidearm' | 'magnum' | 'scatter' | 'stinger' | 'graviton';
+export type LoadoutId = 'assault' | 'recon' | 'breacher' | 'grenadier';
 
 export interface WeaponDef {
   id: WeaponId;
@@ -26,7 +28,10 @@ export interface WeaponDef {
   adsTime: number;
   equipTime: number;
   movePenalty: number;
+  /** Pellets per shot, fired in a fixed pattern across the hip/ADS cone (see pelletDirs). */
   pellets: number;
+  /** Lawful projectile instead of hitscan: it falls under the current gravity law and world time. */
+  projectile?: { speed: number; fuse: number; proximity: number; radius: number; damage: number };
 }
 
 export const WEAPONS: Record<WeaponId, WeaponDef> = {
@@ -62,11 +67,38 @@ export const WEAPONS: Record<WeaponId, WeaponDef> = {
     recoil: { pitch: 3.2, yaw: 0.6, pattern: [0.4, -0.3, 0.25], recover: 8, viewPunch: 2.6 },
     adsFov: 58, adsTime: 0.14, equipTime: 0.32, movePenalty: 1.05, pellets: 1,
   },
+  scatter: {
+    id: 'scatter', name: 'S-8 Breacher Scattergun', short: 'S-8', model: 'Gun_Scatter', auto: false,
+    interval: 0.82, magazine: 6, reload: 2.4, damage: 14, headMultiplier: 1.5, legMultiplier: 0.8,
+    falloff: { near: 7, far: 24, minDamage: 0.25 }, range: 60,
+    spread: { hip: 4.6, ads: 3.2, moving: 0, air: 0, bloomPerShot: 0, bloomMax: 0, recovery: 6 },
+    recoil: { pitch: 4.2, yaw: 0.8, pattern: [0.3, -0.4], recover: 7, viewPunch: 3.6 },
+    adsFov: 64, adsTime: 0.15, equipTime: 0.45, movePenalty: 1.02, pellets: 9,
+  },
+  stinger: {
+    id: 'stinger', name: 'K-9 Stinger Machine Pistol', short: 'K-9', model: 'Gun_Stinger', auto: true,
+    interval: 60 / 1050, magazine: 24, reload: 1.5, damage: 13, headMultiplier: 1.6, legMultiplier: 0.85,
+    falloff: { near: 10, far: 32, minDamage: 0.5 }, range: 120,
+    spread: { hip: 2.6, ads: 0.9, moving: 0.9, air: 2.5, bloomPerShot: 0.18, bloomMax: 2.2, recovery: 11 },
+    recoil: { pitch: 0.45, yaw: 0.4, pattern: [0.3, -0.35, 0.2, -0.25, 0.4, -0.1], recover: 12, viewPunch: 0.6 },
+    adsFov: 64, adsTime: 0.12, equipTime: 0.26, movePenalty: 1.06, pellets: 1,
+  },
+  graviton: {
+    id: 'graviton', name: 'G-0 Graviton Launcher', short: 'G-0', model: 'Gun_Graviton', auto: false,
+    interval: 0.75, magazine: 4, reload: 2.6, damage: 0, headMultiplier: 1, legMultiplier: 1,
+    falloff: { near: 0, far: 1, minDamage: 1 }, range: 120,
+    spread: { hip: 0, ads: 0, moving: 0, air: 0, bloomPerShot: 0, bloomMax: 0, recovery: 6 },
+    recoil: { pitch: 2.6, yaw: 0.5, pattern: [0.2, -0.3], recover: 6, viewPunch: 2.8 },
+    adsFov: 60, adsTime: 0.2, equipTime: 0.5, movePenalty: 0.95, pellets: 1,
+    projectile: { speed: 34, fuse: 2.6, proximity: 1.1, radius: 4.5, damage: 105 },
+  },
 };
 
 export const LOADOUTS: Record<LoadoutId, { name: string; role: string; weapons: [WeaponId, WeaponId] }> = {
   assault: { name: 'Assault', role: 'Pulse carbine and sidearm. Wins mid-range fights.', weapons: ['carbine', 'sidearm'] },
   recon: { name: 'Recon', role: 'Rail rifle and magnum. Holds lanes and ridges.', weapons: ['lancer', 'magnum'] },
+  breacher: { name: 'Breacher', role: 'Scattergun and machine pistol. Clears rooms and doorways.', weapons: ['scatter', 'stinger'] },
+  grenadier: { name: 'Grenadier', role: 'Graviton launcher and sidearm. Its charges fall with the laws.', weapons: ['graviton', 'sidearm'] },
 };
 
 export const GRENADE = { fuse: 2.2, radius: 6.5, damage: 110, throwSpeed: 19, perLife: 2 };
@@ -84,3 +116,34 @@ export function zoneMultiplier(w: WeaponDef, zone: HitZone) {
 }
 
 export type HitZone = 'head' | 'body' | 'legs';
+
+/** Pellet cone half-angle (degrees): fixed per stance so client and server derive the same pattern. */
+export const pelletCone = (w: WeaponDef, ads: boolean) => ads ? w.spread.ads : w.spread.hip;
+
+/**
+ * Fixed pellet pattern around `dir`: one center pellet, an inner ring and an outer ring at the cone
+ * edge. Deterministic (no randomness) so the server can re-trace exactly what the client fired.
+ */
+export function pelletDirs(dir: Vec3, coneDeg: number, count: number): Vec3[] {
+  const len = Math.hypot(dir.x, dir.y, dir.z) || 1;
+  const f = { x: dir.x / len, y: dir.y / len, z: dir.z / len };
+  // Right = f × up (falls back to world X when aiming straight up or down); up = right × f.
+  let rx = -f.z, rz = f.x;
+  const rl = Math.hypot(rx, rz);
+  if (rl < 1e-4) { rx = 1; rz = 0; } else { rx /= rl; rz /= rl; }
+  const ux = -rz * f.y, uy = rz * f.x - rx * f.z, uz = rx * f.y;
+  const out: Vec3[] = [f];
+  const inner = Math.floor((count - 1) / 3), outer = count - 1 - inner;
+  const ring = (n: number, radius: number, phase: number) => {
+    const t = Math.tan(coneDeg * radius * Math.PI / 180);
+    for (let i = 0; i < n; i++) {
+      const a = phase + i / n * Math.PI * 2, x = Math.cos(a) * t, y = Math.sin(a) * t;
+      const d = { x: f.x + rx * x + ux * y, y: f.y + uy * y, z: f.z + rz * x + uz * y };
+      const l = Math.hypot(d.x, d.y, d.z);
+      out.push({ x: d.x / l, y: d.y / l, z: d.z / l });
+    }
+  };
+  ring(inner, 0.45, Math.PI / 2);
+  ring(outer, 1, Math.PI / 2 + Math.PI / outer);
+  return out;
+}
