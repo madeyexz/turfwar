@@ -134,11 +134,28 @@ Development pages (dev server only): `/dev/level.html?map=verdant` (battlefield 
 
 ## Deploy
 
-Not deployed yet: Vercel and SpacetimeDB Maincloud logins were never completed. To deploy,
-`spacetime login`, publish the module to Maincloud under a unique name, set
-`VITE_SPACETIMEDB_URI=wss://maincloud.spacetimedb.com` and `VITE_SPACETIMEDB_DATABASE` in Vercel
-**before building**, optionally `OPENAI_API_KEY`, then `bunx vercel --prod`. Without the SpacetimeDB
-variables the build still ships solo and Law Lab, with Online shown as unavailable.
+Production: https://lawbreaker.vercel.app. The private GitHub repository
+`madeyexz/lawbreaker` is connected to Vercel project `madeyexzs-projects/lawbreaker`, with
+`rebuild-preview` as its production branch. Maincloud database: `3d-game-c4lhd`
+(dashboard: https://spacetimedb.com/3d-game-c4lhd).
+
+Vercel production build variables are `VITE_SPACETIMEDB_URI=wss://maincloud.spacetimedb.com`
+and `VITE_SPACETIMEDB_DATABASE=3d-game-c4lhd`. Do not use `same-origin` on Vercel; that proxy
+exists only in the development server. `OPENAI_API_KEY` is deliberately absent: presets work,
+and free-form AI returns the fallback response without incurring AI charges.
+
+For module updates, run tests and module type checks, then publish non-destructively:
+
+```sh
+bun run test && bun run build && bun run typecheck:module
+spacetime publish -s maincloud -p spacetimedb --delete-data=never --yes=remote,skip-login 3d-game-c4lhd
+```
+
+Stop if schema changes require deletion; never use the local development script for cloud
+publication. On an existing empty starter database, the first valid join initializes the match
+atomically; subsequent joins preserve its state. Publish the compatible module before pushing
+the matching commit to `rebuild-preview`, which triggers Vercel's GitHub deployment.
+Verify the production URL and two separate Online clients after each release.
 
 ## Assets and licenses
 

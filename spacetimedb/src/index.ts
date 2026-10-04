@@ -224,7 +224,8 @@ const micros = (ctx: Ctx) => ctx.timestamp.microsSinceUnixEpoch;
 
 // ---- Lifecycle ----------------------------------------------------------------------------
 
-export const init = spacetimedb.init(ctx => {
+function initializeMatch(ctx: Ctx) {
+  if (ctx.db.match.id.find(0)) return;
   const random = () => ctx.random();
   const state = createMatch(MAP_ID, { ...ONLINE_CONFIG }, random);
   ctx.db.match.insert({
@@ -237,7 +238,9 @@ export const init = spacetimedb.init(ctx => {
   for (const p of state.points) ctx.db.point.insert({ id: p.id, progress: 0, owner: -1, contested: false, capturing: -1 });
   withMatch(ctx, (s, sim) => balanceTeams(s, sim));
   ctx.db.tickSchedule.insert({ scheduledId: 0n, scheduledAt: ScheduleAt.interval(BigInt(Math.round(1_000_000 / TICK_RATE))) });
-});
+}
+
+export const init = spacetimedb.init(initializeMatch);
 
 export const onDisconnect = spacetimedb.clientDisconnected(ctx => {
   const player = ctx.db.player.identity.find(ctx.sender);
@@ -279,6 +282,8 @@ export const tick = spacetimedb.reducer({ onSchedule: tickTable }, { arg: tickTa
 export const join = spacetimedb.reducer({ name: t.string(), loadout: t.string(), team: t.i8() }, (ctx, { name, loadout, team }) => {
   const clean = name.replace(/[^\p{L}\p{N} _\-.]/gu, '').trim().slice(0, 16) || 'Lawbreaker';
   if (!(loadout in LOADOUTS)) throw new SenderError('Unknown loadout');
+  // Updating an existing starter database does not run the init lifecycle reducer.
+  initializeMatch(ctx);
   const existing = ctx.db.player.identity.find(ctx.sender);
   withMatch(ctx, (state, sim) => {
     if (existing && state.soldiers.some(s => s.id === existing.soldierId)) return;
