@@ -1,0 +1,166 @@
+import { CollisionWorld } from './collision';
+import { clamp } from './math';
+
+/** Infantry movement tuned for a fast browser arena shooter. Shared by players and bots. */
+export const MOVE = {
+  radius: 0.38,
+  standHeight: 1.8,
+  crouchHeight: 1.2,
+  eyeStand: 1.62,
+  eyeCrouch: 1.05,
+  walk: 6.2,
+  sprint: 8.8,
+  crouch: 3.1,
+  ads: 3.6,
+  backward: 0.82,
+  groundAccel: 62,
+  airAccel: 11,
+  friction: 9,
+  gravity: 21,
+  jumpSpeed: 7.1,
+  slideSpeed: 11.8,
+  slideTime: 0.78,
+  slideFriction: 2.6,
+  slideCooldown: 0.45,
+  coyote: 0.12,
+};
+
+export interface MoveState {
+  x: number; y: number; z: number;
+  vx: number; vy: number; vz: number;
+  grounded: boolean;
+  /** 0 standing to 1 fully crouched (eases between). */
+  crouch: number;
+  slideTime: number;
+  slideCooldown: number;
+  airTime: number;
+  prevCrouchInput: boolean;
+  prevJumpInput: boolean;
+}
+
+export interface MoveInput {
+  /** -1 back .. 1 forward */
+  forward: number;
+  /** -1 left .. 1 right */
+  strafe: number;
+  yaw: number;
+  jump: boolean;
+  crouch: boolean;
+  sprint: boolean;
+  ads: boolean;
+}
+
+export interface MoveEvents { jumped: boolean; landed: number; slideStarted: boolean; stepped: number }
+
+export const idleInput = (yaw = 0): MoveInput => ({ forward: 0, strafe: 0, yaw, jump: false, crouch: false, sprint: false, ads: false });
+
+export function createMoveState(x: number, y: number, z: number): MoveState {
+  return { x, y, z, vx: 0, vy: 0, vz: 0, grounded: true, crouch: 0, slideTime: 0, slideCooldown: 0, airTime: 0, prevCrouchInput: false, prevJumpInput: false };
+}
+
+export const eyeHeight = (s: Pick<MoveState, 'crouch'>) => MOVE.eyeStand + (MOVE.eyeCrouch - MOVE.eyeStand) * s.crouch;
+export const bodyHeight = (s: Pick<MoveState, 'crouch'>) => MOVE.standHeight + (MOVE.crouchHeight - MOVE.standHeight) * s.crouch;
+export const isSprinting = (s: MoveState, input: MoveInput) =>
+  input.sprint && input.forward > 0.1 && !input.ads && s.slideTime <= 0 && s.crouch < 0.5;
+
+/** Advance one soldier by dt seconds. Mutates the state and returns feel events. */
+export function stepMovement(world: CollisionWorld, s: MoveState, input: MoveInput, dt: number, team = -1): MoveEvents {
+  const events: MoveEvents = { jumped: false, landed: 0, slideStarted: false, stepped: 0 };
+  const speedH = Math.hypot(s.vx, s.vz);
+  const crouchPressed = input.crouch && !s.prevCrouchInput;
+  const jumpPressed = input.jump && !s.prevJumpInput;
+  s.prevCrouchInput = input.crouch; s.prevJumpInput = input.jump;
+  s.slideCooldown = Math.max(0, s.slideCooldown - dt);
+
+  // Slide: crouch while sprinting on the ground converts momentum into a low, fast slide.
+  if (crouchPressed && s.grounded && s.slideCooldown <= 0 && s.slideTime <= 0 && speedH > MOVE.walk + 0.6) {
+    const boost = Math.max(speedH, MOVE.slideSpeed) / (speedH || 1);
+    s.vx *= boost; s.vz *= boost; s.slideTime = MOVE.slideTime; events.slideStarted = true;
+  }
+  if (s.slideTime > 0) {
+    s.slideTime -= dt;
+    if (!input.crouch || Math.hypot(s.vx, s.vz) < 3.4) s.slideTime = 0;
+    if (s.slideTime <= 0) { s.slideTime = 0; s.slideCooldown = MOVE.slideCooldown; }
+  }
+
+  // Crouch eases; standing up is blocked under low ceilings.
+  let wantCrouch = input.crouch || s.slideTime > 0 ? 1 : 0;
+  if (!wantCrouch && s.crouch > 0 && world.ceilingHeight(s.x, s.z, s.y, MOVE.radius) < s.y + MOVE.standHeight + 0.05) wantCrouch = 1;
+  s.crouch = clamp(s.crouch + Math.sign(wantCrouch - s.crouch) * dt * 7, 0, 1);
+
+  const sin = Math.sin(input.yaw), cos = Math.cos(input.yaw);
+  let fx = input.forward, sx = input.strafe;
+  const len = Math.hypot(fx, sx);
+  if (len > 1) { fx /= len; sx /= len; }
+  // forward = (-sin, -cos), right = (cos, -sin)
+  const wishX = -sin * fx + cos * sx, wishZ = -cos * fx - sin * sx;
+  const sprinting = isSprinting(s, input);
+  let maxSpeed = sprinting ? MOVE.sprint : input.ads ? MOVE.ads : MOVE.walk;
+  if (s.crouch > 0) maxSpeed = Math.min(maxSpeed, maxSpeed + (MOVE.crouch * (input.ads ? 0.85 : 1) - maxSpeed) * s.crouch);
+  if (fx < -0.1) maxSpeed *= MOVE.backward;
+
+  if (s.grounded && s.slideTime > 0) {
+    // Sliding: low friction, light steering only.
+    const sp = Math.hypot(s.vx, s.vz);
+    const drop = Math.max(0, sp - MOVE.slideFriction * dt * (1 + sp * 0.12));
+    if (sp > 0) { s.vx *= drop / sp; s.vz *= drop / sp; }
+    s.vx += wishX * 4 * dt; s.vz += wishZ * 4 * dt;
+  } else if (s.grounded) {
+    const tx = wishX * maxSpeed, tz = wishZ * maxSpeed;
+    const dx = tx - s.vx, dz = tz - s.vz;
+    const dl = Math.hypot(dx, dz);
+    // Faster deceleration than acceleration keeps strafes crisp.
+    const accel = (len < 0.05 ? MOVE.friction * 7 : MOVE.groundAccel) * dt;
+    if (dl <= accel) { s.vx = tx; s.vz = tz; }
+    else { s.vx += dx / dl * accel; s.vz += dz / dl * accel; }
+  } else {
+    // Air control: steer toward the wish direction without exceeding the current or max speed.
+    const cur = Math.hypot(s.vx, s.vz);
+    s.vx += wishX * MOVE.airAccel * dt; s.vz += wishZ * MOVE.airAccel * dt;
+    const next = Math.hypot(s.vx, s.vz), cap = Math.max(cur, maxSpeed);
+    if (next > cap) { s.vx *= cap / next; s.vz *= cap / next; }
+  }
+
+  s.airTime = s.grounded ? 0 : s.airTime + dt;
+  if (jumpPressed && (s.grounded || s.airTime < MOVE.coyote) && s.crouch < 0.6) {
+    s.vy = MOVE.jumpSpeed; s.grounded = false; s.airTime = MOVE.coyote; events.jumped = true;
+    if (s.slideTime > 0) { s.slideTime = 0; s.slideCooldown = MOVE.slideCooldown; }
+  }
+  s.vy -= MOVE.gravity * dt;
+
+  // Horizontal sweep in substeps so fast slides cannot tunnel through thin cover.
+  const height = bodyHeight(s);
+  const travel = Math.hypot(s.vx, s.vz) * dt;
+  const steps = Math.max(1, Math.ceil(travel / (MOVE.radius * 0.5)));
+  const startX = s.x, startZ = s.z, startY = s.y;
+  let blocked = false;
+  for (let i = 0; i < steps; i++) {
+    s.x += s.vx * dt / steps; s.z += s.vz * dt / steps;
+    const pos = { x: s.x, y: s.y, z: s.z };
+    if (world.resolveCylinder(pos, MOVE.radius, height, team)) blocked = true;
+    s.x = pos.x; s.z = pos.z;
+    // Allow stepping onto low ledges mid-sweep.
+    const g = world.groundHeight(s.x, s.z, s.y, MOVE.radius);
+    if (s.grounded && g > s.y && g <= s.y + 0.6) { events.stepped += g - s.y; s.y = g; }
+  }
+  if (blocked && dt > 0) { s.vx = (s.x - startX) / dt; s.vz = (s.z - startZ) / dt; }
+
+  // Vertical: land, snap down small steps and slopes, bump ceilings.
+  const wasGrounded = s.grounded;
+  const fallSpeed = -s.vy;
+  s.y += s.vy * dt;
+  const ground = world.groundHeight(s.x, s.z, Math.max(s.y, startY), MOVE.radius);
+  if (s.y <= ground) {
+    if (!wasGrounded && fallSpeed > 1) events.landed = fallSpeed;
+    s.y = ground; s.vy = 0; s.grounded = true;
+  } else if (wasGrounded && s.vy <= 0 && s.y - ground < 0.65) {
+    s.y = ground; s.vy = 0; s.grounded = true;
+  } else {
+    s.grounded = false;
+  }
+  if (s.vy > 0) {
+    const ceiling = world.ceilingHeight(s.x, s.z, s.y, MOVE.radius);
+    if (s.y + height > ceiling) { s.y = ceiling - height; s.vy = 0; }
+  }
+  return events;
+}

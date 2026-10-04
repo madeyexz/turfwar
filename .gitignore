@@ -7,3 +7,4 @@ dist/
 .amp/portals/
 spacetimedb/target/
 spacetimedb/.spacetime/
+public/_scratch

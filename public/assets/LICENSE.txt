@@ -1,0 +1,5 @@
+All models, textures and animations in this folder were converted from CC0 1.0 packs by Quaternius
+(https://quaternius.com): Sci-Fi Essentials Kit, Modular Sci-Fi MegaKit, Universal Base Characters,
+Universal Animation Library and Universal Animation Library 2 (free Standard editions).
+CC0 1.0 Universal Public Domain Dedication: https://creativecommons.org/publicdomain/zero/1.0/
+Converted with tools/import-assets.ts (textures resized to WebP; animations meshopt-compressed).

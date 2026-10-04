@@ -1,0 +1,14 @@
+Surface textures from Poly Haven (https://polyhaven.com), CC0 1.0 Universal.
+Resized to 1024px WebP by tools/fetch-textures.ts.
+
+sand: https://polyhaven.com/a/sand_01
+cliff: https://polyhaven.com/a/rock_face
+dirt: https://polyhaven.com/a/dry_ground_rocks
+snow: https://polyhaven.com/a/snow_02
+icerock: https://polyhaven.com/a/rock_boulder_cracked
+moss: https://polyhaven.com/a/forest_ground_04
+lichen: https://polyhaven.com/a/lichen_rock
+path: https://polyhaven.com/a/grass_path_2
+concrete: https://polyhaven.com/a/concrete_floor_02
+metalplate: https://polyhaven.com/a/metal_plate
+container: https://polyhaven.com/a/container_side
