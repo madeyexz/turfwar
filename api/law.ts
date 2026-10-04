@@ -1,4 +1,4 @@
-import { parseLawCommand } from '../shared/laws';
+import { parseLawCommand } from '../shared/laws.js';
 
 // Structural Node/Vercel interfaces avoid a runtime dependency on @vercel/node.
 export interface LawRequest { method?: string; body?: unknown }
