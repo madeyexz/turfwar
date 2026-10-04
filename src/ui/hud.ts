@@ -69,6 +69,7 @@ export class Hud {
         <h3>Operative down</h3><p data-k="deathText"></p>
         <div class="loadouts">${Object.entries(LOADOUTS).map(([id, l]) => `<button data-loadout="${id}">${l.name}</button>`).join('')}</div>
       </div>
+      <div class="released panel" data-k="released" hidden><b data-k="releasedTitle"></b><span>Click to resume · <kbd>M</kbd> deploy screen</span></div>
       <div class="scoreboard panel" data-k="board" hidden></div>
       <div class="end panel" data-k="end" hidden><small data-k="endSub"></small><h2 data-k="endTitle"></h2><p data-k="endText"></p><button data-k="endMenu">Change deployment</button></div>
       <div class="fps" data-k="fps"></div>`;
@@ -311,6 +312,11 @@ export class Hud {
   }
 
   fps(text: string) { this.set('fps', text); }
+  /** Mouse released mid-game: solo is paused; online the match carries on. */
+  released(show: boolean, solo: boolean) {
+    this.el.released.hidden = !show;
+    if (show) this.set('releasedTitle', solo ? 'Paused' : 'Mouse released — the match continues');
+  }
   net(text: string) { this.set('net', text); }
 
   minimap(state: MatchState, me: Soldier | undefined, yaw: number, positions: Map<number, THREE.Vector3>, myPos: THREE.Vector3) {

@@ -84,7 +84,7 @@ export class Game {
     this.hud.onMenu = () => this.onExit?.();
     this.lawbar = new LawBar(container, (command, source, text) => this.applyLaw(command, source, text));
     this.lawbar.onClose = () => { void this.input.lock(); };
-    renderer.renderer.domElement.addEventListener('click', () => { if (!this.input.locked && !this.lawbar.open) void this.input.lock(); });
+    this.input.canRelock = () => !this.lawbar.open;
     if (me) this.player.spawnFrom(me);
     this.refreshLaws();
     if (import.meta.env.DEV) Object.assign(window, { __game: this });
@@ -104,14 +104,20 @@ export class Game {
     this.renderer.scene.remove(this.level.group, this.effects.group, this.bodies.group);
     for (const r of this.remotes.values()) { r.view.dispose(); r.view.gun.removeFromParent(); }
     this.viewmodel.root.removeFromParent();
+    this.input.dispose();
+    this.hud.released(false, false);
     document.exitPointerLock?.();
   }
 
   frame(dt: number, render = true) {
     if (!this.running) return;
     this.input.beginFrame();
-    this.time += dt;
     const link = this.link;
+    // Solo pauses while the mouse is released (Esc) during a live round: the frame still renders,
+    // but no time passes for the match, the player or the effects.
+    const before = link.state(), self = before?.soldiers.find(s => s.id === link.myId());
+    if (link.mode === 'offline' && !this.input.locked && !this.lawbar.open && self?.alive && before?.phase !== 'ended') dt = 0;
+    this.time += dt;
     link.update(dt);
     const state = link.state();
     if (!state) { this.renderer.render(this.time, new THREE.Vector3(), 300); return; }
@@ -119,6 +125,9 @@ export class Game {
     const myId = link.myId();
     const me = state.soldiers.find(s => s.id === myId);
     const active = this.input.locked && !this.lawbar.open;
+    // Mouse released while alive in a live round (online: the match keeps going).
+    const released = !this.input.locked && !this.lawbar.open && !!me?.alive && state.phase !== 'ended';
+    this.hud.released(released, link.mode === 'offline');
 
     // ---- Hotkeys ----
     if (active) {

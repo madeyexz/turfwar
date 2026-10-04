@@ -11,31 +11,40 @@ export class Input {
   sensitivity = 1;
   enabled = true;
 
+  /** Removes every listener this instance registered (a new Input is created per match). */
+  private readonly abort = new AbortController();
+
   constructor(private canvas: HTMLElement) {
+    const signal = this.abort.signal;
     document.addEventListener('keydown', e => {
       if (!this.enabled || isTyping(e)) return;
       if (['Space', 'Tab', 'ControlLeft', 'KeyC', 'Slash', 'Quote'].includes(e.code)) e.preventDefault();
       if (!e.repeat) this.pressed.add(e.code);
       this.keys.add(e.code);
-    });
-    document.addEventListener('keyup', e => { this.keys.delete(e.code); });
+    }, { signal });
+    document.addEventListener('keyup', e => { this.keys.delete(e.code); }, { signal });
     document.addEventListener('mousemove', e => {
       if (!this.locked) return;
       this.lookX += e.movementX; this.lookY += e.movementY;
-    });
+    }, { signal });
     canvas.addEventListener('mousedown', e => {
       if (!this.locked) return;
       if (e.button === 0) { this.fire = true; this.pressed.add('Mouse0'); }
       if (e.button === 2) this.aim = true;
       if (e.button === 1) this.pressed.add('Mouse1');
-    });
-    document.addEventListener('mouseup', e => { if (e.button === 0) this.fire = false; if (e.button === 2) this.aim = false; });
-    canvas.addEventListener('contextmenu', e => e.preventDefault());
-    document.addEventListener('wheel', e => { if (this.locked) this.wheel += Math.sign(e.deltaY); }, { passive: true });
-    window.addEventListener('blur', () => this.clear());
-    document.addEventListener('visibilitychange', () => this.clear());
-    document.addEventListener('pointerlockchange', () => { if (!this.locked) { this.fire = false; this.aim = false; } });
+    }, { signal });
+    document.addEventListener('mouseup', e => { if (e.button === 0) this.fire = false; if (e.button === 2) this.aim = false; }, { signal });
+    canvas.addEventListener('contextmenu', e => e.preventDefault(), { signal });
+    document.addEventListener('wheel', e => { if (this.locked) this.wheel += Math.sign(e.deltaY); }, { passive: true, signal });
+    window.addEventListener('blur', () => this.clear(), { signal });
+    document.addEventListener('visibilitychange', () => this.clear(), { signal });
+    document.addEventListener('pointerlockchange', () => { if (!this.locked) { this.fire = false; this.aim = false; } }, { signal });
+    // Clicking the view (re)captures the mouse.
+    canvas.addEventListener('click', () => { if (!this.locked && this.canRelock()) void this.lock(); }, { signal });
   }
+  /** Set by the game: whether a click on the view should capture the mouse (not while a dialog is open). */
+  canRelock = () => true;
+  dispose() { this.abort.abort(); this.clear(); }
 
   /** Dev-only: ?debuginput lets automated browsers drive input without pointer lock. */
   static readonly debug = import.meta.env.DEV && new URLSearchParams(location.search).has('debuginput');
