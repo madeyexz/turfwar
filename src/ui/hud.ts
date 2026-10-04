@@ -185,9 +185,10 @@ export class Hud {
       }
       e.classList.toggle('contested', p2.contested);
     }
-    const t = Math.max(0, Math.ceil(state.phaseLeft));
+    const lab = state.config.practice && state.phase === 'live';
+    const t = Math.max(0, lab ? Math.floor(state.time) : Math.ceil(state.phaseLeft));
     const clock = `${Math.floor(t / 60)}:${String(t % 60).padStart(2, '0')}`;
-    this.set('timer', state.phase === 'warmup' ? `DEPLOYING <b>${clock}</b>` : state.phase === 'ended' ? `NEXT ROUND <b>${clock}</b>` : `<b>${clock}</b> · FIRST TO ${state.config.scoreLimit}`, 'html');
+    this.set('timer', state.phase === 'warmup' ? `DEPLOYING <b>${clock}</b>` : state.phase === 'ended' ? `NEXT ROUND <b>${clock}</b>` : lab ? `<b>${clock}</b> · LAW LAB` : `<b>${clock}</b> · FIRST TO ${state.config.scoreLimit}`, 'html');
     // Capture status for the point I'm standing in.
     let inside: { id: PointId; progress: number; capturing: number; owner: number; contested: boolean } | undefined;
     if (me?.alive) for (const pt of state.points) {
