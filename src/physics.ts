@@ -1,15 +1,22 @@
 import RAPIER from '@dimforge/rapier3d-compat';
 import { defaultLaws, type Laws } from '../shared/laws';
+import { groundHeight, maps, segmentBox, terrainData, type BattleMap } from './battlefield';
 
 export const STEP = 1 / 120;
 export type Vec = { x: number; y: number; z: number };
-export type BodyKind = 'drone' | 'shot' | 'debris';
+export type BodyKind = 'drone' | 'shot' | 'debris' | 'hostileShot';
 export interface Entity { id: number; kind: BodyKind; body: RAPIER.RigidBody; age: number }
-interface Snapshot { score: number; bodies: { id: number; kind: BodyKind; age: number; position: Vec; velocity: Vec }[] }
+interface Snapshot { score: number; enemyTimer: number; capture: number; bodies: { id: number; kind: BodyKind; age: number; position: Vec; velocity: Vec }[] }
 const HISTORY_CAPACITY = 1201;
 
 export function timeFactor(time: Laws['time'], playerSpeed: number) {
   return time.scale * (time.mode === 'playerMotion' ? Math.min(1, Math.max(0, playerSpeed) / 6) : 1);
+}
+
+export function segmentDistance(p: Vec, a: Vec, b: Vec) {
+  const dx = b.x - a.x, dy = b.y - a.y, dz = b.z - a.z;
+  const t = Math.max(0, Math.min(1, ((p.x - a.x) * dx + (p.y - a.y) * dy + (p.z - a.z) * dz) / (dx * dx + dy * dy + dz * dz || 1)));
+  return Math.hypot(p.x - a.x - t * dx, p.y - a.y - t * dy, p.z - a.z - t * dz);
 }
 
 export function gravityAt(p: Vec, gravity: Laws['gravity']): Vec {
@@ -34,21 +41,38 @@ export class Simulation {
   historyHead = 0;
   historyLength = 0;
   rewindTicks = 0;
-  onHit: (() => void) | undefined;
+  map = maps[0];
+  staticBodies: RAPIER.RigidBody[] = [];
+  enemyTimer = 0;
+  capture = 0;
+  onHit: ((position: Vec) => void) | undefined;
+  onPlayerHit: (() => void) | undefined;
 
   constructor() {
     this.world.integrationParameters.numSolverIterations = 16;
-    const floor = this.world.createRigidBody(RAPIER.RigidBodyDesc.fixed().setTranslation(0, -3.5, 0));
-    this.world.createCollider(RAPIER.ColliderDesc.cylinder(0.25, 24), floor);
+    this.setMap(maps[0]);
+  }
+
+  setMap(map: BattleMap) {
+    this.map = map;
+    for (const body of this.staticBodies) this.world.removeRigidBody(body);
+    this.staticBodies = [];
+    const data = terrainData(map);
+    const ground = this.world.createRigidBody(RAPIER.RigidBodyDesc.fixed());
+    this.world.createCollider(RAPIER.ColliderDesc.trimesh(data.vertices, data.indices), ground); this.staticBodies.push(ground);
+    for (const b of map.structures) {
+      const body = this.world.createRigidBody(RAPIER.RigidBodyDesc.fixed().setTranslation(b.x, -3.25 + b.h / 2, b.z));
+      this.world.createCollider(RAPIER.ColliderDesc.cuboid(b.w / 2, b.h / 2, b.d / 2), body); this.staticBodies.push(body);
+    }
     this.reset();
   }
 
   spawn(kind: BodyKind, position: Vec, velocity: Vec): Entity {
     const body = this.world.createRigidBody(RAPIER.RigidBodyDesc.dynamic()
       .setTranslation(position.x, position.y, position.z).setLinvel(velocity.x, velocity.y, velocity.z)
-      .setCanSleep(false).setCcdEnabled(kind === 'shot').lockRotations());
+      .setCanSleep(false).setCcdEnabled(kind === 'shot' || kind === 'hostileShot').lockRotations());
     this.world.createCollider(RAPIER.ColliderDesc.ball(kind === 'drone' ? 0.5 : 0.09)
-      .setDensity(1).setRestitution(0.5).setSensor(kind === 'shot'), body);
+      .setDensity(1).setRestitution(0.5).setSensor(kind === 'shot' || kind === 'hostileShot'), body);
     const entity = { id: this.nextId++, kind, body, age: 0 };
     this.entities.push(entity);
     return entity;
@@ -73,14 +97,14 @@ export class Simulation {
       const angle = i * Math.PI * 2 / 5;
       this.spawn('debris', { x: Math.cos(angle) * 10, y: 0, z: Math.sin(angle) * 10 }, { x: -Math.sin(angle) * 2.8, y: 0, z: Math.cos(angle) * 2.8 });
     }
-    this.score = 0;
+    this.score = 0; this.enemyTimer = 0; this.capture = 0;
     this.history.fill(undefined); this.historyHead = 0; this.historyLength = 0; this.rewindTicks = 0;
     this.save();
   }
 
   save() {
     this.history[this.historyHead] = {
-      score: this.score,
+      score: this.score, enemyTimer: this.enemyTimer, capture: this.capture,
       bodies: this.entities.map(e => ({ id: e.id, kind: e.kind, age: e.age, position: { ...e.body.translation() }, velocity: { ...e.body.linvel() } })),
     };
     this.historyHead = (this.historyHead + 1) % HISTORY_CAPACITY;
@@ -92,7 +116,7 @@ export class Simulation {
     return this.rewindTicks * STEP;
   }
 
-  tick(playerSpeed: number) {
+  tick(playerSpeed: number, target?: Vec) {
     if (this.rewindTicks > 0) {
       this.historyHead = (this.historyHead - 1 + HISTORY_CAPACITY) % HISTORY_CAPACITY;
       this.history[this.historyHead] = undefined;
@@ -108,16 +132,36 @@ export class Simulation {
         entity.body.setLinvel(saved.velocity, true);
         entity.body.resetForces(true);
       }
-      this.score = snapshot.score;
+      this.score = snapshot.score; this.enemyTimer = snapshot.enemyTimer; this.capture = snapshot.capture;
       return;
     }
     const dt = STEP * timeFactor(this.laws.time, playerSpeed);
-    if (dt > 0) this.step(dt);
+    if (dt > 0) {
+      if (target) {
+        this.enemyTimer += dt;
+        if (this.enemyTimer >= .8) {
+          this.enemyTimer = 0;
+          const drone = this.entities.filter(e => e.kind === 'drone').find(e => {
+            const p = e.body.translation();
+            return Math.hypot(p.x - target.x, p.z - target.z) < 65 && !this.map.structures.some(b => segmentBox(p, target, b));
+          });
+          if (drone && this.entities.filter(e => e.kind === 'hostileShot').length < 24) {
+            const p = drone.body.translation(), d = { x: target.x - p.x, y: target.y - .5 - p.y, z: target.z - p.z };
+            const length = Math.hypot(d.x, d.y, d.z) || 1;
+            this.spawn('hostileShot', p, { x: d.x / length * 26, y: d.y / length * 26, z: d.z / length * 26 });
+          }
+        }
+        const contested = this.entities.some(e => e.kind === 'drone' && Math.hypot(e.body.translation().x, e.body.translation().z) < 18);
+        if (Math.hypot(target.x, target.z) < 12 && !contested) this.capture = Math.min(100, this.capture + dt * 12.5);
+      }
+      this.step(dt, target);
+    }
     this.save();
   }
 
-  step(dt = STEP) {
+  step(dt = STEP, target?: Vec) {
     this.world.timestep = dt;
+    const oldPositions = new Map(this.entities.filter(e => e.kind === 'shot' || e.kind === 'hostileShot').map(e => [e.id, { ...e.body.translation() }]));
     for (const entity of this.entities) {
       entity.body.resetForces(true);
       const p = entity.body.translation(), v = entity.body.linvel();
@@ -129,11 +173,13 @@ export class Simulation {
       entity.age += dt;
     }
     this.world.step();
-    for (const shot of this.entities.filter(e => e.kind === 'shot')) {
+    for (const shot of this.entities.filter(e => e.kind === 'shot' || e.kind === 'hostileShot')) {
       const p = shot.body.translation();
-      const hit = this.entities.find(e => e.kind === 'drone' && Math.hypot(
-        e.body.translation().x - p.x, e.body.translation().y - p.y, e.body.translation().z - p.z) < 0.75);
-      if (hit) { this.remove(hit); this.remove(shot); this.score += 100; this.onHit?.(); }
+      const old = oldPositions.get(shot.id)!;
+      if (p.y < groundHeight(p.x, p.z, this.map) || this.map.structures.some(b => segmentBox(old, p, b))) { this.remove(shot); continue; }
+      const hit = shot.kind === 'shot' ? this.entities.find(e => e.kind === 'drone' && segmentDistance(e.body.translation(), old, p) < .75) : undefined;
+      if (hit) { const position = { ...hit.body.translation() }; this.remove(hit); this.remove(shot); this.score += 100; this.onHit?.(position); }
+      else if (shot.kind === 'hostileShot' && target && segmentDistance({ x: target.x, y: target.y - .5, z: target.z }, old, p) < .65) { this.remove(shot); this.onPlayerHit?.(); }
       else if (shot.age > 6) this.remove(shot);
     }
   }
