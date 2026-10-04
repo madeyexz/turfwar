@@ -33,8 +33,8 @@ Improve playable gunplay, map flow, animation, and multiplayer—not only the HU
 
 ## Gameplay and authority
 
-Modes are Solo skirmish (bots), Online, and Law Lab (sandbox). Four maps support
-A/B/C Domination. Physics laws cover gravity, motion-driven time, slow-light visuals,
+Modes are Solo skirmish (bots), Online, and Law Lab (sandbox). Five maps support
+A/B/C Domination; Meridian District is the 50v50 city (Online holds up to 100 soldiers). Physics laws cover gravity, motion-driven time, slow-light visuals,
 and rewind. Presets 1–4 and the four example sentences must work without an AI key.
 
 Online damage, scores, bots, objectives, and laws are server-controlled. Human

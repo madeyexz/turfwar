@@ -1,14 +1,13 @@
 import type { Identity, Infer } from 'spacetimedb';
 import type { Vec3 } from '../../shared/math';
 import type { ClientReport, MatchEvent, MatchState, PointState, ShotClaim, Soldier, Team } from '../../shared/match/state';
-import type { LoadoutId } from '../../shared/weapons';
 import type { Body } from '../../shared/world';
 import type { GameLink } from '../game/link';
 import type { DbConnection } from '../module_bindings';
 import type RosterTable from '../module_bindings/roster_table';
 import { loadMap } from '../../shared/maps/index';
 import { decodeFrame, framePoints, type DecodedFrame, type FramePose } from '../../shared/match/frame';
-import { LOADOUTS, WEAPONS } from '../../shared/weapons';
+import { LOADOUTS, WEAPONS, type LoadoutId } from '../../shared/weapons';
 
 type RosterRow = Infer<typeof RosterTable>;
 

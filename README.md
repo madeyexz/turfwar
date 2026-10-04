@@ -14,9 +14,9 @@ runner (`bun` / `bunx`, never npm/npx).
 
 | Area | Implemented |
 | --- | --- |
-| Modes | **Solo skirmish** (6v6, bots fill both teams, three difficulties), **Online match** (SpacetimeDB-authoritative; humans replace bots; maps rotate between rounds), **Law Lab** (no bots, passive sentinels — a sandbox for experimenting with laws). |
+| Modes | **Solo skirmish** (bots fill both teams: 6v6, or 50v50 on Meridian District; three difficulties), **Online match** (SpacetimeDB-authoritative, up to 100 soldiers; humans replace bots; maps rotate between rounds, skipping maps too small for the humans present), **Law Lab** (no bots, passive sentinels — a sandbox for experimenting with laws). |
 | Objective | Domination: capture A, B and C (8 s solo capture, faster with more teammates, frozen while contested). Owned points tick team score; kills add score; first to 200 or most after 10 min wins, then a new round starts. |
-| Battlefields | **Cinder Basin** (desert outpost: reactor plaza, comm bunkers, ridge watchtower, cargo yard), **Frostline Reach** (arctic relay: walled reactor courtyard with gates and wall-top catwalks, rooftop towers, frozen trench with a bridge, crystal ridge), **Verdant Divide** (jungle uplink: reactor plateau, clearing bunkers, creek bed, tree cover). **Ochre Quarter** (desert old town: an original homage to the classic two-site layout of CS:GO's Dust II — Long with its doors, corner and pit, Mid with the crate and doors, Catwalk up to Short, roofed Tunnels — built from our own geometry and CC0 assets). The first three lanes-and-flanks layouts are rotationally symmetric for fairness (tested); Ochre Quarter keeps its source's attacker/defender asymmetry on purpose (team 0 attacks from the south, A and C are the defenders' sites, B is Mid). Team spawns are protected by one-way energy shields. |
+| Battlefields | **Cinder Basin** (desert outpost: reactor plaza, comm bunkers, ridge watchtower, cargo yard), **Frostline Reach** (arctic relay: walled reactor courtyard with gates and wall-top catwalks, rooftop towers, frozen trench with a bridge, crystal ridge), **Verdant Divide** (jungle uplink: reactor plateau, clearing bunkers, creek bed, tree cover). **Ochre Quarter** (desert old town: an original homage to the classic two-site layout of CS:GO's Dust II — Long with its doors, corner and pit, Mid with the crate and doors, Catwalk up to Short, roofed Tunnels — built from our own geometry and CC0 assets). **Meridian District** (300 × 200 m city for 50v50: a street grid of towers and enterable buildings with walkable roofs, transit and freight plazas at A and C, reactor square at B, and forward spawns that open while a team holds a point uncontested and no enemy is within 25 m). The first three lanes-and-flanks layouts are rotationally symmetric for fairness (tested), as is Meridian; Ochre Quarter keeps its source's attacker/defender asymmetry on purpose (team 0 attacks from the south, A and C are the defenders' sites, B is Mid). Team spawns are protected by one-way energy shields. |
 | Gunplay | Hitscan weapons with fire rate, magazines, timed reloads, hip/ADS/moving/air spread, per-shot bloom, recoil climb with partial recovery, view punch, damage falloff and head/leg multipliers. Kits: **Assault** (VX-7 pulse carbine + P-12 sidearm) and **Recon** (L-90 scoped rail rifle + R-6 magnum). Grenades (G) are physical bodies that obey the laws. |
 | Movement | Shared deterministic controller: walk, sprint (with sprint-to-fire delay), crouch, slide (crouch while sprinting), jump with coyote time, step-up, ramps/stairs, team shields. |
 | Feel | First-person rigged arms (cut from the soldier rig) posed by IK onto CC0 weapon models; procedural sway, figure-eight bob, kick, sprint carry, ADS with red-dot reticle, scope overlay, reload choreography with a magazine in hand, equip and grenade throw; muzzle flash, tracers, impact sparks and dust, bullet marks, explosions; hit markers, headshot/kill confirms, damage-direction arcs, kill feed, procedural WebAudio gunshots, reloads, footsteps and cues; a looping 60-second menu theme sequenced from those same effects. |
@@ -72,11 +72,21 @@ naming who changed what.
 
 `spacetimedb/src/index.ts` runs the **same** `shared/match` simulation as solo play, server-side:
 
-- Tables: `match` (phase, scores, laws, map), `soldier` (replicated state), `point`, `body` (drones,
-  bolts, grenades, shards), `player` (identity → soldier), private `bot_brain` and `history` (rewind
-  ring), an event table `match_event` (shots, damage, kills, captures, law changes), and a 30 Hz
-  scheduled `tick` reducer that runs bots, the lawful world, objectives, scoring, respawns, round
-  resets and map rotation. With no humans connected the tick idles.
+- Built for 100 soldiers per match. Player reducers only **queue** input: `report` overwrites the
+  soldier's row in a private `inbox` (elapsed time accumulates for the movement budget) and `fire`,
+  `grenade`, `reload_weapon`, `switch_slot` and `choose_loadout` append to a private `command` queue.
+  The 30 Hz scheduled `tick` loads the match **once**, applies every queued report and command in
+  arrival order through the shared validation, runs bots, the lawful world, objectives, scoring,
+  respawns, round resets and map rotation, and saves. With no humans connected the tick idles.
+- What clients subscribe to: `match` (slow fields only: phase, scores, laws, map; rewritten only when
+  they change), `roster` (name, team, kit, alive, score line, respawn/law-ready times; rewritten only
+  on events), `player` (identity → soldier), the event table `match_event` (damage, kills, captures,
+  laws) and one `frame` row rewritten every tick: a packed binary snapshot (`shared/match/frame.ts`)
+  of every soldier's pose and vitals (22 bytes each, 2 cm positions), lawful bodies, capture
+  progress, the clocks and that tick's shots. `soldier`, `point` and `body` keep full-precision
+  server state and are not subscribed to; per-tick bookkeeping lives in a private `clock` row.
+  Private `bot_brain` and `history` (rewind ring) are unchanged. All original tables and columns
+  remain, so an existing database migrates in place.
 - Clients send their own movement (`report`, 20 Hz) and shots (`fire`) with an optional claimed hit.
   Movement spends a distance budget measured against server time (refills at 14 m/s, capped at
   6 m ≈ 0.7 s of sprinting), so reports that bunch up after a network stall pass but sending reports
@@ -91,11 +101,20 @@ naming who changed what.
   hit volumes, and no friendly fire. Damage, kills and scores are authoritative. Drones and bot shots
   are simulated entirely on the server.
 - Client-side: own movement is predicted with the shared controller; remote soldiers and bodies are
-  interpolated ~100 ms behind; a rejected position snaps the client back; dropped (idle) clients
-  rejoin automatically. Online play was verified with two separate browser clients (different
+  interpolated ~100 ms behind from the frame; a rejected position snaps the client back; dropped
+  (idle) clients rejoin automatically. Online play was verified with two separate browser clients (different
   identities): they see each other move, receive each other's law changes and cooldown errors, and
   fight through server validation — one client killed the other, both kill feeds showed it and the
   victim's death screen named the killer.
+- Load test (local only): `bun scripts/loadtest.ts --uri ws://127.0.0.1:3100 --db <name> --clients 100`
+  runs headless clients that move with the shared controller, fire validated shots and report the
+  server tick rate, bytes per client, report round trips and corrections; it refuses non-local URIs.
+  `bun scripts/simbench.ts meridian` times the simulation alone, `bun scripts/lawcheck.ts` checks
+  law replication and cooldowns with two identities. On an M3 Pro with a local server, 100 clients
+  on Meridian measured 30 ticks/s, ~84 KB/s per client (~8 MB/s total egress), report round trips
+  of 6 / 9 / 12 ms (p50/p95/p99) and zero corrections; the previous one-load-per-reducer design
+  measured ~517 KB/s per client and 51 / 147 / 225 ms. These are single-machine numbers, not a
+  production load test: Maincloud capacity, real network latency and egress cost are unmeasured.
 - Trust model and limits: movement is client-reported (validated, not simulated), hit detection is
   shooter-favoured within tolerances (no full lag compensation), one match per database, and the
   anonymous AI law route is not rate limited by this code (use Vercel Firewall + an OpenAI spend
@@ -182,9 +201,13 @@ committed.
 Targets 60 fps on an M-series MacBook at the default *medium* preset (DPR ≤ 1, 2048 shadow map,
 half-resolution bloom). Budgets: merged static geometry per material, one draw call set per soldier
 (body + 3-part armor + weapon), at most four dynamic point lights (reactor + three pooled flashes),
-pooled effects. A typical firefight frame is ~150–420 draw calls and ~0.5 M triangles. **The 60 fps
-target has not been measured on Apple hardware**: development ran in a cloud sandbox whose browser
-renders with SwiftShader (CPU), where the game runs at about 3 fps, so no frame-rate claim is made.
+pooled effects. A typical firefight frame is ~150–420 draw calls and ~0.5 M triangles. Remote soldiers use a
+crowd level of detail: off-screen soldiers are hidden and not animated; on screen, full animation and
+shadows within 30 m, half-rate animation to 70 m, quarter rate beyond (positions update every frame).
+Remote gunfire beyond 110 m is not drawn, gunshot audio is limited to 85 m and six voices per frame,
+and at most eight teammate name tags show. Measured with the built-in check on an M3 Pro (Chrome,
+medium, 1200×942): Solo 50v50 on Meridian ran 59.9 fps average with 0.2% of frames over 16.7 ms
+and ~9 ms main-thread time (before the crowd LOD: 50 fps and 19 ms).
 
 **Measure it yourself:** click *Run the 30-second performance check* on the deploy screen (or open
 `/?bench`, optionally `&map=frostline&quality=high`). A scripted soldier runs the objective route
@@ -202,6 +225,11 @@ also has Low / Medium / High graphics presets (`?quality=` works too).
 - Movement is client-reported (validated). A determined cheater could still play within the
   limits the server allows (up to ~1.6× sprint speed sustained, short 6 m bursts, aim assistance).
 - One match per database; no lobbies, parties, persistent progression or matchmaking.
+- Every client receives every soldier's pose (no distance-based interest management), so bandwidth
+  grows linearly with soldiers per match (~84 KB/s per client at 100). Every tick also writes the
+  full soldier set and a rewind snapshot to the database's durable log.
+- Bots are deliberately simple at this scale: they look for enemies every 0.2–0.35 s and line-of-
+  sight test only the four most pressing candidates.
 - First-person and third-person animation is code-driven on CC0 clips; there are no authored
   rifle-specific reload/hit animations, and fingers are posed procedurally.
 - Audio is synthesized; there are no recorded weapon samples.

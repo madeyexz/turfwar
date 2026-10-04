@@ -118,6 +118,9 @@ const CLIPS: Record<ClipName, string> = {
 /** Ground speed (m/s) at which each locomotion clip plays at 1x. */
 const CLIP_SPEED: Partial<Record<ClipName, number>> = { walk: 1.6, jog: 4.4, sprint: 7.2, crouchWalk: 1.8 };
 
+/** Frames between full animation updates per level of detail (see SoldierView.setLod). */
+const LOD_INTERVAL = [1, 2, 4, 8] as const;
+
 const up = new THREE.Vector3(0, 1, 0);
 const v1 = new THREE.Vector3(), v2 = new THREE.Vector3(), v3 = new THREE.Vector3(), q1 = new THREE.Quaternion(), q2 = new THREE.Quaternion();
 
@@ -205,7 +208,40 @@ export class SoldierView {
 
   muzzleWorld(out = new THREE.Vector3()) { return this.muzzle.getWorldPosition(out); }
 
+  /**
+   * Level of detail for crowded battles: 0 near (full rate, shadows), 1 mid (half-rate animation),
+   * 2 far (quarter rate), 3 off-screen (hidden, not animated). Positions always update every frame.
+   */
+  setLod(level: 0 | 1 | 2 | 3) {
+    if (level === this.lod) return;
+    if ((level === 0) !== (this.lod === 0)) {
+      this.shadowMeshes ??= [...this.meshesOf(this.model), ...this.meshesOf(this.gun)];
+      for (const m of this.shadowMeshes) m.castShadow = level === 0;
+    }
+    this.lod = level;
+    this.root.visible = level < 3;
+    if (level === 3) this.gun.visible = false;
+  }
+  private lod: 0 | 1 | 2 | 3 = 0;
+  get onScreen() { return this.lod < 3; }
+  private shadowMeshes?: THREE.Mesh[];
+  private frame = 0;
+  private pending = 0;
+  private meshesOf(o: THREE.Object3D) { const out: THREE.Mesh[] = []; o.traverse(c => { if ((c as THREE.Mesh).isMesh) out.push(c as THREE.Mesh); }); return out; }
+
   update(dt: number, p: SoldierPose) {
+    // Distant and hidden soldiers animate at a reduced rate; between updates they only move.
+    const every = LOD_INTERVAL[this.lod];
+    this.pending += dt;
+    if (this.lod === 3 || (++this.frame % every !== 0 && p.alive === this.wasAlive)) {
+      const dx = p.x - this.root.position.x, dy = p.y - this.root.position.y, dz = p.z - this.root.position.z;
+      this.root.position.set(p.x, p.y, p.z);
+      this.root.rotation.y = p.yaw;
+      this.gun.position.x += dx; this.gun.position.y += dy; this.gun.position.z += dz;
+      if (this.lod === 3) this.pending = Math.min(this.pending, 0.25);
+      return;
+    }
+    dt = this.pending; this.pending = 0;
     this.root.position.set(p.x, p.y, p.z);
     this.root.rotation.y = p.yaw;
     // ---- Locomotion blend ----

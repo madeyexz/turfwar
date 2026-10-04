@@ -17,6 +17,11 @@ export function botName(state: MatchState, random: () => number) {
     const name = CALLSIGNS[Math.floor(random() * CALLSIGNS.length)];
     if (!used.has(name)) return name;
   }
+  // Big battles outnumber the callsigns: number them like squad members instead.
+  for (let i = 0; i < 200; i++) {
+    const name = `${CALLSIGNS[Math.floor(random() * CALLSIGNS.length)]}-${2 + Math.floor(random() * 8)}`;
+    if (!used.has(name)) return name;
+  }
   return `Unit-${state.nextId}`;
 }
 

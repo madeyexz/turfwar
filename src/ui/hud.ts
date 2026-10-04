@@ -9,6 +9,8 @@ import type { LocalPlayer } from '../game/player';
 
 const TEAM_CSS = ['var(--aegis)', 'var(--crimson)'];
 const TEAM_HEX = ['#4aa8ff', '#ff5544'];
+/** Teammate name tags shown at once (nearest first). */
+const NAMETAG_MAX = 8;
 const pointSvg = (fill: string, progress: number, color: string) => `<svg viewBox="0 0 38 38"><path d="M19 2 36 19 19 36 2 19Z" fill="rgba(8,16,22,.75)" stroke="${fill}" stroke-width="2"/>${progress > 0 ? `<path d="M19 2 36 19 19 36 2 19Z" fill="none" stroke="${color}" stroke-width="3" stroke-dasharray="${(progress * 96).toFixed(1)} 200"/>` : ''}</svg>`;
 
 /** DOM heads-up display. Elements are created once; updates only touch changed values. */
@@ -151,13 +153,15 @@ export class Hud {
       (m.lastElementChild as HTMLElement).textContent = p.contested ? 'CONTESTED' : `${dist}m`;
     }
     // Teammate name tags (and enemies under the crosshair would need line of sight; omitted).
+    // In 50-a-side battles only the nearest few are labelled, or the tags bury the fight.
     const seen = new Set<number>();
-    for (const s of state.soldiers) {
-      if (!me || s.id === me.id || !s.alive || s.team !== me.team) continue;
-      const pos = soldiers.get(s.id);
-      if (!pos) continue;
-      const d = camera.position.distanceTo(pos);
-      if (d > 90) continue;
+    const tagged = state.soldiers
+      .filter(s => me && s.id !== me.id && s.alive && s.team === me.team && soldiers.has(s.id))
+      .map(s => ({ s, pos: soldiers.get(s.id)!, d: camera.position.distanceTo(soldiers.get(s.id)!) }))
+      .filter(t => t.d <= 90)
+      .sort((a, b) => a.d - b.d)
+      .slice(0, NAMETAG_MAX);
+    for (const { s, pos, d } of tagged) {
       const v = pos.clone().setY(pos.y + 2.05).project(camera);
       if (v.z > 1 || Math.abs(v.x) > 1 || Math.abs(v.y) > 1) continue;
       seen.add(s.id);

@@ -36,7 +36,7 @@ menu.innerHTML = `
     <p class="lede">Squad-based sci-fi infantry combat. Capture the outposts, hold the reactor — and when the fight turns, rewrite gravity, time and light with a sentence.</p>
     <label class="field">Callsign<input type="text" id="callsign" maxlength="16" autocomplete="off" spellcheck="false"></label>
     <div class="field"><label class="field">Mode</label><div class="choices" id="modes">
-      <button class="choice" data-mode="offline"><b>Solo skirmish</b><small>6v6 against bots in this tab. Works fully offline.</small></button>
+      <button class="choice" data-mode="offline"><b>Solo skirmish</b><small>Bots fill both teams in this tab (50v50 on Meridian). Works fully offline.</small></button>
       <button class="choice" data-mode="online"><b>Online match</b><small id="online-note">Real players via SpacetimeDB; bots fill empty slots.</small></button>
       <button class="choice" data-mode="lab"><b>Law Lab</b><small>No bots, passive sentinels. Experiment with the laws in peace.</small></button>
     </div></div>

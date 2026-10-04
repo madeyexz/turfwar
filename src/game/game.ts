@@ -25,6 +25,12 @@ import { LocalPlayer } from './player';
 import { adsFov, settings } from './settings';
 
 type Sample = { x: number; y: number; z: number; vx: number; vy: number; vz: number; yaw: number; pitch: number; crouch: number };
+/** Remote soldiers closer than this get full animation and shadows; up to LOD_MID, half rate. */
+const LOD_NEAR = 30, LOD_MID = 70;
+/** Remote gunfire farther than this is not drawn or heard (a 100-soldier battle fires hundreds of shots a second). */
+const SHOT_FX_RANGE = 110, SHOT_AUDIO_RANGE = 85;
+const frustum = new THREE.Frustum(), projScreen = new THREE.Matrix4(), lodSphere = new THREE.Sphere(new THREE.Vector3(), 1.3);
+
 interface Remote { view: SoldierView; buffer: InterpBuffer<Sample>; pos: THREE.Vector3; crouch: number; yaw: number; stepDist: number; last?: THREE.Vector3; loadout: LoadoutId }
 
 
@@ -49,6 +55,8 @@ export class Game {
   private fpsTime = 0;
   private wasAlive = false;
   private corrections = 0;
+  /** Remote gunshot sounds started this frame. */
+  private shotVoices = 0;
   /** Online: hit markers already shown for predicted hits, so the server's confirmations don't repeat them. */
   private predictedHits: { at: number; target: number }[] = [];
   private lastLook = { x: 0, y: 0 };
@@ -168,6 +176,7 @@ export class Game {
     }
 
     // ---- Events ----
+    this.shotVoices = 0;
     for (const e of link.drainEvents()) this.handleEvent(e, state, myId);
 
     // ---- World views ----
@@ -179,12 +188,20 @@ export class Game {
     }
     const renderTime = now - link.interpDelay - 0.02;
     const positions = new Map<number, THREE.Vector3>();
+    const byId = new Map(state.soldiers.map(s => [s.id, s]));
+    // Crowd LOD: the view frustum (from last frame's camera) and distance decide how much work each
+    // remote soldier gets; positions still update every frame so hit tests and markers stay exact.
+    const cam0 = this.renderer.camera;
+    frustum.setFromProjectionMatrix(projScreen.multiplyMatrices(cam0.projectionMatrix, cam0.matrixWorldInverse));
     for (const [id, r] of this.remotes) {
-      const s = state.soldiers.find(x => x.id === id);
+      const s = byId.get(id);
       const sample = r.buffer.sample(renderTime, ['yaw']);
       if (!s || !sample) continue;
       r.pos.set(sample.x, sample.y, sample.z); r.crouch = sample.crouch; r.yaw = sample.yaw;
       positions.set(id, r.pos);
+      lodSphere.center.set(sample.x, sample.y + 1, sample.z);
+      const distance = lodSphere.center.distanceTo(cam0.position);
+      r.view.setLod(!frustum.intersectsSphere(lodSphere) ? 3 : distance < LOD_NEAR ? 0 : distance < LOD_MID ? 1 : 2);
       const w = LOADOUTS[s.loadout].weapons[s.weapon];
       r.view.update(dt, {
         x: sample.x, y: sample.y, z: sample.z, vx: sample.vx, vy: sample.vy, vz: sample.vz, yaw: sample.yaw, pitch: sample.pitch, crouch: sample.crouch,
@@ -194,7 +211,7 @@ export class Game {
       // Hide a soldier the camera is inside (crowded spawns, kill cam): clipping through a body looks broken.
       const cp = this.renderer.camera.position;
       const inside = Math.hypot(r.pos.x - cp.x, r.pos.z - cp.z) < 0.75 && cp.y > r.pos.y - 0.3 && cp.y < r.pos.y + 2.2;
-      r.view.root.visible = !inside;
+      r.view.root.visible = !inside && r.view.onScreen;
       if (inside) r.view.gun.visible = false;
       // Remote footsteps.
       if (s.alive && s.m.grounded && r.last) {
@@ -335,13 +352,17 @@ export class Game {
       case 'shot': {
         if (e.shooter === myId) break;
         const r = this.remotes.get(e.shooter);
-        const from = r ? r.view.muzzleWorld() : new THREE.Vector3(e.from.x, e.from.y, e.from.z);
         r?.view.shoot();
+        const cam = this.renderer.camera.position;
+        const shooterDistance = Math.hypot(e.from.x - cam.x, e.from.y - cam.y, e.from.z - cam.z);
+        if (shooterDistance > SHOT_FX_RANGE && Math.hypot(e.to.x - cam.x, e.to.y - cam.y, e.to.z - cam.z) > SHOT_FX_RANGE) break;
+        const from = r?.view.onScreen ? r.view.muzzleWorld() : new THREE.Vector3(e.from.x, e.from.y, e.from.z);
         const to = new THREE.Vector3(e.to.x, e.to.y, e.to.z);
         this.effects.tracer(from, to, find(e.shooter)?.team === 0 ? 0xa8dcff : 0xffb0a0, 1.2);
         if (e.hit === 0) this.effects.impact(to, from.clone().sub(to).normalize(), e.surface, true);
         else this.effects.hitSpark(to, false);
-        if (e.weapon !== 'bolt') this.audio.gunshot(e.weapon, this.listener(), from);
+        // Cap remote gunshot voices per frame: each one is several WebAudio nodes.
+        if (e.weapon !== 'bolt' && shooterDistance < SHOT_AUDIO_RANGE && this.shotVoices++ < 6) this.audio.gunshot(e.weapon, this.listener(), from);
         break;
       }
       case 'damage': {
