@@ -39,7 +39,9 @@ export class Input {
 
   /** Dev-only: ?debuginput lets automated browsers drive input without pointer lock. */
   static readonly debug = import.meta.env.DEV && new URLSearchParams(location.search).has('debuginput');
-  get locked() { return Input.debug || document.pointerLockElement === this.canvas; }
+  /** Set while a script (the ?bench run) drives the player, so input counts without pointer lock. */
+  driven = false;
+  get locked() { return Input.debug || this.driven || document.pointerLockElement === this.canvas; }
   down(code: string) { return this.keys.has(code); }
   /** True once per physical press. */
   take(code: string) { const had = this.pressed.has(code); this.pressed.delete(code); return had; }

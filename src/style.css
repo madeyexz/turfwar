@@ -195,6 +195,25 @@ body.rewinding #hud::after { content: ''; position: fixed; inset: 0; background:
 #menu .credits { font-size: 12px; color: #7c8e94; line-height: 1.35; }
 #menu .credits a { color: #9fb3b9; }
 
+#menu .bench-link { align-self: flex-start; background: none; border: none; padding: 0; color: var(--muted); font-size: 13px; font-weight: 600; letter-spacing: 0.08em; text-decoration: underline; text-underline-offset: 3px; }
+#menu .bench-link:hover { color: var(--accent); }
+
+/* ---------- Performance check ---------- */
+.bench-banner { position: fixed; top: 96px; left: 50%; transform: translateX(-50%); z-index: 4; padding: 4px 14px; background: var(--panel-solid); border: 1px solid var(--accent); color: var(--accent); font-weight: 700; letter-spacing: 0.16em; text-transform: uppercase; font-size: 14px; pointer-events: none; }
+.bench-panel { position: fixed; left: 50%; top: 50%; transform: translate(-50%, -50%); z-index: 7; width: min(600px, calc(100vw - 32px)); max-height: calc(100vh - 32px); overflow-y: auto; padding: 18px 24px; background: var(--panel-solid); border: 1px solid var(--accent); box-shadow: 0 0 40px rgba(127, 246, 255, 0.18); user-select: text; }
+.bench-panel h2 { margin: 0 0 8px; font-size: 30px; letter-spacing: 0.12em; text-transform: uppercase; }
+.bench-panel .verdict { font-size: 20px; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; margin-bottom: 12px; }
+.bench-panel .verdict.ok { color: var(--accent); }
+.bench-panel .verdict.bad { color: var(--amber); }
+.bench-panel table { width: 100%; border-collapse: collapse; font-size: 15px; line-height: 1.2; }
+.bench-panel th { text-align: left; color: var(--muted); font-weight: 600; padding: 3px 12px 3px 0; vertical-align: top; width: 46%; }
+.bench-panel td { font-weight: 700; padding: 3px 0; overflow-wrap: anywhere; }
+.bench-panel tr + tr { border-top: 1px solid var(--line); }
+.bench-panel p { color: var(--muted); font-size: 13px; font-weight: 500; line-height: 1.35; margin: 12px 0; }
+.bench-panel .actions { display: flex; gap: 8px; flex-wrap: wrap; }
+.bench-panel button { border: 1px solid var(--line); background: rgba(255, 255, 255, 0.05); padding: 6px 14px; font-weight: 700; letter-spacing: 0.1em; text-transform: uppercase; }
+.bench-panel button:first-child { border-color: var(--accent); color: var(--accent); }
+
 /* ---------- Law command bar ---------- */
 #lawbar { position: fixed; left: 50%; bottom: 120px; transform: translateX(-50%); width: min(720px, 92vw); z-index: 6; padding: 14px; background: var(--panel-solid); border: 1px solid var(--accent); box-shadow: 0 0 40px rgba(127, 246, 255, 0.18); }
 #lawbar form { display: flex; gap: 8px; align-items: center; }

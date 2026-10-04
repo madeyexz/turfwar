@@ -7,6 +7,7 @@ import { Audio } from './audio';
 import { Game } from './game/game';
 import type { GameLink } from './game/link';
 import { OfflineLink } from './game/offline';
+import { Bench, BENCH_SECONDS, benchReport, type BenchResult } from './game/bench';
 import { onlineAvailable, connectOnline } from './net/online';
 import { LevelView } from './render/level';
 import { THEMES } from './render/materials';
@@ -42,8 +43,12 @@ menu.innerHTML = `
     <div class="field"><label class="field">Bot difficulty (solo)</label><div class="choices" id="skills" style="grid-template-columns:1fr 1fr 1fr">
       <button class="choice" data-skill="0.25"><b>Recruit</b></button><button class="choice" data-skill="0.45"><b>Veteran</b></button><button class="choice" data-skill="0.75"><b>Elite</b></button>
     </div></div>
+    <div class="field"><label class="field">Graphics</label><div class="choices" id="qualities" style="grid-template-columns:1fr 1fr 1fr">
+      <button class="choice" data-quality="low"><b>Low</b><small>No bloom, 1k shadows</small></button><button class="choice" data-quality="medium"><b>Medium</b><small>Bloom, 2k shadows</small></button><button class="choice" data-quality="high"><b>High</b><small>1.5× resolution</small></button>
+    </div></div>
     <button class="deploy" id="deploy" disabled>Loading…</button>
     <div class="status" id="status"></div>
+    <button class="bench-link" id="bench">Run the ${BENCH_SECONDS}-second performance check</button>
     <div class="controls">
       <span>WASD · Mouse</span><span>Move · look</span><span>LMB · RMB</span><span>Fire · aim down sights</span>
       <span>Shift · Space</span><span>Sprint · jump</span><span>C / Ctrl</span><span>Crouch (while sprinting: slide)</span>
@@ -63,6 +68,11 @@ if (!maps.some(m => m.id === mapId)) mapId = maps[0].id;
 let loadout = store.get('loadout', 'assault') as LoadoutId;
 let team = params.get('team') ?? store.get('team', 'auto');
 let skill = params.get('skill') ?? store.get('skill', '0.45');
+let quality = (params.get('quality') ?? store.get('quality', 'medium')) as keyof typeof QUALITY;
+if (!QUALITY[quality]) quality = 'medium';
+/** ?bench: scripted solo run that measures frame times on this device. */
+const benchMode = params.has('bench');
+if (benchMode) mode = 'offline';
 const callsign = menu.querySelector<HTMLInputElement>('#callsign')!;
 callsign.value = params.get('name') ?? store.get('name', `Lawbreaker-${Math.floor(Math.random() * 900 + 100)}`);
 const online = onlineAvailable();
@@ -71,12 +81,17 @@ if (!online.ok) {
   menu.querySelector('#online-note')!.textContent = online.reason;
   if (mode === 'online') mode = 'offline';
 }
-select('modes', 'mode', mode); select('maps', 'map', mapId); select('loadouts', 'loadout', loadout); select('teams', 'team', team); select('skills', 'skill', skill);
+select('modes', 'mode', mode); select('maps', 'map', mapId); select('loadouts', 'loadout', loadout); select('teams', 'team', team); select('skills', 'skill', skill); select('qualities', 'quality', quality);
 menu.querySelectorAll<HTMLButtonElement>('[data-mode]').forEach(b => b.addEventListener('click', () => { mode = b.dataset.mode!; select('modes', 'mode', mode); }));
 menu.querySelectorAll<HTMLButtonElement>('[data-map]').forEach(b => b.addEventListener('click', () => { mapId = b.dataset.map!; select('maps', 'map', mapId); showBackdrop(); }));
 menu.querySelectorAll<HTMLButtonElement>('[data-loadout]').forEach(b => b.addEventListener('click', () => { loadout = b.dataset.loadout as LoadoutId; select('loadouts', 'loadout', loadout); }));
 menu.querySelectorAll<HTMLButtonElement>('[data-team]').forEach(b => b.addEventListener('click', () => { team = b.dataset.team!; select('teams', 'team', team); }));
 menu.querySelectorAll<HTMLButtonElement>('[data-skill]').forEach(b => b.addEventListener('click', () => { skill = b.dataset.skill!; select('skills', 'skill', skill); }));
+menu.querySelectorAll<HTMLButtonElement>('[data-quality]').forEach(b => b.addEventListener('click', () => {
+  quality = b.dataset.quality as keyof typeof QUALITY; select('qualities', 'quality', quality); store.set('quality', quality);
+  renderer?.applyQuality(QUALITY[quality]);
+}));
+menu.querySelector('#bench')!.addEventListener('click', () => { location.search = `?bench&map=${mapId}&quality=${quality}`; });
 const deploy = menu.querySelector<HTMLButtonElement>('#deploy')!;
 const status = menu.querySelector<HTMLElement>('#status')!;
 
@@ -84,6 +99,8 @@ let assets: Assets;
 let renderer: Renderer;
 let game: Game | undefined;
 let backdrop: LevelView | undefined;
+let bench: Bench | undefined;
+let benchBanner: HTMLElement | undefined;
 const audio = new Audio();
 
 function showBackdrop() {
@@ -97,7 +114,7 @@ function showBackdrop() {
 
 async function start() {
   const name = callsign.value.trim().slice(0, 16) || 'Lawbreaker';
-  store.set('name', name); store.set('mode', mode); store.set('map', mapId); store.set('loadout', loadout); store.set('team', team); store.set('skill', skill);
+  if (!benchMode) { store.set('name', name); store.set('mode', mode); store.set('map', mapId); store.set('loadout', loadout); store.set('team', team); store.set('skill', skill); }
   deploy.disabled = true; deploy.textContent = 'Deploying…';
   audio.start();
   const teamChoice = team === 'auto' ? undefined : (Number(team) as Team);
@@ -121,6 +138,7 @@ async function start() {
 
 function launch(link: GameLink, map: string) {
   game = new Game(assets, renderer, link, map, audio, app);
+  if (benchMode && !bench) startBench(game);
   game.onMapChange = next => { game?.stop(true); launch(link, next); };
   game.onExit = () => {
     game?.stop(); game = undefined;
@@ -135,9 +153,37 @@ document.addEventListener('keydown', e => {
   if (e.code === 'KeyM' && game && !game.input.locked && e.target === document.body) game.onExit?.();
 });
 
+function startBench(g: Game) {
+  bench = new Bench(g, renderer, quality);
+  benchBanner = document.createElement('div');
+  benchBanner.className = 'bench-banner';
+  app.appendChild(benchBanner);
+  bench.onDone = result => { benchBanner?.remove(); showBenchResult(result); };
+}
+
+function showBenchResult(r: BenchResult) {
+  const panel = document.createElement('div');
+  panel.className = 'bench-panel';
+  panel.innerHTML = `
+    <h2>Performance check</h2>
+    <div class="verdict ${r.meets60 ? 'ok' : 'bad'}">60 fps target ${r.meets60 ? 'met' : 'not met'} on this device</div>
+    <table>${benchReport(r).map(([k, v]) => `<tr><th>${k}</th><td></td></tr>`).join('')}</table>
+    <p>${r.seconds} s of scripted combat after a warm-up. Browsers cap frames at the display refresh rate, so 120 Hz screens can exceed 60. Met means an average of at least 58 fps with 95% of frames within 18.2 ms.</p>
+    <div class="actions"><button data-a="copy">Copy results</button><button data-a="again">Run again</button><button data-a="menu">Back to menu</button></div>`;
+  // Values go in as text: the GPU string comes from the driver.
+  panel.querySelectorAll('td').forEach((td, i) => { td.textContent = benchReport(r)[i][1]; });
+  panel.addEventListener('click', e => {
+    const a = (e.target as HTMLElement).dataset.a;
+    if (a === 'copy') void navigator.clipboard?.writeText(JSON.stringify(r, null, 2)).then(() => { (e.target as HTMLElement).textContent = 'Copied'; }, () => undefined);
+    if (a === 'again') location.reload();
+    if (a === 'menu') location.href = location.pathname;
+  });
+  app.appendChild(panel);
+  document.exitPointerLock?.();
+}
+
 async function boot() {
-  const quality = (params.get('quality') ?? store.get('quality', 'medium')) as keyof typeof QUALITY;
-  renderer = new Renderer(app, QUALITY[quality] ?? QUALITY.medium);
+  renderer = new Renderer(app, QUALITY[quality]);
   assets = await loadAssets(f => { deploy.textContent = `Loading ${(f * 100).toFixed(0)}%`; });
   showBackdrop();
   deploy.disabled = false; deploy.textContent = 'Deploy';
@@ -158,17 +204,26 @@ async function boot() {
       renderer.render(now / 1000, new THREE.Vector3(), 300);
     }
   };
+  let benchLeft = -1;
   const loop = (now: number) => {
-    const dt = fixed ? 1 / 30 : Math.max(0, Math.min(0.05, (now - previous) / 1000)); previous = now;
+    const interval = now - previous;
+    const dt = fixed ? 1 / 30 : Math.max(0, Math.min(0.05, interval / 1000)); previous = now;
+    const t0 = performance.now();
+    if (bench && game) bench.drive(dt);
     step(dt, now);
+    if (bench && !bench.done) {
+      bench.record(interval, performance.now() - t0);
+      const left = Math.ceil(bench.remaining);
+      if (left !== benchLeft && benchBanner) { benchLeft = left; benchBanner.textContent = bench.warming ? 'Performance check · warming up' : `Performance check · ${left} s`; }
+    }
     requestAnimationFrame(loop);
   };
   if (!params.has('capture')) requestAnimationFrame(loop);
   let simNow = 0;
   /** Advance n fixed frames (capture mode). Returns once the frames are rendered. */
   const stepFrames = (n: number, render = true) => { for (let i = 0; i < n; i++) { simNow += 1000 / 30; step(1 / 30, simNow, render && i === n - 1); } return n; };
-  if (params.get('autostart')) void start();
-  if (import.meta.env.DEV) Object.assign(window, { __lb: { get game() { return game; }, renderer, assets, step: stepFrames, start } });
+  if (params.get('autostart') || benchMode) void start();
+  if (import.meta.env.DEV) Object.assign(window, { __lb: { get game() { return game; }, get bench() { return bench; }, renderer, assets, step: stepFrames, start } });
 }
 
 void boot().catch(error => {

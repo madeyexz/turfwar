@@ -179,6 +179,11 @@ export class Game {
         grounded: s.m.grounded, sprint: s.sprint, ads: s.ads, slide: s.m.slideTime > 0, alive: s.alive, weapon: w,
         reloading: s.reloadLeft > 0 ? 1 - s.reloadLeft / 2 : 0, firing: s.sinceShot < 0.15,
       });
+      // Hide a soldier the camera is inside (crowded spawns, kill cam): clipping through a body looks broken.
+      const cp = this.renderer.camera.position;
+      const inside = Math.hypot(r.pos.x - cp.x, r.pos.z - cp.z) < 0.75 && cp.y > r.pos.y - 0.3 && cp.y < r.pos.y + 2.2;
+      r.view.root.visible = !inside;
+      if (inside) r.view.gun.visible = false;
       // Remote footsteps.
       if (s.alive && s.m.grounded && r.last) {
         r.stepDist += r.last.distanceTo(r.pos);
