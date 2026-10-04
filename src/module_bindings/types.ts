@@ -133,6 +133,8 @@ export const Soldier = __t.object("Soldier", {
   sinceShot: __t.f32(),
   corrections: __t.u32(),
   idle: __t.f32(),
+  moveSlack: __t.f32(),
+  groundY: __t.f32(),
 });
 export type Soldier = __Infer<typeof Soldier>;
 

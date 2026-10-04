@@ -64,6 +64,10 @@ export interface Soldier {
   sinceShot: number;
   /** Increments whenever the server rejects a client-reported position. */
   corrections: number;
+  /** Metres a client may still move right now (refilling budget used to absorb network jitter). */
+  moveSlack: number;
+  /** Feet height when last on a floor (server bookkeeping for the flying check). */
+  groundY: number;
   /** Seconds since the last client report (humans) — used for disconnect cleanup. */
   idle: number;
   brain?: BotBrain;

@@ -55,4 +55,6 @@ export default __t.row({
   sinceShot: __t.f32().name("since_shot"),
   corrections: __t.u32(),
   idle: __t.f32(),
+  moveSlack: __t.f32().name("move_slack"),
+  groundY: __t.f32().name("ground_y"),
 });

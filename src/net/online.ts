@@ -37,7 +37,7 @@ function soldierFromRow(r: Record<string, unknown> & { id: number }): Soldier {
     yaw: n('yaw'), pitch: n('pitch'), alive: b('alive'), health: n('health'), shield: n('shield'), weapon: n('weapon') as 0 | 1, ammo: [n('ammo0'), n('ammo1')],
     reloadLeft: n('reloadLeft'), fireCooldown: n('fireCooldown'), switchLeft: n('switchLeft'), grenades: n('grenades'), respawnLeft: n('respawnLeft'),
     protectLeft: n('protectLeft'), sinceHit: n('sinceHit'), lastAttacker: n('lastAttacker'), kills: n('kills'), deaths: n('deaths'), score: n('score'),
-    captures: n('captures'), lawCooldown: n('lawCooldown'), sprint: b('sprint'), ads: b('ads'), sinceShot: n('sinceShot'), corrections: n('corrections'), idle: n('idle'),
+    captures: n('captures'), lawCooldown: n('lawCooldown'), sprint: b('sprint'), ads: b('ads'), sinceShot: n('sinceShot'), corrections: n('corrections'), idle: n('idle'), moveSlack: n('moveSlack') ?? 0, groundY: n('groundY') ?? 0,
   };
 }
 

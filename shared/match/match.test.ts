@@ -7,7 +7,7 @@ import { hitShape } from '../hitbox';
 import { findPath, nearestNode } from './nav';
 import { addSoldier, applyLaw, balanceTeams, createContext, createMatch, fireShot, reportState, tickMatch, TICK_RATE } from './sim';
 import { OFFLINE_CONFIG, ONLINE_CONFIG, type MatchEvent, type MatchState, type Soldier } from './state';
-import type { SimContext } from './combat';
+import { MOVE_SLACK, type SimContext } from './combat';
 
 function setup(config = OFFLINE_CONFIG, seed = 1) {
   const events: MatchEvent[] = [];
@@ -141,6 +141,32 @@ describe('server-side validation', () => {
     // Team 1's shield sits at x = +66.6: team 0 cannot stand inside it.
     place(a, 66.2, 0, ctx);
     expect(reportState(state, ctx, a.id, report(a, { x: 66.6 }), 1 / 20)).toBe(false);
+  });
+
+  it('absorbs network jitter but never pays for report spam', () => {
+    const { state, ctx, a } = duel();
+    // Sprinting at 8.8 m/s reported at 20 Hz, but delivered in uneven bunches (0, 0, 150 ms gaps).
+    const gaps = [0.002, 0.002, 0.146, 0.05, 0.004, 0.096];
+    for (let i = 0; i < 60; i++) {
+      expect(reportState(state, ctx, a.id, report(a, { x: a.m.x + 8.8 / 20 }), gaps[i % gaps.length])).toBe(true);
+      a.m.x -= 8.8 / 20; // stay on open ground
+    }
+    expect(a.corrections).toBe(0);
+    // A speed hack sending 200 reports per second, each 0.5 m apart (100 m/s), gets at most the
+    // budget for that second (burst cap plus one second at the speed limit), not 100 m.
+    let moved = 0;
+    for (let i = 0; i < 200; i++) {
+      const dir = i % 2 ? -1 : 1;
+      if (reportState(state, ctx, a.id, report(a, { x: a.m.x + 0.5 * dir }), 0.005)) moved += 0.5;
+    }
+    expect(moved).toBeLessThanOrEqual(MOVE_SLACK.max + MOVE_SLACK.speed * 1);
+    expect(moved).toBeLessThan(25);
+    // Vertical: a stream of small rises cannot climb past a jump's height, nor hover there.
+    const y0 = a.m.y;
+    for (let i = 0; i < 50; i++) reportState(state, ctx, a.id, report(a, { y: a.m.y + 0.3 }), 0.05);
+    expect(a.m.y - y0).toBeLessThan(2);
+    for (let i = 0; i < 80; i++) reportState(state, ctx, a.id, report(a), 0.05);
+    expect(a.m.y - y0).toBeLessThan(0.36);
   });
 });
 

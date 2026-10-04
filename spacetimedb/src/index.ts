@@ -35,7 +35,7 @@ const soldierTable = table({ name: 'soldier', public: true }, {
   alive: t.bool(), health: t.f32(), shield: t.f32(), weapon: t.u8(), ammo0: t.u16(), ammo1: t.u16(),
   reloadLeft: t.f32(), fireCooldown: t.f32(), switchLeft: t.f32(), grenades: t.u8(), respawnLeft: t.f32(), protectLeft: t.f32(),
   sinceHit: t.f32(), lastAttacker: t.i32(), kills: t.u32(), deaths: t.u32(), score: t.u32(), captures: t.u32(),
-  lawCooldown: t.f32(), sprint: t.bool(), ads: t.bool(), sinceShot: t.f32(), corrections: t.u32(), idle: t.f32(),
+  lawCooldown: t.f32(), sprint: t.bool(), ads: t.bool(), sinceShot: t.f32(), corrections: t.u32(), idle: t.f32(), moveSlack: t.f32(), groundY: t.f32(),
 });
 
 const brainTable = table({ name: 'bot_brain' }, { id: t.u32().primaryKey(), json: t.string() });
@@ -80,7 +80,7 @@ function soldierFromRow(r: SoldierRow, brain?: BotBrain): Soldier {
     reloadLeft: r.reloadLeft, fireCooldown: r.fireCooldown, switchLeft: r.switchLeft, grenades: r.grenades, respawnLeft: r.respawnLeft,
     protectLeft: r.protectLeft, sinceHit: r.sinceHit, lastAttacker: r.lastAttacker, kills: r.kills, deaths: r.deaths, score: r.score,
     captures: r.captures, lawCooldown: r.lawCooldown, sprint: r.sprint, ads: r.ads, sinceShot: r.sinceShot, corrections: r.corrections,
-    idle: r.idle, brain,
+    idle: r.idle, moveSlack: r.moveSlack, groundY: r.groundY, brain,
   };
 }
 
@@ -96,7 +96,7 @@ function soldierToRow(s: Soldier): SoldierRow {
     reloadLeft: s.reloadLeft, fireCooldown: s.fireCooldown, switchLeft: s.switchLeft, grenades: u(s.grenades, 255), respawnLeft: s.respawnLeft,
     protectLeft: s.protectLeft, sinceHit: Math.min(s.sinceHit, 999), lastAttacker: s.lastAttacker, kills: u(s.kills), deaths: u(s.deaths),
     score: u(s.score), captures: u(s.captures), lawCooldown: s.lawCooldown, sprint: s.sprint, ads: s.ads, sinceShot: Math.min(s.sinceShot, 999),
-    corrections: u(s.corrections), idle: Math.min(s.idle, 9999),
+    corrections: u(s.corrections), idle: Math.min(s.idle, 9999), moveSlack: s.moveSlack, groundY: s.groundY,
   };
 }
 

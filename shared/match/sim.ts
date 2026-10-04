@@ -7,7 +7,7 @@ import { HEALTH, LOADOUTS, WEAPONS, type LoadoutId } from '../weapons';
 import { BODY_RADIUS, History, PHYSICS_STEP, circularSpeed, stepBodies, timeFactor, type Body } from '../world';
 import { botName, createBrain, updateBot } from './bots';
 import {
-  DRONE, TICK_RATE, applyDamage, explode, eyeOf, feetOf, isHostile, killSoldier, resolveShot, spawnBody, spawnSoldier,
+  DRONE, MOVE_SLACK, TICK_RATE, applyDamage, explode, eyeOf, feetOf, isHostile, killSoldier, resolveShot, spawnBody, spawnSoldier,
   throwGrenadeFrom, traceShot, weaponOf, type SimContext, type TraceResult,
 } from './combat';
 import type { ClientReport, MatchConfig, MatchEvent, MatchState, ShotClaim, Soldier, Team, WorldSnapshot } from './state';
@@ -68,7 +68,7 @@ export function addSoldier(state: MatchState, ctx: SimContext, opts: { name: str
     m: createMoveState(0, 0, 0), yaw: 0, pitch: 0, alive: false, health: 0, shield: 0, weapon: 0,
     ammo: [WEAPONS[LOADOUTS[loadout].weapons[0]].magazine, WEAPONS[LOADOUTS[loadout].weapons[1]].magazine],
     reloadLeft: 0, fireCooldown: 0, switchLeft: 0, grenades: 0, respawnLeft: 0, protectLeft: 0, sinceHit: 99, lastAttacker: -1,
-    kills: 0, deaths: 0, score: 0, captures: 0, lawCooldown: 0, sprint: false, ads: false, sinceShot: 99, corrections: 0, idle: 0,
+    kills: 0, deaths: 0, score: 0, captures: 0, lawCooldown: 0, sprint: false, ads: false, sinceShot: 99, corrections: 0, moveSlack: MOVE_SLACK.max, groundY: 0, idle: 0,
   };
   if (opts.bot) s.brain = createBrain(clamp(state.config.botSkill + (ctx.random() - 0.5) * 0.3, 0.15, 0.95));
   state.soldiers.push(s);
@@ -103,6 +103,8 @@ export function balanceTeams(state: MatchState, ctx: SimContext) {
 // ---------------------------------------------------------------------------------------
 
 /** Accept a client's own movement report if it is physically plausible. */
+const JUMP_APEX = MOVE.jumpSpeed ** 2 / (2 * MOVE.gravity);
+
 export function reportState(state: MatchState, ctx: SimContext, id: number, r: ClientReport, elapsed: number) {
   const s = state.soldiers.find(x => x.id === id);
   if (!s || s.bot) return false;
@@ -111,19 +113,38 @@ export function reportState(state: MatchState, ctx: SimContext, id: number, r: C
   if (!finite) return false;
   s.yaw = r.yaw; s.pitch = clamp(r.pitch, -1.5, 1.5);
   if (!s.alive) return true;
-  const dt = clamp(elapsed, 1 / 60, 0.5);
+  // Distance budget against server-measured time: it refills at the top movement speed and is
+  // capped, so jitter (reports bunching up after a gap) passes, but sending reports faster never
+  // buys extra distance.
+  const dt = clamp(elapsed, 0, 0.5);
+  s.moveSlack = Math.min(MOVE_SLACK.max, s.moveSlack + MOVE_SLACK.speed * dt);
   const horizontal = Math.hypot(r.x - s.m.x, r.z - s.m.z);
   const rise = r.y - s.m.y;
-  const maxHorizontal = (MOVE.slideSpeed * 1.3 + 1.5) * dt + 0.8;
-  const pos = { x: r.x, y: r.y, z: r.z };
-  const b = ctx.map.bounds;
-  const outOfBounds = r.x < b.minX - 1 || r.x > b.maxX + 1 || r.z < b.minZ - 1 || r.z > b.maxZ + 1;
-  if (horizontal > maxHorizontal || rise > MOVE.jumpSpeed * dt + 1.2 || outOfBounds || ctx.world.overlapsSolid(pos, MOVE.radius * 0.55, 1.2, s.team)) {
+  const cost = horizontal + Math.max(0, rise);
+  // Airborne checks: rising higher than a jump from the last floor is flying, and a long airborne
+  // spell that is not falling is hovering. Either drops the soldier back to the floor.
+  const floor = ctx.world.groundHeight(r.x, r.z, r.y + 0.05, MOVE.radius);
+  const airborne = r.y - floor > 0.35;
+  const airTime = airborne ? s.m.airTime + dt : 0;
+  const flying = (rise > 0.02 && r.y > s.groundY + JUMP_APEX + 0.45) || (airTime > 2.5 && rise > -0.01);
+  if (flying) {
+    s.m.y = ctx.world.groundHeight(s.m.x, s.m.z, s.m.y + 0.05, MOVE.radius); s.m.vy = 0;
+    s.m.airTime = 0; s.groundY = s.m.y;
     s.corrections++;
     return false;
   }
+  const pos = { x: r.x, y: r.y, z: r.z };
+  const b = ctx.map.bounds;
+  const outOfBounds = r.x < b.minX - 1 || r.x > b.maxX + 1 || r.z < b.minZ - 1 || r.z > b.maxZ + 1;
+  if (cost > s.moveSlack || outOfBounds || ctx.world.overlapsSolid(pos, MOVE.radius * 0.55, 1.2, s.team)) {
+    s.corrections++;
+    return false;
+  }
+  s.moveSlack -= cost;
+  s.m.airTime = airTime;
+  if (!airborne) s.groundY = r.y;
   s.m.x = r.x; s.m.y = r.y; s.m.z = r.z; s.m.vx = r.vx; s.m.vy = r.vy; s.m.vz = r.vz;
-  s.m.crouch = clamp(r.crouch, 0, 1); s.m.grounded = r.grounded;
+  s.m.crouch = clamp(r.crouch, 0, 1); s.m.grounded = r.grounded && !airborne;
   s.sprint = r.sprint; s.ads = r.ads;
   if (r.weapon !== s.weapon) switchWeapon(state, id, r.weapon);
   if (horizontal > 0.05 && s.protectLeft > 0.6) s.protectLeft = Math.min(s.protectLeft, 0.6);

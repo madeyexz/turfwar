@@ -27,6 +27,12 @@ export const eyeOf = (s: Soldier): Vec3 => ({ x: s.m.x, y: s.m.y + eyeHeight(s.m
 export const feetOf = (s: Soldier): Vec3 => ({ x: s.m.x, y: s.m.y, z: s.m.z });
 export const isHostile = (a: number, b: number) => a !== b || a === -1;
 
+/**
+ * Distance budget for client-reported movement: refills at `speed` (a little above slide speed)
+ * up to `max` metres: how far a burst of delayed reports may move at once (about 0.7 s of sprinting).
+ */
+export const MOVE_SLACK = { speed: 13, max: 6 };
+
 export function spawnSoldier(state: MatchState, ctx: SimContext, s: Soldier) {
   const options = ctx.map.spawns.filter(p => p.team === s.team);
   // Prefer the spawn slot with the most room from teammates who just spawned.
@@ -44,7 +50,7 @@ export function spawnSoldier(state: MatchState, ctx: SimContext, s: Soldier) {
   const [a, b] = LOADOUTS[s.loadout].weapons;
   s.ammo = [WEAPONS[a].magazine, WEAPONS[b].magazine]; s.weapon = 0;
   s.reloadLeft = 0; s.fireCooldown = 0; s.switchLeft = 0; s.grenades = GRENADE.perLife;
-  s.protectLeft = RESPAWN_PROTECT; s.sinceHit = 99; s.lastAttacker = -1; s.sinceShot = 99;
+  s.protectLeft = RESPAWN_PROTECT; s.sinceHit = 99; s.lastAttacker = -1; s.sinceShot = 99; s.moveSlack = MOVE_SLACK.max; s.groundY = s.m.y;
   if (s.brain) { s.brain.path = []; s.brain.target = -1; s.brain.repath = 0; s.brain.goal = ''; }
   ctx.emit({ type: 'spawn', id: s.id });
 }
