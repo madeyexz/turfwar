@@ -82,6 +82,7 @@ async function boot() {
       jumpVelocity -= 12 * dt; player.y = Math.max(2.3, player.y + jumpVelocity * dt);
     }
     const playerSpeed = dt > 0 ? player.distanceTo(oldPosition) / dt : 0;
+    view.velocity.copy(player).sub(oldPosition).divideScalar(dt || 1);
     view.camera.position.copy(player); view.camera.rotation.set(pitch, yaw, 0);
     accumulator += dt;
     while (accumulator >= STEP) { sim.tick(playerSpeed); accumulator -= STEP; }

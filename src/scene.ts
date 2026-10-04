@@ -1,5 +1,6 @@
 import * as THREE from 'three';
 import type { Simulation } from './physics';
+import { SlowLight } from './slow-light';
 
 export class ArenaView {
   renderer = new THREE.WebGLRenderer({ antialias: true, powerPreference: 'high-performance' });
@@ -13,6 +14,8 @@ export class ArenaView {
   shotMaterial = new THREE.MeshBasicMaterial({ color: 0xc9f8ff });
   ringMaterial = new THREE.MeshBasicMaterial({ color: 0xffb891, transparent: true, opacity: 0.65 });
   ringGeometry = new THREE.TorusGeometry(0.64, 0.014, 4, 24);
+  slowLight = new SlowLight();
+  velocity = new THREE.Vector3();
   frame = 0;
 
   constructor(container: HTMLElement) {
@@ -96,13 +99,13 @@ export class ArenaView {
         }
         this.scene.add(mesh); this.meshes.set(entity.id, mesh);
       }
-      const p = entity.body.translation(); mesh.position.set(p.x, p.y, p.z); mesh.rotation.y += 0.008;
+      const p = entity.body.translation(); mesh.position.set(p.x, p.y, p.z); mesh.rotation.y = entity.age * 0.6;
       const trail = this.trails.get(entity.id);
       if (trail && this.frame % 3 === 0) {
         trail.points.push(mesh.position.clone()); if (trail.points.length > 100) trail.points.shift();
         trail.line.geometry.dispose(); trail.line.geometry = new THREE.BufferGeometry().setFromPoints(trail.points);
       }
     }
-    this.renderer.render(this.scene, this.camera);
+    this.slowLight.render(this.renderer, this.scene, this.camera, this.velocity, sim.laws.lightSpeed.c);
   }
 }
