@@ -38,6 +38,9 @@ menu.innerHTML = `
     <div class="field"><label class="field">Faction</label><div class="choices" id="teams" style="grid-template-columns:1fr 1fr 1fr">
       <button class="choice" data-team="auto"><b>Auto</b></button><button class="choice" data-team="0"><b style="color:var(--aegis)">Aegis</b></button><button class="choice" data-team="1"><b style="color:var(--crimson)">Crimson</b></button>
     </div></div>
+    <div class="field"><label class="field">Bot difficulty (solo)</label><div class="choices" id="skills" style="grid-template-columns:1fr 1fr 1fr">
+      <button class="choice" data-skill="0.25"><b>Recruit</b></button><button class="choice" data-skill="0.45"><b>Veteran</b></button><button class="choice" data-skill="0.75"><b>Elite</b></button>
+    </div></div>
     <button class="deploy" id="deploy" disabled>Loading…</button>
     <div class="status" id="status"></div>
     <div class="controls">
@@ -57,7 +60,8 @@ let mode = params.get('mode') ?? store.get('mode', 'offline');
 let mapId = params.get('map') ?? store.get('map', maps[0].id);
 if (!maps.some(m => m.id === mapId)) mapId = maps[0].id;
 let loadout = store.get('loadout', 'assault') as LoadoutId;
-let team = store.get('team', 'auto');
+let team = params.get('team') ?? store.get('team', 'auto');
+let skill = params.get('skill') ?? store.get('skill', '0.45');
 const callsign = menu.querySelector<HTMLInputElement>('#callsign')!;
 callsign.value = params.get('name') ?? store.get('name', `Lawbreaker-${Math.floor(Math.random() * 900 + 100)}`);
 const online = onlineAvailable();
@@ -66,11 +70,12 @@ if (!online.ok) {
   menu.querySelector('#online-note')!.textContent = online.reason;
   if (mode === 'online') mode = 'offline';
 }
-select('modes', 'mode', mode); select('maps', 'map', mapId); select('loadouts', 'loadout', loadout); select('teams', 'team', team);
+select('modes', 'mode', mode); select('maps', 'map', mapId); select('loadouts', 'loadout', loadout); select('teams', 'team', team); select('skills', 'skill', skill);
 menu.querySelectorAll<HTMLButtonElement>('[data-mode]').forEach(b => b.addEventListener('click', () => { mode = b.dataset.mode!; select('modes', 'mode', mode); }));
 menu.querySelectorAll<HTMLButtonElement>('[data-map]').forEach(b => b.addEventListener('click', () => { mapId = b.dataset.map!; select('maps', 'map', mapId); showBackdrop(); }));
 menu.querySelectorAll<HTMLButtonElement>('[data-loadout]').forEach(b => b.addEventListener('click', () => { loadout = b.dataset.loadout as LoadoutId; select('loadouts', 'loadout', loadout); }));
 menu.querySelectorAll<HTMLButtonElement>('[data-team]').forEach(b => b.addEventListener('click', () => { team = b.dataset.team!; select('teams', 'team', team); }));
+menu.querySelectorAll<HTMLButtonElement>('[data-skill]').forEach(b => b.addEventListener('click', () => { skill = b.dataset.skill!; select('skills', 'skill', skill); }));
 const deploy = menu.querySelector<HTMLButtonElement>('#deploy')!;
 const status = menu.querySelector<HTMLElement>('#status')!;
 
@@ -91,7 +96,7 @@ function showBackdrop() {
 
 async function start() {
   const name = callsign.value.trim().slice(0, 16) || 'Lawbreaker';
-  store.set('name', name); store.set('mode', mode); store.set('map', mapId); store.set('loadout', loadout); store.set('team', team);
+  store.set('name', name); store.set('mode', mode); store.set('map', mapId); store.set('loadout', loadout); store.set('team', team); store.set('skill', skill);
   deploy.disabled = true; deploy.textContent = 'Deploying…';
   audio.start();
   const teamChoice = team === 'auto' ? undefined : (Number(team) as Team);
@@ -99,7 +104,7 @@ async function start() {
   try {
     link = mode === 'online'
       ? await connectOnline(name, loadout, teamChoice, s => { status.textContent = s; })
-      : new OfflineLink(mapId, name, loadout, teamChoice);
+      : new OfflineLink(mapId, name, loadout, teamChoice, { botSkill: Math.max(0.1, Math.min(0.95, Number(skill) || 0.45)) });
   } catch (error) {
     status.textContent = `Could not deploy: ${(error as Error).message}`;
     deploy.disabled = false; deploy.textContent = 'Deploy';
@@ -160,7 +165,7 @@ async function boot() {
   if (!params.has('capture')) requestAnimationFrame(loop);
   let simNow = 0;
   /** Advance n fixed frames (capture mode). Returns once the frames are rendered. */
-  const stepFrames = (n: number) => { for (let i = 0; i < n; i++) { simNow += 1000 / 30; step(1 / 30, simNow, i === n - 1); } return n; };
+  const stepFrames = (n: number, render = true) => { for (let i = 0; i < n; i++) { simNow += 1000 / 30; step(1 / 30, simNow, render && i === n - 1); } return n; };
   if (params.get('autostart')) void start();
   if (import.meta.env.DEV) Object.assign(window, { __lb: { get game() { return game; }, renderer, assets, step: stepFrames, start } });
 }

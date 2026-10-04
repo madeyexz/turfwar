@@ -42,6 +42,8 @@ export class LocalPlayer {
   alive = false;
   sprinting = false;
   private sprintBlock = 0;
+  /** Sprint-to-fire delay: the weapon has to come back up before it can shoot. */
+  private sprintRecover = 0;
   private triggerHeld = false;
   private shotsInBurst = 0;
   private sinceShot = 9;
@@ -128,6 +130,7 @@ export class LocalPlayer {
       }
     }
     this.sprinting = this.alive && isSprinting(this.m, moveInput) && this.m.grounded;
+    this.sprintRecover = this.sprinting ? 0.14 : Math.max(0, this.sprintRecover - dt);
     const adsTarget = moveInput.ads && !this.sprinting && this.alive ? 1 : 0;
     this.ads = clamp(this.ads + Math.sign(adsTarget - this.ads) * dt / w.adsTime, 0, 1);
 
@@ -142,7 +145,7 @@ export class LocalPlayer {
       if (this.throwLeft <= 0) result.grenade = { origin: this.eye(), dir: dirFromAngles(this.yaw, this.pitch + 0.06) };
     }
 
-    const trigger = wantsFire && !this.sprinting && this.throwLeft <= 0;
+    const trigger = wantsFire && !this.sprinting && this.sprintRecover <= 0 && this.throwLeft <= 0;
     if (!trigger) { this.triggerHeld = false; this.shotsInBurst = 0; }
     if (trigger && this.switchLeft <= 0 && this.reloadLeft <= 0 && this.fireCooldown <= 0 && (w.auto || !this.triggerHeld)) {
       if (this.ammo[this.slot] <= 0) {

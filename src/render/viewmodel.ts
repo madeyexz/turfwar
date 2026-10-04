@@ -128,9 +128,10 @@ export class ViewModel {
     if (w.id !== this.current) this.setWeapon(w.id);
     const rig = RIGS[this.current];
     this.equipT = Math.min(1, this.equipT + dt / Math.max(0.15, w.equipTime));
-    const ads = ease(p.ads);
     const speed = Math.min(1.4, p.speed() / 6);
-    const sprint = this.sprint.update(p.sprinting ? 1 : 0, dt);
+    const sprint = Math.max(0, Math.min(1, this.sprint.update(p.sprinting ? 1 : 0, dt)));
+    // Coming out of a sprint, the weapon must finish lowering before the sights come up.
+    const ads = ease(p.ads) * (1 - sprint);
     // Mouse sway lags behind the view.
     const sx = this.swayX.update(Math.max(-1, Math.min(1, -look.x * 0.0035)) * (1 - ads * 0.8), dt);
     const sy = this.swayY.update(Math.max(-1, Math.min(1, look.y * 0.0035)) * (1 - ads * 0.8), dt);

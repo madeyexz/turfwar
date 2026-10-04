@@ -95,7 +95,7 @@ export interface MatchConfig {
   botSkill: number;
 }
 
-export const OFFLINE_CONFIG: MatchConfig = { teamSize: 6, scoreLimit: 200, timeLimit: 600, lawCooldown: 0, lawDuration: 0, warmup: 3, respawn: 4, botSkill: 0.55 };
+export const OFFLINE_CONFIG: MatchConfig = { teamSize: 6, scoreLimit: 200, timeLimit: 600, lawCooldown: 0, lawDuration: 0, warmup: 3, respawn: 4, botSkill: 0.45 };
 export const ONLINE_CONFIG: MatchConfig = { teamSize: 6, scoreLimit: 200, timeLimit: 600, lawCooldown: 25, lawDuration: 30, warmup: 8, respawn: 5, botSkill: 0.55 };
 
 export interface MatchState {

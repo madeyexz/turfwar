@@ -55,15 +55,21 @@ export class Input {
   autopilot(steps: typeof this.script) { this.script.push(...steps); }
   get scripted() { return this.script.length > 0; }
   /** Apply the current scripted step; call once at the start of each frame. */
+  private wasScripted = false;
   beginFrame() {
     const step = this.script[0];
-    if (!step) return;
+    if (!step) {
+      // Release scripted keys one frame after the script ends so its last step still applies.
+      if (this.wasScripted) { this.keys.clear(); this.fire = false; this.aim = false; this.wasScripted = false; }
+      return;
+    }
+    this.wasScripted = true;
     this.keys.clear();
     for (const k of step.keys ?? []) this.keys.add(k);
     if (step.press) { for (const k of step.press) this.pressed.add(k); step.press = undefined; }
     this.fire = !!step.fire; this.aim = !!step.aim;
     if (step.look) { this.lookX += step.look[0]; this.lookY += step.look[1]; }
-    if (--step.frames <= 0) { this.script.shift(); if (!this.script.length) { this.keys.clear(); this.fire = false; this.aim = false; } }
+    if (--step.frames <= 0) this.script.shift();
   }
   clear() { this.keys.clear(); this.pressed.clear(); this.fire = false; this.aim = false; this.lookX = this.lookY = 0; }
   lock() { return this.canvas.requestPointerLock?.(); }
