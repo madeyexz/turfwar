@@ -3,9 +3,10 @@ import { schema, table, t, SenderError, type ReducerCtx, type InferSchema } from
 import { parseLawCommand } from '../../shared/laws';
 import { MAP_IDS, loadMap, loadNav } from '../../shared/maps/index';
 import type { SimContext } from '../../shared/match/combat';
+import { encodeFrame } from '../../shared/match/frame';
 import {
   addSoldier, applyLaw, balanceTeams, createMatch, fireShot, HISTORY_SECONDS, reload, removeSoldier, reportState, resetMatch,
-  setLoadout, switchWeapon, throwGrenade, tickMatch, TICK_RATE,
+  setLoadout, switchWeapon, teamSizeFor, throwGrenade, tickMatch, TICK_RATE,
 } from '../../shared/match/sim';
 import { ONLINE_CONFIG, type BotBrain, type MatchEvent, type MatchState, type PointState, type Soldier, type Team, type WorldSnapshot } from '../../shared/match/state';
 import { LOADOUTS, type LoadoutId } from '../../shared/weapons';
@@ -13,11 +14,21 @@ import type { Body } from '../../shared/world';
 
 /**
  * Authoritative multiplayer: the same shared match simulation the offline client runs, executed
- * here on a 30 Hz scheduled reducer. Clients report their own movement and shot claims; every
- * report is validated by the shared rules before it touches the match.
+ * here on a 30 Hz scheduled reducer. Player reducers only queue their input (a cheap private-row
+ * write); the tick loads the match once, applies every queued report and command through the
+ * shared validation rules, simulates, and publishes one packed `frame` row plus the slow-changing
+ * `roster` rows. That keeps a 100-soldier match to one load/save per tick and one small row
+ * update per client per tick.
  */
-const MAP_ID = 'cinder';
+const START_MAP = 'meridian';
 const HISTORY_CAPACITY = HISTORY_SECONDS * TICK_RATE + 1;
+/** Queued commands one soldier may have applied per tick; anything beyond is spam. */
+const COMMANDS_PER_TICK = 24;
+
+// ---- Tables -------------------------------------------------------------------------------
+// `match`, `soldier`, `point`, `body` and `player` keep their original columns so existing
+// databases migrate in place. Clients now read `match` (slow fields), `roster`, `frame` and their
+// own `player` row; `soldier`, `point` and `body` hold full-precision server state.
 
 const matchTable = table({ name: 'match', public: true }, {
   id: t.u8().primaryKey(),
@@ -26,6 +37,13 @@ const matchTable = table({ name: 'match', public: true }, {
   lawsJson: t.string(), lawAuthor: t.i32(), lawText: t.string(), lawLeft: t.f64(), rewindLeft: t.u32(),
   nextId: t.u32(), droneTimer: t.f64(), winner: t.i8(), configJson: t.string(),
   historyHead: t.u32(), historyLength: t.u32(), lastTickMicros: t.u64(), humans: t.u32(),
+});
+
+/** Per-tick server bookkeeping, kept out of the public match row so it is not broadcast 30×/s. */
+const clockTable = table({ name: 'clock' }, {
+  id: t.u8().primaryKey(),
+  phaseLeft: t.f64(), time: t.f64(), worldTime: t.f64(), tick: t.u32(), scoreTimer: t.f64(), lawLeft: t.f64(), rewindLeft: t.u32(),
+  nextId: t.u32(), droneTimer: t.f64(), historyHead: t.u32(), historyLength: t.u32(), lastTickMicros: t.u64(),
 });
 
 const soldierTable = table({ name: 'soldier', public: true }, {
@@ -39,6 +57,18 @@ const soldierTable = table({ name: 'soldier', public: true }, {
   // Appended with defaults so existing databases migrate in place.
   moveSlack: t.f32().default(6), groundY: t.f32().default(0),
 });
+
+/** What other players need about a soldier, rewritten only when it changes (not every tick). */
+const rosterTable = table({ name: 'roster', public: true }, {
+  id: t.u32().primaryKey(), name: t.string(), team: t.u8(), bot: t.bool(), loadout: t.string(), alive: t.bool(),
+  grenades: t.u8(), kills: t.u32(), deaths: t.u32(), score: t.u32(), captures: t.u32(),
+  /** Match time (`frame.time`) at which the soldier respawns / may rewrite a law again. */
+  respawnAt: t.f32(), lawReadyAt: t.f32(),
+  protect: t.bool(), lastAttacker: t.i32(), corrections: t.u32(),
+});
+
+/** One row, rewritten every tick: the packed binary snapshot from shared/match/frame.ts. */
+const frameTable = table({ name: 'frame', public: true }, { id: t.u8().primaryKey(), mapId: t.string(), data: t.byteArray() });
 
 const brainTable = table({ name: 'bot_brain' }, { id: t.u32().primaryKey(), json: t.string() });
 
@@ -55,6 +85,16 @@ const playerTable = table({ name: 'player', public: true }, {
   identity: t.identity().primaryKey(), soldierId: t.u32(), lastReportMicros: t.u64(),
 });
 
+/** Latest movement report per soldier, applied (and marked consumed) by the next tick. */
+const inboxTable = table({ name: 'inbox' }, {
+  soldierId: t.u32().primaryKey(), lastMicros: t.u64(), elapsed: t.f32(), pending: t.bool(),
+  x: t.f32(), y: t.f32(), z: t.f32(), vx: t.f32(), vy: t.f32(), vz: t.f32(), yaw: t.f32(), pitch: t.f32(),
+  crouch: t.f32(), grounded: t.bool(), sprint: t.bool(), ads: t.bool(), slide: t.bool(), weapon: t.u8(),
+});
+
+/** Queued shots, grenades, reloads, weapon and kit switches, applied in order by the next tick. */
+const commandTable = table({ name: 'command' }, { id: t.u64().primaryKey().autoInc(), soldierId: t.u32(), json: t.string() });
+
 const historyTable = table({ name: 'history' }, { slot: t.u32().primaryKey(), json: t.string() });
 
 const eventTable = table({ name: 'match_event', public: true, event: true }, { seq: t.u32(), json: t.string() });
@@ -62,15 +102,25 @@ const eventTable = table({ name: 'match_event', public: true, event: true }, { s
 const tickTable = table({ name: 'tick_schedule' }, { scheduledId: t.u64().primaryKey().autoInc(), scheduledAt: t.scheduleAt() });
 
 const spacetimedb = schema({
-  match: matchTable, soldier: soldierTable, botBrain: brainTable, point: pointTable, body: bodyTable,
-  player: playerTable, history: historyTable, matchEvent: eventTable, tickSchedule: tickTable,
+  match: matchTable, clock: clockTable, soldier: soldierTable, roster: rosterTable, frame: frameTable, botBrain: brainTable,
+  point: pointTable, body: bodyTable, player: playerTable, inbox: inboxTable, command: commandTable, history: historyTable,
+  matchEvent: eventTable, tickSchedule: tickTable,
 });
 export default spacetimedb;
 
 type Ctx = ReducerCtx<InferSchema<typeof spacetimedb>>;
 type SoldierRow = Parameters<Ctx['db']['soldier']['insert']>[0];
+type RosterRow = Parameters<Ctx['db']['roster']['insert']>[0];
 type BodyRow = Parameters<Ctx['db']['body']['insert']>[0];
 type MatchRow = Parameters<Ctx['db']['match']['insert']>[0];
+type ClockRow = Parameters<Ctx['db']['clock']['insert']>[0];
+
+type Command =
+  | { kind: 'fire'; weapon: 0 | 1; origin: { x: number; y: number; z: number }; dir: { x: number; y: number; z: number }; target: number; zone: 'head' | 'body' | 'legs' | ''; point: { x: number; y: number; z: number } }
+  | { kind: 'grenade'; origin: { x: number; y: number; z: number }; dir: { x: number; y: number; z: number } }
+  | { kind: 'reload' }
+  | { kind: 'switch'; slot: 0 | 1 }
+  | { kind: 'loadout'; loadout: LoadoutId };
 
 // ---- Row <-> state conversion ------------------------------------------------------------
 
@@ -102,21 +152,48 @@ function soldierToRow(s: Soldier): SoldierRow {
   };
 }
 
+/** Countdowns become absolute match times so the row only changes when a new countdown starts. */
+const at = (time: number, left: number) => left > 0 ? Math.round((time + left) * 10) / 10 : 0;
+function rosterRow(s: Soldier, time: number): RosterRow {
+  return {
+    id: s.id, name: s.name, team: s.team, bot: s.bot, loadout: s.loadout, alive: s.alive, grenades: u(s.grenades, 255),
+    kills: u(s.kills), deaths: u(s.deaths), score: u(s.score), captures: u(s.captures),
+    respawnAt: s.alive ? 0 : at(time, s.respawnLeft), lawReadyAt: at(time, s.lawCooldown),
+    protect: s.protectLeft > 0, lastAttacker: s.lastAttacker, corrections: u(s.corrections),
+  };
+}
+/** Compare roster rows ignoring the sub-second drift of countdowns that are already running. */
+const rosterKey = (r: RosterRow) => JSON.stringify({ ...r, respawnAt: Math.round(r.respawnAt), lawReadyAt: Math.round(r.lawReadyAt) });
+
 const bodyToRow = (b: Body): BodyRow => ({ id: b.id, kind: b.kind, x: b.x, y: b.y, z: b.z, vx: b.vx, vy: b.vy, vz: b.vz, age: Math.min(b.age, 9999), owner: b.owner, team: b.team, hp: b.hp, timer: b.timer });
 const bodyFromRow = (r: BodyRow): Body => ({ id: r.id, kind: r.kind as Body['kind'], x: r.x, y: r.y, z: r.z, vx: r.vx, vy: r.vy, vz: r.vz, age: r.age, owner: r.owner, team: r.team, hp: r.hp, timer: r.timer });
 
-interface Loaded { state: MatchState; row: MatchRow; soldierKeys: Map<number, string>; bodyKeys: Map<number, string>; pointKeys: Map<string, string>; brainKeys: Map<number, string> }
+/** The broadcast part of the match row: only these fields trigger a row update. */
+const slowKey = (r: MatchRow) => JSON.stringify([r.mapId, r.phase, r.score0, r.score1, r.lawsJson, r.lawAuthor, r.lawText, r.winner, r.configJson, r.humans]);
+
+interface Loaded {
+  state: MatchState; row: MatchRow; clock: ClockRow; clockExists: boolean;
+  soldierKeys: Map<number, string>; rosterKeys: Map<number, string>; bodyKeys: Map<number, string>; pointKeys: Map<string, string>; brainKeys: Map<number, string>;
+}
 
 function load(ctx: Ctx): Loaded {
   const row = ctx.db.match.id.find(0);
   if (!row) throw new SenderError('Match not initialized');
+  // Databases from before the clock table carry these fields in the match row.
+  const existing = ctx.db.clock.id.find(0);
+  const clock: ClockRow = existing ?? {
+    id: 0, phaseLeft: row.phaseLeft, time: row.time, worldTime: row.worldTime, tick: row.tick, scoreTimer: row.scoreTimer, lawLeft: row.lawLeft,
+    rewindLeft: row.rewindLeft, nextId: row.nextId, droneTimer: row.droneTimer, historyHead: row.historyHead, historyLength: row.historyLength,
+    lastTickMicros: row.lastTickMicros,
+  };
   const brains = new Map<number, BotBrain>();
   const brainKeys = new Map<number, string>();
   for (const b of ctx.db.botBrain.iter()) { brains.set(b.id, JSON.parse(b.json)); brainKeys.set(b.id, b.json); }
-  const soldierKeys = new Map<number, string>(), bodyKeys = new Map<number, string>(), pointKeys = new Map<string, string>();
+  const soldierKeys = new Map<number, string>(), rosterKeys = new Map<number, string>(), bodyKeys = new Map<number, string>(), pointKeys = new Map<string, string>();
   const soldiers: Soldier[] = [];
   for (const r of ctx.db.soldier.iter()) { soldiers.push(soldierFromRow(r, brains.get(r.id))); soldierKeys.set(r.id, JSON.stringify(r)); }
   soldiers.sort((a, b) => a.id - b.id);
+  for (const r of ctx.db.roster.iter()) rosterKeys.set(r.id, rosterKey(r));
   const bodies: Body[] = [];
   for (const r of ctx.db.body.iter()) { bodies.push(bodyFromRow(r)); bodyKeys.set(r.id, JSON.stringify(r)); }
   bodies.sort((a, b) => a.id - b.id);
@@ -127,90 +204,109 @@ function load(ctx: Ctx): Loaded {
     return { id: def.id, progress: p?.progress ?? 0, owner: (p?.owner ?? -1) as -1 | Team, contested: p?.contested ?? false, capturing: (p?.capturing ?? -1) as -1 | Team };
   });
   const state: MatchState = {
-    mapId: row.mapId, phase: row.phase as MatchState['phase'], phaseLeft: row.phaseLeft, time: row.time, worldTime: row.worldTime, tick: row.tick,
-    scores: [row.score0, row.score1], scoreTimer: row.scoreTimer, laws: JSON.parse(row.lawsJson), lawAuthor: row.lawAuthor, lawText: row.lawText,
-    lawLeft: row.lawLeft, rewindLeft: row.rewindLeft, soldiers, points, bodies, nextId: row.nextId, droneTimer: row.droneTimer,
+    mapId: row.mapId, phase: row.phase as MatchState['phase'], phaseLeft: clock.phaseLeft, time: clock.time, worldTime: clock.worldTime, tick: clock.tick,
+    scores: [row.score0, row.score1], scoreTimer: clock.scoreTimer, laws: JSON.parse(row.lawsJson), lawAuthor: row.lawAuthor, lawText: row.lawText,
+    lawLeft: clock.lawLeft, rewindLeft: clock.rewindLeft, soldiers, points, bodies, nextId: clock.nextId, droneTimer: clock.droneTimer,
     winner: row.winner as -1 | Team, config: JSON.parse(row.configJson),
   };
-  return { state, row, soldierKeys, bodyKeys, pointKeys, brainKeys };
+  return { state, row, clock: { ...clock }, clockExists: !!existing, soldierKeys, rosterKeys, bodyKeys, pointKeys, brainKeys };
 }
 
-function save(ctx: Ctx, loaded: Loaded, events: MatchEvent[]) {
-  const { state, row } = loaded;
-  const humans = state.soldiers.filter(s => !s.bot).length;
-  ctx.db.match.id.update({
-    ...row, mapId: state.mapId, phase: state.phase, phaseLeft: state.phaseLeft, time: state.time, worldTime: state.worldTime, tick: state.tick >>> 0,
-    score0: u(state.scores[0]), score1: u(state.scores[1]), scoreTimer: state.scoreTimer, lawsJson: JSON.stringify(state.laws),
-    lawAuthor: state.lawAuthor, lawText: state.lawText.slice(0, 200), lawLeft: state.lawLeft, rewindLeft: u(state.rewindLeft),
-    nextId: state.nextId, droneTimer: state.droneTimer, winner: state.winner, humans,
-    historyHead: loaded.row.historyHead, historyLength: loaded.row.historyLength, lastTickMicros: loaded.row.lastTickMicros,
+function save(ctx: Ctx, loaded: Loaded, events: MatchEvent[], frame: boolean) {
+  const { state, row, clock } = loaded;
+  Object.assign(clock, {
+    phaseLeft: state.phaseLeft, time: state.time, worldTime: state.worldTime, tick: state.tick >>> 0, scoreTimer: state.scoreTimer,
+    lawLeft: state.lawLeft, rewindLeft: u(state.rewindLeft), nextId: state.nextId, droneTimer: state.droneTimer,
   });
+  if (loaded.clockExists) ctx.db.clock.id.update(clock); else { ctx.db.clock.insert(clock); loaded.clockExists = true; }
+  const humans = state.soldiers.filter(s => !s.bot).length;
+  const next: MatchRow = {
+    ...row, mapId: state.mapId, phase: state.phase, score0: u(state.scores[0]), score1: u(state.scores[1]), lawsJson: JSON.stringify(state.laws),
+    lawAuthor: state.lawAuthor, lawText: state.lawText.slice(0, 200), winner: state.winner, humans,
+  };
+  if (slowKey(next) !== slowKey(row)) {
+    // Refresh the legacy per-tick columns too, so the row stays self-consistent when it is written.
+    ctx.db.match.id.update({ ...next, phaseLeft: clock.phaseLeft, time: clock.time, worldTime: clock.worldTime, tick: clock.tick, scoreTimer: clock.scoreTimer, lawLeft: clock.lawLeft, rewindLeft: clock.rewindLeft, nextId: clock.nextId, droneTimer: clock.droneTimer, historyHead: clock.historyHead, historyLength: clock.historyLength, lastTickMicros: clock.lastTickMicros });
+  }
   const seen = new Set<number>();
   for (const s of state.soldiers) {
     seen.add(s.id);
-    const next = soldierToRow(s);
-    const key = JSON.stringify(next);
+    const nextRow = soldierToRow(s);
+    const key = JSON.stringify(nextRow);
     const prev = loaded.soldierKeys.get(s.id);
-    if (prev === undefined) ctx.db.soldier.insert(next);
-    else if (prev !== key) ctx.db.soldier.id.update(next);
+    if (prev === undefined) ctx.db.soldier.insert(nextRow);
+    else if (prev !== key) ctx.db.soldier.id.update(nextRow);
+    const roster = rosterRow(s, state.time);
+    const before = loaded.rosterKeys.get(s.id);
+    if (before === undefined) ctx.db.roster.insert(roster);
+    else if (before !== rosterKey(roster)) ctx.db.roster.id.update(roster);
     if (s.brain) {
       const json = JSON.stringify(s.brain);
-      const before = loaded.brainKeys.get(s.id);
-      if (before === undefined) ctx.db.botBrain.insert({ id: s.id, json });
-      else if (before !== json) ctx.db.botBrain.id.update({ id: s.id, json });
+      const prevBrain = loaded.brainKeys.get(s.id);
+      if (prevBrain === undefined) ctx.db.botBrain.insert({ id: s.id, json });
+      else if (prevBrain !== json) ctx.db.botBrain.id.update({ id: s.id, json });
     }
   }
   for (const id of loaded.soldierKeys.keys()) if (!seen.has(id)) ctx.db.soldier.id.delete(id);
+  for (const id of loaded.rosterKeys.keys()) if (!seen.has(id)) ctx.db.roster.id.delete(id);
   for (const id of loaded.brainKeys.keys()) if (!seen.has(id)) ctx.db.botBrain.id.delete(id);
   const bodySeen = new Set<number>();
   for (const b of state.bodies) {
     bodySeen.add(b.id);
-    const next = bodyToRow(b);
+    const nextBody = bodyToRow(b);
     const prev = loaded.bodyKeys.get(b.id);
-    if (prev === undefined) ctx.db.body.insert(next);
-    else if (prev !== JSON.stringify(next)) ctx.db.body.id.update(next);
+    if (prev === undefined) ctx.db.body.insert(nextBody);
+    else if (prev !== JSON.stringify(nextBody)) ctx.db.body.id.update(nextBody);
   }
   for (const id of loaded.bodyKeys.keys()) if (!bodySeen.has(id)) ctx.db.body.id.delete(id);
   for (const p of state.points) {
-    const next = { id: p.id, progress: p.progress, owner: p.owner, contested: p.contested, capturing: p.capturing };
+    const nextPoint = { id: p.id, progress: p.progress, owner: p.owner, contested: p.contested, capturing: p.capturing };
     const prev = loaded.pointKeys.get(p.id);
-    if (prev === undefined) ctx.db.point.insert(next);
-    else if (prev !== JSON.stringify(next)) ctx.db.point.id.update(next);
+    if (prev === undefined) ctx.db.point.insert(nextPoint);
+    else if (prev !== JSON.stringify(nextPoint)) ctx.db.point.id.update(nextPoint);
   }
-  events.forEach((e, i) => ctx.db.matchEvent.insert({ seq: i, json: JSON.stringify(e) }));
+  // Shots ride in the packed frame; everything else is a (rarer) JSON event.
+  const shots = frame ? events.filter((e): e is Extract<MatchEvent, { type: 'shot' }> => e.type === 'shot') : [];
+  let seq = 0;
+  for (const e of events) if (!frame || e.type !== 'shot') ctx.db.matchEvent.insert({ seq: seq++, json: JSON.stringify(e) });
+  if (frame) {
+    const data = encodeFrame(state, shots);
+    if (ctx.db.frame.id.find(0)) ctx.db.frame.id.update({ id: 0, mapId: state.mapId, data });
+    else ctx.db.frame.insert({ id: 0, mapId: state.mapId, data });
+  }
 }
 
 /** World-rewind history lives in a private ring of rows. */
 function historyAdapter(ctx: Ctx, loaded: Loaded): SimContext['history'] {
-  const row = loaded.row;
+  const clock = loaded.clock;
   const read = (slot: number): WorldSnapshot | undefined => { const r = ctx.db.history.slot.find(slot); return r ? JSON.parse(r.json) : undefined; };
   return {
-    get length() { return row.historyLength; },
+    get length() { return clock.historyLength; },
     push(s: WorldSnapshot) {
-      const slot = row.historyHead, json = JSON.stringify(s);
+      const slot = clock.historyHead, json = JSON.stringify(s);
       if (ctx.db.history.slot.find(slot)) ctx.db.history.slot.update({ slot, json }); else ctx.db.history.insert({ slot, json });
-      row.historyHead = (row.historyHead + 1) % HISTORY_CAPACITY;
-      row.historyLength = Math.min(HISTORY_CAPACITY, row.historyLength + 1);
+      clock.historyHead = (clock.historyHead + 1) % HISTORY_CAPACITY;
+      clock.historyLength = Math.min(HISTORY_CAPACITY, clock.historyLength + 1);
     },
     pop() {
-      if (!row.historyLength) return undefined;
-      row.historyHead = (row.historyHead - 1 + HISTORY_CAPACITY) % HISTORY_CAPACITY;
-      row.historyLength--;
-      return read(row.historyHead);
+      if (!clock.historyLength) return undefined;
+      clock.historyHead = (clock.historyHead - 1 + HISTORY_CAPACITY) % HISTORY_CAPACITY;
+      clock.historyLength--;
+      return read(clock.historyHead);
     },
-    peek() { return row.historyLength ? read((row.historyHead - 1 + HISTORY_CAPACITY) % HISTORY_CAPACITY) : undefined; },
-    clear() { for (const h of [...ctx.db.history.iter()]) ctx.db.history.slot.delete(h.slot); row.historyHead = 0; row.historyLength = 0; },
+    peek() { return clock.historyLength ? read((clock.historyHead - 1 + HISTORY_CAPACITY) % HISTORY_CAPACITY) : undefined; },
+    clear() { for (const h of [...ctx.db.history.iter()]) ctx.db.history.slot.delete(h.slot); clock.historyHead = 0; clock.historyLength = 0; },
   };
 }
 
 /** Load the match, run `fn` against the shared rules, and persist the result atomically. */
-function withMatch<T>(ctx: Ctx, fn: (state: MatchState, sim: SimContext) => T): T {
+function withMatch<T>(ctx: Ctx, fn: (state: MatchState, sim: SimContext, loaded: Loaded) => T, frame = false): T {
   const loaded = load(ctx);
   const events: MatchEvent[] = [];
   const { def, world } = loadMap(loaded.state.mapId);
   const sim: SimContext = { map: def, world, nav: loadNav(loaded.state.mapId), random: () => ctx.random(), emit: e => events.push(e), history: historyAdapter(ctx, loaded) };
-  const result = fn(loaded.state, sim);
-  save(ctx, loaded, events);
+  const result = fn(loaded.state, sim, loaded);
+  save(ctx, loaded, events, frame);
   return result;
 }
 
@@ -222,12 +318,23 @@ function mySoldier(ctx: Ctx) {
 
 const micros = (ctx: Ctx) => ctx.timestamp.microsSinceUnixEpoch;
 
+/** Next battlefield: rotate through every map, skipping ones too small for the humans present. */
+function nextMap(current: string, humans: number) {
+  const fits = (id: string) => teamSizeFor(loadMap(id).def, ONLINE_CONFIG) * 2 >= humans;
+  const start = MAP_IDS.indexOf(current as (typeof MAP_IDS)[number]);
+  for (let i = 1; i <= MAP_IDS.length; i++) {
+    const id = MAP_IDS[(start + i) % MAP_IDS.length];
+    if (fits(id)) return id;
+  }
+  return START_MAP;
+}
+
 // ---- Lifecycle ----------------------------------------------------------------------------
 
 function initializeMatch(ctx: Ctx) {
   if (ctx.db.match.id.find(0)) return;
   const random = () => ctx.random();
-  const state = createMatch(MAP_ID, { ...ONLINE_CONFIG }, random);
+  const state = createMatch(START_MAP, { ...ONLINE_CONFIG }, random);
   ctx.db.match.insert({
     id: 0, mapId: state.mapId, phase: state.phase, phaseLeft: state.phaseLeft, time: 0, worldTime: 0, tick: 0, score0: 0, score1: 0,
     scoreTimer: 0, lawsJson: JSON.stringify(state.laws), lawAuthor: -1, lawText: '', lawLeft: -1, rewindLeft: 0, nextId: state.nextId,
@@ -249,21 +356,60 @@ export const onDisconnect = spacetimedb.clientDisconnected(ctx => {
   withMatch(ctx, (state, sim) => { removeSoldier(state, sim, player.soldierId); balanceTeams(state, sim); });
 });
 
+/** Apply every queued movement report and command, in arrival order, through the shared rules. */
+function applyInputs(ctx: Ctx, state: MatchState, sim: SimContext) {
+  const present = new Set(state.soldiers.map(s => s.id));
+  for (const row of [...ctx.db.inbox.iter()]) {
+    if (!present.has(row.soldierId)) { ctx.db.inbox.soldierId.delete(row.soldierId); continue; }
+    if (!row.pending) continue;
+    reportState(state, sim, row.soldierId, {
+      x: row.x, y: row.y, z: row.z, vx: row.vx, vy: row.vy, vz: row.vz, yaw: row.yaw, pitch: row.pitch, crouch: row.crouch,
+      grounded: row.grounded, sprint: row.sprint, ads: row.ads, slide: row.slide, weapon: row.weapon ? 1 : 0,
+    }, row.elapsed);
+    ctx.db.inbox.soldierId.update({ ...row, pending: false, elapsed: 0 });
+  }
+  const commands = [...ctx.db.command.iter()].sort((a, b) => (a.id < b.id ? -1 : a.id > b.id ? 1 : 0));
+  const applied = new Map<number, number>();
+  for (const c of commands) {
+    ctx.db.command.id.delete(c.id);
+    const count = (applied.get(c.soldierId) ?? 0) + 1;
+    applied.set(c.soldierId, count);
+    if (!present.has(c.soldierId) || count > COMMANDS_PER_TICK) continue;
+    const cmd = JSON.parse(c.json) as Command;
+    switch (cmd.kind) {
+      case 'fire': fireShot(state, sim, c.soldierId, cmd); break;
+      case 'grenade': throwGrenade(state, sim, c.soldierId, cmd.origin, cmd.dir); break;
+      case 'reload': reload(state, c.soldierId); break;
+      case 'switch': switchWeapon(state, c.soldierId, cmd.slot); break;
+      case 'loadout': setLoadout(state, c.soldierId, cmd.loadout); break;
+    }
+  }
+}
+
 export const tick = spacetimedb.reducer({ onSchedule: tickTable }, { arg: tickTable.rowType }, ctx => {
   const row = ctx.db.match.id.find(0);
   if (!row) return;
   const now = micros(ctx);
-  const dt = Math.min(0.1, Math.max(0, Number(now - row.lastTickMicros) / 1_000_000));
-  ctx.db.match.id.update({ ...row, lastTickMicros: now });
+  const clock = ctx.db.clock.id.find(0);
+  const last = clock?.lastTickMicros ?? row.lastTickMicros;
+  const dt = Math.min(0.1, Math.max(0, Number(now - last) / 1_000_000));
   // Nobody connected: freeze the battlefield instead of simulating bots for no one.
-  if (row.humans === 0 || dt <= 0) return;
-  withMatch(ctx, (state, sim) => {
+  if (row.humans === 0 || dt <= 0) {
+    if (clock) ctx.db.clock.id.update({ ...clock, lastTickMicros: now });
+    else ctx.db.match.id.update({ ...row, lastTickMicros: now });
+    return;
+  }
+  withMatch(ctx, (state, sim, loaded) => {
+    loaded.clock.lastTickMicros = now;
+    applyInputs(ctx, state, sim);
     if (state.phase === 'ended' && state.phaseLeft - dt <= 0) {
       // Rotate battlefields between rounds; clients rebuild their scene when mapId changes.
-      const next = MAP_IDS[(MAP_IDS.indexOf(state.mapId as (typeof MAP_IDS)[number]) + 1) % MAP_IDS.length];
+      const next = nextMap(state.mapId, state.soldiers.filter(s => !s.bot).length);
       const { def, world } = loadMap(next);
       state.mapId = next;
-      resetMatch(state, { ...sim, map: def, world, nav: loadNav(next) });
+      const nextSim = { ...sim, map: def, world, nav: loadNav(next) };
+      resetMatch(state, nextSim);
+      balanceTeams(state, nextSim);
       return;
     }
     tickMatch(state, sim, dt);
@@ -274,7 +420,7 @@ export const tick = spacetimedb.reducer({ onSchedule: tickTable }, { arg: tickTa
         removeSoldier(state, sim, s.id); balanceTeams(state, sim);
       }
     }
-  });
+  }, true);
 });
 
 // ---- Player commands ----------------------------------------------------------------------
@@ -300,48 +446,43 @@ export const leave = spacetimedb.reducer({}, ctx => {
   withMatch(ctx, (state, sim) => { removeSoldier(state, sim, player.soldierId); balanceTeams(state, sim); });
 });
 
+/** Movement report: stored for the next tick (latest wins; elapsed time accumulates for the budget). */
 export const report = spacetimedb.reducer({
   x: t.f32(), y: t.f32(), z: t.f32(), vx: t.f32(), vy: t.f32(), vz: t.f32(), yaw: t.f32(), pitch: t.f32(),
   crouch: t.f32(), grounded: t.bool(), sprint: t.bool(), ads: t.bool(), slide: t.bool(), weapon: t.u8(),
 }, (ctx, r) => {
   const player = mySoldier(ctx);
   const now = micros(ctx);
-  const elapsed = Number(now - player.lastReportMicros) / 1_000_000;
-  ctx.db.player.identity.update({ ...player, lastReportMicros: now });
-  withMatch(ctx, (state, sim) => reportState(state, sim, player.soldierId, { ...r, weapon: r.weapon ? 1 : 0 }, elapsed));
+  const prev = ctx.db.inbox.soldierId.find(player.soldierId);
+  const since = Number(now - (prev?.lastMicros ?? player.lastReportMicros)) / 1_000_000;
+  const next = { ...r, weapon: r.weapon ? 1 : 0, soldierId: player.soldierId, lastMicros: now, elapsed: (prev?.pending ? prev.elapsed : 0) + Math.max(0, since), pending: true };
+  if (prev) ctx.db.inbox.soldierId.update(next); else ctx.db.inbox.insert(next);
 });
+
+const queue = (ctx: Ctx, command: Command) => {
+  const player = mySoldier(ctx);
+  ctx.db.command.insert({ id: 0n, soldierId: player.soldierId, json: JSON.stringify(command) });
+};
 
 export const fire = spacetimedb.reducer({
   weapon: t.u8(), ox: t.f32(), oy: t.f32(), oz: t.f32(), dx: t.f32(), dy: t.f32(), dz: t.f32(),
   target: t.i32(), zone: t.string(), px: t.f32(), py: t.f32(), pz: t.f32(),
 }, (ctx, a) => {
-  const player = mySoldier(ctx);
   const zone = a.zone === 'head' || a.zone === 'body' || a.zone === 'legs' ? a.zone : '';
-  withMatch(ctx, (state, sim) => fireShot(state, sim, player.soldierId, {
-    weapon: a.weapon ? 1 : 0, origin: { x: a.ox, y: a.oy, z: a.oz }, dir: { x: a.dx, y: a.dy, z: a.dz }, target: a.target, zone,
-    point: { x: a.px, y: a.py, z: a.pz },
-  }));
+  queue(ctx, { kind: 'fire', weapon: a.weapon ? 1 : 0, origin: { x: a.ox, y: a.oy, z: a.oz }, dir: { x: a.dx, y: a.dy, z: a.dz }, target: a.target, zone, point: { x: a.px, y: a.py, z: a.pz } });
 });
 
 export const grenade = spacetimedb.reducer({ ox: t.f32(), oy: t.f32(), oz: t.f32(), dx: t.f32(), dy: t.f32(), dz: t.f32() }, (ctx, a) => {
-  const player = mySoldier(ctx);
-  withMatch(ctx, (state, sim) => throwGrenade(state, sim, player.soldierId, { x: a.ox, y: a.oy, z: a.oz }, { x: a.dx, y: a.dy, z: a.dz }));
+  queue(ctx, { kind: 'grenade', origin: { x: a.ox, y: a.oy, z: a.oz }, dir: { x: a.dx, y: a.dy, z: a.dz } });
 });
 
-export const reloadWeapon = spacetimedb.reducer({}, ctx => {
-  const player = mySoldier(ctx);
-  withMatch(ctx, state => reload(state, player.soldierId));
-});
+export const reloadWeapon = spacetimedb.reducer({}, ctx => { queue(ctx, { kind: 'reload' }); });
 
-export const switchSlot = spacetimedb.reducer({ slot: t.u8() }, (ctx, { slot }) => {
-  const player = mySoldier(ctx);
-  withMatch(ctx, state => switchWeapon(state, player.soldierId, slot ? 1 : 0));
-});
+export const switchSlot = spacetimedb.reducer({ slot: t.u8() }, (ctx, { slot }) => { queue(ctx, { kind: 'switch', slot: slot ? 1 : 0 }); });
 
 export const chooseLoadout = spacetimedb.reducer({ loadout: t.string() }, (ctx, { loadout }) => {
-  const player = mySoldier(ctx);
   if (!(loadout in LOADOUTS)) throw new SenderError('Unknown loadout');
-  withMatch(ctx, state => setLoadout(state, player.soldierId, loadout as LoadoutId));
+  queue(ctx, { kind: 'loadout', loadout: loadout as LoadoutId });
 });
 
 /** Law commands arrive as JSON and are validated/clamped by the shared Zod schema. */

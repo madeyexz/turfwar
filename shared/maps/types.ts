@@ -22,7 +22,8 @@ export type BlockStyle =
 export type PointId = 'A' | 'B' | 'C';
 
 export interface CapturePointDef { id: PointId; name: string; x: number; y: number; z: number; radius: number }
-export interface SpawnDef { team: 0 | 1; x: number; y: number; z: number; yaw: number }
+/** A spawn slot. With `point`, it is a forward spawn: open only while its team holds that point. */
+export interface SpawnDef { team: 0 | 1; x: number; y: number; z: number; yaw: number; point?: PointId }
 
 export type Decor =
   | { kind: 'block'; solid: number; style: BlockStyle; color?: number }
@@ -57,4 +58,6 @@ export interface MapDef {
   laws: Laws;
   /** Sun direction and environment tint used by the renderer. */
   sun: Vec3;
+  /** Soldiers per team this battlefield is built for (bots fill the gap); defaults to the mode's size. */
+  teamSize?: number;
 }

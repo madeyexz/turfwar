@@ -2,6 +2,7 @@ import { chestPoint, hitShape } from '../hitbox';
 import { STEP_HEIGHT } from '../collision';
 import { parseLawCommand, type LawCommand, type Laws } from '../laws';
 import { loadMap, loadNav } from '../maps/index';
+import type { MapDef } from '../maps/types';
 import { clamp, cloneData, dist3, normalize3, segmentPointDistance, type Vec3 } from '../math';
 import { MOVE, createMoveState } from '../movement';
 import { HEALTH, LOADOUTS, WEAPONS, type LoadoutId } from '../weapons';
@@ -85,12 +86,16 @@ export function removeSoldier(state: MatchState, ctx: SimContext, id: number) {
   ctx.emit({ type: 'leave', id, name: s.name });
 }
 
-/** Keep both teams at config.teamSize by adding or removing bots around the humans. */
+/** Soldiers per team: the battlefield's own size (big maps hold 50v50), except in Law Lab. */
+export const teamSizeFor = (map: MapDef, config: MatchConfig) => config.practice ? config.teamSize : map.teamSize ?? config.teamSize;
+
+/** Keep both teams at the battlefield's team size by adding or removing bots around the humans. */
 export function balanceTeams(state: MatchState, ctx: SimContext) {
+  const size = teamSizeFor(ctx.map, state.config);
   for (const team of [0, 1] as Team[]) {
     const members = state.soldiers.filter(s => s.team === team);
     const humans = members.filter(s => !s.bot).length;
-    const wantBots = Math.max(0, state.config.teamSize - humans);
+    const wantBots = Math.max(0, size - humans);
     const bots = members.filter(s => s.bot);
     for (let i = bots.length; i < wantBots; i++) addSoldier(state, ctx, { name: botName(state, ctx.random), team, bot: true });
     // Remove dead bots first when a human takes a slot.

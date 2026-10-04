@@ -33,11 +33,64 @@ export const BotBrain = __t.object("BotBrain", {
 });
 export type BotBrain = __Infer<typeof BotBrain>;
 
+export const Clock = __t.object("Clock", {
+  id: __t.u8(),
+  phaseLeft: __t.f64(),
+  time: __t.f64(),
+  worldTime: __t.f64(),
+  tick: __t.u32(),
+  scoreTimer: __t.f64(),
+  lawLeft: __t.f64(),
+  rewindLeft: __t.u32(),
+  nextId: __t.u32(),
+  droneTimer: __t.f64(),
+  historyHead: __t.u32(),
+  historyLength: __t.u32(),
+  lastTickMicros: __t.u64(),
+});
+export type Clock = __Infer<typeof Clock>;
+
+export const Command = __t.object("Command", {
+  id: __t.u64(),
+  soldierId: __t.u32(),
+  json: __t.string(),
+});
+export type Command = __Infer<typeof Command>;
+
+export const Frame = __t.object("Frame", {
+  id: __t.u8(),
+  mapId: __t.string(),
+  data: __t.byteArray(),
+});
+export type Frame = __Infer<typeof Frame>;
+
 export const History = __t.object("History", {
   slot: __t.u32(),
   json: __t.string(),
 });
 export type History = __Infer<typeof History>;
+
+export const Inbox = __t.object("Inbox", {
+  soldierId: __t.u32(),
+  lastMicros: __t.u64(),
+  elapsed: __t.f32(),
+  pending: __t.bool(),
+  x: __t.f32(),
+  y: __t.f32(),
+  z: __t.f32(),
+  vx: __t.f32(),
+  vy: __t.f32(),
+  vz: __t.f32(),
+  yaw: __t.f32(),
+  pitch: __t.f32(),
+  crouch: __t.f32(),
+  grounded: __t.bool(),
+  sprint: __t.bool(),
+  ads: __t.bool(),
+  slide: __t.bool(),
+  weapon: __t.u8(),
+});
+export type Inbox = __Infer<typeof Inbox>;
 
 export const Match = __t.object("Match", {
   id: __t.u8(),
@@ -87,6 +140,26 @@ export const Point = __t.object("Point", {
   capturing: __t.i8(),
 });
 export type Point = __Infer<typeof Point>;
+
+export const Roster = __t.object("Roster", {
+  id: __t.u32(),
+  name: __t.string(),
+  team: __t.u8(),
+  bot: __t.bool(),
+  loadout: __t.string(),
+  alive: __t.bool(),
+  grenades: __t.u8(),
+  kills: __t.u32(),
+  deaths: __t.u32(),
+  score: __t.u32(),
+  captures: __t.u32(),
+  respawnAt: __t.f32(),
+  lawReadyAt: __t.f32(),
+  protect: __t.bool(),
+  lastAttacker: __t.i32(),
+  corrections: __t.u32(),
+});
+export type Roster = __Infer<typeof Roster>;
 
 export const Soldier = __t.object("Soldier", {
   id: __t.u32(),

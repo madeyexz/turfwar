@@ -1,15 +1,16 @@
 import { describe, expect, it } from 'vitest';
 import { defaultLaws } from '../laws';
 import { MAP_IDS, loadMap, loadNav } from '../maps/index';
-import { rng } from '../math';
+import { rng, wrapAngle } from '../math';
 import { CollisionWorld } from '../collision';
 import { createMoveState, eyeHeight, stepMovement } from '../movement';
 import { hitShape } from '../hitbox';
 import { WEAPONS } from '../weapons';
 import { findPath, nearestNode } from './nav';
-import { addSoldier, applyLaw, balanceTeams, createContext, createMatch, fireShot, reportState, tickMatch, TICK_RATE } from './sim';
+import { addSoldier, applyLaw, balanceTeams, createContext, createMatch, fireShot, reportState, teamSizeFor, tickMatch, TICK_RATE } from './sim';
 import { OFFLINE_CONFIG, ONLINE_CONFIG, type MatchEvent, type MatchState, type Soldier } from './state';
-import { MOVE_SLACK, type SimContext } from './combat';
+import { MOVE_SLACK, spawnSoldier, type SimContext } from './combat';
+import { decodeFrame, encodeFrame } from './frame';
 
 function setup(config = OFFLINE_CONFIG, seed = 1) {
   const events: MatchEvent[] = [];
@@ -310,5 +311,74 @@ describe('objectives', () => {
     expect(p.owner).toBe(0);
     expect(events.some(e => e.type === 'capture' && e.point === 'A' && e.team === 0)).toBe(true);
     expect(a.captures).toBe(1);
+  });
+});
+
+describe('100-soldier battles', () => {
+  function city(seed = 3) {
+    const events: MatchEvent[] = [];
+    const random = rng(seed);
+    const ctx = createContext('meridian', random, e => events.push(e));
+    const state = createMatch('meridian', { ...ONLINE_CONFIG, warmup: 1 }, random);
+    return { ctx, state, events };
+  }
+
+  it('a big battlefield fills both teams to its own size; small maps and Law Lab keep theirs', () => {
+    const { ctx, state } = city();
+    expect(teamSizeFor(ctx.map, state.config)).toBe(50);
+    balanceTeams(state, ctx);
+    expect(state.soldiers.filter(s => s.team === 0).length).toBe(50);
+    expect(state.soldiers.filter(s => s.team === 1).length).toBe(50);
+    expect(teamSizeFor(ctx.map, { ...ONLINE_CONFIG, teamSize: 0, practice: true })).toBe(0);
+    expect(teamSizeFor(loadMap('cinder').def, ONLINE_CONFIG)).toBe(ONLINE_CONFIG.teamSize);
+  });
+
+  it('fifty bots a side fight and take objectives on the city map', () => {
+    const { ctx, state, events } = city(11);
+    balanceTeams(state, ctx);
+    tick(state, ctx, 90);
+    expect(events.filter(e => e.type === 'kill').length).toBeGreaterThan(20);
+    expect(events.filter(e => e.type === 'capture').length).toBeGreaterThan(0);
+    for (const s of state.soldiers) if (s.alive) expect(ctx.world.overlapsSolid(s.m, 0.2, 1.2)).toBe(false);
+  });
+
+  it('forward spawns open only while the team holds the point and no enemy is close', () => {
+    const { ctx, state } = city();
+    const s = addSoldier(state, ctx, { name: 'F', team: 0, bot: false });
+    const forward = (id: string) => ctx.map.spawns.filter(p => p.team === 0 && p.point === id);
+    expect(forward('A').length).toBeGreaterThan(0);
+    const at = (slots: typeof ctx.map.spawns) => slots.some(p => Math.hypot(p.x - s.m.x, p.z - s.m.z) < 2);
+    for (let i = 0; i < 20; i++) { spawnSoldier(state, ctx, s); expect(at(forward('A'))).toBe(false); }
+    state.points.find(p => p.id === 'A')!.owner = 0;
+    let used = 0;
+    for (let i = 0; i < 20; i++) { spawnSoldier(state, ctx, s); if (at(forward('A'))) used++; }
+    expect(used).toBeGreaterThan(10);
+    // An enemy standing on the forward slots closes the ones near it.
+    const enemy = addSoldier(state, ctx, { name: 'E', team: 1, bot: false });
+    const slot = forward('A')[0];
+    place(enemy, slot.x, slot.z, ctx);
+    const near = forward('A').filter(p => Math.hypot(p.x - slot.x, p.z - slot.z) < 20);
+    for (let i = 0; i < 20; i++) { spawnSoldier(state, ctx, s); expect(at(near)).toBe(false); }
+  });
+
+  it('the packed frame round-trips poses, bodies, points and shots', () => {
+    const { ctx, state } = city();
+    balanceTeams(state, ctx);
+    tick(state, ctx, 3);
+    const a = state.soldiers[3];
+    a.yaw = -2.5; a.pitch = 0.4; a.reloadLeft = 1; a.sinceShot = 0;
+    const shot = { type: 'shot' as const, shooter: a.id, weapon: 'lancer' as const, from: { x: 1.23, y: 2, z: -3 }, to: { x: 40.5, y: 1, z: -80.02 }, hit: 1 as const, surface: 'concrete' };
+    const frame = decodeFrame(encodeFrame(state, [shot]))!;
+    expect(frame.tick).toBe(state.tick);
+    expect(frame.poses.length).toBe(100);
+    const p = frame.poses.find(x => x.id === a.id)!;
+    expect(p.x).toBeCloseTo(a.m.x, 1); expect(p.y).toBeCloseTo(a.m.y, 1); expect(p.z).toBeCloseTo(a.m.z, 1);
+    expect(Math.abs(wrapAngle(p.yaw - a.yaw))).toBeLessThan(0.001);
+    expect(p.pitch).toBeCloseTo(0.4, 3);
+    expect(p.reloading).toBe(true); expect(p.firing).toBe(true); expect(p.alive).toBe(a.alive);
+    expect(frame.bodies.length).toBe(state.bodies.length);
+    expect(frame.points.map(x => x.owner)).toEqual(state.points.map(x => x.owner));
+    expect(frame.shots[0]).toMatchObject({ shooter: a.id, weapon: 'lancer', hit: 1, surface: 'concrete' });
+    expect(frame.shots[0].to.z).toBeCloseTo(-80.02, 1);
   });
 });

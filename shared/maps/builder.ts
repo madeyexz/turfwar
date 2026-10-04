@@ -33,6 +33,8 @@ export interface BuilderOptions {
   sun: { x: number; y: number; z: number };
   /** Hand-authored base ground; replaces the mirrored noise and boundary ridges. */
   ground?: (x: number, z: number) => number;
+  /** Soldiers per team the layout is built for (see MapDef.teamSize). */
+  teamSize?: number;
 }
 
 /**
@@ -154,8 +156,10 @@ export class MapBuilder {
     this.points.push({ id, name, x: this.tx(x), y, z: this.tz(z), radius });
   }
 
-  spawn(team: 0 | 1, x: number, y: number, z: number, yaw: number) {
-    this.spawns.push({ team: this.team(team), x: this.tx(x), y, z: this.tz(z), yaw: this.rot(yaw) });
+  spawn(team: 0 | 1, x: number, y: number, z: number, yaw: number, point?: PointId) {
+    const slot: SpawnDef = { team: this.team(team), x: this.tx(x), y, z: this.tz(z), yaw: this.rot(yaw) };
+    if (point) slot.point = point;
+    this.spawns.push(slot);
   }
 
   raw(decor: Decor) { this.decor.push(decor); }
@@ -259,6 +263,7 @@ export class MapBuilder {
       bounds: { minX: -o.halfX, maxX: o.halfX, minZ: -o.halfZ, maxZ: o.halfZ },
       terrain: this.terrain, solids: this.solids, ramps: this.ramps, points: this.points, spawns: this.spawns,
       anomaly: { x: anomaly.x, y: anomaly.y + 5, z: anomaly.z }, decor: this.decor, laws: o.laws, sun: o.sun,
+      ...(o.teamSize ? { teamSize: o.teamSize } : {}),
     };
   }
 }

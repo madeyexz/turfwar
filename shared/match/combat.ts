@@ -34,13 +34,21 @@ export const isHostile = (a: number, b: number) => a !== b || a === -1;
 export const MOVE_SLACK = { speed: 14, max: 6 };
 
 export function spawnSoldier(state: MatchState, ctx: SimContext, s: Soldier) {
-  const options = ctx.map.spawns.filter(p => p.team === s.team);
-  // Prefer the spawn slot with the most room from teammates who just spawned.
+  // Forward slots open only while the team holds their point uncontested.
+  const held = (id: string) => state.points.some(p => p.id === id && p.owner === s.team && !p.contested);
+  const options = ctx.map.spawns.filter(p => p.team === s.team && (!p.point || held(p.point)));
+  // Prefer the slot with the most room from soldiers who just spawned; never a forward slot with
+  // enemies close by, and lean toward the front so big maps do not turn into long walks.
   let best = options[0], bestScore = -Infinity;
   for (const o of options) {
-    let near = Infinity;
-    for (const other of state.soldiers) if (other.alive && other.id !== s.id) near = Math.min(near, Math.hypot(other.m.x - o.x, other.m.z - o.z));
-    const score = Math.min(near, 12) + ctx.random() * 2;
+    let near = Infinity, enemy = Infinity;
+    for (const other of state.soldiers) {
+      if (!other.alive || other.id === s.id) continue;
+      const d = Math.hypot(other.m.x - o.x, other.m.z - o.z);
+      if (other.team === s.team) near = Math.min(near, d); else enemy = Math.min(enemy, d);
+    }
+    if (o.point && enemy < 25) continue;
+    const score = Math.min(near, 12) + ctx.random() * 2 + (o.point ? 3 : 0);
     if (score > bestScore) { bestScore = score; best = o; }
   }
   s.m = createMoveState(best.x + (ctx.random() - 0.5) * 1.5, best.y, best.z + (ctx.random() - 0.5) * 1.5);

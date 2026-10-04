@@ -61,9 +61,13 @@ function plan(ctx: SimContext, bot: Soldier, brain: BotBrain, tx: number, ty: nu
 }
 
 /** Find the most pressing visible enemy. */
+/** Line-of-sight checks one bot may spend per look; big battles have many candidates in view. */
+const SIGHT_CHECKS = 4;
+
 function perceive(state: MatchState, ctx: SimContext, bot: Soldier, brain: BotBrain) {
   const eye = eyeOf(bot);
-  let best: Soldier | undefined, bestScore = Infinity;
+  // Cheap filters first (range, field of view), then ray-test only the most pressing few.
+  const candidates: { s: Soldier; score: number }[] = [];
   for (const s of state.soldiers) {
     if (!s.alive || s.team === bot.team) continue;
     const dx = s.m.x - bot.m.x, dz = s.m.z - bot.m.z;
@@ -72,13 +76,15 @@ function perceive(state: MatchState, ctx: SimContext, bot: Soldier, brain: BotBr
     const facing = Math.abs(wrapAngle(yawTo(eye, s.m) - bot.yaw));
     const recentlyHit = bot.lastAttacker === s.id && bot.sinceHit < 2;
     if (facing > 1.25 && d > 11 && !recentlyHit) continue;
+    candidates.push({ s, score: d * (facing > 1.25 ? 1.6 : 1) * (s.id === brain.target ? 0.7 : 1) * (recentlyHit ? 0.5 : 1) });
+  }
+  candidates.sort((a, b) => a.score - b.score);
+  for (const { s } of candidates.slice(0, SIGHT_CHECKS)) {
     const chest = chestPoint(feetOf(s), s.m.crouch);
     const head = { x: s.m.x, y: s.m.y + eyeHeight(s.m), z: s.m.z };
-    if (!ctx.world.lineOfSight(eye, chest, bot.team) && !ctx.world.lineOfSight(eye, head, bot.team)) continue;
-    const score = d * (facing > 1.25 ? 1.6 : 1) * (s.id === brain.target ? 0.7 : 1) * (recentlyHit ? 0.5 : 1);
-    if (score < bestScore) { bestScore = score; best = s; }
+    if (ctx.world.lineOfSight(eye, chest, bot.team) || ctx.world.lineOfSight(eye, head, bot.team)) return s;
   }
-  return best;
+  return undefined;
 }
 
 export function updateBot(state: MatchState, ctx: SimContext, bot: Soldier, dt: number) {
@@ -90,7 +96,7 @@ export function updateBot(state: MatchState, ctx: SimContext, bot: Soldier, dt: 
   // ---- Perception -----------------------------------------------------------------
   let target = state.soldiers.find(s => s.id === brain.target && s.alive);
   if (brain.think <= 0) {
-    brain.think = 0.12 + ctx.random() * 0.08;
+    brain.think = 0.2 + ctx.random() * 0.15;
     const seen = perceive(state, ctx, bot, brain);
     if (seen) {
       if (seen.id !== brain.target) {

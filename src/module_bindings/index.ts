@@ -48,10 +48,12 @@ import SwitchSlotReducer from "./switch_slot_reducer";
 
 // Import all table schema definitions
 import BodyRow from "./body_table";
+import FrameRow from "./frame_table";
 import MatchRow from "./match_table";
 import MatchEventRow from "./match_event_table";
 import PlayerRow from "./player_table";
 import PointRow from "./point_table";
+import RosterRow from "./roster_table";
 import SoldierRow from "./soldier_table";
 
 /** Type-only namespace exports for generated type groups. */
@@ -69,6 +71,17 @@ const tablesSchema = __schema({
       { name: 'body_id_key', constraint: 'unique', columns: ['id'] },
     ],
   }, BodyRow),
+  frame: __table({
+    name: 'frame',
+    indexes: [
+      { accessor: 'id', name: 'frame_id_idx_btree', algorithm: 'btree', columns: [
+        'id',
+      ] },
+    ],
+    constraints: [
+      { name: 'frame_id_key', constraint: 'unique', columns: ['id'] },
+    ],
+  }, FrameRow),
   match: __table({
     name: 'match',
     indexes: [
@@ -110,6 +123,17 @@ const tablesSchema = __schema({
       { name: 'point_id_key', constraint: 'unique', columns: ['id'] },
     ],
   }, PointRow),
+  roster: __table({
+    name: 'roster',
+    indexes: [
+      { accessor: 'id', name: 'roster_id_idx_btree', algorithm: 'btree', columns: [
+        'id',
+      ] },
+    ],
+    constraints: [
+      { name: 'roster_id_key', constraint: 'unique', columns: ['id'] },
+    ],
+  }, RosterRow),
   soldier: __table({
     name: 'soldier',
     indexes: [
