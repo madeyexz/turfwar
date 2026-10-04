@@ -1,5 +1,5 @@
 Surface textures from Poly Haven (https://polyhaven.com), CC0 1.0 Universal.
-Resized to 1024px WebP by tools/fetch-textures.ts.
+Resized to 1024px WebP by tools/fetch-textures.ts (icerock diffuse desaturated to 20%).
 
 sand: https://polyhaven.com/a/sand_01
 cliff: https://polyhaven.com/a/rock_face

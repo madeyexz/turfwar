@@ -21,7 +21,7 @@ export const THEMES: Record<ThemeId, Theme> = {
   },
   snow: {
     id: 'snow', ground: 'snow', rock: 'icerock', dirt: 'icerock',
-    groundTint: new THREE.Color(0.95, 0.98, 1.05), rockTint: new THREE.Color(0.5, 0.58, 0.7), dirtTint: new THREE.Color(0.72, 0.78, 0.86),
+    groundTint: new THREE.Color(0.95, 0.98, 1.05), rockTint: new THREE.Color(0.56, 0.64, 0.78), dirtTint: new THREE.Color(0.8, 0.88, 1.0),
     skyTop: new THREE.Color(0x48688e), skyHorizon: new THREE.Color(0xc9d8e6), fog: new THREE.Color(0xbccbd9), fogDensity: 0.006,
     sunColor: new THREE.Color(0xe8f0ff), sunIntensity: 2.6, hemiSky: new THREE.Color(0xc8dcf0), hemiGround: new THREE.Color(0x7d8a99), hemiIntensity: 1.5,
     planet: new THREE.Color(0xb7c4e8), exposure: 0.92,
