@@ -29,6 +29,9 @@ const animsUrl = params.get('anims');
 const start = () => models.forEach((url, i) => loader.load(url, gltf => {
   gltf.animations.push(...extraClips);
   const root = gltf.scene; root.position.x = (i - (models.length - 1) / 2) * spacing;
+  const only = params.get('only');
+  if (only) for (const c of root.children) c.visible = c.name === only;
+  if (params.get('grid')) { const g = new THREE.GridHelper(2, 40, 0xff0000, 0x333333); g.rotation.x = Math.PI / 2; scene.add(g, new THREE.AxesHelper(0.5)); ground.visible = false; }
   if (params.get('scale')) root.scale.setScalar(Number(params.get('scale')));
   root.traverse(o => { if ((o as THREE.Mesh).isMesh) { o.castShadow = true; o.receiveShadow = true; } });
   scene.add(root);
@@ -38,7 +41,7 @@ const start = () => models.forEach((url, i) => loader.load(url, gltf => {
     const clip = THREE.AnimationClip.findByName(gltf.animations, anim);
     if (clip) { const a = mixer.clipAction(clip); a.play(); if (params.get('t')) { a.time = Number(params.get('t')); a.paused = true; } }
   }
-  const box = new THREE.Box3().setFromObject(root);
+  const box = new THREE.Box3(); root.traverseVisible(o => { if ((o as THREE.Mesh).isMesh) box.expandByObject(o); });
   info.textContent += `${url}\n size ${box.getSize(new THREE.Vector3()).toArray().map(v => v.toFixed(2))} min ${box.min.toArray().map(v => v.toFixed(2))}\n anims ${gltf.animations.map(a => a.name).join(', ')}\n`;
   (window as any).__ready = ((window as any).__ready ?? 0) + 1;
 }, undefined, e => { info.textContent += 'ERROR ' + e; console.error(e); }));

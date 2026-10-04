@@ -81,7 +81,7 @@ export function cinderBasin(): MapDef {
     b.rail(-47, -9, -33, -9, a.top);
     b.solidProp('Prop_Crate_Large', -36, a.y, -16, 0, 1.9, 1.3, 1.9);
     b.solidProp('Prop_Chest', -44, a.y, -12, Math.PI / 2, 1.5, 0.75, 0.8);
-    b.prop('Prop_Computer', -46.2, a.y, -17.5, Math.PI / 2);
+    b.prop('Kit_Prop_Computer', -46.2, a.y, -17.5, Math.PI / 2);
     b.light(-40, a.y + 3.6, -14, 0xfff1d0, 6, 12);
     // Approach cover.
     b.box(-30, b.ground(-30, -7), -7, 3.6, 1.2, 0.8, 'concrete');

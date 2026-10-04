@@ -263,13 +263,19 @@ export class LevelView {
     this.group.add(o);
   }
 
+  /**
+   * Decorative lights are emissive fixtures with a soft glow sprite, not real PointLights:
+   * every dynamic light costs every lit pixel, so real lights are reserved for the reactor
+   * and short-lived muzzle/explosion flashes.
+   */
   private light(x: number, y: number, z: number, color: number, intensity: number, distance: number) {
-    const light = new THREE.PointLight(color, intensity, distance, 1.6);
-    light.position.set(x, y, z);
-    this.group.add(light);
-    const fixture = new THREE.Mesh(new THREE.SphereGeometry(0.12, 12, 8), new THREE.MeshBasicMaterial({ color: new THREE.Color(color).multiplyScalar(3) }));
-    fixture.position.copy(light.position);
+    const c = new THREE.Color(color);
+    const fixture = new THREE.Mesh(new THREE.BoxGeometry(0.5, 0.08, 0.18), new THREE.MeshBasicMaterial({ color: c.clone().multiplyScalar(3) }));
+    fixture.position.set(x, y, z);
     this.group.add(fixture);
+    const glow = new THREE.Sprite(new THREE.SpriteMaterial({ map: glowTexture(), color: c, transparent: true, opacity: Math.min(0.5, intensity * 0.06), blending: THREE.AdditiveBlending, depthWrite: false }));
+    glow.position.set(x, y, z); glow.scale.setScalar(distance * 0.35);
+    this.group.add(glow);
   }
 
   private spawnPad(team: 0 | 1, x: number, y: number, z: number, rotY: number) {
@@ -409,6 +415,19 @@ function tint(g: THREE.BufferGeometry, hex: number, base: number, height: number
   const col = new THREE.Color(hex);
   const c = g.getAttribute('color') as THREE.BufferAttribute;
   for (let i = 0; i < c.count; i++) c.setXYZ(i, c.getX(i) * col.r, c.getY(i) * col.g, c.getZ(i) * col.b);
+}
+
+let glowTex: THREE.Texture | undefined;
+function glowTexture() {
+  if (glowTex) return glowTex;
+  const canvas = document.createElement('canvas');
+  canvas.width = canvas.height = 64;
+  const ctx = canvas.getContext('2d')!;
+  const g = ctx.createRadialGradient(32, 32, 0, 32, 32, 32);
+  g.addColorStop(0, 'rgba(255,255,255,0.9)'); g.addColorStop(0.3, 'rgba(255,255,255,0.25)'); g.addColorStop(1, 'rgba(255,255,255,0)');
+  ctx.fillStyle = g; ctx.fillRect(0, 0, 64, 64);
+  glowTex = new THREE.CanvasTexture(canvas);
+  return glowTex;
 }
 
 function hazardTexture() {

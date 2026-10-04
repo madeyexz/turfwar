@@ -15,7 +15,7 @@ export interface SimContext {
   nav?: NavGraph;
   random: () => number;
   emit: (event: MatchEvent) => void;
-  history: { push(s: WorldSnapshot): void; pop(): WorldSnapshot | undefined; readonly length: number; clear(): void };
+  history: { push(s: WorldSnapshot): void; pop(): WorldSnapshot | undefined; peek(): WorldSnapshot | undefined; readonly length: number; clear(): void };
 }
 
 export const TICK_RATE = 30;

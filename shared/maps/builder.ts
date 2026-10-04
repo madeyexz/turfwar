@@ -169,9 +169,10 @@ export class MapBuilder {
     };
     for (const side of ['n', 's', 'e', 'w'] as Side[]) {
       const info = sides[side];
-      const gaps = opts.doors.filter(g => g[0] === side).map(g => ({ at: g[1], width: g[2], kind: 'door' as const }))
-        .concat((opts.windows ?? []).filter(g => g[0] === side).map(g => ({ at: g[1], width: g[2], kind: 'window' as const })))
-        .sort((a, b) => a.at - b.at);
+      const gaps: { at: number; width: number; kind: 'door' | 'window' }[] = [
+        ...opts.doors.filter(g => g[0] === side).map(g => ({ at: g[1], width: g[2], kind: 'door' as const })),
+        ...(opts.windows ?? []).filter(g => g[0] === side).map(g => ({ at: g[1], width: g[2], kind: 'window' as const })),
+      ].sort((a, b) => a.at - b.at);
       let cursor = -info.len / 2;
       const segment = (from: number, to: number, y0: number, y1: number) => {
         if (to - from < 0.05) return;

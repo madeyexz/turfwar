@@ -9,10 +9,12 @@ import type { Theme } from './materials';
 import { SkyView } from './sky';
 
 export interface Quality { pixelRatio: number; shadows: number; bloom: boolean }
-export const QUALITY: Record<'low' | 'medium' | 'high', Quality> = {
+/** 'test' exists for software-rendered automation (no GPU); it is not a player-facing preset. */
+export const QUALITY: Record<'low' | 'medium' | 'high' | 'test', Quality> = {
   low: { pixelRatio: 0.85, shadows: 1024, bloom: false },
   medium: { pixelRatio: 1, shadows: 2048, bloom: true },
   high: { pixelRatio: 1.5, shadows: 2048, bloom: true },
+  test: { pixelRatio: 0.5, shadows: 0, bloom: false },
 };
 
 /** Owns the WebGL renderer, world scene, first-person overlay scene and post-processing. */
@@ -36,7 +38,8 @@ export class Renderer {
     this.quality = quality;
     this.renderer = new THREE.WebGLRenderer({ antialias: true, powerPreference: 'high-performance', stencil: false });
     this.renderer.toneMapping = THREE.ACESFilmicToneMapping;
-    this.renderer.shadowMap.enabled = true;
+    this.renderer.shadowMap.enabled = quality.shadows > 0;
+    this.renderer.info.autoReset = false;
     this.renderer.shadowMap.type = THREE.PCFSoftShadowMap;
     container.prepend(this.renderer.domElement);
     this.camera.rotation.order = 'YXZ';
@@ -55,7 +58,7 @@ export class Renderer {
     const overlay = new RenderPass(this.viewScene, this.viewCamera);
     overlay.clear = false; overlay.clearDepth = true;
     this.composer.addPass(overlay);
-    this.bloom = new UnrealBloomPass(new THREE.Vector2(256, 256), 0.55, 0.5, 0.86);
+    this.bloom = new UnrealBloomPass(new THREE.Vector2(256, 256), 0.38, 0.45, 0.92);
     this.composer.addPass(this.bloom);
     this.slowLight = new ShaderPass(SlowLightShader);
     this.composer.addPass(this.slowLight);
@@ -67,7 +70,8 @@ export class Renderer {
 
   applyQuality(q: Quality) {
     this.quality = q;
-    this.sun.shadow.mapSize.set(q.shadows, q.shadows);
+    this.sun.castShadow = q.shadows > 0;
+    this.sun.shadow.mapSize.set(Math.max(256, q.shadows), Math.max(256, q.shadows));
     this.sun.shadow.map?.dispose(); this.sun.shadow.map = null;
     this.bloom.enabled = q.bloom;
     this.resize();
@@ -113,6 +117,7 @@ export class Renderer {
 
   /** velocity: the lawbreaker's world velocity; c: current speed of light. */
   render(time: number, velocity: THREE.Vector3, c: number) {
+    this.renderer.info.reset();
     // Keep the shadow frustum centered on the player, snapped to texels to avoid shimmering.
     const target = this.camera.position;
     const texel = 110 / this.sun.shadow.mapSize.x;
