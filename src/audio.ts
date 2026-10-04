@@ -135,8 +135,15 @@ export class Audio {
   gunshot(weapon: WeaponId, listener?: { pos: V3; yaw: number }, at?: V3) {
     if (!this.ready) return;
     const t = this.now();
-    const heavy = weapon === 'lancer' ? 1.6 : weapon === 'magnum' ? 1.35 : weapon === 'sidearm' ? 0.8 : 1;
     const out = this.out(listener ? 0.75 : 0.55, listener, at, listener ? 0.5 : 0.28);
+    if (weapon === 'graviton') {
+      // Launcher: a hollow pneumatic thump with a falling gravitic warble instead of a crack.
+      this.noiseBurst(out, t, 0.12, 'bandpass', 420, 1.2, 0.9);
+      this.tone(out, t, 'sine', 240, 45, 0.32, 0.9);
+      this.tone(out, t + 0.01, 'triangle', 1400, 180, 0.26, 0.18);
+      return;
+    }
+    const heavy = weapon === 'lancer' ? 1.6 : weapon === 'scatter' ? 1.5 : weapon === 'magnum' ? 1.35 : weapon === 'sidearm' ? 0.8 : weapon === 'stinger' ? 0.7 : 1;
     // Transient crack, mid body, sub thump, mechanical tail and a faint energy zap.
     this.noiseBurst(out, t, 0.03, 'highpass', 2500, 0.7, 0.9 * heavy);
     this.noiseBurst(out, t, 0.11 * heavy, 'bandpass', 1100 / heavy, 0.9, 1.1);
@@ -144,6 +151,13 @@ export class Audio {
     this.noiseBurst(out, t + 0.01, 0.35 * heavy, 'lowpass', 900, 0.5, 0.35);
     if (weapon === 'carbine' || weapon === 'lancer') this.tone(out, t, 'sawtooth', weapon === 'lancer' ? 1800 : 1400, 260, 0.07 * heavy, 0.08);
     if (weapon === 'lancer') this.tone(out, t + 0.02, 'sine', 3200, 600, 0.35, 0.12);
+    if (weapon === 'stinger') this.tone(out, t, 'square', 2600, 900, 0.03, 0.05);
+    if (weapon === 'scatter') {
+      // Wide low blast, then the pump racking the next shell.
+      this.noiseBurst(out, t, 0.22, 'lowpass', 600, 0.6, 0.9);
+      this.noiseBurst(out, t + 0.36, 0.05, 'bandpass', 1800, 2, 0.35);
+      this.noiseBurst(out, t + 0.5, 0.06, 'bandpass', 1300, 2, 0.4);
+    }
   }
 
   boltShot(listener: { pos: V3; yaw: number }, at: V3) {

@@ -37,7 +37,7 @@ class Trail {
   }
 }
 
-/** Renders lawful-world bodies: sentinel drones, grenades, plasma bolts and anomaly shards. */
+/** Renders lawful-world bodies: sentinel drones, grenades, graviton charges, plasma bolts and anomaly shards. */
 export class BodiesView {
   readonly group = new THREE.Group();
   private views = new Map<number, View>();
@@ -45,6 +45,9 @@ export class BodiesView {
   private boltGeo = new THREE.CapsuleGeometry(0.07, 0.5, 4, 8).rotateX(Math.PI / 2);
   private shardGeo = new THREE.OctahedronGeometry(0.3, 0).scale(0.6, 1.4, 0.6);
   private shardMat = new THREE.MeshStandardMaterial({ color: 0x0c1e24, emissive: 0x6ff0ff, emissiveIntensity: 1.6, metalness: 0.4, roughness: 0.25 });
+  private chargeGeo = new THREE.IcosahedronGeometry(0.13, 1);
+  private chargeRingGeo = new THREE.TorusGeometry(0.24, 0.02, 6, 24);
+  private chargeMat = new THREE.MeshBasicMaterial({ color: new THREE.Color(0xb48cff).multiplyScalar(3), blending: THREE.AdditiveBlending, transparent: true, depthWrite: false });
   private frame = 0;
 
   constructor(private assets: Assets) {}
@@ -79,6 +82,10 @@ export class BodiesView {
       } else if (v.kind === 'grenade') {
         v.object.rotation.x += dt * 9;
         if (v.light) v.light.visible = Math.sin(time * 18) > 0;
+      } else if (v.kind === 'charge') {
+        const pulse = 1 + Math.sin(time * 30) * 0.18;
+        v.object.scale.setScalar(pulse);
+        v.object.rotation.y += dt * 8;
       } else if (v.kind === 'bolt') {
         const vel = v.object.position.clone().sub(prev);
         if (vel.lengthSq() > 1e-8) v.object.lookAt(v.object.position.clone().add(vel));
@@ -120,6 +127,15 @@ export class BodiesView {
       }
       case 'bolt': {
         object = new THREE.Mesh(this.boltGeo, this.boltMat);
+        break;
+      }
+      case 'charge': {
+        // Graviton charge: a violet core inside a spinning ring, trailing its (law-bent) path.
+        object = new THREE.Mesh(this.chargeGeo, this.chargeMat);
+        const ring = new THREE.Mesh(this.chargeRingGeo, this.chargeMat);
+        ring.rotation.x = Math.PI / 2.6;
+        object.add(ring);
+        trail = new Trail(new THREE.Color(0xa77bff).multiplyScalar(1.2), 70);
         break;
       }
       default: {

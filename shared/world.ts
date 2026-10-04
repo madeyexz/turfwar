@@ -10,7 +10,7 @@ import type { Vec3 } from './math';
 export const PHYSICS_STEP = 1 / 120;
 export const PLANET_GRAVITY = 9.8;
 
-export type BodyKind = 'drone' | 'grenade' | 'bolt' | 'debris';
+export type BodyKind = 'drone' | 'grenade' | 'bolt' | 'debris' | 'charge';
 
 export interface Body {
   id: number;
@@ -23,14 +23,14 @@ export interface Body {
   /** Team allegiance (-1 = neutral, attacks everyone). */
   team: number;
   hp: number;
-  /** Drones: seconds until next shot; grenades: fuse remaining. */
+  /** Drones: seconds until next shot; grenades and graviton charges: fuse remaining. */
   timer: number;
 }
 
-export const BODY_RADIUS: Record<BodyKind, number> = { drone: 0.55, grenade: 0.09, bolt: 0.12, debris: 0.25 };
+export const BODY_RADIUS: Record<BodyKind, number> = { drone: 0.55, grenade: 0.09, bolt: 0.12, debris: 0.25, charge: 0.14 };
 /** Planetary gravity applies to thrown objects; drones hover and bolts are energy. */
-const FEELS_PLANET: Record<BodyKind, boolean> = { drone: false, grenade: true, bolt: false, debris: true };
-const RESTITUTION: Record<BodyKind, number> = { drone: 0.5, grenade: 0.38, bolt: 0, debris: 0.3 };
+const FEELS_PLANET: Record<BodyKind, boolean> = { drone: false, grenade: true, bolt: false, debris: true, charge: true };
+const RESTITUTION: Record<BodyKind, number> = { drone: 0.5, grenade: 0.38, bolt: 0, debris: 0.3, charge: 0 };
 
 /** World seconds per wall-clock second. Motion is the controlling lawbreaker's speed. */
 export function timeFactor(time: Laws['time'], motionSpeed: number) {
@@ -97,6 +97,7 @@ function collide(b: Body, ox: number, oy: number, oz: number, world: CollisionWo
     if (hit) {
       if (hooks.onImpact?.(b, hit.point, hit.normal)) return true;
       if (b.kind === 'bolt') return true;
+      if (b.kind === 'charge') { stick(b, hit.point, hit.normal); return false; }
       // Reflect velocity about the surface normal and back off to the contact point.
       const n = hit.normal, vn = b.vx * n.x + b.vy * n.y + b.vz * n.z;
       if (vn < 0) {
@@ -112,10 +113,18 @@ function collide(b: Body, ox: number, oy: number, oz: number, world: CollisionWo
   const g = terrainHeight(world.terrain, b.x, b.z);
   if (b.y - r < g) {
     if (b.kind === 'bolt') return true;
+    if (b.kind === 'charge') { stick(b, { x: b.x, y: g, z: b.z }, { x: 0, y: 1, z: 0 }); return false; }
     b.y = g + r;
     if (b.vy < 0) { b.vy = -b.vy * RESTITUTION[b.kind]; if (b.kind !== 'drone') { b.vx *= 0.8; b.vz *= 0.8; } }
   }
   return false;
+}
+
+/** Graviton charges detonate on contact: park at the surface with the fuse spent. */
+function stick(b: Body, point: Vec3, normal: Vec3) {
+  const r = BODY_RADIUS[b.kind];
+  b.x = point.x + normal.x * r; b.y = point.y + normal.y * r; b.z = point.z + normal.z * r;
+  b.vx = b.vy = b.vz = 0; b.timer = 0;
 }
 
 /** Fixed-size ring buffer used for bounded world rewind. */

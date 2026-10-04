@@ -4,7 +4,7 @@ import type { Laws } from '../laws';
 import type { MapDef } from '../maps/types';
 import { dist3, raySphere, type Vec3 } from '../math';
 import { createMoveState, eyeHeight } from '../movement';
-import { GRENADE, HEALTH, LOADOUTS, WEAPONS, damageAt, zoneMultiplier, type HitZone, type WeaponDef } from '../weapons';
+import { GRENADE, HEALTH, LOADOUTS, WEAPONS, damageAt, pelletCone, pelletDirs, zoneMultiplier, type HitZone, type WeaponDef } from '../weapons';
 import { BODY_RADIUS, type Body } from '../world';
 import type { NavGraph } from './nav';
 import type { MatchEvent, MatchState, Soldier, Team, WorldSnapshot } from './state';
@@ -92,15 +92,18 @@ export function spreadFor(s: Soldier, w: WeaponDef, bloom = 0) {
 
 export interface TraceResult { point: Vec3; soldier?: Soldier; zone?: HitZone; drone?: Body; distance: number; surface?: string }
 
-/** Authoritative hitscan against static geometry, enemy soldiers and drones. */
-export function traceShot(state: MatchState, ctx: SimContext, shooter: Soldier, origin: Vec3, dir: Vec3, range: number): TraceResult {
+/**
+ * Authoritative hitscan against static geometry, enemy soldiers and drones. `feet` may move a
+ * soldier's hit shape to where the shooter saw it (validated lag compensation for pellets).
+ */
+export function traceShot(state: MatchState, ctx: SimContext, shooter: Soldier, origin: Vec3, dir: Vec3, range: number, feet: (s: Soldier) => Vec3 = feetOf): TraceResult {
   const wall = ctx.world.raycast(origin, dir, range, shooter.team);
   let best = wall ? wall.t : range;
   let result: TraceResult = { point: wall ? wall.point : { x: origin.x + dir.x * range, y: origin.y + dir.y * range, z: origin.z + dir.z * range }, distance: best, surface: wall?.surface };
   for (const s of state.soldiers) {
     if (!s.alive || s.id === shooter.id || s.team === shooter.team) continue;
     if (Math.abs(s.m.x - origin.x) > best + 2 || Math.abs(s.m.z - origin.z) > best + 2) continue;
-    const hit = raycastSoldier(origin, dir, hitShape(feetOf(s), s.m.crouch, s.yaw));
+    const hit = raycastSoldier(origin, dir, hitShape(feet(s), s.m.crouch, s.yaw));
     if (hit && hit.t < best) {
       best = hit.t;
       result = { point: { x: origin.x + dir.x * hit.t, y: origin.y + dir.y * hit.t, z: origin.z + dir.z * hit.t }, soldier: s, zone: hit.zone, distance: hit.t };
@@ -139,6 +142,38 @@ export function resolveShot(state: MatchState, ctx: SimContext, shooter: Soldier
   ctx.emit({ type: 'shot', shooter: shooter.id, weapon: w.id, from: origin, to: result.point, hit, surface: result.surface });
 }
 
+/**
+ * Fire every pellet of a scattergun shot along the weapon's fixed pattern. Damage per target is
+ * summed into one hit (a head pellet makes it a headshot); each pellet still leaves a tracer.
+ */
+export function resolvePellets(state: MatchState, ctx: SimContext, shooter: Soldier, w: WeaponDef, origin: Vec3, dir: Vec3, ads: boolean, feet: (s: Soldier) => Vec3 = feetOf) {
+  const hits = new Map<Soldier, { amount: number; head: boolean }>();
+  for (const d of pelletDirs(dir, pelletCone(w, ads), w.pellets)) {
+    const r = traceShot(state, ctx, shooter, origin, d, w.range, feet);
+    let hit: 0 | 1 | 2 = 0;
+    if (r.soldier && r.zone) {
+      const h = hits.get(r.soldier) ?? { amount: 0, head: false };
+      h.amount += damageAt(w, r.distance) * zoneMultiplier(w, r.zone);
+      h.head ||= r.zone === 'head';
+      hits.set(r.soldier, h);
+      hit = r.zone === 'head' ? 2 : 1;
+    } else if (r.drone) {
+      damageDrone(state, ctx, r.drone, damageAt(w, r.distance), shooter.id); hit = 1;
+    }
+    ctx.emit({ type: 'shot', shooter: shooter.id, weapon: w.id, from: origin, to: r.point, hit, surface: r.surface });
+  }
+  for (const [target, h] of hits) applyDamage(state, ctx, target, shooter.id, h.amount, h.head ? 'head' : 'body', origin, w.id);
+}
+
+/** Launch a graviton charge: a lawful body that bends with gravity and time, detonating on contact. */
+export function launchCharge(state: MatchState, ctx: SimContext, s: Soldier, w: WeaponDef, origin: Vec3, dir: Vec3) {
+  const p = w.projectile!;
+  const v = { x: dir.x * p.speed + s.m.vx * 0.3, y: dir.y * p.speed + s.m.vy * 0.3, z: dir.z * p.speed + s.m.vz * 0.3 };
+  // A zero-length shot event carries the muzzle report to other clients.
+  ctx.emit({ type: 'shot', shooter: s.id, weapon: w.id, from: origin, to: origin, hit: 0 });
+  return spawnBody(state, 'charge', origin, v, s.id, s.team, 1, p.fuse);
+}
+
 export function spawnBody(state: MatchState, kind: Body['kind'], p: Vec3, v: Vec3, owner: number, team: number, hp = 1, timer = 0): Body {
   const body: Body = { id: state.nextId++, kind, x: p.x, y: p.y, z: p.z, vx: v.x, vy: v.y, vz: v.z, age: 0, owner, team, hp, timer };
   state.bodies.push(body);
@@ -152,22 +187,25 @@ export function throwGrenadeFrom(state: MatchState, s: Soldier, origin: Vec3, di
   return spawnBody(state, 'grenade', origin, v, s.id, s.team, 1, GRENADE.fuse);
 }
 
-export function explode(state: MatchState, ctx: SimContext, g: Body) {
+export interface Blast { radius: number; damage: number; weapon: string }
+const GRENADE_BLAST: Blast = { radius: GRENADE.radius, damage: GRENADE.damage, weapon: 'grenade' };
+
+export function explode(state: MatchState, ctx: SimContext, g: Body, blast: Blast = GRENADE_BLAST) {
   const center = { x: g.x, y: g.y + 0.2, z: g.z };
-  ctx.emit({ type: 'explosion', x: g.x, y: g.y, z: g.z, owner: g.owner });
+  ctx.emit({ type: 'explosion', x: g.x, y: g.y, z: g.z, owner: g.owner, radius: blast.radius, weapon: blast.weapon });
   for (const s of state.soldiers) {
     if (!s.alive) continue;
     const chest = chestPoint(feetOf(s), s.m.crouch);
     const d = dist3(center, chest);
-    if (d > GRENADE.radius || !ctx.world.lineOfSight(center, chest, -2)) continue;
+    if (d > blast.radius || !ctx.world.lineOfSight(center, chest, -2)) continue;
     const owner = state.soldiers.find(o => o.id === g.owner);
     if (owner && owner.team === s.team && owner.id !== s.id) continue;
-    applyDamage(state, ctx, s, g.owner, GRENADE.damage * (1 - d / GRENADE.radius) ** 1.2, 'blast', center, 'grenade');
+    applyDamage(state, ctx, s, g.owner, blast.damage * (1 - d / blast.radius) ** 1.2, 'blast', center, blast.weapon);
   }
   for (const b of [...state.bodies]) {
     if (b.kind !== 'drone' || b.id === g.id) continue;
     const d = dist3(center, b);
-    if (d < GRENADE.radius) damageDrone(state, ctx, b, GRENADE.damage * (1 - d / GRENADE.radius), g.owner);
+    if (d < blast.radius) damageDrone(state, ctx, b, blast.damage * (1 - d / blast.radius), g.owner);
   }
 }
 

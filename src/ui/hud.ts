@@ -98,7 +98,7 @@ export class Hud {
     (cross.children[2] as HTMLElement).style.transform = `translateX(${-px - 9}px)`;
     (cross.children[3] as HTMLElement).style.transform = `translateX(${px}px)`;
     cross.classList.toggle('ads', p.ads > 0.6);
-    this.el.reddot.hidden = !(p.ads > 0.85 && p.weapon.id === 'carbine');
+    this.el.reddot.hidden = !(p.ads > 0.85 && (p.weapon.id === 'carbine' || p.weapon.id === 'graviton'));
     cross.classList.toggle('hidden', p.sprinting || p.reloading);
     this.hitTimer -= dt;
     if (this.hitTimer <= 0) this.el.hit.classList.remove('on', 'head', 'kill');
@@ -223,7 +223,7 @@ export class Hud {
     this.el.ammo.classList.toggle('low', ammo > 0 && ammo <= w.magazine * 0.25);
     this.el.ammo.classList.toggle('empty', ammo === 0);
     this.set('nades', String(p.grenades));
-    this.set('fire', p.reloading ? 'RELOADING' : w.auto ? 'AUTO' : 'SEMI');
+    this.set('fire', p.reloading ? 'RELOADING' : w.auto ? 'AUTO' : w.projectile ? 'LAUNCHER' : w.pellets > 1 ? 'PUMP' : 'SEMI');
     this.set('reload', `${p.reloading ? (1 - p.reloadLeft / p.reloadTotal) * 100 : 0}%`, 'width');
     // Death panel.
     const dead = !!me && !me.alive && state.phase !== 'ended';

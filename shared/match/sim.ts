@@ -8,8 +8,8 @@ import { HEALTH, LOADOUTS, WEAPONS, type LoadoutId } from '../weapons';
 import { BODY_RADIUS, History, PHYSICS_STEP, circularSpeed, stepBodies, timeFactor, type Body } from '../world';
 import { botName, createBrain, updateBot } from './bots';
 import {
-  DRONE, MOVE_SLACK, TICK_RATE, applyDamage, explode, eyeOf, feetOf, isHostile, killSoldier, resolveShot, spawnBody, spawnSoldier,
-  throwGrenadeFrom, traceShot, weaponOf, type SimContext, type TraceResult,
+  DRONE, MOVE_SLACK, TICK_RATE, applyDamage, explode, eyeOf, feetOf, isHostile, killSoldier, launchCharge, resolvePellets, resolveShot,
+  spawnBody, spawnSoldier, throwGrenadeFrom, traceShot, weaponOf, type SimContext, type TraceResult,
 } from './combat';
 import type { ClientReport, MatchConfig, MatchEvent, MatchState, ShotClaim, Soldier, Team, WorldSnapshot } from './state';
 
@@ -63,7 +63,8 @@ function spawnDrone(state: MatchState, center: Vec3, random: () => number, phase
 export function addSoldier(state: MatchState, ctx: SimContext, opts: { name: string; team?: Team; bot: boolean; loadout?: LoadoutId }): Soldier {
   const counts = [0, 1].map(t => state.soldiers.filter(s => s.team === t && !s.bot).length);
   const team: Team = opts.team ?? (counts[0] <= counts[1] ? 0 : 1);
-  const loadout = opts.loadout ?? (opts.bot ? (ctx.random() < 0.3 ? 'recon' : 'assault') : 'assault');
+  const roll = opts.loadout || !opts.bot ? 0 : ctx.random();
+  const loadout = opts.loadout ?? (opts.bot ? (roll < 0.25 ? 'recon' : roll < 0.43 ? 'breacher' : roll < 0.58 ? 'grenadier' : 'assault') : 'assault');
   const s: Soldier = {
     id: state.nextId++, name: opts.name.slice(0, 20), team, bot: opts.bot, loadout,
     m: createMoveState(0, 0, 0), yaw: 0, pitch: 0, alive: false, health: 0, shield: 0, weapon: 0,
@@ -200,7 +201,9 @@ export function fireShot(state: MatchState, ctx: SimContext, id: number, claim: 
   const eye = eyeOf(s);
   const origin = dist3(claim.origin, eye) < 2.5 ? claim.origin : eye;
   const dir = normalize3(claim.dir);
+  if (w.projectile) { launchCharge(state, ctx, s, w, { x: origin.x + dir.x * 0.6, y: origin.y + dir.y * 0.6, z: origin.z + dir.z * 0.6 }, dir); return true; }
   let result: TraceResult | undefined;
+  let compensated: { target: Soldier; shift: Vec3 } | undefined;
   const target = claim.target >= 0 ? state.soldiers.find(x => x.id === claim.target) : undefined;
   if (target && target.alive && target.team !== s.team && claim.zone) {
     const distance = dist3(origin, claim.point);
@@ -215,12 +218,37 @@ export function fireShot(state: MatchState, ctx: SimContext, id: number, claim: 
     const aligned = toPoint.x * dir.x + toPoint.y * dir.y + toPoint.z * dir.z > Math.cos(0.12);
     if (distance <= w.range && nearest <= tolerance && aligned && ctx.world.lineOfSight(origin, claim.point, s.team)) {
       result = { point: claim.point, soldier: target, zone: claim.zone, distance };
+      compensated = { target, shift: lagShift(shape, claim.point) };
     }
+  }
+  if (w.pellets > 1) {
+    // Pellets re-trace the shared fixed pattern; a validated claim moves its target to where the
+    // shooter saw it (just far enough for the claimed point to touch the hit shape).
+    const feet = (x: Soldier) => {
+      const f = feetOf(x);
+      return compensated?.target === x ? { x: f.x + compensated.shift.x, y: f.y + compensated.shift.y, z: f.z + compensated.shift.z } : f;
+    };
+    resolvePellets(state, ctx, s, w, origin, dir, s.ads, feet);
+    return true;
   }
   // Without a valid soldier claim, the server traces walls and drones itself.
   result ??= traceShot({ ...state, soldiers: [] }, ctx, s, origin, dir, w.range);
   resolveShot(state, ctx, s, w, origin, result);
   return true;
+}
+
+/** Offset that moves a hit shape just far enough for `point` to lie on its surface. */
+function lagShift(shape: ReturnType<typeof hitShape>, point: Vec3): Vec3 {
+  const parts = [
+    { ...segmentPointDistance(point, shape.chestBottom, shape.chestTop), a: shape.chestBottom, b: shape.chestTop, r: shape.chestR },
+    { ...segmentPointDistance(point, shape.foot, shape.hip), a: shape.foot, b: shape.hip, r: shape.legR },
+    { distance: dist3(point, shape.head), t: 0, a: shape.head, b: shape.head, r: shape.headR },
+  ];
+  const best = parts.reduce((x, y) => y.distance - y.r < x.distance - x.r ? y : x);
+  if (best.distance <= best.r) return { x: 0, y: 0, z: 0 };
+  const q = { x: best.a.x + (best.b.x - best.a.x) * best.t, y: best.a.y + (best.b.y - best.a.y) * best.t, z: best.a.z + (best.b.z - best.a.z) * best.t };
+  const k = 1 - best.r / best.distance;
+  return { x: (point.x - q.x) * k, y: (point.y - q.y) * k, z: (point.z - q.z) * k };
 }
 
 export function throwGrenade(state: MatchState, ctx: SimContext, id: number, origin: Vec3, dir: Vec3) {
@@ -405,6 +433,15 @@ function stepWorld(state: MatchState, ctx: SimContext, dtW: number) {
     } else if (b.kind === 'grenade') {
       b.timer -= dtW;
       if (b.timer <= 0 || far) { removeBody(state, b); if (!far) explode(state, ctx, b); }
+    } else if (b.kind === 'charge') {
+      // Graviton charges detonate on contact (world.ts spends the fuse), near an enemy, or on timeout.
+      const p = WEAPONS.graviton.projectile!;
+      b.timer -= dtW;
+      if (b.timer > 0) for (const s of state.soldiers) {
+        if (!s.alive || !isHostile(b.team, s.team)) continue;
+        if (segmentPointDistance(chestPoint(feetOf(s), s.m.crouch), old, b).distance < p.proximity) { b.timer = 0; break; }
+      }
+      if (b.timer <= 0 || far) { removeBody(state, b); if (!far) explode(state, ctx, b, { radius: p.radius, damage: p.damage, weapon: 'graviton' }); }
     } else if (b.kind === 'drone') {
       if (far) { removeBody(state, b); continue; }
       b.timer -= dtW;

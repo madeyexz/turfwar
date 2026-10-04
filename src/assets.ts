@@ -1,6 +1,7 @@
 import * as THREE from 'three';
 import { GLTFLoader, type GLTF } from 'three/examples/jsm/loaders/GLTFLoader.js';
 import { MeshoptDecoder } from 'three/examples/jsm/libs/meshopt_decoder.module.js';
+import { addProceduralGuns } from './render/procguns';
 
 /** Runtime asset registry. All models are CC0 (see public/assets/LICENSE.txt). */
 export interface Assets {
@@ -40,8 +41,10 @@ export async function loadAssets(onProgress: (fraction: number) => void): Promis
     }
     return map;
   };
+  const guns = named(weapons);
+  addProceduralGuns(guns);
   return {
-    weapons: named(weapons), props: named(props), drone, soldier,
+    weapons: guns, props: named(props), drone, soldier,
     clips: new Map(anims.animations.map(c => [c.name, c])),
     textures,
   };

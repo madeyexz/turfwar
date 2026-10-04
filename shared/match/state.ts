@@ -149,7 +149,7 @@ export type MatchEvent =
   | { type: 'law'; author: number; command: LawCommand; text: string; source: string }
   | { type: 'lawRevert' }
   | { type: 'rewind'; seconds: number }
-  | { type: 'explosion'; x: number; y: number; z: number; owner: number }
+  | { type: 'explosion'; x: number; y: number; z: number; owner: number; radius?: number; weapon?: string }
   | { type: 'droneDown'; x: number; y: number; z: number; killer: number }
   | { type: 'phase'; phase: Phase; winner: -1 | Team }
   | { type: 'join'; id: number; name: string; team: Team }
