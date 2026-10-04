@@ -112,7 +112,7 @@ export class OnlineLink implements GameLink {
     if (this.reportsInFlight > 3) return; // never queue up stale movement
     this.reportsInFlight++;
     const sent = performance.now();
-    void this.conn.reducers.report({ ...r, weapon: r.weapon })
+    void this.conn.reducers.report({ ...r, slide: !!r.slide, weapon: r.weapon })
       .then(() => { if (sent - this.lastPing > 500) { this.pingMs = this.pingMs ? this.pingMs * 0.7 + (performance.now() - sent) * 0.3 : performance.now() - sent; this.lastPing = sent; } })
       .catch(() => undefined)
       .finally(() => { this.reportsInFlight--; });

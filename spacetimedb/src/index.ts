@@ -295,7 +295,7 @@ export const leave = spacetimedb.reducer({}, ctx => {
 
 export const report = spacetimedb.reducer({
   x: t.f32(), y: t.f32(), z: t.f32(), vx: t.f32(), vy: t.f32(), vz: t.f32(), yaw: t.f32(), pitch: t.f32(),
-  crouch: t.f32(), grounded: t.bool(), sprint: t.bool(), ads: t.bool(), weapon: t.u8(),
+  crouch: t.f32(), grounded: t.bool(), sprint: t.bool(), ads: t.bool(), slide: t.bool(), weapon: t.u8(),
 }, (ctx, r) => {
   const player = mySoldier(ctx);
   const now = micros(ctx);

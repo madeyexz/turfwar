@@ -164,6 +164,8 @@ export interface ClientReport {
   grounded: boolean;
   sprint: boolean;
   ads: boolean;
+  /** Sliding (replicated so other players see the slide animation). */
+  slide?: boolean;
   weapon: 0 | 1;
 }
 

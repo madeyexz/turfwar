@@ -146,6 +146,7 @@ export function reportState(state: MatchState, ctx: SimContext, id: number, r: C
   s.m.x = r.x; s.m.y = r.y; s.m.z = r.z; s.m.vx = r.vx; s.m.vy = r.vy; s.m.vz = r.vz;
   s.m.crouch = clamp(r.crouch, 0, 1); s.m.grounded = r.grounded && !airborne;
   s.sprint = r.sprint; s.ads = r.ads;
+  s.m.slideTime = r.slide ? Math.max(s.m.slideTime, 0.2) : 0;
   if (r.weapon !== s.weapon) switchWeapon(state, id, r.weapon);
   if (horizontal > 0.05 && s.protectLeft > 0.6) s.protectLeft = Math.min(s.protectLeft, 0.6);
   return true;

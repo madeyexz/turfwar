@@ -23,5 +23,6 @@ export default {
   grounded: __t.bool(),
   sprint: __t.bool(),
   ads: __t.bool(),
+  slide: __t.bool(),
   weapon: __t.u8(),
 };
