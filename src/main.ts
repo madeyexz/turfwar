@@ -1,6 +1,9 @@
 import * as THREE from 'three';
 import { initPhysics, Simulation, STEP } from './physics';
 import { ArenaView } from './scene';
+import { HUD } from './hud';
+import { parseLawCommand } from '../shared/laws';
+import { connectBackend, recordLaw, recordScore } from './backend';
 import './style.css';
 
 const app = document.querySelector<HTMLDivElement>('#app')!;
@@ -21,13 +24,26 @@ async function boot() {
   const sim = new Simulation();
   const view = new ArenaView(app);
   const keys = new Set<string>();
+  const hud = new HUD((value, source) => {
+    const command = parseLawCommand(value);
+    switch (command.kind) {
+      case 'gravity': sim.laws.gravity = command.gravity; break;
+      case 'time': sim.laws.time = command.time; break;
+      case 'lightSpeed': sim.laws.lightSpeed = command.lightSpeed; break;
+      case 'rewind': sim.laws.rewind = command.rewind; break;
+    }
+    hud.update(sim.laws); hud.toast(`${source} / ${command.kind} law changed`);
+    void recordLaw(command);
+  }, () => keys.clear());
+  hud.update(sim.laws);
+  connectBackend(status => { document.querySelector('#backend-status')!.textContent = status === 'connected' ? 'SPACETIMEDB LIVE' : status === 'connecting' ? 'CONNECTING' : status === 'error' ? 'SYNC UNAVAILABLE' : 'LOCAL SESSION'; });
   let playing = false;
   let yaw = 0, pitch = -0.12, jumpVelocity = 0;
   const player = new THREE.Vector3(0, 2.3, 19);
   const enter = document.querySelector<HTMLButtonElement>('#enter')!;
   function start() {
     playing = true; enter.hidden = true;
-    view.renderer.domElement.requestPointerLock()?.catch(() => toast('Click the arena to enable mouse look.'));
+    view.renderer.domElement.requestPointerLock()?.catch(() => hud.toast('Click the arena to enable mouse look.'));
   }
   enter.addEventListener('click', start);
   document.addEventListener('pointerlockchange', () => {
@@ -36,7 +52,12 @@ async function boot() {
   document.addEventListener('mousemove', e => {
     if (document.pointerLockElement) { yaw -= e.movementX * 0.002; pitch = Math.max(-1.3, Math.min(1.3, pitch - e.movementY * 0.002)); }
   });
-  document.addEventListener('keydown', e => { keys.add(e.code); if (e.code === 'Space') e.preventDefault(); });
+  document.addEventListener('keydown', e => {
+    if (hud.panel.open) return;
+    if (e.code === 'Slash') { e.preventDefault(); hud.open(); return; }
+    if (/^Digit[1-4]$/.test(e.code) && !e.repeat) { hud.preset(Number(e.code.slice(-1)) - 1); return; }
+    keys.add(e.code); if (e.code === 'Space') e.preventDefault();
+  });
   document.addEventListener('keyup', e => keys.delete(e.code));
   window.addEventListener('blur', () => keys.clear());
   view.renderer.domElement.addEventListener('click', () => {
@@ -45,11 +66,7 @@ async function boot() {
     const position = player.clone().addScaledVector(direction, 0.6);
     sim.spawn('shot', position, direction.multiplyScalar(24));
   });
-  sim.onHit = () => { toast('+100 / Target neutralized'); };
-  function toast(text: string) {
-    const node = document.querySelector<HTMLElement>('#toast')!; node.textContent = text; node.classList.add('visible');
-    setTimeout(() => node.classList.remove('visible'), 3200);
-  }
+  sim.onHit = () => { hud.toast('+100 / Target neutralized'); void recordScore(sim.score); };
   let previous = performance.now(), accumulator = 0;
   function frame(now: number) {
     const dt = Math.min((now - previous) / 1000, 0.05); previous = now;
