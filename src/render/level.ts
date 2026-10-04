@@ -26,6 +26,8 @@ export class LevelView {
       steelDark: surfaceMaterial(assets, 'metalplate', { color: 0x6c757c, metalness: 0.35, normalScale: 0.6 }),
       floor: surfaceMaterial(assets, 'metalplate', { color: 0xb3b9be, metalness: 0.3 }),
       concrete: trimMaterial(assets, 'T_Trim_03_BaseColor', 0xd8d2c8),
+      sandstone: surfaceMaterial(assets, 'concrete', { color: 0xffe9c4, normalScale: 0.5 }),
+      sandstoneTrim: surfaceMaterial(assets, 'concrete', { color: 0xc9a77a, normalScale: 0.5 }),
       container: surfaceMaterial(assets, 'container', { metalness: 0.3, roughness: 0.75 }),
       rock: surfaceMaterial(assets, theme.rock, { color: theme.rockTint.getHex(), normalScale: 1.2 }),
       hazard: new THREE.MeshStandardMaterial({ map: hazardTexture(), roughness: 0.6, metalness: 0.2 }),
@@ -154,6 +156,14 @@ export class LevelView {
         for (const [sx, sz] of [[-1, -1], [1, -1], [-1, 1], [1, 1]]) this.add('steelDark', boxGeo(cx + sx * (w / 2 - 0.08), cy, cz + sz * (d / 2 - 0.08), 0.18, h + 0.02, 0.18));
         return;
       }
+      case 'sandstone': {
+        // Plastered masonry: shaded body with a darker cornice on building-height blocks.
+        const g = boxGeo(cx, cy, cz, w, h, d, 0, 7);
+        shade(g, s.minY, h, 0.78);
+        this.add('sandstone', g);
+        if (h > 6) this.add('sandstoneTrim', boxGeo(cx, s.maxY - 0.2, cz, w + 0.3, 0.4, d + 0.3, 0, 4));
+        return;
+      }
       case 'concrete': case 'pillar': {
         const g = boxGeo(cx, cy, cz, w, h, d, Math.min(0.12, w / 6, d / 6), 3);
         shade(g, s.minY, h, 0.72);
@@ -207,9 +217,11 @@ export class LevelView {
 
   private rock(s: Solid, r: () => number) {
     const w = s.maxX - s.minX, h = s.maxY - s.minY, d = s.maxZ - s.minZ;
-    const geo = rockGeometry(Math.floor(r() * 1000));
-    geo.scale(w * 0.62, h * 1.08, d * 0.62);
-    geo.translate((s.minX + s.maxX) / 2, s.minY - 0.15, (s.minZ + s.maxZ) / 2);
+    // Rocks are cover: the boulder fills its collision box (sunk slightly into the ground) so shots
+    // stop exactly where the rock shows, never on invisible corners or through visible bulges.
+    const geo = rockBlockGeometry(Math.floor(r() * 1000));
+    geo.scale(w, h + 0.2, d);
+    geo.translate((s.minX + s.maxX) / 2, s.minY - 0.2, (s.minZ + s.maxZ) / 2);
     worldUV(geo, 2.5);
     this.add('rock', geo);
   }
@@ -351,6 +363,16 @@ export class LevelView {
 
   private crystal(x: number, y: number, z: number, scale: number, rotY: number) {
     const r = rng(Math.round(x * 13 + z * 7) >>> 0);
+    // Solid core filling the collision box (1.4 × 2.4 × 1.4 per scale), capped with a point; the
+    // shards around it are decoration.
+    const core = new THREE.CylinderGeometry(0.99 * scale, 0.99 * scale, 2.5 * scale, 4);
+    core.rotateY(Math.PI / 4);
+    core.translate(x, y - 0.1 + 1.25 * scale, z);
+    this.add('crystal', nonIndexed(core));
+    const cap = new THREE.CylinderGeometry(0, 0.99 * scale, 0.8 * scale, 4);
+    cap.rotateY(Math.PI / 4);
+    cap.translate(x, y + 2.4 * scale + 0.4 * scale, z);
+    this.add('crystal', nonIndexed(cap));
     for (let i = 0; i < 5; i++) {
       const h = (1.4 + r() * 1.8) * scale;
       const shard = new THREE.CylinderGeometry(0, 0.32 * scale, h, 6);
@@ -436,6 +458,23 @@ function rockGeometry(seed: number, detail = 3) {
     // Faceted strata: quantize slightly along a tilted axis.
     v.y = Math.max(v.y * 0.85, -0.55);
     p.setXYZ(i, v.x, (v.y + 0.55) / 1.55, v.z);
+  }
+  const ng = nonIndexed(g);
+  ng.computeVertexNormals();
+  return ng;
+}
+
+/** Weathered block filling a unit box (base at y=0): a rounded box whose erosion only cuts in a few percent. */
+function rockBlockGeometry(seed: number) {
+  const g = new RoundedBoxGeometry(1, 1, 1, 6, 0.16);
+  const p = g.getAttribute('position') as THREE.BufferAttribute;
+  const v = new THREE.Vector3();
+  for (let i = 0; i < p.count; i++) {
+    v.fromBufferAttribute(p, i);
+    const broad = Math.abs(fbm(v.x * 2.2 + v.y * 1.3 + seed * 0.37, v.z * 2.2 - v.y * 1.1, seed, 3));
+    const chips = Math.abs(fbm(v.x * 7 + v.y * 5 + seed, v.z * 7 - v.y * 4, seed + 5, 2));
+    v.multiplyScalar(1 - broad * 0.09 - chips * 0.05);
+    p.setXYZ(i, v.x, v.y + 0.5, v.z);
   }
   const ng = nonIndexed(g);
   ng.computeVertexNormals();

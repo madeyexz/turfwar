@@ -1,4 +1,4 @@
-// Development-only battlefield preview: /dev/level.html?map=cinder&cam=x,y,z&look=x,y,z&q=medium
+// Development-only battlefield preview: /dev/level.html?map=cinder&cam=x,y,z&look=x,y,z&q=medium&solids=rock,glass
 import * as THREE from 'three';
 import { loadAssets } from '../src/assets';
 import { LevelView } from '../src/render/level';
@@ -15,6 +15,11 @@ const r = new Renderer(document.body, QUALITY[(params.get('q') as 'medium') ?? '
 r.setTheme(theme, map.sun);
 const level = new LevelView(assets, map, theme);
 r.scene.add(level.group);
+// Overlay collision boxes (by surface, or 'all') to check that visuals match what bullets and bodies hit.
+const solids = params.get('solids')?.split(',');
+if (solids) for (const s of map.solids) if (solids.includes('all') || solids.includes(s.surface)) {
+  r.scene.add(new THREE.Box3Helper(new THREE.Box3(new THREE.Vector3(s.minX, s.minY, s.minZ), new THREE.Vector3(s.maxX, s.maxY, s.maxZ)), 0xff00ff));
+}
 const [cx, cy, cz] = (params.get('cam') ?? '-60,14,40').split(',').map(Number);
 const [lx, ly, lz] = (params.get('look') ?? '0,2,0').split(',').map(Number);
 r.camera.position.set(cx, cy, cz); r.camera.lookAt(lx, ly, lz);

@@ -229,8 +229,8 @@ export class Game {
       cam.updateProjectionMatrix();
       this.renderer.viewCamera.fov = 58 - this.player.ads * (w.id === 'lancer' ? 0 : 10);
       this.renderer.viewCamera.updateProjectionMatrix();
+      // update() also decides visibility: a full-zoom scope hides the weapon behind the HUD reticle.
       this.viewmodel.update(dt, this.player, look);
-      this.viewmodel.root.visible = true;
     } else {
       // Kill cam: rise above the body and look toward the killer.
       const killer = me ? positions.get(me.lastAttacker) : undefined;
