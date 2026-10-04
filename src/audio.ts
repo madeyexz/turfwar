@@ -7,40 +7,86 @@ type V3 = { x: number; y: number; z: number };
  * thump and reverb tail; spatialized remote fire, footsteps, reloads, explosions and UI cues.
  */
 export class Audio {
-  private ctx?: AudioContext;
+  private ctx?: BaseAudioContext;
   private master!: GainNode;
   private reverb!: ConvolverNode;
   private reverbSend!: GainNode;
   private noise!: AudioBuffer;
-  private wind?: AudioBufferSourceNode;
+  /** Start time for sounds while recording offline; live play uses the context clock. */
+  private clock?: number;
+  private music?: { src: AudioBufferSourceNode; gain: GainNode };
   muted = false;
   volume = 0.8;
+  musicVolume = 0.6;
 
   start() {
-    if (this.ctx) { void this.ctx.resume(); return; }
-    const ctx = this.ctx = new AudioContext();
-    this.master = ctx.createGain(); this.master.gain.value = this.volume;
+    if (this.ctx) { void (this.ctx as AudioContext).resume(); return; }
+    const ctx = new AudioContext();
+    this.build(ctx);
     const comp = ctx.createDynamicsCompressor(); comp.threshold.value = -14; comp.ratio.value = 4;
     this.master.connect(comp).connect(ctx.destination);
+    this.reverb = ctx.createConvolver(); this.reverb.buffer = reverbImpulse(ctx, 1.6);
+    this.reverbSend.connect(this.reverb).connect(this.master);
+    this.wind();
+  }
+
+  private build(ctx: BaseAudioContext) {
+    this.ctx = ctx;
+    this.master = ctx.createGain(); this.master.gain.value = this.volume;
     this.noise = ctx.createBuffer(1, ctx.sampleRate * 2, ctx.sampleRate);
     const data = this.noise.getChannelData(0);
     for (let i = 0; i < data.length; i++) data[i] = Math.random() * 2 - 1;
-    this.reverb = ctx.createConvolver();
-    const ir = ctx.createBuffer(2, ctx.sampleRate * 1.6, ctx.sampleRate);
-    for (let c = 0; c < 2; c++) {
-      const d = ir.getChannelData(c);
-      for (let i = 0; i < d.length; i++) d[i] = (Math.random() * 2 - 1) * Math.pow(1 - i / d.length, 3.2);
-    }
-    this.reverb.buffer = ir;
     this.reverbSend = ctx.createGain(); this.reverbSend.gain.value = 0.32;
-    this.reverbSend.connect(this.reverb).connect(this.master);
-    this.startWind();
   }
 
-  setMuted(muted: boolean) { this.muted = muted; if (this.master) this.master.gain.value = muted ? 0 : this.volume; }
+  /**
+   * Records sound effects offline into a dry buffer (no reverb or compressor), so other
+   * code can reuse the exact game sounds as instruments. Effects start at time zero.
+   */
+  static record(seconds: number, play: (sfx: Audio) => void, sampleRate = 44100) {
+    const ctx = new OfflineAudioContext(2, Math.ceil(seconds * sampleRate), sampleRate);
+    const sfx = new Audio();
+    sfx.build(ctx);
+    sfx.master.gain.value = 1;
+    sfx.master.connect(ctx.destination);
+    sfx.clock = 0;
+    play(sfx);
+    return ctx.startRendering();
+  }
+
+  /** Loops a rendered music buffer on its own bus (bypassing the effects compressor), fading in. */
+  playMusic(buffer: AudioBuffer, fadeIn = 2) {
+    const ctx = this.ctx;
+    if (!(ctx instanceof AudioContext) || this.music) return;
+    const src = ctx.createBufferSource(); src.buffer = buffer; src.loop = true;
+    const gain = ctx.createGain();
+    gain.gain.setValueAtTime(0.0001, ctx.currentTime);
+    gain.gain.linearRampToValueAtTime(this.muted ? 0 : this.musicVolume, ctx.currentTime + fadeIn);
+    src.connect(gain).connect(ctx.destination); src.start();
+    this.music = { src, gain };
+  }
+
+  stopMusic(fadeOut = 1.2) {
+    const music = this.music, ctx = this.ctx;
+    if (!music || !ctx) return;
+    this.music = undefined;
+    const t = ctx.currentTime;
+    music.gain.gain.cancelScheduledValues(t);
+    music.gain.gain.setValueAtTime(music.gain.gain.value, t);
+    music.gain.gain.linearRampToValueAtTime(0, t + fadeOut);
+    music.src.stop(t + fadeOut + 0.05);
+  }
+
+  setMusicVolume(volume: number) {
+    this.musicVolume = volume;
+    const music = this.music, ctx = this.ctx;
+    if (music && ctx) music.gain.gain.setTargetAtTime(this.muted ? 0 : volume, ctx.currentTime, 0.05);
+  }
+
+  setMuted(muted: boolean) { this.muted = muted; if (this.master) this.master.gain.value = muted ? 0 : this.volume; this.setMusicVolume(this.musicVolume); }
 
   private get ready() { return !!this.ctx && !this.muted; }
-  private now() { return this.ctx!.currentTime; }
+  private now() { return this.clock ?? this.ctx!.currentTime; }
 
   /** Output chain: optional stereo pan + distance attenuation + reverb send. */
   private out(gain: number, listener?: { pos: V3; yaw: number }, at?: V3, wet = 0.35) {
@@ -183,15 +229,26 @@ export class Audio {
 
   ui() { if (!this.ready) return; const t = this.now(); this.tone(this.out(0.2, undefined, undefined, 0.05), t, 'sine', 900, 1100, 0.05, 0.2); }
 
-  private startWind() {
-    const ctx = this.ctx!;
+  /** Low filtered-noise wind bed: endless live, or `seconds` long when recording. */
+  wind(seconds?: number) {
+    const ctx = this.ctx!, t = this.now();
     const src = ctx.createBufferSource(); src.buffer = this.noise; src.loop = true;
     const f = ctx.createBiquadFilter(); f.type = 'lowpass'; f.frequency.value = 380;
     const g = ctx.createGain(); g.gain.value = 0.05;
     const lfo = ctx.createOscillator(); lfo.frequency.value = 0.07;
     const lfoGain = ctx.createGain(); lfoGain.gain.value = 140;
-    lfo.connect(lfoGain).connect(f.frequency); lfo.start();
-    src.connect(f).connect(g).connect(this.master); src.start();
-    this.wind = src;
+    lfo.connect(lfoGain).connect(f.frequency); lfo.start(t);
+    src.connect(f).connect(g).connect(this.master); src.start(t);
+    if (seconds) { src.stop(t + seconds); lfo.stop(t + seconds); }
   }
+}
+
+/** Decaying stereo noise impulse response used for the shared reverb. */
+export function reverbImpulse(ctx: BaseAudioContext, seconds: number, decay = 3.2) {
+  const ir = ctx.createBuffer(2, Math.ceil(ctx.sampleRate * seconds), ctx.sampleRate);
+  for (let c = 0; c < 2; c++) {
+    const d = ir.getChannelData(c);
+    for (let i = 0; i < d.length; i++) d[i] = (Math.random() * 2 - 1) * Math.pow(1 - i / d.length, decay);
+  }
+  return ir;
 }

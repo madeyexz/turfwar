@@ -13,6 +13,7 @@ import { onlineAvailable, connectOnline } from './net/online';
 import { LevelView } from './render/level';
 import { THEMES } from './render/materials';
 import { QUALITY, Renderer } from './render/renderer';
+import { renderTheme } from './theme';
 import './style.css';
 
 const app = document.querySelector<HTMLDivElement>('#app')!;
@@ -50,6 +51,7 @@ menu.innerHTML = `
     <div class="field sliders">
       <label class="field"><span>Mouse sensitivity · <output id="sens-out"></output></span><input type="range" id="sens" min="0.2" max="3" step="0.05"></label>
       <label class="field"><span>Field of view · <output id="fov-out"></output></span><input type="range" id="fov" min="65" max="95" step="1"></label>
+      <label class="field"><span>Menu music · <output id="music-out"></output></span><input type="range" id="music" min="0" max="1" step="0.05"></label>
     </div>
     <button class="deploy" id="deploy" disabled>Loading…</button>
     <div class="status" id="status"></div>
@@ -96,19 +98,24 @@ menu.querySelectorAll<HTMLButtonElement>('[data-quality]').forEach(b => b.addEve
   quality = b.dataset.quality as keyof typeof QUALITY; select('qualities', 'quality', quality); store.set('quality', quality);
   renderer?.applyQuality(QUALITY[quality]);
 }));
-const sens = menu.querySelector<HTMLInputElement>('#sens')!, fov = menu.querySelector<HTMLInputElement>('#fov')!;
+const sens = menu.querySelector<HTMLInputElement>('#sens')!, fov = menu.querySelector<HTMLInputElement>('#fov')!, music = menu.querySelector<HTMLInputElement>('#music')!;
 settings.sensitivity = Math.max(0.2, Math.min(3, Number(store.get('sensitivity', '1')) || 1));
 settings.fov = Math.max(65, Math.min(95, Number(store.get('fov', '78')) || 78));
 sens.value = String(settings.sensitivity); fov.value = String(settings.fov);
+const audio = new Audio();
+audio.musicVolume = Math.max(0, Math.min(1, Number(store.get('music', '0.6')) || 0));
+music.value = String(audio.musicVolume);
 /** Vertical FOV (what three.js uses) with its 16:9 horizontal equivalent, which players usually quote. */
 const horizontal = (v: number) => Math.round(2 * Math.atan(Math.tan(v * Math.PI / 360) * 16 / 9) * 180 / Math.PI);
 const showSettings = () => {
   menu.querySelector('#sens-out')!.textContent = `${settings.sensitivity.toFixed(2)}×`;
   menu.querySelector('#fov-out')!.textContent = `${settings.fov}° vertical · ${horizontal(settings.fov)}° horizontal (16:9)`;
+  menu.querySelector('#music-out')!.textContent = audio.musicVolume > 0 ? `${Math.round(audio.musicVolume * 100)}%` : 'Off';
 };
 showSettings();
 sens.addEventListener('input', () => { settings.sensitivity = Number(sens.value); store.set('sensitivity', sens.value); showSettings(); });
 fov.addEventListener('input', () => { settings.fov = Number(fov.value); store.set('fov', fov.value); showSettings(); });
+music.addEventListener('input', () => { audio.setMusicVolume(Number(music.value)); store.set('music', music.value); showSettings(); });
 menu.querySelector('#bench')!.addEventListener('click', () => { location.search = `?bench&map=${mapId}&quality=${quality}`; });
 const deploy = menu.querySelector<HTMLButtonElement>('#deploy')!;
 const status = menu.querySelector<HTMLElement>('#status')!;
@@ -119,7 +126,17 @@ let game: Game | undefined;
 let backdrop: LevelView | undefined;
 let bench: Bench | undefined;
 let benchBanner: HTMLElement | undefined;
-const audio = new Audio();
+let theme: Promise<AudioBuffer> | undefined;
+let inMenu = !benchMode;
+let gestured = false;
+
+/** Loops the menu theme once the player has interacted (browsers block audio before a gesture). */
+function menuMusic() {
+  if (!inMenu || !gestured || !theme) return;
+  audio.start();
+  void theme.then(buffer => { if (inMenu) audio.playMusic(buffer); }, () => undefined);
+}
+for (const type of ['pointerdown', 'keydown'] as const) document.addEventListener(type, () => { gestured = true; menuMusic(); });
 
 function showBackdrop() {
   if (!assets || game) return;
@@ -134,7 +151,9 @@ async function start() {
   const name = callsign.value.trim().slice(0, 16) || 'Lawbreaker';
   if (!benchMode) { store.set('name', name); store.set('mode', mode); store.set('map', mapId); store.set('loadout', loadout); store.set('team', team); store.set('skill', skill); }
   deploy.disabled = true; deploy.textContent = 'Deploying…';
+  inMenu = false;
   audio.start();
+  audio.stopMusic();
   const teamChoice = team === 'auto' ? undefined : (Number(team) as Team);
   let link: GameLink;
   try {
@@ -144,6 +163,7 @@ async function start() {
   } catch (error) {
     status.textContent = `Could not deploy: ${(error as Error).message}`;
     deploy.disabled = false; deploy.textContent = 'Deploy';
+    inMenu = !benchMode; menuMusic();
     return;
   }
   if (backdrop) { renderer.scene.remove(backdrop.group); backdrop = undefined; }
@@ -163,6 +183,7 @@ function launch(link: GameLink, map: string) {
     document.body.classList.add('menu-open'); menu.hidden = false;
     deploy.disabled = false; deploy.textContent = 'Deploy';
     showBackdrop();
+    inMenu = !benchMode; menuMusic();
   };
 }
 deploy.addEventListener('click', () => void start());
@@ -207,6 +228,10 @@ async function boot() {
   showBackdrop();
   deploy.disabled = false; deploy.textContent = 'Deploy';
   status.textContent = mode === 'online' ? online.reason : '';
+  if (!benchMode) {
+    theme = renderTheme();
+    theme.then(menuMusic, error => console.warn('Menu theme unavailable', error));
+  }
   let previous = performance.now();
   let angle = 0.6;
   // Dev/test: ?fixeddt advances exactly 1/30 s per rendered frame; ?capture steps only on demand.
