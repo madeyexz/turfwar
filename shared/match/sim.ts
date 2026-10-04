@@ -401,6 +401,7 @@ function removeBody(state: MatchState, b: Body) {
 }
 
 function droneFire(state: MatchState, ctx: SimContext, d: Body) {
+  if (state.config.practice) return;
   let best: Soldier | undefined, bestD = DRONE.range;
   for (const s of state.soldiers) {
     if (!s.alive || !isHostile(d.team, s.team) || s.protectLeft > 0) continue;

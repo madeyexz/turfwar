@@ -93,9 +93,12 @@ export interface MatchConfig {
   warmup: number;
   respawn: number;
   botSkill: number;
+  /** Law Lab: no bots, passive sentinels, no score limit — a sandbox for experimenting with laws. */
+  practice?: boolean;
 }
 
 export const OFFLINE_CONFIG: MatchConfig = { teamSize: 6, scoreLimit: 200, timeLimit: 600, lawCooldown: 0, lawDuration: 0, warmup: 3, respawn: 4, botSkill: 0.45 };
+export const PRACTICE_CONFIG: MatchConfig = { teamSize: 0, scoreLimit: 100000, timeLimit: 36000, lawCooldown: 0, lawDuration: 0, warmup: 1, respawn: 2, botSkill: 0.4, practice: true };
 export const ONLINE_CONFIG: MatchConfig = { teamSize: 6, scoreLimit: 200, timeLimit: 600, lawCooldown: 25, lawDuration: 30, warmup: 8, respawn: 5, botSkill: 0.55 };
 
 export interface MatchState {

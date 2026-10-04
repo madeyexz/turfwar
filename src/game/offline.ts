@@ -3,7 +3,7 @@ import {
   addSoldier, applyLaw, balanceTeams, createContext, createMatch, fireShot, reload, reportState, setLoadout, switchWeapon,
   throwGrenade, tickMatch, TICK_RATE, type SimContext,
 } from '../../shared/match/sim';
-import { OFFLINE_CONFIG, type ClientReport, type MatchConfig, type MatchEvent, type MatchState, type ShotClaim, type Team } from '../../shared/match/state';
+import { OFFLINE_CONFIG, PRACTICE_CONFIG, type ClientReport, type MatchConfig, type MatchEvent, type MatchState, type ShotClaim, type Team } from '../../shared/match/state';
 import type { LoadoutId } from '../../shared/weapons';
 import type { GameLink } from './link';
 
@@ -19,10 +19,11 @@ export class OfflineLink implements GameLink {
   private ticks = 0;
   private lastReport = performance.now();
 
-  constructor(mapId: string, name: string, loadout: LoadoutId, team: Team | undefined, config: Partial<MatchConfig> = {}) {
+  constructor(mapId: string, name: string, loadout: LoadoutId, team: Team | undefined, config: Partial<MatchConfig> = {}, practice = false) {
     const random = rng((Math.random() * 2 ** 31) | 0);
     this.ctx = createContext(mapId, random, e => this.events.push(e));
-    this.match = createMatch(mapId, { ...OFFLINE_CONFIG, ...config }, random);
+    this.match = createMatch(mapId, practice ? { ...PRACTICE_CONFIG } : { ...OFFLINE_CONFIG, ...config }, random);
+    this.practice = practice;
     this.me = addSoldier(this.match, this.ctx, { name, team, bot: false, loadout }).id;
     balanceTeams(this.match, this.ctx);
   }
@@ -31,7 +32,8 @@ export class OfflineLink implements GameLink {
   state() { return this.match; }
   version() { return this.ticks; }
   drainEvents() { const e = this.events; this.events = []; return e; }
-  status() { return 'SOLO SKIRMISH'; }
+  private practice = false;
+  status() { return this.practice ? 'LAW LAB · PRACTICE' : 'SOLO SKIRMISH'; }
 
   update(dt: number) {
     this.accumulator += Math.min(dt, 0.25);

@@ -8,7 +8,9 @@
     "dev": "vite --host 0.0.0.0",
     "build": "tsc --noEmit && vite build",
     "test": "vitest run",
-    "preview": "vite preview --host 0.0.0.0"
+    "preview": "vite preview --host 0.0.0.0",
+    "dev:spacetime": "./scripts/dev-spacetime.sh",
+    "typecheck:module": "bun run --cwd spacetimedb typecheck"
   },
   "dependencies": {
     "spacetimedb": "2.10.2",

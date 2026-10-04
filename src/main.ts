@@ -32,6 +32,7 @@ menu.innerHTML = `
     <div class="field"><label class="field">Mode</label><div class="choices" id="modes">
       <button class="choice" data-mode="offline"><b>Solo skirmish</b><small>6v6 against bots in this tab. Works fully offline.</small></button>
       <button class="choice" data-mode="online"><b>Online match</b><small id="online-note">Real players via SpacetimeDB; bots fill empty slots.</small></button>
+      <button class="choice" data-mode="lab"><b>Law Lab</b><small>No bots, passive sentinels. Experiment with the laws in peace.</small></button>
     </div></div>
     <div class="field"><label class="field">Battlefield</label><div class="choices" id="maps">${maps.map(m => `<button class="choice" data-map="${m.id}"><b>${m.name}</b><small>${m.description}</small></button>`).join('')}</div></div>
     <div class="field"><label class="field">Kit</label><div class="choices" id="loadouts">${Object.entries(LOADOUTS).map(([id, l]) => `<button class="choice" data-loadout="${id}"><b>${l.name}</b><small>${l.role}</small></button>`).join('')}</div></div>
@@ -104,7 +105,7 @@ async function start() {
   try {
     link = mode === 'online'
       ? await connectOnline(name, loadout, teamChoice, s => { status.textContent = s; })
-      : new OfflineLink(mapId, name, loadout, teamChoice, { botSkill: Math.max(0.1, Math.min(0.95, Number(skill) || 0.45)) });
+      : new OfflineLink(mapId, name, loadout, teamChoice, { botSkill: Math.max(0.1, Math.min(0.95, Number(skill) || 0.45)) }, mode === 'lab');
   } catch (error) {
     status.textContent = `Could not deploy: ${(error as Error).message}`;
     deploy.disabled = false; deploy.textContent = 'Deploy';
