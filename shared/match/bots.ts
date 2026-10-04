@@ -3,6 +3,7 @@ import { clamp, dirFromAngles, wrapAngle, type Vec3 } from '../math';
 import { MOVE, eyeHeight, stepMovement, type MoveInput } from '../movement';
 import { GRENADE, LOADOUTS, WEAPONS, type WeaponId } from '../weapons';
 import { eyeOf, feetOf, launchCharge, resolvePellets, resolveShot, spreadFor, throwGrenadeFrom, traceShot, weaponOf, type SimContext } from './combat';
+import { reactorPoint } from '../maps/index';
 import { findPath, nearestNode } from './nav';
 import type { BotBrain, MatchState, Soldier } from './state';
 
@@ -46,7 +47,7 @@ function chooseGoal(state: MatchState, ctx: SimContext, bot: Soldier, brain: Bot
     const def = ctx.map.points.find(d => d.id === p.id)!;
     const distance = Math.hypot(def.x - bot.m.x, def.z - bot.m.z);
     let score = (p.owner !== bot.team ? 1.1 : 0.25) + (p.contested ? 0.7 : 0) + (p.capturing !== -1 && p.capturing !== bot.team ? 0.9 : 0);
-    score += p.id === 'B' ? 0.25 : 0;
+    score += p.id === reactorPoint(ctx.map) ? 0.25 : 0;
     score -= distance / 140;
     // Spread the team out: discourage piling onto one point.
     const mates = state.soldiers.filter(s => s.bot && s.team === bot.team && s.id !== bot.id && s.brain?.goal === p.id).length;

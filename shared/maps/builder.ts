@@ -33,6 +33,8 @@ export interface BuilderOptions {
   sun: { x: number; y: number; z: number };
   /** Hand-authored base ground; replaces the mirrored noise and boundary ridges. */
   ground?: (x: number, z: number) => number;
+  /** Point holding the reactor (see MapDef.reactor); defaults to B. */
+  reactor?: PointId;
   /** Soldiers per team the layout is built for (see MapDef.teamSize). */
   teamSize?: number;
 }
@@ -256,7 +258,7 @@ export class MapBuilder {
     const o = this.o;
     // The anomaly field is centred on the reactor core (5 m above its base).
     const reactor = this.decor.find(d => d.kind === 'reactor') as { x: number; y: number; z: number } | undefined;
-    const point = this.points.find(p => p.id === 'B')!;
+    const point = this.points.find(p => p.id === (o.reactor ?? 'B'))!;
     const anomaly = reactor ?? { x: point.x, y: point.y, z: point.z };
     return {
       id: o.id, name: o.name, region: o.region, description: o.description, theme: o.theme,
@@ -264,6 +266,7 @@ export class MapBuilder {
       terrain: this.terrain, solids: this.solids, ramps: this.ramps, points: this.points, spawns: this.spawns,
       anomaly: { x: anomaly.x, y: anomaly.y + 5, z: anomaly.z }, decor: this.decor, laws: o.laws, sun: o.sun,
       ...(o.teamSize ? { teamSize: o.teamSize } : {}),
+      ...(o.reactor ? { reactor: o.reactor } : {}),
     };
   }
 }

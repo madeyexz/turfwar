@@ -19,7 +19,8 @@ export type BlockStyle =
   | 'glass'
   | 'invisible';
 
-export type PointId = 'A' | 'B' | 'C';
+/** Three points on the smaller maps; Conquest-style battlefields use up to five. */
+export type PointId = 'A' | 'B' | 'C' | 'D' | 'E';
 
 export interface CapturePointDef { id: PointId; name: string; x: number; y: number; z: number; radius: number }
 /** A spawn slot. With `point`, it is a forward spawn: open only while its team holds that point. */
@@ -58,6 +59,8 @@ export interface MapDef {
   laws: Laws;
   /** Sun direction and environment tint used by the renderer. */
   sun: Vec3;
+  /** The point with the reactor and its orbiting sentinels (defaults to B). */
+  reactor?: PointId;
   /** Soldiers per team this battlefield is built for (bots fill the gap); defaults to the mode's size. */
   teamSize?: number;
 }

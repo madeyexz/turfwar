@@ -1,7 +1,7 @@
 import * as THREE from 'three';
 import { hitShape, raycastSoldier } from '../../shared/hitbox';
 import { parseLawCommand, type LawCommand } from '../../shared/laws';
-import { loadMap } from '../../shared/maps/index';
+import { loadMap, reactorPoint } from '../../shared/maps/index';
 import { raySphere, type Vec3 } from '../../shared/math';
 import type { MatchEvent, MatchState, Soldier } from '../../shared/match/state';
 import { LOADOUTS, pelletCone, pelletDirs, type HitZone, type LoadoutId } from '../../shared/weapons';
@@ -228,7 +228,7 @@ export class Game {
     this.bodies.update(dt, renderTime, this.time);
     this.effects.update(dt);
     this.level.update(this.time);
-    const b = state.points.find(p => p.id === 'B');
+    const b = state.points.find(p => p.id === reactorPoint(this.map.def));
     if (this.level.reactor) { this.level.reactor.owner = b?.owner ?? -1; this.level.reactor.update(this.time); }
 
     // ---- Camera ----

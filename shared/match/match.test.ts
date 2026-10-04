@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { defaultLaws } from '../laws';
-import { MAP_IDS, loadMap, loadNav } from '../maps/index';
+import { MAP_IDS, loadMap, loadNav, reactorPoint } from '../maps/index';
 import { rng, wrapAngle } from '../math';
 import { CollisionWorld } from '../collision';
 import { createMoveState, eyeHeight, stepMovement } from '../movement';
@@ -28,7 +28,10 @@ describe('maps and navigation', () => {
   for (const id of MAP_IDS) {
     it(`${id}: every capture point is reachable from both spawns`, () => {
       const { def } = loadMap(id); const nav = loadNav(id);
-      expect(def.points.map(p => p.id).sort()).toEqual(['A', 'B', 'C']);
+      const ids = def.points.map(p => p.id).sort();
+      expect(ids).toEqual(['A', 'B', 'C', 'D', 'E'].slice(0, ids.length));
+      expect([3, 5]).toContain(ids.length);
+      expect(ids).toContain(reactorPoint(def));
       for (const team of [0, 1]) {
         const sp = def.spawns.find(s => s.team === team)!;
         const start = nearestNode(nav, sp.x, sp.y, sp.z);
@@ -42,10 +45,10 @@ describe('maps and navigation', () => {
       const all = new Set(def.solids.map(key));
       for (const s of def.solids) expect(all.has(key({ minX: -s.maxX, maxX: -s.minX, minZ: -s.maxZ, maxZ: -s.minZ, minY: s.minY, maxY: s.maxY }))).toBe(true);
     });
-    it(`${id}: spawns are not inside geometry and the reactor floats over B`, () => {
+    it(`${id}: spawns are not inside geometry and the reactor floats over its point`, () => {
       const { def, world } = loadMap(id);
       for (const sp of def.spawns) expect(world.overlapsSolid({ x: sp.x, y: sp.y, z: sp.z }, 0.35, 1.7)).toBe(false);
-      const b = def.points.find(p => p.id === 'B')!;
+      const b = def.points.find(p => p.id === reactorPoint(def))!;
       expect(Math.hypot(def.anomaly.x - b.x, def.anomaly.z - b.z)).toBeLessThan(0.5);
       expect(def.anomaly.y - b.y).toBeGreaterThan(2);
     });

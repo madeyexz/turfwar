@@ -1,7 +1,7 @@
 import { chestPoint, hitShape } from '../hitbox';
 import { STEP_HEIGHT } from '../collision';
 import { parseLawCommand, type LawCommand, type Laws } from '../laws';
-import { loadMap, loadNav } from '../maps/index';
+import { loadMap, loadNav, reactorPoint } from '../maps/index';
 import type { MapDef } from '../maps/types';
 import { clamp, cloneData, dist3, normalize3, segmentPointDistance, type Vec3 } from '../math';
 import { MOVE, createMoveState } from '../movement';
@@ -36,13 +36,14 @@ export function createMatch(mapId: string, config: MatchConfig, random: () => nu
     soldiers: [], points: def.points.map(p => ({ id: p.id, progress: 0, owner: -1, contested: false, capturing: -1 })),
     bodies: [], nextId: 1, droneTimer: 0, winner: -1, config,
   };
-  seedAnomaly(state, def.anomaly, random);
+  seedAnomaly(state, def, random);
   return state;
 }
 
 /** Sentinel drones and shards in orbit around the reactor under the current law. */
-function seedAnomaly(state: MatchState, center: Vec3, random: () => number) {
-  for (let i = 0; i < DRONE.max; i++) spawnDrone(state, center, random, i / DRONE.max);
+function seedAnomaly(state: MatchState, map: MapDef, random: () => number) {
+  const center = map.anomaly;
+  for (let i = 0; i < DRONE.max; i++) spawnDrone(state, map, random, i / DRONE.max);
   for (let i = 0; i < 6; i++) {
     const angle = i * Math.PI * 2 / 6 + 0.3, r = 11 + (i % 2) * 1.5;
     const speed = circularSpeed(state.laws.gravity, r);
@@ -51,10 +52,11 @@ function seedAnomaly(state: MatchState, center: Vec3, random: () => number) {
   }
 }
 
-function spawnDrone(state: MatchState, center: Vec3, random: () => number, phase = random()) {
+function spawnDrone(state: MatchState, map: MapDef, random: () => number, phase = random()) {
+  const center = map.anomaly;
   const angle = phase * Math.PI * 2, r = 6 + random() * 2.6, tilt = 0.18 + random() * 0.2;
   const speed = circularSpeed(state.laws.gravity, r);
-  const owner = state.points.find(p => p.id === 'B')?.owner ?? -1;
+  const owner = state.points.find(p => p.id === reactorPoint(map))?.owner ?? -1;
   return spawnBody(state, 'drone',
     { x: center.x + Math.cos(angle) * r, y: center.y + Math.sin(angle) * r * Math.sin(tilt), z: center.z + Math.sin(angle) * r * Math.cos(tilt) },
     { x: -Math.sin(angle) * speed, y: Math.cos(angle) * speed * Math.sin(tilt), z: Math.cos(angle) * speed * Math.cos(tilt) },
@@ -273,7 +275,7 @@ export function applyLaw(state: MatchState, ctx: SimContext, id: number, raw: un
   if (state.config.lawCooldown > 0) {
     if (!s) return { ok: false, message: 'Only deployed lawbreakers can rewrite laws.' };
     if (s.lawCooldown > 0) return { ok: false, message: `Law engine recharging: ${Math.ceil(s.lawCooldown)}s.` };
-    const holdsReactor = state.points.find(p => p.id === 'B')?.owner === s.team;
+    const holdsReactor = state.points.find(p => p.id === reactorPoint(ctx.map))?.owner === s.team;
     s.lawCooldown = state.config.lawCooldown * (holdsReactor ? 0.5 : 1);
   }
   let message: string;
@@ -315,7 +317,7 @@ export function resetMatch(state: MatchState, ctx: SimContext) {
   state.points = ctx.map.points.map(p => ({ id: p.id, progress: 0, owner: -1, contested: false, capturing: -1 }));
   state.bodies = [];
   ctx.history.clear();
-  seedAnomaly(state, ctx.map.anomaly, ctx.random);
+  seedAnomaly(state, ctx.map, ctx.random);
   for (const s of state.soldiers) { s.kills = 0; s.deaths = 0; s.score = 0; s.captures = 0; s.lawCooldown = 0; spawnSoldier(state, ctx, s); }
   ctx.emit({ type: 'phase', phase: 'warmup', winner: -1 });
 }
@@ -461,7 +463,7 @@ function stepWorld(state: MatchState, ctx: SimContext, dtW: number) {
   const drones = state.bodies.filter(b => b.kind === 'drone').length;
   if (drones < DRONE.max && circularSpeed(state.laws.gravity, 7) > 0) {
     state.droneTimer -= dtW;
-    if (state.droneTimer <= 0) { spawnDrone(state, center, ctx.random); state.droneTimer = DRONE.respawn; }
+    if (state.droneTimer <= 0) { spawnDrone(state, ctx.map, ctx.random); state.droneTimer = DRONE.respawn; }
   } else state.droneTimer = DRONE.respawn;
 }
 
@@ -518,7 +520,7 @@ function updatePoints(state: MatchState, ctx: SimContext, dtW: number) {
       for (const s of state.soldiers) {
         if (s.alive && s.team === team && Math.hypot(s.m.x - def.x, s.m.z - def.z) <= def.radius) { s.score += 150; s.captures++; }
       }
-      if (p.id === 'B') for (const b of state.bodies) if (b.kind === 'drone') b.team = team;
+      if (p.id === reactorPoint(ctx.map)) for (const b of state.bodies) if (b.kind === 'drone') b.team = team;
       ctx.emit({ type: 'capture', point: p.id, team });
     }
   }
