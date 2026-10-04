@@ -9,8 +9,8 @@ import { LOADOUTS, type LoadoutId, type WeaponId } from '../../shared/weapons';
 
 /** Grip/foregrip/muzzle points per weapon model (native space: barrel along -X). */
 const GUN_POINTS: Record<WeaponId, { model: string; grip: THREE.Vector3; fore: THREE.Vector3; muzzle: THREE.Vector3; pistol: boolean }> = {
-  carbine: { model: 'Gun_Rifle', grip: new THREE.Vector3(0.02, -0.04, 0), fore: new THREE.Vector3(-0.37, 0.0, 0), muzzle: new THREE.Vector3(-0.76, 0.121, 0), pistol: false },
-  lancer: { model: 'Gun_Sniper', grip: new THREE.Vector3(0.044, -0.048, 0), fore: new THREE.Vector3(-0.47, 0.012, 0), muzzle: new THREE.Vector3(-1.28, 0.077, 0), pistol: false },
+  carbine: { model: 'Gun_Rifle', grip: new THREE.Vector3(0.02, -0.04, 0), fore: new THREE.Vector3(-0.3, 0.0, 0), muzzle: new THREE.Vector3(-0.76, 0.121, 0), pistol: false },
+  lancer: { model: 'Gun_Sniper', grip: new THREE.Vector3(0.044, -0.048, 0), fore: new THREE.Vector3(-0.36, 0.012, 0), muzzle: new THREE.Vector3(-1.28, 0.077, 0), pistol: false },
   sidearm: { model: 'Gun_Pistol', grip: new THREE.Vector3(0.02, -0.024, 0), fore: new THREE.Vector3(0.01, -0.05, 0.02), muzzle: new THREE.Vector3(-0.37, 0.11, 0), pistol: true },
   magnum: { model: 'Gun_Revolver', grip: new THREE.Vector3(0.011, -0.024, 0), fore: new THREE.Vector3(0.0, -0.05, 0.02), muzzle: new THREE.Vector3(-0.45, 0.081, 0), pistol: true },
 };
@@ -141,6 +141,8 @@ export class SoldierView {
   readonly flash: THREE.Mesh;
   flashLeft = 0;
   private bindPose: Map<string, THREE.Quaternion>;
+  /** Dev inspection of IK targets. */
+  debug?: { chest: THREE.Vector3; grip: THREE.Vector3; fore: THREE.Vector3 };
 
   constructor(assets: Assets, readonly team: number, loadout: LoadoutId) {
     armorKit ??= buildArmor(assets);
@@ -250,6 +252,13 @@ export class SoldierView {
     rotateWorld(spine2, up, this.legYaw * 0.4);
     const right = v3.set(Math.cos(p.yaw), 0, -Math.sin(p.yaw));
     const pitch = p.pitch;
+    // Bladed shooting stance: torso turns so the support shoulder leads; head stays on target.
+    const pistol = GUN_POINTS[p.weapon].pistol;
+    const blade = p.sprint ? 0 : pistol ? -0.15 : -0.5;
+    rotateWorld(spine2, up, blade * 0.5);
+    rotateWorld(spine3, up, blade * 0.5);
+    rotateWorld(this.bones.get('neck_01')!, up, -blade * 0.6);
+    rotateWorld(this.bones.get('Head')!, up, -blade * 0.4);
     rotateWorld(spine2, right, pitch * 0.35);
     rotateWorld(spine3, right, pitch * 0.35);
     this.flinch = Math.max(0, this.flinch - dt * 5);
@@ -272,9 +281,9 @@ export class SoldierView {
     const gunUp = new THREE.Vector3().crossVectors(right, fwd).normalize();
     const lowReady = p.sprint ? 1 : 0;
     const gripPos = chest.clone()
-      .addScaledVector(right, points.pistol ? 0.02 : 0.13)
-      .addScaledVector(gunUp, points.pistol ? 0.05 : -0.04 - lowReady * 0.12)
-      .addScaledVector(fwd, (points.pistol ? 0.42 : 0.3) - this.recoil * 0.06 - lowReady * 0.1);
+      .addScaledVector(right, points.pistol ? 0.04 : 0.12)
+      .addScaledVector(gunUp, points.pistol ? 0.08 : 0.0 - lowReady * 0.12)
+      .addScaledVector(fwd, (points.pistol ? 0.44 : 0.3) - this.recoil * 0.06 - lowReady * 0.1);
     // Gun basis: barrel (-X model) along fwd, +Y up.
     const basis = new THREE.Matrix4().makeBasis(fwd.clone().negate(), gunUp, new THREE.Vector3().crossVectors(fwd.clone().negate(), gunUp));
     q1.setFromRotationMatrix(basis);
@@ -289,7 +298,8 @@ export class SoldierView {
       const t = Math.sin(Math.min(1, p.reloading) * Math.PI);
       foreWorld = foreWorld.lerp(chest.clone().addScaledVector(gunUp, -0.25).addScaledVector(right, -0.05), t * 0.8);
     }
-    const pole = (sign: number) => chest.clone().addScaledVector(right, sign * 0.6).addScaledVector(up, -0.8).addScaledVector(fwd, -0.3);
+    const pole = (sign: number) => chest.clone().addScaledVector(right, sign * 0.7).addScaledVector(up, -0.9).addScaledVector(fwd, sign > 0 ? -0.3 : 0.1);
+    this.debug = { chest: chest.clone(), grip: gripWorld.clone(), fore: foreWorld.clone() };
     solveArm(this.bones, 'r', gripWorld, pole(1));
     solveArm(this.bones, 'l', foreWorld, pole(-1));
     orientHand(this.bones, 'r', fwd.clone().addScaledVector(gunUp, -0.8).normalize(), right.clone().negate());

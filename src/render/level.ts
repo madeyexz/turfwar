@@ -25,13 +25,15 @@ export class LevelView {
       steel: surfaceMaterial(assets, 'concrete', { color: 0xb9c2c8, metalness: 0.12, roughness: 0.85, normalScale: 0.6 }),
       steelDark: surfaceMaterial(assets, 'metalplate', { color: 0x6c757c, metalness: 0.35, normalScale: 0.6 }),
       floor: surfaceMaterial(assets, 'metalplate', { color: 0xb3b9be, metalness: 0.3 }),
-      concrete: surfaceMaterial(assets, 'concrete', { color: 0xcfc6b8, normalScale: 0.9 }),
+      concrete: trimMaterial(assets, 'T_Trim_03_BaseColor', 0xd8d2c8),
       container: surfaceMaterial(assets, 'container', { metalness: 0.3, roughness: 0.75 }),
       rock: surfaceMaterial(assets, theme.rock, { color: theme.rockTint.getHex(), normalScale: 1.2 }),
       hazard: new THREE.MeshStandardMaterial({ map: hazardTexture(), roughness: 0.6, metalness: 0.2 }),
       glow: new THREE.MeshStandardMaterial({ color: 0x0a1416, emissive: 0x7ff6ff, emissiveIntensity: 2.4 }),
       glowWarm: new THREE.MeshStandardMaterial({ color: 0x160e06, emissive: 0xffb45a, emissiveIntensity: 2.2 }),
       glass: new THREE.MeshStandardMaterial({ color: 0x6fa8c8, roughness: 0.05, metalness: 0.9, transparent: true, opacity: 0.35 }),
+      panel: trimMaterial(assets, 'T_Trim_02_BaseColor', 0xd4dade),
+      panelDark: trimMaterial(assets, 'T_Trim_01_BaseColor', 0xa8b0b6),
     };
     this.buildTerrain();
     map.decor.forEach(d => {
@@ -166,25 +168,30 @@ export class LevelView {
       case 'glass': this.add('glass', boxGeo(cx, cy, cz, w, h, d)); return;
       case 'invisible': return;
       default: {
-        // Armored wall: plated body, concrete foot, dark cap, pilasters and light strips.
+        // Armored wall: trim-sheet panelling (CC0 MegaKit textures), concrete foot, cap band,
+        // pilasters and accent light strips.
         const dark = style === 'wallDark';
-        const g = boxGeo(cx, cy, cz, w, h, d, Math.min(0.05, w / 8, d / 8), 3);
-        shade(g, s.minY, h, 0.62);
-        this.add(dark ? 'steelDark' : 'steel', g);
         const long = Math.max(w, d), alongX = w >= d;
         if (h > 1.6) {
-          this.add('concrete', boxGeo(cx, s.minY + 0.25, cz, w + 0.12, 0.5, d + 0.12, 0.04, 3));
-          this.add('steelDark', boxGeo(cx, s.maxY - 0.12, cz, w + 0.1, 0.24, d + 0.1));
-          const count = Math.floor(long / 3.2);
+          const foot = 0.45, cap = Math.min(0.75, h * 0.2);
+          this.add('concrete', boxGeo(cx, s.minY + foot / 2, cz, w + 0.12, foot, d + 0.12, 0.04, 3));
+          const body = facadeBox(cx, s.minY + foot, cz, w, h - foot - cap, d, dark ? [0.5, 0.93] : [0.25, 0.6], dark ? 5 : 4);
+          shade(body, s.minY, h, 0.7);
+          this.add(dark ? 'panelDark' : 'panel', body);
+          this.add(dark ? 'panelDark' : 'panel', facadeBox(cx, s.maxY - cap, cz, w + 0.06, cap, d + 0.06, dark ? [0.35, 0.48] : [0.06, 0.24], 4));
+          const count = Math.floor(long / 4);
           for (let i = 1; i < count; i++) {
             const t = -long / 2 + i * long / count;
             const px = alongX ? cx + t : cx, pz = alongX ? cz : cz + t;
-            this.add('steelDark', boxGeo(px, cy, pz, alongX ? 0.32 : w + 0.12, h - 0.1, alongX ? d + 0.12 : 0.32));
+            this.add('steelDark', boxGeo(px, cy, pz, alongX ? 0.3 : w + 0.14, h - 0.05, alongX ? d + 0.14 : 0.3));
           }
-          if (h > 3 && long > 4 && r() < 0.7) {
-            this.add(r() < 0.5 ? 'glow' : 'glowWarm', boxGeo(cx, s.minY + h * 0.72, cz, alongX ? long * 0.6 : w + 0.14, 0.07, alongX ? d + 0.14 : long * 0.6));
+          if (h > 3 && long > 4 && r() < 0.75) {
+            this.add(r() < 0.5 ? 'glow' : 'glowWarm', boxGeo(cx, s.maxY - cap - 0.12, cz, alongX ? long * 0.7 : w + 0.1, 0.06, alongX ? d + 0.1 : long * 0.7));
           }
         } else {
+          const body = facadeBox(cx, s.minY, cz, w, h - 0.12, d, [0.06, 0.24], 4);
+          shade(body, s.minY, h, 0.7);
+          this.add(dark ? 'panelDark' : 'panel', body);
           this.add('steelDark', boxGeo(cx, s.maxY - 0.06, cz, w + 0.08, 0.12, d + 0.08));
         }
       }
@@ -380,6 +387,44 @@ function boxGeo(cx: number, cy: number, cz: number, w: number, h: number, d: num
   g.translate(cx, cy, cz);
   worldUV(g, uvScale);
   return g;
+}
+
+/**
+ * Box whose side faces map a horizontal band [v0, v1] of a trim sheet over their height and
+ * repeat it every `period` metres; caps map to a flat spot of the sheet.
+ */
+function facadeBox(cx: number, y0: number, cz: number, w: number, h: number, d: number, band: [number, number], period: number) {
+  const g = new THREE.BoxGeometry(w, h, d);
+  g.translate(cx, y0 + h / 2, cz);
+  const p = g.getAttribute('position') as THREE.BufferAttribute, n = g.getAttribute('normal') as THREE.BufferAttribute;
+  const uv = g.getAttribute('uv') as THREE.BufferAttribute;
+  for (let i = 0; i < p.count; i++) {
+    const nx = n.getX(i), ny = n.getY(i);
+    if (Math.abs(ny) > 0.5) { uv.setXY(i, 0.12 + (p.getX(i) / period) * 0.02, 0.4); continue; }
+    const along = Math.abs(nx) > 0.5 ? p.getZ(i) : p.getX(i);
+    const f = (p.getY(i) - y0) / h;
+    uv.setXY(i, along / period, band[0] + (1 - f) * (band[1] - band[0]));
+  }
+  return g;
+}
+
+/** Clone a CC0 kit trim-sheet material for procedural architecture. */
+function trimMaterial(assets: Assets, image: string, tint: number) {
+  let found: THREE.MeshStandardMaterial | undefined;
+  assets.props.forEach(root => root.traverse(o => {
+    const m = (o as THREE.Mesh).material as THREE.MeshStandardMaterial | undefined;
+    if (!found && m?.map?.name === image) found = m;
+  }));
+  const material = (found?.clone() ?? new THREE.MeshStandardMaterial()) as THREE.MeshStandardMaterial;
+  for (const t of [material.map, material.normalMap, material.roughnessMap, material.metalnessMap, material.aoMap]) {
+    if (t) { t.wrapS = THREE.RepeatWrapping; t.needsUpdate = true; }
+  }
+  material.color = new THREE.Color(tint);
+  material.vertexColors = true;
+  // The kit's ORM metalness reads as near-black outdoors without local reflections.
+  material.metalnessMap = null; material.metalness = 0.2;
+  if (!found) console.warn('trim material missing', image);
+  return material;
 }
 
 /** World-space box projection so textures keep a constant texel density. */

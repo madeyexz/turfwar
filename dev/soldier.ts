@@ -25,6 +25,7 @@ const [cx, cy, cz] = (params.get('cam') ?? '0,1.6,-7.5').split(',').map(Number);
 const [lx, ly, lz] = (params.get('look') ?? '0,1,0').split(',').map(Number);
 r.camera.position.set(cx, cy, cz); r.camera.lookAt(lx, ly, lz);
 const only = params.get('only');
+const marks = ['#ff0', '#f0f', '#0ff', '#f00', '#0f0'].map(c => { const m = new THREE.Mesh(new THREE.SphereGeometry(0.025), new THREE.MeshBasicMaterial({ color: c, depthTest: false })); m.renderOrder = 99; r.scene.add(m); return m; });
 let t = 0, frames = 0;
 r.renderer.setAnimationLoop(() => {
   const dt = 1 / 60; t += dt;
@@ -35,6 +36,11 @@ r.renderer.setAnimationLoop(() => {
     if (visible) views[i].update(dt, { ...base, ...pose, x, yaw: Math.PI + facing });
     else views[i].gun.visible = false;
   });
+  const dv = views.find(v => v.root.visible && v.debug);
+  if (dv?.debug && params.has('marks')) {
+    marks[0].position.copy(dv.debug.chest); marks[1].position.copy(dv.debug.grip); marks[2].position.copy(dv.debug.fore);
+    dv.root.traverse(o => { if (o.name === 'hand_r') o.getWorldPosition(marks[3].position); if (o.name === 'hand_l') o.getWorldPosition(marks[4].position); });
+  } else marks.forEach(m => m.visible = false);
   r.render(t, new THREE.Vector3(), 300);
   if (++frames === 40) (window as any).__ready = 1;
 });

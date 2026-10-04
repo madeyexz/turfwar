@@ -91,8 +91,10 @@ describe('server-side validation', () => {
     const far = claimAt(a, b); far.point = { ...far.point, y: far.point.y + 4 };
     fireShot(state, ctx, a.id, far);
     expect(b.shield).toBe(50);
-    // Rate limit: an immediate second shot is refused.
+    // Rate limit: a short burst is tolerated (network jitter) but the fourth instant shot is refused.
     a.fireCooldown = 0;
+    expect(fireShot(state, ctx, a.id, claimAt(a, b))).toBe(true);
+    expect(fireShot(state, ctx, a.id, claimAt(a, b))).toBe(true);
     expect(fireShot(state, ctx, a.id, claimAt(a, b))).toBe(true);
     expect(fireShot(state, ctx, a.id, claimAt(a, b))).toBe(false);
     // Empty magazine.

@@ -256,7 +256,7 @@ export const tick = spacetimedb.reducer({ onSchedule: tickTable }, { arg: tickTa
     tickMatch(state, sim, dt);
     // Drop lawbreakers whose clients vanished without a disconnect.
     for (const s of [...state.soldiers]) {
-      if (!s.bot && s.idle > 20) {
+      if (!s.bot && s.idle > 45) {
         for (const p of ctx.db.player.iter()) if (p.soldierId === s.id) ctx.db.player.identity.delete(p.identity);
         removeSoldier(state, sim, s.id); balanceTeams(state, sim);
       }

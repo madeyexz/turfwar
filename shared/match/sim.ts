@@ -161,7 +161,9 @@ export function fireShot(state: MatchState, ctx: SimContext, id: number, claim: 
   if (!s || s.bot || !s.alive || state.phase === 'ended') return false;
   if (claim.weapon !== s.weapon) switchWeapon(state, id, claim.weapon);
   const w = weaponOf(s);
-  if (s.reloadLeft > 0.12 || s.switchLeft > 0.12 || s.fireCooldown > w.interval * 0.35 || s.ammo[s.weapon] <= 0) return false;
+  // Token-bucket rate limit: network jitter can deliver a few shots at once, so allow a short
+  // burst while still capping the sustained rate at the weapon's fire rate.
+  if (s.reloadLeft > 0.12 || s.switchLeft > 0.12 || s.fireCooldown > w.interval * 2.2 || s.ammo[s.weapon] <= 0) return false;
   const values = [claim.origin.x, claim.origin.y, claim.origin.z, claim.dir.x, claim.dir.y, claim.dir.z, claim.point.x, claim.point.y, claim.point.z];
   if (!values.every(Number.isFinite)) return false;
   s.ammo[s.weapon]--;

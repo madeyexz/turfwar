@@ -54,6 +54,9 @@ export class OnlineLink implements GameLink {
   private lastPing = 0;
   private reportsInFlight = 0;
   private disconnected = false;
+  private rejoining = false;
+  /** Join parameters, kept so the client can rejoin if the server drops an idle soldier. */
+  joinArgs?: { name: string; loadout: string; team: number };
 
   constructor(private conn: DbConnection, private identity: Identity) {
     const bump = () => { this.dirty = true; };
@@ -80,6 +83,11 @@ export class OnlineLink implements GameLink {
     const points: PointState[] = [...db.point.iter()].map(p => ({ id: p.id as PointState['id'], progress: p.progress, owner: p.owner as -1 | Team, contested: p.contested, capturing: p.capturing as -1 | Team }));
     const mine = db.player.identity.find(this.identity);
     this.me = mine?.soldierId ?? -1;
+    if (this.me < 0 && this.joinArgs && !this.rejoining && !this.disconnected) {
+      // Backgrounded tabs stop reporting and get dropped as idle; rejoin transparently.
+      this.rejoining = true;
+      void this.conn.reducers.join(this.joinArgs).catch(() => undefined).finally(() => { setTimeout(() => { this.rejoining = false; }, 2000); });
+    }
     this.view = {
       mapId: match.mapId, phase: match.phase as MatchState['phase'], phaseLeft: match.phaseLeft, time: match.time, worldTime: match.worldTime,
       tick: match.tick, scores: [match.score0, match.score1], scoreTimer: match.scoreTimer, laws: JSON.parse(match.lawsJson), lawAuthor: match.lawAuthor,
@@ -121,7 +129,7 @@ export class OnlineLink implements GameLink {
       await this.conn.reducers.rewriteLaw({ commandJson: JSON.stringify(command), source, text });
       return { ok: true, message: '' };
     } catch (error) {
-      return { ok: false, message: String((error as Error).message ?? error).replace(/^.*?:\s*/, '') || 'The server rejected that law.' };
+      return { ok: false, message: String((error as Error)?.message ?? error) || 'The server rejected that law.' };
     }
   }
   dispose() {
@@ -150,7 +158,8 @@ export async function connectOnline(name: string, loadout: LoadoutId, team: Team
         connection.subscriptionBuilder()
           .onApplied(async () => {
             try {
-              await connection.reducers.join({ name, loadout, team: team ?? -1 });
+              link!.joinArgs = { name, loadout, team: team ?? -1 };
+              await connection.reducers.join(link!.joinArgs);
               const wait = () => {
                 if (link!.myId() >= 0) { clearTimeout(timer); resolve(link!); } else setTimeout(wait, 50);
               };
