@@ -66,7 +66,7 @@ naming who changed what.
 | C or Ctrl | Crouch (while sprinting: slide) |
 | R · Q / wheel · G | Reload · swap weapon · throw grenade |
 | `/` · `1` `2` `3` `4` | Sentence law editor · presets: cube gravity, motion time, slow light, rewind 5 s |
-| Tab · Esc | Scoreboard · release the mouse |
+| Tab · Esc | Scoreboard · release the mouse (pauses solo; click to resume, `M` for the deploy screen) |
 
 ## Multiplayer architecture
 
