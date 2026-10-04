@@ -4,7 +4,8 @@ import type { Team } from '../shared/match/state';
 import { LOADOUTS, type LoadoutId } from '../shared/weapons';
 import { loadAssets, type Assets } from './assets';
 import { Audio } from './audio';
-import { Game, settings } from './game/game';
+import { Game } from './game/game';
+import { settings } from './game/settings';
 import type { GameLink } from './game/link';
 import { OfflineLink } from './game/offline';
 import { Bench, BENCH_SECONDS, benchReport, type BenchResult } from './game/bench';
@@ -48,7 +49,7 @@ menu.innerHTML = `
     </div></div>
     <div class="field sliders">
       <label class="field"><span>Mouse sensitivity · <output id="sens-out"></output></span><input type="range" id="sens" min="0.2" max="3" step="0.05"></label>
-      <label class="field"><span>Field of view · <output id="fov-out"></output></span><input type="range" id="fov" min="60" max="95" step="1"></label>
+      <label class="field"><span>Field of view · <output id="fov-out"></output></span><input type="range" id="fov" min="65" max="95" step="1"></label>
     </div>
     <button class="deploy" id="deploy" disabled>Loading…</button>
     <div class="status" id="status"></div>
@@ -97,7 +98,7 @@ menu.querySelectorAll<HTMLButtonElement>('[data-quality]').forEach(b => b.addEve
 }));
 const sens = menu.querySelector<HTMLInputElement>('#sens')!, fov = menu.querySelector<HTMLInputElement>('#fov')!;
 settings.sensitivity = Math.max(0.2, Math.min(3, Number(store.get('sensitivity', '1')) || 1));
-settings.fov = Math.max(60, Math.min(95, Number(store.get('fov', '78')) || 78));
+settings.fov = Math.max(65, Math.min(95, Number(store.get('fov', '78')) || 78));
 sens.value = String(settings.sensitivity); fov.value = String(settings.fov);
 /** Vertical FOV (what three.js uses) with its 16:9 horizontal equivalent, which players usually quote. */
 const horizontal = (v: number) => Math.round(2 * Math.atan(Math.tan(v * Math.PI / 360) * 16 / 9) * 180 / Math.PI);
@@ -196,6 +197,7 @@ function showBenchResult(r: BenchResult) {
     if (a === 'menu') location.href = location.pathname;
   });
   app.appendChild(panel);
+  document.body.classList.add('bench-done');
   document.exitPointerLock?.();
 }
 
@@ -226,7 +228,7 @@ async function boot() {
     const interval = now - previous;
     const dt = fixed ? 1 / 30 : Math.max(0, Math.min(0.05, interval / 1000)); previous = now;
     const t0 = performance.now();
-    if (bench && game) bench.drive(dt);
+    if (bench && !bench.done && game) bench.drive(dt);
     step(dt, now);
     if (bench && !bench.done) {
       bench.record(interval, performance.now() - t0);

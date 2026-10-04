@@ -28,10 +28,10 @@ export const feetOf = (s: Soldier): Vec3 => ({ x: s.m.x, y: s.m.y, z: s.m.z });
 export const isHostile = (a: number, b: number) => a !== b || a === -1;
 
 /**
- * Distance budget for client-reported movement: refills at `speed` (a little above slide speed)
+ * Distance budget for client-reported movement: refills at `speed` (above slide speed, with room for slide-hops)
  * up to `max` metres: how far a burst of delayed reports may move at once (about 0.7 s of sprinting).
  */
-export const MOVE_SLACK = { speed: 13, max: 6 };
+export const MOVE_SLACK = { speed: 14, max: 6 };
 
 export function spawnSoldier(state: MatchState, ctx: SimContext, s: Soldier) {
   const options = ctx.map.spawns.filter(p => p.team === s.team);

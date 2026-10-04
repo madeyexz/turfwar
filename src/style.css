@@ -152,6 +152,7 @@ body.rewinding #hud::after { content: ''; position: fixed; inset: 0; background:
 
 /* Death & scoreboard */
 .released { position: absolute; left: 50%; top: 42%; transform: translate(-50%, -50%); padding: 14px 26px; text-align: center; display: flex; flex-direction: column; gap: 6px; }
+.bench-done .released { display: none; }
 .released b { font-size: 26px; letter-spacing: 0.16em; color: var(--accent); }
 .released span { color: var(--muted); font-weight: 600; letter-spacing: 0.08em; }
 .death { position: absolute; left: 50%; bottom: 18%; transform: translateX(-50%); padding: 14px 24px; text-align: center; min-width: 380px; pointer-events: auto; }

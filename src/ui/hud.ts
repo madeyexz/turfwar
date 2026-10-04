@@ -187,7 +187,7 @@ export class Hud {
       e.classList.toggle('contested', p2.contested);
     }
     const lab = state.config.practice && state.phase === 'live';
-    const t = Math.max(0, lab ? Math.floor(state.time) : Math.ceil(state.phaseLeft));
+    const t = Math.max(0, lab ? Math.floor(state.config.timeLimit - state.phaseLeft) : Math.ceil(state.phaseLeft));
     const clock = `${Math.floor(t / 60)}:${String(t % 60).padStart(2, '0')}`;
     this.set('timer', state.phase === 'warmup' ? `DEPLOYING <b>${clock}</b>` : state.phase === 'ended' ? `NEXT ROUND <b>${clock}</b>` : lab ? `<b>${clock}</b> · LAW LAB` : `<b>${clock}</b> · FIRST TO ${state.config.scoreLimit}`, 'html');
     // Capture status for the point I'm standing in.
@@ -210,10 +210,11 @@ export class Hud {
     // Vitals and weapon.
     if (me) {
       this.set('name', me.name); this.set('loadout', LOADOUTS[p.loadout].name);
-      this.set('shield', String(Math.ceil(me.shield))); this.set('health', String(Math.ceil(me.health)));
+      const health = Math.min(HEALTH.max, me.health);
+      this.set('shield', String(Math.ceil(me.shield))); this.set('health', String(Math.ceil(health)));
       this.set('shieldBar', `${me.shield / HEALTH.shield * 100}%`, 'width');
-      this.set('healthBar', `${me.health / HEALTH.max * 100}%`, 'width');
-      this.el.healthMeter.classList.toggle('low', me.health < 35);
+      this.set('healthBar', `${health / HEALTH.max * 100}%`, 'width');
+      this.el.healthMeter.classList.toggle('low', health < 35);
     }
     const w = p.weapon;
     this.set('weapon', `${w.name} · ${LOADOUTS[p.loadout].weapons.map(id => WEAPONS[id].short).join(' / ')}`);

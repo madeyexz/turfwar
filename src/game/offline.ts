@@ -17,7 +17,8 @@ export class OfflineLink implements GameLink {
   private me: number;
   private accumulator = 0;
   private ticks = 0;
-  private lastReport = performance.now();
+  /** Game time since the last report: the movement check runs on the same clock as the player. */
+  private sinceReport = 0;
 
   constructor(mapId: string, name: string, loadout: LoadoutId, team: Team | undefined, config: Partial<MatchConfig> = {}, practice = false) {
     const random = rng((Math.random() * 2 ** 31) | 0);
@@ -36,6 +37,7 @@ export class OfflineLink implements GameLink {
   status() { return this.practice ? 'LAW LAB · PRACTICE' : 'SOLO SKIRMISH'; }
 
   update(dt: number) {
+    this.sinceReport += dt;
     this.accumulator += Math.min(dt, 0.25);
     const step = 1 / TICK_RATE;
     while (this.accumulator >= step) {
@@ -46,9 +48,8 @@ export class OfflineLink implements GameLink {
   }
 
   report(r: ClientReport) {
-    const now = performance.now();
-    reportState(this.match, this.ctx, this.me, r, (now - this.lastReport) / 1000);
-    this.lastReport = now;
+    reportState(this.match, this.ctx, this.me, r, this.sinceReport);
+    this.sinceReport = 0;
   }
   fire(claim: ShotClaim) { fireShot(this.match, this.ctx, this.me, claim); }
   grenade(origin: Vec3, dir: Vec3) { throwGrenade(this.match, this.ctx, this.me, origin, dir); }

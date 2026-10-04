@@ -78,10 +78,13 @@ naming who changed what.
   scheduled `tick` reducer that runs bots, the lawful world, objectives, scoring, respawns, round
   resets and map rotation. With no humans connected the tick idles.
 - Clients send their own movement (`report`, 20 Hz) and shots (`fire`) with an optional claimed hit.
-  Movement spends a distance budget measured against server time (refills at 13 m/s, capped at
+  Movement spends a distance budget measured against server time (refills at 14 m/s, capped at
   6 m ≈ 0.7 s of sprinting), so reports that bunch up after a network stall pass but sending reports
-  faster never buys distance; rising more than a jump above the last floor or hovering for 2.5 s
-  drops the soldier back down; bounds, solid geometry and enemy shields are enforced. Each shot
+  faster never buys distance; rising higher above the last floor than a jump plus a ledge step-up,
+  or staying airborne for 2.5 s (longer than any fall on these maps), drops the soldier back down;
+  bounds, solid geometry and enemy shields are enforced. Tests drive the real movement controller
+  (sprints, slide-hops, jumps, a ledge step-up) through jittered, bunched delivery and expect zero
+  corrections. Each shot
   claim is checked for alive shooter, weapon, magazine, fire rate (a client's fire clock may run at
   most 250 ms ahead, so slow weapons get no instant follow-up), origin near the shooter, range, line
   of sight through static geometry, a claimed point within a speed-scaled tolerance of the target's
@@ -180,7 +183,7 @@ also has Low / Medium / High graphics presets (`?quality=` works too).
 - No full lag compensation or server-side rewind for hit validation; very high latency can make
   moving targets harder to hit or let claims fail validation.
 - Movement is client-reported (validated). A determined cheater could still play within the
-  limits the server allows (up to ~1.5× sprint speed sustained, short 6 m bursts, aim assistance).
+  limits the server allows (up to ~1.6× sprint speed sustained, short 6 m bursts, aim assistance).
 - One match per database; no lobbies, parties, persistent progression or matchmaking.
 - First-person and third-person animation is code-driven on CC0 clips; there are no authored
   rifle-specific reload/hit animations, and fingers are posed procedurally.

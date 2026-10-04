@@ -1,4 +1,5 @@
 import { chestPoint, hitShape } from '../hitbox';
+import { STEP_HEIGHT } from '../collision';
 import { parseLawCommand, type LawCommand, type Laws } from '../laws';
 import { loadMap, loadNav } from '../maps/index';
 import { clamp, cloneData, dist3, normalize3, segmentPointDistance, type Vec3 } from '../math';
@@ -120,13 +121,14 @@ export function reportState(state: MatchState, ctx: SimContext, id: number, r: C
   s.moveSlack = Math.min(MOVE_SLACK.max, s.moveSlack + MOVE_SLACK.speed * dt);
   const horizontal = Math.hypot(r.x - s.m.x, r.z - s.m.z);
   const rise = r.y - s.m.y;
-  const cost = horizontal + Math.max(0, rise);
-  // Airborne checks: rising higher than a jump from the last floor is flying, and a long airborne
-  // spell that is not falling is hovering. Either drops the soldier back to the floor.
+  const cost = Math.hypot(horizontal, Math.max(0, rise));
+  // Height checks: nothing lifts a lawbreaker higher above its last floor than a jump plus a
+  // step-up onto a ledge (margin for that floor being a report old), and no fall on these maps
+  // lasts 2.5 s, so a longer airborne spell is hovering. Either drops the soldier to the floor.
   const floor = ctx.world.groundHeight(r.x, r.z, r.y + 0.05, MOVE.radius);
   const airborne = r.y - floor > 0.35;
   const airTime = airborne ? s.m.airTime + dt : 0;
-  const flying = (rise > 0.02 && r.y > s.groundY + JUMP_APEX + 0.45) || (airTime > 2.5 && rise > -0.01);
+  const flying = (rise > 0.02 && r.y > s.groundY + JUMP_APEX + STEP_HEIGHT + 0.3) || airTime > 2.5;
   if (flying) {
     s.m.y = ctx.world.groundHeight(s.m.x, s.m.z, s.m.y + 0.05, MOVE.radius); s.m.vy = 0;
     s.m.airTime = 0; s.groundY = s.m.y;

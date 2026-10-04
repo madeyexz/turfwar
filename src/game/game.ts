@@ -22,12 +22,11 @@ import { LawBar } from '../ui/lawbar';
 import { Input } from './input';
 import type { GameLink } from './link';
 import { LocalPlayer } from './player';
+import { adsFov, settings } from './settings';
 
 type Sample = { x: number; y: number; z: number; vx: number; vy: number; vz: number; yaw: number; pitch: number; crouch: number };
 interface Remote { view: SoldierView; buffer: InterpBuffer<Sample>; pos: THREE.Vector3; crouch: number; yaw: number; stepDist: number; last?: THREE.Vector3; loadout: LoadoutId }
 
-/** Player settings shared by every Game instance (set from the deploy screen). */
-export const settings = { fov: 78, sensitivity: 1 };
 
 /** One deployed match: rendering, local prediction, effects, HUD and the link to the match host. */
 export class Game {
@@ -50,8 +49,8 @@ export class Game {
   private fpsTime = 0;
   private wasAlive = false;
   private corrections = 0;
-  /** Online: times of hit markers shown on a predicted hit, so the server's confirmation doesn't repeat them. */
-  private predictedHits: number[] = [];
+  /** Online: hit markers already shown for predicted hits, so the server's confirmations don't repeat them. */
+  private predictedHits: { at: number; target: number }[] = [];
   private lastLook = { x: 0, y: 0 };
   private deathCam = new THREE.Vector3();
   private lawChanged?: string;
@@ -225,7 +224,7 @@ export class Game {
       cam.rotation.set(this.player.pitch + this.player.punchPitch * 0.01, this.player.yaw + this.player.punchYaw, slideRoll, 'YXZ');
       const w = this.player.weapon;
       const base = settings.fov;
-      const targetFov = base + (w.adsFov - base) * this.player.ads + (this.player.sprinting ? 6 : 0) + (this.player.m.slideTime > 0 ? 4 : 0);
+      const targetFov = base + (adsFov(w) - base) * this.player.ads + (this.player.sprinting ? 6 : 0) + (this.player.m.slideTime > 0 ? 4 : 0);
       cam.fov += (targetFov - cam.fov) * Math.min(1, dt * 14);
       cam.updateProjectionMatrix();
       this.renderer.viewCamera.fov = 58 - this.player.ads * (w.id === 'lancer' ? 0 : 10);
@@ -316,13 +315,14 @@ export class Game {
     const end = new THREE.Vector3(point.x, point.y, point.z);
     if (Math.random() < (w.auto ? 0.5 : 1)) this.effects.tracer(muzzle, end, 0xffe2a0, w.id === 'lancer' ? 2.5 : 1);
     if (target >= 0) {
-      this.effects.hitSpark(end, (state.soldiers.find(s => s.id === target)?.shield ?? 0) > 0);
+      const victim = state.soldiers.find(s => s.id === target);
+      this.effects.hitSpark(end, (victim?.shield ?? 0) > 0);
       // Online, waiting a round trip for the marker feels laggy: show it now; the server's damage
-      // event (validated) is then absorbed instead of repeated.
-      if (this.link.mode === 'online') {
+      // event (validated) is then absorbed instead of repeated. Spawn-protected targets take no damage.
+      if (this.link.mode === 'online' && victim && victim.protectLeft <= 0) {
         this.hud.hit(zone === 'head' ? 'head' : 'body');
         this.audio.hitmarker(zone === 'head', false);
-        this.predictedHits.push(performance.now());
+        this.predictedHits.push({ at: performance.now(), target });
       }
     }
     else if (drone) this.effects.hitSpark(end, true);
@@ -347,8 +347,9 @@ export class Game {
       case 'damage': {
         if (e.attacker === myId && e.target !== myId) {
           const now = performance.now();
-          while (this.predictedHits.length && now - this.predictedHits[0] > 800) this.predictedHits.shift();
-          if (this.predictedHits.length && e.zone !== 'blast') this.predictedHits.shift();
+          this.predictedHits = this.predictedHits.filter(h => now - h.at < 1000);
+          const shown = e.zone === 'blast' ? -1 : this.predictedHits.findIndex(h => h.target === e.target);
+          if (shown >= 0) this.predictedHits.splice(shown, 1);
           else {
             this.hud.hit(e.zone === 'head' ? 'head' : 'body');
             this.audio.hitmarker(e.zone === 'head', false);

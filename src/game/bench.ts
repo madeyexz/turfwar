@@ -78,13 +78,15 @@ export class Bench {
 
   /** Steer the local player for this frame. Call before Game.frame. */
   drive(dt: number) {
+    if (this.done) return; // the player has the controls back
     const g = this.game, p = g.player, input = g.input, st = g.link.state();
     input.keys.clear(); input.fire = false; input.aim = false;
-    if (!st || this.done) return;
+    if (!st) return;
     const me = st.soldiers.find(s => s.id === g.link.myId());
     if (!me) return;
-    // The benchmark soldier cannot die (solo only), so the run never stalls on a death screen.
-    me.health = HEALTH.max; me.shield = HEALTH.shield;
+    // Topped up well past the maximum every frame (solo only; the HUD caps the display) so no
+    // single tick of damage can kill the benchmark soldier and stall the run on a death screen.
+    me.health = HEALTH.max * 4; me.shield = HEALTH.shield;
     if (!p.alive || st.phase === 'ended') return;
     const { def, world } = loadMap(g.mapId);
     if (!this.route.length) {

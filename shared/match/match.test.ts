@@ -2,7 +2,8 @@ import { describe, expect, it } from 'vitest';
 import { defaultLaws } from '../laws';
 import { MAP_IDS, loadMap, loadNav } from '../maps/index';
 import { rng } from '../math';
-import { eyeHeight } from '../movement';
+import { CollisionWorld } from '../collision';
+import { createMoveState, eyeHeight, stepMovement } from '../movement';
 import { hitShape } from '../hitbox';
 import { WEAPONS } from '../weapons';
 import { findPath, nearestNode } from './nav';
@@ -178,9 +179,57 @@ describe('server-side validation', () => {
     // Vertical: a stream of small rises cannot climb past a jump's height, nor hover there.
     const y0 = a.m.y;
     for (let i = 0; i < 50; i++) reportState(state, ctx, a.id, report(a, { y: a.m.y + 0.3 }), 0.05);
-    expect(a.m.y - y0).toBeLessThan(2);
+    expect(a.m.y - y0).toBeLessThan(2.4);
     for (let i = 0; i < 80; i++) reportState(state, ctx, a.id, report(a), 0.05);
     expect(a.m.y - y0).toBeLessThan(0.36);
+    // Nor can it pop up onto a roof in one report.
+    expect(reportState(state, ctx, a.id, report(a, { y: a.m.y + 4 }), 0.5)).toBe(false);
+  });
+
+  it('accepts a jump that steps up onto a ledge higher than the jump itself', () => {
+    const env = duel(), a = env.a;
+    const flat = { x0: -100, z0: -100, spacing: 4, n: 51, heights: new Float32Array(51 * 51) };
+    const bounds = { minX: -90, maxX: 90, minZ: -90, maxZ: 90 };
+    const world = new CollisionWorld([{ minX: 6, minY: 0, minZ: -2, maxX: 12, maxY: 1.7, maxZ: 2, surface: 'metal' }], [], flat, bounds);
+    const ctx = { ...env.ctx, world, map: { ...env.ctx.map, bounds } };
+    const m = createMoveState(0, 0, 0);
+    a.m = { ...m }; a.groundY = 0;
+    for (let i = 1; i <= 110; i++) {
+      stepMovement(world, m, { forward: 1, strafe: 0, yaw: -Math.PI / 2, jump: m.x > 3 && m.x < 3.3, crouch: false, sprint: true, ads: false }, 1 / 120, a.team);
+      if (i % 6 === 0) reportState(env.state, ctx, a.id, { x: m.x, y: m.y, z: m.z, vx: m.vx, vy: m.vy, vz: m.vz, yaw: 0, pitch: 0, crouch: 0, grounded: m.grounded, sprint: true, ads: false, weapon: 0 }, 0.05);
+    }
+    expect(m.y).toBeCloseTo(1.7, 2); // landed on top (1.2 m jump + step-up)
+    expect(a.corrections).toBe(0);
+    expect(a.m.y).toBeCloseTo(1.7, 2);
+  });
+
+  it('never corrects a legitimate run: sprinting, slide-hops and jumps over terrain, with network jitter', () => {
+    const { state, ctx, a } = duel();
+    const m = { ...a.m }, r = rng(3), dt = 1 / 120;
+    let t = 0, yaw = -Math.PI / 2, nextSend = 0.05, lastArrival = 0, jumps = 0, slides = 0;
+    const arrivals: { at: number; report: Parameters<typeof reportState>[3] }[] = [];
+    for (let i = 0; i < 120 * 14; i++) {
+      t += dt;
+      yaw += Math.sin(t * 0.6) * 0.006;
+      // Slide every ~2.3 s, hop out of it, and jump regularly in between.
+      const phase = t % 2.3;
+      const ev = stepMovement(ctx.world, m, { forward: 1, strafe: 0, yaw, jump: phase > 2.25 || t % 0.9 < 0.04, crouch: phase > 1.9 && phase < 2.2, sprint: true, ads: false }, dt, a.team);
+      if (ev.jumped) jumps++;
+      if (ev.slideStarted) slides++;
+      if (t >= nextSend) {
+        nextSend += 0.05;
+        // Latency 30–130 ms, plus an occasional 350 ms stall; a websocket keeps order, so stalled reports arrive bunched.
+        const latency = 0.03 + r() * 0.1 + (r() < 0.03 ? 0.35 : 0);
+        lastArrival = Math.max(lastArrival, t + latency);
+        arrivals.push({ at: lastArrival, report: { x: m.x, y: m.y, z: m.z, vx: m.vx, vy: m.vy, vz: m.vz, yaw, pitch: 0, crouch: m.crouch, grounded: m.grounded, sprint: true, ads: false, slide: m.slideTime > 0, weapon: 0 } });
+      }
+    }
+    let prev = 0;
+    for (const { at, report: rep } of arrivals) { reportState(state, ctx, a.id, rep, at - prev); prev = at; }
+    expect(Math.hypot(m.x - (-6), m.z - 22)).toBeGreaterThan(40);
+    expect(jumps).toBeGreaterThan(8);
+    expect(slides).toBeGreaterThan(2);
+    expect(a.corrections).toBe(0);
   });
 });
 

@@ -4,6 +4,7 @@ import { MOVE, createMoveState, eyeHeight, isSprinting, stepMovement, type MoveE
 import type { Soldier } from '../../shared/match/state';
 import { GRENADE, LOADOUTS, WEAPONS, type LoadoutId, type WeaponDef } from '../../shared/weapons';
 import type { Input } from './input';
+import { adsFov, settings } from './settings';
 
 const STEP = 1 / 120;
 const DEG = Math.PI / 180;
@@ -91,7 +92,7 @@ export class LocalPlayer {
     // ---- Look ----
     if (can) {
       const look = input!.consumeLook();
-      const zoom = this.weapon.adsFov / 78;
+      const zoom = adsFov(this.weapon) / settings.fov;
       const sens = this.sensitivity * input!.sensitivity * (1 - this.ads * (1 - zoom * 1.05));
       this.yaw -= look.x * sens;
       this.pitch = clamp(this.pitch - look.y * sens, -1.48, 1.48);
