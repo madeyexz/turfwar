@@ -150,7 +150,7 @@ export function nearestNode(nav: NavGraph, x: number, y: number, z: number) {
 }
 
 /** A* search returning node ids from start to goal (inclusive), or [] when unreachable. */
-export function findPath(nav: NavGraph, start: number, goal: number, maxExpand = 6000): number[] {
+export function findPath(nav: NavGraph, start: number, goal: number, maxExpand = Math.max(6000, nav.x.length)): number[] {
   if (start < 0 || goal < 0) return [];
   if (start === goal) return [start];
   const n = nav.x.length;
