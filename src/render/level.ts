@@ -29,6 +29,10 @@ export class LevelView {
       container: surfaceMaterial(assets, 'container', { metalness: 0.3, roughness: 0.75 }),
       rock: surfaceMaterial(assets, theme.rock, { color: theme.rockTint.getHex(), normalScale: 1.2 }),
       hazard: new THREE.MeshStandardMaterial({ map: hazardTexture(), roughness: 0.6, metalness: 0.2 }),
+      bark: new THREE.MeshStandardMaterial({ color: 0x4a3a2c, roughness: 0.95, vertexColors: true }),
+      leaves: new THREE.MeshStandardMaterial({ color: 0xffffff, roughness: 0.85, flatShading: true, vertexColors: true }),
+      crystal: new THREE.MeshStandardMaterial({ color: 0x1b3a52, emissive: 0x5fd6ff, emissiveIntensity: 0.9, roughness: 0.15, metalness: 0.3, flatShading: true, vertexColors: true }),
+      mast: new THREE.MeshStandardMaterial({ color: 0x5b636a, roughness: 0.6, metalness: 0.5, vertexColors: true }),
       glow: new THREE.MeshStandardMaterial({ color: 0x0a1416, emissive: 0x7ff6ff, emissiveIntensity: 2.4 }),
       glowWarm: new THREE.MeshStandardMaterial({ color: 0x160e06, emissive: 0xffb45a, emissiveIntensity: 2.2 }),
       glass: new THREE.MeshStandardMaterial({ color: 0x6fa8c8, roughness: 0.05, metalness: 0.9, transparent: true, opacity: 0.35 }),
@@ -45,6 +49,9 @@ export class LevelView {
         case 'rail': this.rail(d.x0, d.z0, d.x1, d.z1, d.y); break;
         case 'reactor': (this as { reactor?: ReactorView }).reactor = new ReactorView(d.x, d.y, d.z); this.group.add(this.reactor!.group); break;
         case 'spawnPad': this.spawnPad(d.team, d.x, d.y, d.z, d.rotY); break;
+        case 'tree': this.tree(d.x, d.y, d.z, d.scale, d.variant); break;
+        case 'crystal': this.crystal(d.x, d.y, d.z, d.scale, d.rotY); break;
+        case 'mast': this.mast(d.x, d.y, d.z, d.height); break;
         default: break;
       }
     });
@@ -304,6 +311,70 @@ export class LevelView {
     banner.position.set(x - Math.sin(rotY) * -4.6, y + 3.6, z - Math.cos(rotY) * -4.6);
     banner.rotation.y = rotY;
     this.group.add(banner);
+  }
+
+  // ---- Vegetation, crystals and masts ------------------------------------------------------
+  private tree(x: number, y: number, z: number, scale: number, variant: number) {
+    const r = rng(Math.round(x * 31 + z * 17) >>> 0);
+    const height = (variant === 1 ? 7.5 : 11) * scale;
+    const trunk = new THREE.CylinderGeometry(0.22 * scale, 0.42 * scale, height * 0.75, 7);
+    trunk.translate(x, y + height * 0.375 - 0.2, z);
+    worldUV(trunk, 2);
+    this.add('bark', trunk);
+    const greens = this.theme.id === 'snow' ? [0x3c5a4e, 0x4a6658] : [0x2f6b3a, 0x3e7d3a, 0x4b8a46, 0x2b5f45];
+    const colorize = (g: THREE.BufferGeometry, hex: number) => {
+      const n = g.getAttribute('position').count, c = new Float32Array(n * 3), col = new THREE.Color(hex);
+      for (let i = 0; i < n; i++) { const k = 0.8 + r() * 0.35; c.set([col.r * k, col.g * k, col.b * k], i * 3); }
+      g.setAttribute('color', new THREE.BufferAttribute(c, 3));
+      return g;
+    };
+    if (variant === 1) {
+      // Broad alien canopy: clustered lumpy crowns.
+      for (let i = 0; i < 4; i++) {
+        const crown = new THREE.IcosahedronGeometry((1.8 + r() * 1.2) * scale, 1);
+        crown.scale(1.2, 0.65, 1.2);
+        crown.translate(x + (r() - 0.5) * 2.6 * scale, y + height * (0.72 + r() * 0.2), z + (r() - 0.5) * 2.6 * scale);
+        this.add('leaves', colorize(crown.toNonIndexed(), greens[Math.floor(r() * greens.length)]));
+      }
+    } else {
+      // Tall conifer: stacked tiers that taper upward.
+      const tiers = variant === 2 ? 5 : 4;
+      for (let i = 0; i < tiers; i++) {
+        const t = i / tiers;
+        const cone = new THREE.ConeGeometry((2.6 - t * 1.9) * scale, (3.2 - t * 0.8) * scale, 8);
+        cone.rotateY(r() * 3);
+        cone.translate(x, y + height * (0.3 + t * 0.62), z);
+        this.add('leaves', colorize(cone.toNonIndexed(), greens[Math.floor(r() * greens.length)]));
+      }
+    }
+  }
+
+  private crystal(x: number, y: number, z: number, scale: number, rotY: number) {
+    const r = rng(Math.round(x * 13 + z * 7) >>> 0);
+    for (let i = 0; i < 5; i++) {
+      const h = (1.4 + r() * 1.8) * scale;
+      const shard = new THREE.CylinderGeometry(0, 0.32 * scale, h, 6);
+      shard.translate(0, h / 2, 0);
+      shard.rotateZ((r() - 0.5) * 0.9); shard.rotateX((r() - 0.5) * 0.9);
+      shard.rotateY(rotY + r() * 6);
+      shard.translate(x + (r() - 0.5) * 1.2 * scale, y - 0.1, z + (r() - 0.5) * 1.2 * scale);
+      this.add('crystal', shard.toNonIndexed());
+    }
+  }
+
+  private mast(x: number, y: number, z: number, height: number) {
+    for (const [dx, dz] of [[-0.35, -0.35], [0.35, -0.35], [-0.35, 0.35], [0.35, 0.35]]) this.add('mast', boxGeo(x + dx, y + height / 2, z + dz, 0.08, height, 0.08));
+    for (let h = 1.2; h < height; h += 1.4) {
+      this.add('mast', boxGeo(x, y + h, z - 0.35, 0.78, 0.05, 0.05));
+      this.add('mast', boxGeo(x, y + h, z + 0.35, 0.78, 0.05, 0.05));
+      this.add('mast', boxGeo(x - 0.35, y + h + 0.7, z, 0.05, 0.05, 0.78));
+      this.add('mast', boxGeo(x + 0.35, y + h + 0.7, z, 0.05, 0.05, 0.78));
+    }
+    this.add('mast', boxGeo(x, y + height + 1.2, z, 0.06, 2.4, 0.06));
+    const beacon = new THREE.Mesh(new THREE.SphereGeometry(0.14, 10, 8), new THREE.MeshBasicMaterial({ color: new THREE.Color(0xff3a2a).multiplyScalar(3) }));
+    beacon.position.set(x, y + height + 2.5, z);
+    this.group.add(beacon);
+    this.animated.push({ object: beacon, update: t => { beacon.visible = Math.sin(t * 3 + x) > -0.2; } });
   }
 
   // ---- Dressing --------------------------------------------------------------------------

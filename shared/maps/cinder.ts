@@ -56,15 +56,7 @@ export function cinderBasin(): MapDef {
 
   b.mirrored(() => {
     // ---- Warpgate spawn ----
-    const sy = b.ground(-72, 0);
-    b.box(-79, sy, 0, 1.2, 7, 24, 'wall');                  // rear wall
-    b.box(-73, sy, -12, 13, 7, 1.2, 'wall');                // side walls
-    b.box(-73, sy, 12, 13, 7, 1.2, 'wall');
-    b.box(-73, sy + 7, 0, 13, 0.5, 25, 'floor');            // canopy
-    b.box(-66.6, sy, 0, 0.3, 7, 22.8, 'shield', 'energy', b.team(0)); // team shield
-    for (const z of [-7, -2.5, 2.5, 7]) b.spawn(0, -75, sy, z, -Math.PI / 2);
-    b.raw({ kind: 'spawnPad', team: b.team(0), ...b.at(-74, 0), y: sy, rotY: b.rotation(-Math.PI / 2) });
-    b.light(-76, sy + 6, 0, b.mirroredSide ? 0xff5a4a : 0x58b6ff, 8, 20);
+    b.warpgate(-72, 0);
     // Spawn exits: cover just outside the shield.
     b.box(-60, b.ground(-60, -6), -6, 0.9, 1.3, 4, 'concrete');
     b.box(-60, b.ground(-60, 6), 6, 0.9, 1.3, 4, 'concrete');

@@ -107,16 +107,21 @@ async function start() {
   }
   if (backdrop) { renderer.scene.remove(backdrop.group); backdrop = undefined; }
   const linkMap = link.state()?.mapId ?? mapId;
-  game = new Game(assets, renderer, link, linkMap, audio, app);
+  launch(link, linkMap);
+  menu.hidden = true;
+  document.body.classList.remove('menu-open');
+  await game?.input.lock()?.catch?.(() => undefined);
+}
+
+function launch(link: GameLink, map: string) {
+  game = new Game(assets, renderer, link, map, audio, app);
+  game.onMapChange = next => { game?.stop(true); launch(link, next); };
   game.onExit = () => {
     game?.stop(); game = undefined;
     document.body.classList.add('menu-open'); menu.hidden = false;
     deploy.disabled = false; deploy.textContent = 'Deploy';
     showBackdrop();
   };
-  menu.hidden = true;
-  document.body.classList.remove('menu-open');
-  await game.input.lock()?.catch?.(() => undefined);
 }
 deploy.addEventListener('click', () => void start());
 document.addEventListener('keydown', e => {

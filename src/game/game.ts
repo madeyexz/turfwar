@@ -56,9 +56,13 @@ export class Game {
   private running = true;
   private myTeam = 0;
   onExit?: () => void;
+  /** Online servers rotate battlefields; the host page rebuilds the scene for the new map. */
+  onMapChange?: (mapId: string) => void;
+  readonly mapId: string;
 
   constructor(private assets: Assets, private renderer: Renderer, readonly link: GameLink, mapId: string, readonly audio: Audio, container: HTMLElement) {
     this.map = loadMap(mapId);
+    this.mapId = mapId;
     const def = this.map.def;
     const theme = THEMES[def.theme];
     renderer.setTheme(theme, def.sun);
@@ -88,9 +92,9 @@ export class Game {
     return result;
   }
 
-  stop() {
+  stop(keepLink = false) {
     this.running = false;
-    this.link.dispose();
+    if (!keepLink) this.link.dispose();
     this.hud.dispose();
     this.lawbar.root.remove();
     this.renderer.scene.remove(this.level.group, this.effects.group, this.bodies.group);
@@ -107,6 +111,7 @@ export class Game {
     link.update(dt);
     const state = link.state();
     if (!state) { this.renderer.render(this.time, new THREE.Vector3(), 300); return; }
+    if (state.mapId !== this.mapId && this.onMapChange) { this.onMapChange(state.mapId); return; }
     const myId = link.myId();
     const me = state.soldiers.find(s => s.id === myId);
     const active = this.input.locked && !this.lawbar.open;

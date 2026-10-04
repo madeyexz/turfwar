@@ -33,7 +33,9 @@ export type Decor =
   | { kind: 'reactor'; x: number; y: number; z: number }
   | { kind: 'spawnPad'; team: 0 | 1; x: number; y: number; z: number; rotY: number }
   | { kind: 'banner'; team: 0 | 1; x: number; y: number; z: number; rotY: number }
-  | { kind: 'scatter'; model: string; count: number; seed: number; minR: number; maxR: number; scale: [number, number] };
+  | { kind: 'tree'; x: number; y: number; z: number; scale: number; variant: number }
+  | { kind: 'crystal'; x: number; y: number; z: number; scale: number; rotY: number }
+  | { kind: 'mast'; x: number; y: number; z: number; height: number };
 
 export interface MapDef {
   id: string;

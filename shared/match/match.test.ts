@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { defaultLaws } from '../laws';
-import { loadMap, loadNav } from '../maps/index';
+import { MAP_IDS, loadMap, loadNav } from '../maps/index';
 import { rng } from '../math';
 import { eyeHeight } from '../movement';
 import { hitShape } from '../hitbox';
@@ -21,21 +21,31 @@ const place = (s: Soldier, x: number, z: number, ctx: SimContext, fromY = 50) =>
 const report = (s: Soldier, over: Partial<Parameters<typeof reportState>[3]> = {}) =>
   ({ x: s.m.x, y: s.m.y, z: s.m.z, vx: 0, vy: 0, vz: 0, yaw: s.yaw, pitch: 0, crouch: 0, grounded: true, sprint: false, ads: false, weapon: 0 as const, ...over });
 
-describe('map and navigation', () => {
-  it('every capture point is reachable from both spawns', () => {
-    const { def } = loadMap('cinder'); const nav = loadNav('cinder');
-    for (const team of [0, 1]) {
-      const sp = def.spawns.find(s => s.team === team)!;
-      const start = nearestNode(nav, sp.x, sp.y, sp.z);
-      for (const p of def.points) expect(findPath(nav, start, nearestNode(nav, p.x, p.y, p.z)).length, `${team}->${p.id}`).toBeGreaterThan(3);
-    }
-  });
-  it('is rotationally symmetric for fairness', () => {
-    const { def } = loadMap('cinder');
-    const key = (s: { minX: number; maxX: number; minZ: number; maxZ: number; minY: number; maxY: number }) => [s.minX, s.maxX, s.minZ, s.maxZ, s.minY, s.maxY].map(v => v.toFixed(2)).join();
-    const all = new Set(def.solids.map(key));
-    for (const s of def.solids) expect(all.has(key({ minX: -s.maxX, maxX: -s.minX, minZ: -s.maxZ, maxZ: -s.minZ, minY: s.minY, maxY: s.maxY }))).toBe(true);
-  });
+describe('maps and navigation', () => {
+  for (const id of MAP_IDS) {
+    it(`${id}: every capture point is reachable from both spawns`, () => {
+      const { def } = loadMap(id); const nav = loadNav(id);
+      expect(def.points.map(p => p.id).sort()).toEqual(['A', 'B', 'C']);
+      for (const team of [0, 1]) {
+        const sp = def.spawns.find(s => s.team === team)!;
+        const start = nearestNode(nav, sp.x, sp.y, sp.z);
+        for (const p of def.points) expect(findPath(nav, start, nearestNode(nav, p.x, p.y, p.z)).length, `${team}->${p.id}`).toBeGreaterThan(3);
+      }
+    });
+    it(`${id}: is rotationally symmetric for fairness`, () => {
+      const { def } = loadMap(id);
+      const key = (s: { minX: number; maxX: number; minZ: number; maxZ: number; minY: number; maxY: number }) => [s.minX, s.maxX, s.minZ, s.maxZ, s.minY, s.maxY].map(v => v.toFixed(2)).join();
+      const all = new Set(def.solids.map(key));
+      for (const s of def.solids) expect(all.has(key({ minX: -s.maxX, maxX: -s.minX, minZ: -s.maxZ, maxZ: -s.minZ, minY: s.minY, maxY: s.maxY }))).toBe(true);
+    });
+    it(`${id}: spawns are not inside geometry and the reactor floats over B`, () => {
+      const { def, world } = loadMap(id);
+      for (const sp of def.spawns) expect(world.overlapsSolid({ x: sp.x, y: sp.y, z: sp.z }, 0.35, 1.7)).toBe(false);
+      const b = def.points.find(p => p.id === 'B')!;
+      expect(Math.hypot(def.anomaly.x - b.x, def.anomaly.z - b.z)).toBeLessThan(0.5);
+      expect(def.anomaly.y - b.y).toBeGreaterThan(2);
+    });
+  }
 });
 
 describe('bot match', () => {

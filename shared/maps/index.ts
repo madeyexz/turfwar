@@ -1,11 +1,13 @@
 import { CollisionWorld } from '../collision';
 import { buildNav, type NavGraph } from '../match/nav';
 import { cinderBasin } from './cinder';
+import { frostlineReach } from './frostline';
+import { verdantDivide } from './verdant';
 import type { MapDef } from './types';
 
-export const MAP_IDS = ['cinder'] as const;
+export const MAP_IDS = ['cinder', 'frostline', 'verdant'] as const;
 export type MapId = (typeof MAP_IDS)[number];
-const factories: Record<string, () => MapDef> = { cinder: cinderBasin };
+const factories: Record<string, () => MapDef> = { cinder: cinderBasin, frostline: frostlineReach, verdant: verdantDivide };
 
 export interface LoadedMap { def: MapDef; world: CollisionWorld; nav?: NavGraph }
 const cache = new Map<string, LoadedMap>();

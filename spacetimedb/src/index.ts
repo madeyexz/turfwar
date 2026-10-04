@@ -1,10 +1,10 @@
 import { ScheduleAt } from 'spacetimedb';
 import { schema, table, t, SenderError, type ReducerCtx, type InferSchema } from 'spacetimedb/server';
 import { parseLawCommand } from '../../shared/laws';
-import { loadMap, loadNav } from '../../shared/maps/index';
+import { MAP_IDS, loadMap, loadNav } from '../../shared/maps/index';
 import type { SimContext } from '../../shared/match/combat';
 import {
-  addSoldier, applyLaw, balanceTeams, createMatch, fireShot, HISTORY_SECONDS, reload, removeSoldier, reportState,
+  addSoldier, applyLaw, balanceTeams, createMatch, fireShot, HISTORY_SECONDS, reload, removeSoldier, reportState, resetMatch,
   setLoadout, switchWeapon, throwGrenade, tickMatch, TICK_RATE,
 } from '../../shared/match/sim';
 import { ONLINE_CONFIG, type BotBrain, type MatchEvent, type MatchState, type PointState, type Soldier, type Team, type WorldSnapshot } from '../../shared/match/state';
@@ -137,7 +137,7 @@ function save(ctx: Ctx, loaded: Loaded, events: MatchEvent[]) {
   const { state, row } = loaded;
   const humans = state.soldiers.filter(s => !s.bot).length;
   ctx.db.match.id.update({
-    ...row, phase: state.phase, phaseLeft: state.phaseLeft, time: state.time, worldTime: state.worldTime, tick: state.tick >>> 0,
+    ...row, mapId: state.mapId, phase: state.phase, phaseLeft: state.phaseLeft, time: state.time, worldTime: state.worldTime, tick: state.tick >>> 0,
     score0: u(state.scores[0]), score1: u(state.scores[1]), scoreTimer: state.scoreTimer, lawsJson: JSON.stringify(state.laws),
     lawAuthor: state.lawAuthor, lawText: state.lawText.slice(0, 200), lawLeft: state.lawLeft, rewindLeft: u(state.rewindLeft),
     nextId: state.nextId, droneTimer: state.droneTimer, winner: state.winner, humans,
@@ -253,6 +253,14 @@ export const tick = spacetimedb.reducer({ onSchedule: tickTable }, { arg: tickTa
   // Nobody connected: freeze the battlefield instead of simulating bots for no one.
   if (row.humans === 0 || dt <= 0) return;
   withMatch(ctx, (state, sim) => {
+    if (state.phase === 'ended' && state.phaseLeft - dt <= 0) {
+      // Rotate battlefields between rounds; clients rebuild their scene when mapId changes.
+      const next = MAP_IDS[(MAP_IDS.indexOf(state.mapId as (typeof MAP_IDS)[number]) + 1) % MAP_IDS.length];
+      const { def, world } = loadMap(next);
+      state.mapId = next;
+      resetMatch(state, { ...sim, map: def, world, nav: loadNav(next) });
+      return;
+    }
     tickMatch(state, sim, dt);
     // Drop lawbreakers whose clients vanished without a disconnect.
     for (const s of [...state.soldiers]) {

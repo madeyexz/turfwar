@@ -21,7 +21,7 @@ export function fbm(x: number, z: number, seed: number, octaves = 4) {
 }
 const smooth = (t: number) => { const c = Math.max(0, Math.min(1, t)); return c * c * (3 - 2 * c); };
 
-interface Pad { x: number; z: number; w: number; d: number; h: number; blend: number }
+interface Pad { x: number; z: number; w: number; d: number; h: number; blend: number; order: number }
 interface Bump { x: number; z: number; r: number; h: number }
 
 export interface BuilderOptions {
@@ -52,10 +52,16 @@ export class MapBuilder {
 
   /** Run a placement block for the west half, then again rotated 180° for the east half. */
   mirrored(place: () => void) {
+    // Pads blend in order; give each mirrored pair the same rank so terrain stays symmetric.
+    const base = this.padRank;
     this.s = 1; place();
+    const after = this.padRank;
+    this.padRank = base;
     this.s = -1; place();
+    this.padRank = Math.max(after, this.padRank);
     this.s = 1;
   }
+  private padRank = 0;
   get mirroredSide() { return this.s < 0; }
   team(t: 0 | 1): 0 | 1 { return (this.s < 0 ? 1 - t : t) as 0 | 1; }
   private tx(x: number) { return x * this.s; }
@@ -64,7 +70,7 @@ export class MapBuilder {
 
   // ---- Terrain -------------------------------------------------------------------------
   pad(x: number, z: number, w: number, d: number, h: number, blend = 5) {
-    this.pads.push({ x: this.tx(x), z: this.tz(z), w, d, h, blend });
+    this.pads.push({ x: this.tx(x), z: this.tz(z), w, d, h, blend, order: this.padRank++ });
   }
   bump(x: number, z: number, r: number, h: number) { this.bumps.push({ x: this.tx(x), z: this.tz(z), r, h }); }
 
@@ -91,6 +97,7 @@ export class MapBuilder {
 
   buildTerrain(spacing = 2) {
     const o = this.o;
+    this.pads.sort((a, c) => a.order - c.order);
     const extent = Math.max(o.halfX, o.halfZ) + 70;
     const n = Math.ceil(extent * 2 / spacing) + 1;
     const heights = new Float32Array(n * n);
@@ -206,9 +213,45 @@ export class MapBuilder {
     }
   }
 
+  /** Team warpgate: walled spawn room whose energy shield only its own team can cross. */
+  warpgate(x: number, z: number) {
+    const sy = this.ground(x, z);
+    this.box(x - 7, sy, z, 1.2, 7, 24, 'wall');
+    this.box(x - 1, sy, z - 12, 13, 7, 1.2, 'wall');
+    this.box(x - 1, sy, z + 12, 13, 7, 1.2, 'wall');
+    this.box(x - 1, sy + 7, z, 13, 0.5, 25, 'floor');
+    this.box(x + 5.4, sy, z, 0.3, 7, 22.8, 'shield', 'energy', this.team(0));
+    for (const dz of [-7, -2.5, 2.5, 7]) this.spawn(0, x - 3, sy, z + dz, -Math.PI / 2);
+    this.raw({ kind: 'spawnPad', team: this.team(0), ...this.at(x - 2, z), y: sy, rotY: this.rotation(-Math.PI / 2) });
+    this.light(x - 4, sy + 6, z, this.mirroredSide ? 0xff5a4a : 0x58b6ff, 8, 20);
+    return sy;
+  }
+
+  /** Tree with a solid trunk (canopy is decorative). */
+  tree(x: number, z: number, scale = 1, variant = 0) {
+    const y = this.ground(x, z);
+    this.box(x, y, z, 0.6 * scale, 3.2 * scale, 0.6 * scale, 'invisible', 'rock');
+    this.decor.push({ kind: 'tree', x: this.tx(x), y, z: this.tz(z), scale, variant });
+  }
+
+  /** Glowing ice/anomaly crystal cluster with a solid core. */
+  crystal(x: number, z: number, scale = 1, rotY = 0) {
+    const y = this.ground(x, z);
+    this.box(x, y, z, 1.4 * scale, 2.4 * scale, 1.4 * scale, 'invisible', 'glass');
+    this.decor.push({ kind: 'crystal', x: this.tx(x), y, z: this.tz(z), scale, rotY: this.rot(rotY) });
+  }
+
+  /** Antenna mast landmark (decorative). */
+  mast(x: number, y: number, z: number, height: number) {
+    this.decor.push({ kind: 'mast', x: this.tx(x), y, z: this.tz(z), height });
+  }
+
   build(): MapDef {
     const o = this.o;
-    const anomaly = this.points.find(p => p.id === 'B')!;
+    // The anomaly field is centred on the reactor core (5 m above its base).
+    const reactor = this.decor.find(d => d.kind === 'reactor') as { x: number; y: number; z: number } | undefined;
+    const point = this.points.find(p => p.id === 'B')!;
+    const anomaly = reactor ?? { x: point.x, y: point.y, z: point.z };
     return {
       id: o.id, name: o.name, region: o.region, description: o.description, theme: o.theme,
       bounds: { minX: -o.halfX, maxX: o.halfX, minZ: -o.halfZ, maxZ: o.halfZ },

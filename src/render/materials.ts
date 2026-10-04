@@ -20,15 +20,15 @@ export const THEMES: Record<ThemeId, Theme> = {
     planet: new THREE.Color(0xd9a27a), exposure: 1.0,
   },
   snow: {
-    id: 'snow', ground: 'snow', rock: 'icerock', dirt: 'dirt',
-    groundTint: new THREE.Color(0.95, 0.98, 1.05), rockTint: new THREE.Color(0.62, 0.68, 0.78), dirtTint: new THREE.Color(0.7, 0.7, 0.74),
+    id: 'snow', ground: 'snow', rock: 'icerock', dirt: 'icerock',
+    groundTint: new THREE.Color(0.95, 0.98, 1.05), rockTint: new THREE.Color(0.5, 0.58, 0.7), dirtTint: new THREE.Color(0.72, 0.78, 0.86),
     skyTop: new THREE.Color(0x48688e), skyHorizon: new THREE.Color(0xc9d8e6), fog: new THREE.Color(0xbccbd9), fogDensity: 0.006,
     sunColor: new THREE.Color(0xe8f0ff), sunIntensity: 2.6, hemiSky: new THREE.Color(0xc8dcf0), hemiGround: new THREE.Color(0x7d8a99), hemiIntensity: 1.5,
     planet: new THREE.Color(0xb7c4e8), exposure: 0.92,
   },
   forest: {
     id: 'forest', ground: 'moss', rock: 'lichen', dirt: 'path',
-    groundTint: new THREE.Color(0.9, 1.02, 0.86), rockTint: new THREE.Color(0.8, 0.86, 0.82), dirtTint: new THREE.Color(0.95, 0.9, 0.8),
+    groundTint: new THREE.Color(0.72, 1.0, 0.55), rockTint: new THREE.Color(0.72, 0.8, 0.74), dirtTint: new THREE.Color(0.9, 0.84, 0.72),
     skyTop: new THREE.Color(0x2f6f86), skyHorizon: new THREE.Color(0xb9d6c9), fog: new THREE.Color(0x9fc0b4), fogDensity: 0.0055,
     sunColor: new THREE.Color(0xfff0d0), sunIntensity: 3.1, hemiSky: new THREE.Color(0xb8e0d8), hemiGround: new THREE.Color(0x4f5f3d), hemiIntensity: 1.35,
     planet: new THREE.Color(0x9fd6c6), exposure: 0.98,
