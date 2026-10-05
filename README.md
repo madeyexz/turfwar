@@ -96,6 +96,18 @@ homage to the classic two-site layout of CS:GO's Dust II, built from our own geo
 above a city; the street is fatal) and **Meridian District** (a large war-torn city quarter), each with
 bomb sites (two on Ochre Quarter and Meridian District, one elsewhere).
 
+**Taipei** is Ximending (西門町) taken 1:1 from the user's own browser game *臺北狂飆 / TAIPEI RUSH*
+(https://taipei-gta.vercel.app), used with its author's permission: the source's street plan,
+building volumes and collision boxes, shop and blade signs, rooftop billboards, the Ximen gateway,
+the walk-in cinema lobby and game arcade, the arcades (騎樓) of the blocks along Zhongxiao W. Rd, the
+median hedges, the Civic Blvd expressway and the Red House, around the spot where that game starts
+its player. Our game only overlays its bases (SWAT under the expressway, Militia on Zhongxiao W. Rd),
+the bomb sites (A Cinema Street, B the arcade), ammo crates and the playable bounds (about 200 × 250 m,
+Squad rooms). `tools/import-taipei.ts` regenerates `shared/maps/taipei-data.ts` from that game's built
+JavaScript; its header explains how. Approximations: the octagonal Red House is drawn as a round
+drum with a stepped roof, medians follow the junction gaps by rule, and the source's MRT exits,
+street furniture, traffic, pedestrians and generic facade signs are not carried over.
+
 Every map has ammo crates (one more stands in each base) and open team bases. Sabotage lists only the
 maps with bomb sites.
 
@@ -268,6 +280,10 @@ texture, sound and line of code here is original or CC0/OFL.
   cobblestone architecture of the BeGone maps): Poly Haven, CC0 1.0, fetched by `tools/fetch-textures.ts`; see
   `public/assets/tex/LICENSE.txt`.
 - Font: Rajdhani by Indian Type Foundry, SIL Open Font License 1.1 (`public/fonts/OFL.txt`).
+- Taipei map layout: the Ximending quarter of *臺北狂飆 / TAIPEI RUSH* (https://taipei-gta.vercel.app)
+  — its streets, buildings, signs and landmarks — used with the author's permission and extracted by
+  `tools/import-taipei.ts` into `shared/maps/taipei-data.ts`. Its shop names are that game's own parody
+  brands. Facade windows, shopfronts and sign artwork are drawn procedurally in `src/render/level.ts`.
 - Sky, terrain, architecture, effects and the remaining audio (knife, casings, footsteps,
   explosions, heartbeat, bomb, round and cash cues, UI, and the fallback weapon voices used before
   the recordings load) are procedural.
@@ -342,12 +358,13 @@ shared/        Pure TypeScript shared by browser, tests and the SpacetimeDB modu
   world.ts       Grenades under gravity
   maps/          Builder + BeGone's six maps (Crane, Tower, Warehouse, Pipeline, Courtyard,
                  Timbertown) and eight originals (Cinder, Frostline, Verdant, Ochre, Citadel,
-                 Railyard, Skyline, Meridian) with ladders, bomb sites and ammo crates
+                 Railyard, Skyline, Meridian), plus Taipei (taipei-data.ts, generated from 臺北狂飆),
+                 with ladders, bomb sites and ammo crates
   match/         State, rounds and bomb, combat validation, economy, bots, navigation, packed frame
 src/           Browser client: lobby, game loop, prediction, rendering, view model, soldiers, HUD, store, audio, net
 spacetimedb/   SpacetimeDB module (tables, scheduled tick, validated reducers)
 scripts/       Local load test and simulation benchmark
-tools/         Reproducible CC0 asset import, sound and texture fetch scripts
+tools/         Reproducible CC0 asset import, sound and texture fetch scripts, and the Taipei map import
 dev/           Development preview pages
 ```
 

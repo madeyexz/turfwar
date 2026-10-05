@@ -1,8 +1,11 @@
 import type { Heightfield, Ladder, Ramp, Solid } from '../collision';
 import type { Vec3 } from '../math';
 
-/** Dusk (low sun), twilight (blue hour), steppe (dry midday) and meadow light the BeGone maps under Earth skies. */
-export type ThemeId = 'desert' | 'snow' | 'forest' | 'dusk' | 'twilight' | 'steppe' | 'meadow';
+/**
+ * Dusk (low sun), twilight (blue hour), steppe (dry midday) and meadow light the BeGone maps under Earth skies;
+ * taipei is a humid city evening over asphalt.
+ */
+export type ThemeId = 'desert' | 'snow' | 'forest' | 'dusk' | 'twilight' | 'steppe' | 'meadow' | 'taipei';
 
 /** Visual treatment of a solid. Collision is identical regardless of style. */
 export type BlockStyle =
@@ -27,6 +30,7 @@ export type BlockStyle =
   | 'slab'        // plain poured-concrete floors
   | 'hedge'       // clipped hedge
   | 'steel'       // painted, rusting structural steel (gantries, girders, tanks)
+  | 'facade'      // city building: rendered wall with a grid of windows (some lit), tinted per block
   | 'invisible';
 
 /** Stairs and plain ramps are walkways; 'roof' draws a corrugated pitched-roof plane. */
@@ -60,7 +64,18 @@ export type Decor =
   | { kind: 'banner'; team: 0 | 1; x: number; y: number; z: number; rotY: number }
   | { kind: 'tree'; x: number; y: number; z: number; scale: number; variant: number }
   | { kind: 'crystal'; x: number; y: number; z: number; scale: number; rotY: number }
-  | { kind: 'mast'; x: number; y: number; z: number; height: number };
+  | { kind: 'mast'; x: number; y: number; z: number; height: number }
+  /**
+   * Lit sign panel centred at (x, y, z), w × h, its face turned to rotY (0 faces north, π/2 east).
+   * board: shop sign with a name and an optional second line; blade: a vertical sign standing out
+   * from a wall (readable from both sides); billboard and gate: free-standing, text on the front;
+   * screen: an LED screen; marquee: a cinema canopy's bulb strip.
+   */
+  | { kind: 'sign'; style: SignStyle; x: number; y: number; z: number; rotY: number; w: number; h: number; text: string; sub?: string; bg: string; fg: string }
+  /** Road paint (lane lines, crossings): a flat w × d quad at height y (decorative). */
+  | { kind: 'marking'; x: number; y: number; z: number; w: number; d: number; color: number };
+
+export type SignStyle = 'board' | 'blade' | 'billboard' | 'gate' | 'screen' | 'marquee';
 
 export interface MapDef {
   id: string;
