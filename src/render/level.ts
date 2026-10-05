@@ -904,7 +904,7 @@ function curtainMaterial() {
     // A floor's offices are lit together, in runs, the way towers look at night.
     let run = 0, warm = true, on = false;
     for (let bx = 0; bx < CURTAIN_TILE; bx++) {
-      if (run-- <= 0) { run = 1 + Math.floor(r() * 4); on = r() < 0.42; warm = r() < 0.75; }
+      if (run-- <= 0) { run = 1 + Math.floor(r() * 4); on = r() < 0.3; warm = r() < 0.75; }
       const x = bx * cell, y = fy * cell, shade = 0.75 + r() * 0.35;
       const g = c.createLinearGradient(x, y, x + cell, y + cell);
       g.addColorStop(0, `rgb(${70 * shade},${104 * shade},${118 * shade})`); g.addColorStop(1, `rgb(${30 * shade},${48 * shade},${60 * shade})`);
@@ -925,7 +925,7 @@ function curtainMaterial() {
   e.fillStyle = '#000'; e.fillRect(0, size - 8, 8, 8);
   const map = new THREE.CanvasTexture(wall), emissiveMap = new THREE.CanvasTexture(lit);
   for (const t of [map, emissiveMap]) { t.wrapS = t.wrapT = THREE.RepeatWrapping; t.colorSpace = THREE.SRGBColorSpace; t.anisotropy = 4; }
-  return new THREE.MeshStandardMaterial({ map, emissiveMap, emissive: 0xffffff, emissiveIntensity: 1.1, roughness: 0.18, metalness: 0.55, vertexColors: true });
+  return new THREE.MeshStandardMaterial({ map, emissiveMap, emissive: 0xffffff, emissiveIntensity: 0.75, roughness: 0.18, metalness: 0.55, vertexColors: true });
 }
 
 /** Window grid of the facade sheet: 4 bays × 4 floors per tile. */

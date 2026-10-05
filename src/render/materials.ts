@@ -79,11 +79,11 @@ export const THEMES: Record<ThemeId, Theme> = {
   // Xinyi after dusk: the last violet light over the hills, the towers lit from inside and a warm
   // sodium glow on the paving. Soldiers still read at range: the night is in the sky, not the floor.
   xinyi: {
-    id: 'xinyi', ground: 'concrete', rock: 'moss', dirt: 'concrete',
-    groundTint: new THREE.Color(0.4, 0.4, 0.44), rockTint: new THREE.Color(0.42, 0.6, 0.48), dirtTint: new THREE.Color(0.46, 0.46, 0.5),
-    skyTop: new THREE.Color(0x0e1630), skyHorizon: new THREE.Color(0x7a5a8a), fog: new THREE.Color(0x3a3850), fogDensity: 0.0019,
-    sunColor: new THREE.Color(0xb8c4ff), sunIntensity: 1.5, hemiSky: new THREE.Color(0x8a96c8), hemiGround: new THREE.Color(0x8a6a4a), hemiIntensity: 1.65,
-    planet: null, exposure: 1.12, urban: true,
+    id: 'xinyi', ground: 'moss', rock: 'moss', dirt: 'path',
+    groundTint: new THREE.Color(0.6, 0.85, 0.55), rockTint: new THREE.Color(0.75, 0.95, 0.72), dirtTint: new THREE.Color(0.46, 0.46, 0.5),
+    skyTop: new THREE.Color(0x0a1230), skyHorizon: new THREE.Color(0x4e4a74), fog: new THREE.Color(0x2c3048), fogDensity: 0.0019,
+    sunColor: new THREE.Color(0xc4ceff), sunIntensity: 2.1, hemiSky: new THREE.Color(0x9aa6d8), hemiGround: new THREE.Color(0x9a7a5a), hemiIntensity: 2.1,
+    planet: null, exposure: 1.2, urban: true,
   },
 };
 
