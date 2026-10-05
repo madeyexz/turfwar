@@ -76,6 +76,15 @@ export const THEMES: Record<ThemeId, Theme> = {
     sunColor: new THREE.Color(0xffc49a), sunIntensity: 2.6, hemiSky: new THREE.Color(0xa8b4d4), hemiGround: new THREE.Color(0x5a5048), hemiIntensity: 1.4,
     planet: null, exposure: 1.0, urban: true,
   },
+  // Xinyi after dusk: the last violet light over the hills, the towers lit from inside and a warm
+  // sodium glow on the paving. Soldiers still read at range: the night is in the sky, not the floor.
+  xinyi: {
+    id: 'xinyi', ground: 'concrete', rock: 'moss', dirt: 'concrete',
+    groundTint: new THREE.Color(0.4, 0.4, 0.44), rockTint: new THREE.Color(0.42, 0.6, 0.48), dirtTint: new THREE.Color(0.46, 0.46, 0.5),
+    skyTop: new THREE.Color(0x0e1630), skyHorizon: new THREE.Color(0x7a5a8a), fog: new THREE.Color(0x3a3850), fogDensity: 0.0019,
+    sunColor: new THREE.Color(0xb8c4ff), sunIntensity: 1.5, hemiSky: new THREE.Color(0x8a96c8), hemiGround: new THREE.Color(0x8a6a4a), hemiIntensity: 1.65,
+    planet: null, exposure: 1.12, urban: true,
+  },
 };
 
 /** Terrain: world-space planar ground with triplanar rock on slopes and dirt along a splat channel. */

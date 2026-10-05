@@ -197,6 +197,21 @@ export class MapBuilder {
     this.decor.push({ kind: 'ball', x: this.tx(x), y, z: this.tz(z), radius, style, ...(color === undefined ? {} : { color }) });
   }
 
+  /** Decorative box with no collision (mullions, fins, trims, canopies out of reach): centred on x/z, base at y. */
+  detail(x: number, y: number, z: number, w: number, h: number, d: number, style: BlockStyle, color?: number) {
+    this.decor.push({ kind: 'detail', x: this.tx(x), y, z: this.tz(z), w, h, d, style, ...(color === undefined ? {} : { color }) });
+  }
+
+  /** Decorative notched-square tower section with no collision (see the 'loft' decor). */
+  loft(x: number, z: number, y0: number, y1: number, half0: number, notch0: number, half1: number, notch1: number, style: BlockStyle, color?: number, cap = false) {
+    this.decor.push({ kind: 'loft', x: this.tx(x), z: this.tz(z), y0, y1, half0, notch0, half1, notch1, style, ...(color === undefined ? {} : { color }), ...(cap ? { cap } : {}) });
+  }
+
+  /** Decorative disc with no collision, facing the normal (nx, ny, nz). */
+  disc(x: number, y: number, z: number, nx: number, ny: number, nz: number, rx: number, ry: number, depth: number, style: BlockStyle, color?: number) {
+    this.decor.push({ kind: 'disc', x: this.tx(x), y, z: this.tz(z), nx: this.tx(nx), ny, nz: this.tz(nz), rx, ry, depth, style, ...(color === undefined ? {} : { color }) });
+  }
+
   /** Still water filling a w×d basin at height y (decorative; dig the basin with a terrain pad). */
   water(x: number, y: number, z: number, w: number, d: number) {
     this.decor.push({ kind: 'water', x: this.tx(x), y, z: this.tz(z), w, d });
@@ -367,7 +382,7 @@ function surfaceFor(style: BlockStyle): Surface {
     case 'hedge': return 'dirt';
     case 'facade': return 'concrete';
     case 'rock': return 'rock';
-    case 'glass': return 'glass';
+    case 'glass': case 'curtain': return 'glass';
     case 'shield': return 'energy';
     default: return 'metal';
   }

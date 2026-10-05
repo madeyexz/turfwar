@@ -3,9 +3,9 @@ import type { Vec3 } from '../math';
 
 /**
  * Dusk (low sun), twilight (blue hour), steppe (dry midday) and meadow light the BeGone maps under Earth skies;
- * taipei is a humid city evening over asphalt.
+ * taipei is a humid city evening over asphalt; xinyi is the same city after dark, lit by its towers.
  */
-export type ThemeId = 'desert' | 'snow' | 'forest' | 'dusk' | 'twilight' | 'steppe' | 'meadow' | 'taipei';
+export type ThemeId = 'desert' | 'snow' | 'forest' | 'dusk' | 'twilight' | 'steppe' | 'meadow' | 'taipei' | 'xinyi';
 
 /** Visual treatment of a solid. Collision is identical regardless of style. */
 export type BlockStyle =
@@ -31,6 +31,8 @@ export type BlockStyle =
   | 'hedge'       // clipped hedge
   | 'steel'       // painted, rusting structural steel (gantries, girders, tanks)
   | 'facade'      // city building: rendered wall with a grid of windows (some lit), tinted per block
+  | 'curtain'     // glass curtain wall: tinted panels between mullions, office floors lit at night
+  | 'neon'        // self-lit strip, screen or lamp (its colour is the light's; bloom picks it up)
   | 'invisible';
 
 /** Stairs and plain ramps are walkways; 'roof' draws a corrugated pitched-roof plane. */
@@ -47,8 +49,20 @@ export interface SpawnDef { team: 0 | 1; x: number; y: number; z: number; yaw: n
 
 export type Decor =
   | { kind: 'block'; solid: number; style: BlockStyle; color?: number }
-  /** Cylinder resting on y, upright or lying along x/z (silos, tanks, pipes); collision comes from boxes placed with it. */
-  | { kind: 'cylinder'; x: number; y: number; z: number; radius: number; height: number; axis: 'x' | 'y' | 'z'; style: BlockStyle; color?: number }
+  /**
+   * Cylinder resting on y, upright or lying along x/z (silos, tanks, pipes); collision comes from boxes placed with it.
+   * An upright one may taper to `top` (its top radius).
+   */
+  | { kind: 'cylinder'; x: number; y: number; z: number; radius: number; height: number; axis: 'x' | 'y' | 'z'; style: BlockStyle; color?: number; top?: number }
+  /** Decorative box (no collision) centred on x/z with its base at y: mullions, fins, trims and anything out of reach. */
+  | { kind: 'detail'; x: number; y: number; z: number; w: number; h: number; d: number; style: BlockStyle; color?: number }
+  /**
+   * Decorative tower section (no collision): a square of half-size half0 at y0 lofted to half1 at y1,
+   * its corners stepped in twice by notch (Taipei 101's sawtooth corners). y0 = y1 draws a flat ring.
+   */
+  | { kind: 'loft'; x: number; z: number; y0: number; y1: number; half0: number; notch0: number; half1: number; notch1: number; style: BlockStyle; color?: number; cap?: boolean }
+  /** Decorative disc (no collision) centred at (x, y, z), its face turned to the normal (nx, ny, nz): rx × ry, depth thick. */
+  | { kind: 'disc'; x: number; y: number; z: number; nx: number; ny: number; nz: number; rx: number; ry: number; depth: number; style: BlockStyle; color?: number }
   /** Sphere centred at y (statues); collision comes from a box placed with it. */
   | { kind: 'ball'; x: number; y: number; z: number; radius: number; style: BlockStyle; color?: number }
   /** Lattice girder along its bottom centreline from (x0, y0, z0) to (x1, y1, z1); collision comes from boxes placed with it. */
