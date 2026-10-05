@@ -1,14 +1,14 @@
 import { rng, type Vec3 } from '../../shared/math';
 import {
-  addSoldier, balanceTeams, buyItem, createContext, createMatch, fireShot, pickUp, reload, reportState, setLoadout, switchWeapon,
-  throwGrenade, tickMatch, TICK_RATE, type SimContext,
+  addSoldier, balanceTeams, buyAttachmentFor, buyItem, createContext, createMatch, fireShot, reload, reportState, switchWeapon,
+  throwGrenade, tickMatch, useAmmoCrate, TICK_RATE, type SimContext,
 } from '../../shared/match/sim';
-import { OFFLINE_CONFIG, PRACTICE_CONFIG, type ClientReport, type MatchConfig, type MatchEvent, type MatchState, type ShotClaim, type Team } from '../../shared/match/state';
+import { ELIMINATION, PRACTICE_CONFIG, type ClientReport, type MatchConfig, type MatchEvent, type MatchState, type ShotClaim, type Team } from '../../shared/match/state';
 import type { BuyItem } from '../../shared/match/economy';
-import type { LoadoutId } from '../../shared/weapons';
+import type { AttachmentId, Slot, WeaponId } from '../../shared/weapons';
 import type { GameLink } from './link';
 
-/** Solo skirmish: the authoritative simulation runs in this tab with bots on both teams. */
+/** Solo match: the authoritative simulation runs in this tab with bots on both teams. */
 export class OfflineLink implements GameLink {
   readonly mode = 'offline' as const;
   readonly interpDelay = 1 / TICK_RATE;
@@ -20,13 +20,14 @@ export class OfflineLink implements GameLink {
   private ticks = 0;
   /** Game time since the last report: the movement check runs on the same clock as the player. */
   private sinceReport = 0;
+  private practice: boolean;
 
-  constructor(mapId: string, name: string, loadout: LoadoutId, team: Team | undefined, config: Partial<MatchConfig> = {}, practice = false) {
+  constructor(mapId: string, name: string, team: Team | undefined, config: Partial<MatchConfig> = {}, practice = false) {
     const random = rng((Math.random() * 2 ** 31) | 0);
     this.ctx = createContext(mapId, random, e => this.events.push(e));
-    this.match = createMatch(mapId, practice ? { ...PRACTICE_CONFIG } : { ...OFFLINE_CONFIG, ...config }, random);
+    this.match = createMatch(mapId, practice ? { ...PRACTICE_CONFIG, ...config } : { ...ELIMINATION, ...config });
     this.practice = practice;
-    this.me = addSoldier(this.match, this.ctx, { name, team, bot: false, loadout }).id;
+    this.me = addSoldier(this.match, this.ctx, { name, team, bot: false }).id;
     balanceTeams(this.match, this.ctx);
   }
 
@@ -34,8 +35,7 @@ export class OfflineLink implements GameLink {
   state() { return this.match; }
   version() { return this.ticks; }
   drainEvents() { const e = this.events; this.events = []; return e; }
-  private practice = false;
-  status() { return this.practice ? 'PRACTICE RANGE' : 'SOLO SKIRMISH'; }
+  status() { return this.practice ? 'PRACTICE RANGE' : 'SOLO'; }
 
   update(dt: number) {
     this.sinceReport += dt;
@@ -55,9 +55,14 @@ export class OfflineLink implements GameLink {
   fire(claim: ShotClaim) { fireShot(this.match, this.ctx, this.me, claim); }
   grenade(origin: Vec3, dir: Vec3) { throwGrenade(this.match, this.ctx, this.me, origin, dir); }
   reload() { reload(this.match, this.me); }
-  switchWeapon(slot: 0 | 1) { switchWeapon(this.match, this.me, slot); }
-  setLoadout(loadout: LoadoutId) { setLoadout(this.match, this.me, loadout); }
+  switchWeapon(slot: Slot) { switchWeapon(this.match, this.me, slot); }
   buy(item: BuyItem) { buyItem(this.match, this.ctx, this.me, item); }
-  pickup(index: number) { pickUp(this.match, this.ctx, this.me, index); }
+  attach(weapon: WeaponId, attachment: AttachmentId) { buyAttachmentFor(this.match, this.me, weapon, attachment); }
+  useCrate(index: number) { useAmmoCrate(this.match, this.ctx, this.me, index); }
+  say(text: string, team: boolean) {
+    const s = this.match.soldiers.find(x => x.id === this.me);
+    const clean = text.trim().slice(0, 120);
+    if (s && clean) this.events.push({ type: 'chat', id: s.id, name: s.name, team: s.team, text: clean, teamOnly: team });
+  }
   dispose() { this.events = []; }
 }

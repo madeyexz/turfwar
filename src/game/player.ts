@@ -2,12 +2,12 @@ import { CollisionWorld } from '../../shared/collision';
 import { clamp, dirFromAngles, type Vec3 } from '../../shared/math';
 import { MOVE, createMoveState, eyeHeight, isSprinting, stepMovement, type MoveEvents, type MoveInput, type MoveState } from '../../shared/movement';
 import type { Soldier } from '../../shared/match/state';
-import { GRENADE, WEAPONS, pelletCone, type LoadoutId, type WeaponDef, type WeaponId } from '../../shared/weapons';
+import { DEFAULT_WEAPONS, STAMINA, pelletCone, weaponStats, type Attachments, type Slot, type WeaponDef, type WeaponId } from '../../shared/weapons';
 import type { Input } from './input';
-import { adsFov, settings } from './settings';
+import { BINOCULAR_ZOOM, adsFov, settings } from './settings';
 
 /** Snipers have a second, stronger scope magnification. */
-const hasSecondZoom = (w: WeaponDef) => w.category === 'sniper';
+const hasSecondZoom = (w: WeaponDef) => w.class === 'sniper';
 
 const STEP = 1 / 120;
 const DEG = Math.PI / 180;
@@ -24,8 +24,9 @@ export interface FrameResult {
 }
 
 /**
- * The lawbreaker you control: client-predicted movement (the same shared controller the server
- * validates against), weapon handling, recoil and spread, plus camera feel state.
+ * The operator you control: client-predicted movement (the same shared controller the server
+ * validates against), stamina, weapon handling, recoil and spread, plus camera feel state.
+ * Keys follow BeGone: 1 knife, 2 secondary, 3 primary, 4 (or G) grenade, Q/wheel cycle, Z binoculars.
  */
 export class LocalPlayer {
   m: MoveState = createMoveState(0, 0, 0);
@@ -34,11 +35,14 @@ export class LocalPlayer {
   yaw = 0;
   pitch = 0;
   team = 0;
-  loadout: LoadoutId = 'assault';
-  slot: 0 | 1 = 0;
-  /** Weapons in the primary/secondary slots (kit, bought or picked up; the host decides). */
-  weapons: [WeaponId, WeaponId] = ['carbine', 'sidearm'];
-  ammo: [number, number] = [30, 14];
+  /** In hand: 0 primary, 1 secondary, 2 knife. */
+  slot: Slot = 0;
+  private lastSlot: Slot = 1;
+  /** Equipped primary and secondary (bought in the store; the host decides). */
+  weapons: [WeaponId, WeaponId] = [...DEFAULT_WEAPONS];
+  /** Attachments fitted per weapon (from the host). */
+  attachments: Partial<Record<WeaponId, Attachments>> = {};
+  ammo: [number, number] = [32, 12];
   /** Spare rounds per slot as last reported by the host. */
   reserve: [number, number] = [0, 0];
   reloadLeft = 0;
@@ -47,8 +51,12 @@ export class LocalPlayer {
   fireCooldown = 0;
   bloom = 0;
   ads = 0;
-  grenades = GRENADE.perLife;
+  grenades = 0;
+  private sinceThrow = 9;
   throwLeft = 0;
+  stamina: number = STAMINA.max;
+  /** Binoculars up (Z): 10× zoom, no weapon. */
+  binoculars = false;
   alive = false;
   sprinting = false;
   private sprintBlock = 0;
@@ -72,6 +80,7 @@ export class LocalPlayer {
 
   /** Field of view while fully aimed: the weapon's zoom, doubled in magnification at the second scope level. */
   get aimFov() {
+    if (this.binoculars) return 2 * Math.atan(Math.tan(settings.fov * DEG / 2) / BINOCULAR_ZOOM) / DEG;
     const first = adsFov(this.weapon);
     if (!this.zoomLevel || !hasSecondZoom(this.weapon)) return first;
     return 2 * Math.atan(Math.tan(first * DEG / 2) / 2) / DEG;
@@ -79,30 +88,45 @@ export class LocalPlayer {
   /** Magnification of the current aim relative to the base field of view (1 at the hip). */
   get magnification() { return Math.tan(settings.fov * DEG / 2) / Math.tan(this.aimFov * DEG / 2); }
 
-  get weapon(): WeaponDef { return WEAPONS[this.weapons[this.slot]]; }
+  statsOf(slot: Slot): WeaponDef {
+    const id = slot === 2 ? 'knife' : this.weapons[slot];
+    return weaponStats(id, this.attachments[id]);
+  }
+  get weapon(): WeaponDef { return this.statsOf(this.slot); }
   get reloading() { return this.reloadLeft > 0; }
+  /** Out of breath: slowed and unable to sprint. */
+  get tired() { return this.stamina <= STAMINA.tired; }
 
   spawnFrom(s: Soldier) {
     this.m = { ...s.m, vx: 0, vy: 0, vz: 0 };
     this.prev = { x: s.m.x, y: s.m.y, z: s.m.z, crouch: s.m.crouch };
-    this.yaw = s.yaw; this.pitch = 0; this.team = s.team; this.loadout = s.loadout; this.slot = 0;
-    this.weapons = [...s.weapons]; this.reserve = [...s.reserve];
-    this.ammo = [WEAPONS[s.weapons[0]].magazine, WEAPONS[s.weapons[1]].magazine];
-    this.reloadLeft = 0; this.switchLeft = WEAPONS[s.weapons[0]].equipTime; this.fireCooldown = 0; this.bloom = 0; this.ads = 0;
-    this.grenades = GRENADE.perLife; this.alive = true; this.recoilDebt = 0; this.accumulator = 0;
+    this.yaw = s.yaw; this.pitch = 0; this.team = s.team; this.slot = 0; this.lastSlot = 1;
+    this.weapons = [...s.weapons]; this.attachments = structuredClone(s.attachments); this.reserve = [...s.reserve];
+    this.ammo = [this.statsOf(0).magazine, this.statsOf(1).magazine];
+    this.reloadLeft = 0; this.switchLeft = this.statsOf(0).equipTime; this.fireCooldown = 0; this.bloom = 0; this.ads = 0;
+    this.grenades = s.grenades; this.alive = true; this.recoilDebt = 0; this.accumulator = 0;
+    this.stamina = STAMINA.max; this.binoculars = false; this.zoomLevel = 0;
   }
 
   /**
-   * Follow the host's gear: a bought or picked-up weapon arrives with a full magazine and brings
-   * itself up; spare ammo follows the host (reloads and ammo pickups), except mid-reload.
+   * Follow the host's gear: a bought weapon arrives with a full magazine and brings itself up;
+   * attachments change stats (a smaller magazine trims what is loaded); spare ammo follows the
+   * host (reloads and ammo crates), except mid-reload; grenades follow once a throw has landed.
    */
   syncGear(s: Soldier) {
     for (const i of [0, 1] as const) {
       if (s.weapons[i] === this.weapons[i]) continue;
-      this.weapons[i] = s.weapons[i]; this.ammo[i] = WEAPONS[s.weapons[i]].magazine;
-      this.slot = i; this.reloadLeft = 0; this.switchLeft = WEAPONS[s.weapons[i]].equipTime; this.bloom = 0; this.ads = 0;
+      this.weapons[i] = s.weapons[i];
+      this.attachments[s.weapons[i]] = s.attachments[s.weapons[i]];
+      this.ammo[i] = this.statsOf(i).magazine;
+      this.selectSlot(i); this.switchLeft = this.statsOf(i).equipTime;
+    }
+    if (JSON.stringify(s.attachments) !== JSON.stringify(this.attachments)) {
+      this.attachments = structuredClone(s.attachments);
+      for (const i of [0, 1] as const) this.ammo[i] = Math.min(this.ammo[i], this.statsOf(i).magazine);
     }
     if (this.reloadLeft <= 0) this.reserve = [...s.reserve];
+    if (this.sinceThrow > 1.5 && this.throwLeft <= 0) this.grenades = s.grenades;
   }
 
   /** Snap to the server's position after a rejected movement report. */
@@ -134,6 +158,7 @@ export class LocalPlayer {
 
     // ---- Weapon timers ----
     const w = this.weapon;
+    this.sinceThrow += dt;
     this.fireCooldown = Math.max(0, this.fireCooldown - dt);
     this.switchLeft = Math.max(0, this.switchLeft - dt);
     this.sprintBlock = Math.max(0, this.sprintBlock - dt);
@@ -141,23 +166,32 @@ export class LocalPlayer {
     this.bloom = Math.max(0, this.bloom - w.spread.recovery * dt * (this.sinceShot > 0.08 ? 1 : 0.25));
     if (this.reloadLeft > 0) {
       this.reloadLeft -= dt;
-      if (this.reloadLeft <= 0) {
+      if (this.reloadLeft <= 0 && this.slot !== 2) {
+        const slot = this.slot;
         this.reloadLeft = 0;
-        const take = Math.min(w.magazine - this.ammo[this.slot], this.reserve[this.slot]);
-        this.ammo[this.slot] += take; this.reserve[this.slot] -= take;
+        const take = Math.min(w.magazine - this.ammo[slot], this.reserve[slot]);
+        this.ammo[slot] += take; this.reserve[slot] -= take;
       }
     }
 
     // ---- Movement (fixed 120 Hz using the shared controller) ----
-    const wantsFire = can && input!.fire && !blockFire;
+    const wantsFire = can && input!.fire && !blockFire && !this.binoculars;
     if (wantsFire) this.sprintBlock = 0.2;
+    // Stamina (BeGone): sprinting drains it, jumping costs a chunk, and at 30 or less you are slowed and cannot sprint.
+    const sprintKey = can && (input!.down('ShiftLeft') || input!.down('ShiftRight'));
+    const canSprint = this.sprinting ? this.stamina > 0 : this.stamina > STAMINA.tired + STAMINA.sprintStart;
+    const jumpKey = can && input!.down('Space') && this.stamina >= STAMINA.jump;
     const moveInput: MoveInput = can ? {
       forward: Number(input!.down('KeyW')) - Number(input!.down('KeyS')),
       strafe: Number(input!.down('KeyD')) - Number(input!.down('KeyA')),
-      yaw: this.yaw, jump: input!.down('Space'), crouch: input!.down('KeyC') || input!.down('ControlLeft'),
-      sprint: (input!.down('ShiftLeft') || input!.down('ShiftRight')) && this.sprintBlock <= 0 && this.reloadLeft <= 0,
-      ads: input!.aim && this.reloadLeft <= 0 && this.switchLeft < 0.1,
+      yaw: this.yaw, jump: jumpKey, crouch: input!.down('KeyC') || input!.down('ControlLeft'),
+      sprint: sprintKey && canSprint && this.sprintBlock <= 0 && this.reloadLeft <= 0,
+      ads: (input!.aim && w.class !== 'melee' && this.reloadLeft <= 0 && this.switchLeft < 0.1) || this.binoculars,
+      speed: w.speed * (this.tired ? 0.8 : 1),
     } : { forward: 0, strafe: 0, yaw: this.yaw, jump: false, crouch: false, sprint: false, ads: false };
+    // Round-start freeze (and holding E on the bomb): look and aim, but stay put.
+    if (this.frozen || this.using) { moveInput.forward = moveInput.strafe = 0; moveInput.jump = moveInput.sprint = false; }
+    const wasSprinting = this.sprinting;
     if (this.alive) {
       this.accumulator += Math.min(dt, 0.1);
       while (this.accumulator >= STEP) {
@@ -169,6 +203,9 @@ export class LocalPlayer {
       }
     }
     this.sprinting = this.alive && isSprinting(this.m, moveInput) && this.m.grounded;
+    if (result.move.jumped) this.stamina = Math.max(0, this.stamina - STAMINA.jump);
+    if (this.sprinting && !wasSprinting) this.stamina = Math.max(0, this.stamina - STAMINA.sprintStart);
+    this.stamina = clamp(this.stamina + (this.sprinting ? -STAMINA.sprint : this.m.crouch > 0.5 ? STAMINA.regenCrouched : STAMINA.regen) * dt, 0, STAMINA.max);
     this.sprintRecover = this.sprinting ? 0.14 : Math.max(0, this.sprintRecover - dt);
     const adsTarget = moveInput.ads && !this.sprinting && this.alive ? 1 : 0;
     this.ads = clamp(this.ads + Math.sign(adsTarget - this.ads) * dt / w.adsTime, 0, 1);
@@ -176,13 +213,25 @@ export class LocalPlayer {
 
     // ---- Weapon actions ----
     if (can) {
-      // While scoped, the wheel (or Z) steps the scope's magnification instead of swapping weapons.
-      const wheel = input!.consumeWheel(), zoomKey = input!.take('KeyZ');
-      const scoped = this.ads > 0.6 && hasSecondZoom(this.weapon);
-      if (scoped && (wheel !== 0 || zoomKey)) { this.zoomLevel = this.zoomLevel ? 0 : 1; result.zoomed = true; }
-      else if ((input!.take('KeyQ') || wheel !== 0) && this.throwLeft <= 0) this.swap(result);
+      // While scoped, the wheel steps a sniper scope's magnification instead of cycling weapons.
+      const wheel = input!.consumeWheel();
+      const scoped = this.ads > 0.6 && hasSecondZoom(this.weapon) && !this.binoculars;
+      if (input!.take('KeyZ')) { this.binoculars = !this.binoculars; this.zoomLevel = 0; result.zoomed = true; }
+      if (scoped && wheel !== 0) { this.zoomLevel = this.zoomLevel ? 0 : 1; result.zoomed = true; }
+      else if (this.throwLeft <= 0) {
+        let to: Slot | undefined;
+        if (input!.take('Digit1')) to = 2;
+        if (input!.take('Digit2')) to = 1;
+        if (input!.take('Digit3')) to = 0;
+        if (input!.take('KeyQ')) to = this.lastSlot;
+        if (wheel !== 0) to = (((this.slot + (wheel > 0 ? 1 : 2)) % 3) as Slot);
+        if (to !== undefined && to !== this.slot) this.swap(to, result);
+      }
       if (input!.take('KeyR')) this.startReload(result);
-      if (input!.take('KeyG') && this.grenades > 0 && this.throwLeft <= 0 && this.reloadLeft <= 0) { this.throwLeft = 0.32; this.grenades--; }
+      const throwKey = input!.take('Digit4') || input!.take('KeyG');
+      if (throwKey && this.grenades > 0 && this.throwLeft <= 0 && this.reloadLeft <= 0) {
+        this.throwLeft = 0.32; this.grenades--; this.sinceThrow = 0; this.binoculars = false;
+      }
     }
     if (this.throwLeft > 0) {
       this.throwLeft -= dt;
@@ -192,16 +241,16 @@ export class LocalPlayer {
     const trigger = wantsFire && !this.sprinting && this.sprintRecover <= 0 && this.throwLeft <= 0;
     if (!trigger) { this.triggerHeld = false; this.shotsInBurst = 0; }
     if (trigger && this.switchLeft <= 0 && this.reloadLeft <= 0 && this.fireCooldown <= 0 && (w.auto || !this.triggerHeld)) {
-      if (this.ammo[this.slot] <= 0) {
+      if (this.slot !== 2 && this.ammo[this.slot] <= 0) {
         if (!this.triggerHeld) result.dryFire = true;
         this.startReload(result);
       } else {
-        this.ammo[this.slot]--;
+        if (this.slot !== 2) this.ammo[this.slot]--;
         this.fireCooldown += w.interval;
         if (this.fireCooldown < 0) this.fireCooldown = w.interval;
         // Pellet weapons fire a fixed pattern around the exact aim (the server re-traces it), and
-        // launcher charges leave straight down the sights; everything else samples the spread cone.
-        const spread = w.pellets > 1 || w.projectile ? 0 : this.currentSpread() * DEG;
+        // the knife strikes straight ahead; everything else samples the spread cone.
+        const spread = w.pellets > 1 || w.class === 'melee' ? 0 : this.currentSpread() * DEG;
         // Uniform disc sampling inside the cone.
         const a = Math.random() * Math.PI * 2, r = Math.sqrt(Math.random()) * spread;
         const dir = dirFromAngles(this.yaw + Math.cos(a) * r, this.pitch + Math.sin(a) * r);
@@ -256,14 +305,21 @@ export class LocalPlayer {
     this.punchYaw += (Math.random() - 0.5) * w.recoil.viewPunch * 0.01;
   }
 
-  private swap(result: FrameResult) {
-    this.slot = this.slot === 0 ? 1 : 0;
-    this.reloadLeft = 0; this.switchLeft = this.weapon.equipTime; this.bloom = 0; this.ads = 0; this.zoomLevel = 0;
+  private selectSlot(to: Slot) {
+    if (to !== this.slot) this.lastSlot = this.slot;
+    this.slot = to;
+    this.reloadLeft = 0; this.bloom = 0; this.ads = 0; this.zoomLevel = 0; this.binoculars = false;
+  }
+
+  private swap(to: Slot, result: FrameResult) {
+    this.selectSlot(to);
+    this.switchLeft = this.weapon.equipTime;
     result.switched = true;
   }
 
   startReload(result?: FrameResult) {
     const w = this.weapon;
+    if (this.slot === 2) return;
     if (this.reloadLeft > 0 || this.ammo[this.slot] >= w.magazine || this.switchLeft > 0 || this.reserve[this.slot] <= 0) return;
     this.reloadLeft = this.reloadTotal = w.reload;
     if (result) result.reloadStarted = true;
@@ -274,8 +330,14 @@ export class LocalPlayer {
     return {
       x: this.m.x, y: this.m.y, z: this.m.z, vx: this.m.vx, vy: this.m.vy, vz: this.m.vz, yaw: this.yaw, pitch: this.pitch,
       crouch: this.m.crouch, grounded: this.m.grounded, sprint: this.sprinting, ads: this.ads > 0.5, slide: this.m.slideTime > 0, weapon: this.slot,
+      use: this.using,
     };
   }
+
+  /** Holding E (arming or disarming the bomb); set by the game each frame. */
+  using = false;
+  /** Frozen at round start: no moving or shooting (set by the game). */
+  frozen = false;
 
   speed() { return Math.hypot(this.m.vx, this.m.vz); }
   slideFactor() { return this.m.slideTime > 0 ? 1 : 0; }

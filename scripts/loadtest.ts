@@ -1,6 +1,6 @@
 /**
  * Online load test: headless clients join a LOCAL SpacetimeDB match, move with the shared
- * movement controller toward capture points, and fire at visible enemies with claimed hits the
+ * movement controller between map landmarks, and fire at visible enemies with claimed hits the
  * server validates. Prints the server tick rate, bytes each client receives, report round trips,
  * movement corrections and kills.
  *
@@ -13,7 +13,7 @@ import { chestPoint } from '../shared/hitbox';
 import { loadMap } from '../shared/maps/index';
 import { dirFromAngles, normalize3 } from '../shared/math';
 import { createMoveState, eyeHeight, stepMovement, type MoveState } from '../shared/movement';
-import { LOADOUTS, WEAPONS } from '../shared/weapons';
+import { WEAPONS } from '../shared/weapons';
 import { readWorld, type WorldView } from './loadtest-view';
 
 const args = new Map<string, string>();
@@ -122,7 +122,7 @@ class Client {
           this.conn = conn;
           conn.subscriptionBuilder().onApplied(async () => {
             const view = readWorld(conn, -1);
-            await conn.reducers.join({ name: `Load${worker}-${this.index}`, loadout: 'assault', team: -1 });
+            await conn.reducers.join({ name: `Load${worker}-${this.index}`, team: -1 });
             const wait = () => {
               const v = readWorld(conn, -1);
               if (v.myId >= 0) { this.me = v.myId; clearTimeout(timer); resolve(); } else setTimeout(wait, 100);
@@ -146,15 +146,15 @@ class Client {
     }
     if (self.alive && !this.alive) {
       this.m = createMoveState(self.x, self.y, self.z); this.yaw = self.yaw;
-      this.ammo = WEAPONS[LOADOUTS.assault.weapons[0]].magazine; this.goalLeft = 0;
-      // Shop like a player: try a random gun each deployment (the server checks credits and buy time).
-      const ids = Object.keys(WEAPONS);
+      this.ammo = WEAPONS.mp5.magazine; this.goalLeft = 0;
+      // Shop like a player: try a random gun each round (the server checks cash, base and buy time).
+      const ids = Object.keys(WEAPONS).filter(id => id !== 'knife');
       void this.conn.reducers.buy({ item: ids[Math.floor(Math.random() * ids.length)] }).catch(() => undefined);
     }
     this.alive = self.alive;
     if (!self.alive) return;
 
-    // Wander between capture points so the fight spreads over the map like real players.
+    // Wander between landmarks so the fight spreads over the map like real players.
     this.goalLeft -= dt;
     if (this.goalLeft <= 0) { this.goal = Math.floor(Math.random() * def.points.length); this.goalLeft = 8 + Math.random() * 12; }
     const p = def.points[this.goal];
@@ -170,13 +170,13 @@ class Client {
       const sent = performance.now();
       void this.conn.reducers.report({
         x: this.m.x, y: this.m.y, z: this.m.z, vx: this.m.vx, vy: this.m.vy, vz: this.m.vz, yaw: this.yaw, pitch: this.pitch,
-        crouch: this.m.crouch, grounded: this.m.grounded, sprint: input.sprint, ads: false, slide: this.m.slideTime > 0, weapon: 0,
+        crouch: this.m.crouch, grounded: this.m.grounded, sprint: input.sprint, ads: false, slide: this.m.slideTime > 0, weapon: 0, use: false,
       }).then(() => { if (measuring) rtts.push(performance.now() - sent); }).catch(() => undefined).finally(() => { this.inFlight--; });
     }
 
     // Shoot the nearest visible enemy (the server re-checks range, line of sight and hit volume).
     if (now < this.nextShot || now < this.reloadUntil) return;
-    if (this.ammo <= 0) { void this.conn.reducers.reloadWeapon({}).catch(() => undefined); this.reloadUntil = now + 2300; this.ammo = WEAPONS.carbine.magazine; return; }
+    if (this.ammo <= 0) { void this.conn.reducers.reloadWeapon({}).catch(() => undefined); this.reloadUntil = now + 2300; this.ammo = WEAPONS.mp5.magazine; return; }
     const eye = { x: this.m.x, y: this.m.y + eyeHeight(this.m), z: this.m.z };
     let best: { id: number; chest: { x: number; y: number; z: number } } | undefined, bestD = 45;
     for (const s of view.soldiers.values()) {
@@ -191,7 +191,7 @@ class Client {
     const dir = normalize3({ x: best.chest.x - eye.x, y: best.chest.y - eye.y, z: best.chest.z - eye.z });
     this.pitch = Math.asin(dir.y); void dirFromAngles;
     this.ammo--; shots++;
-    this.nextShot = now + WEAPONS.carbine.interval * 1000 * 1.05;
+    this.nextShot = now + WEAPONS.mp5.interval * 1000 * 1.05;
     void this.conn.reducers.fire({ weapon: 0, ox: eye.x, oy: eye.y, oz: eye.z, dx: dir.x, dy: dir.y, dz: dir.z, target: best.id, zone: 'body', px: best.chest.x, py: best.chest.y, pz: best.chest.z }).catch(() => undefined);
   }
 }

@@ -11,5 +11,6 @@ import {
 } from "spacetimedb";
 
 export default {
-  loadout: __t.string(),
+  text: __t.string(),
+  team: __t.bool(),
 };

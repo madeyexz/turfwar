@@ -38,10 +38,9 @@ export const Clock = __t.object("Clock", {
   phaseLeft: __t.f64(),
   time: __t.f64(),
   tick: __t.u32(),
-  scoreTimer: __t.f64(),
   nextId: __t.u32(),
   lastTickMicros: __t.u64(),
-  pickupsJson: __t.string(),
+  roundJson: __t.string(),
 });
 export type Clock = __Infer<typeof Clock>;
 
@@ -84,6 +83,7 @@ export const Inbox = __t.object("Inbox", {
   ads: __t.bool(),
   slide: __t.bool(),
   weapon: __t.u8(),
+  use: __t.bool(),
 });
 export type Inbox = __Infer<typeof Inbox>;
 
@@ -124,6 +124,8 @@ export const Player = __t.object("Player", {
   identity: __t.identity(),
   soldierId: __t.u32(),
   lastReportMicros: __t.u64(),
+  chatWindowMicros: __t.u64(),
+  chatCount: __t.u32(),
 });
 export type Player = __Infer<typeof Player>;
 
@@ -141,15 +143,13 @@ export const Roster = __t.object("Roster", {
   name: __t.string(),
   team: __t.u8(),
   bot: __t.bool(),
-  loadout: __t.string(),
   alive: __t.bool(),
   grenades: __t.u8(),
+  grenadeHe: __t.bool(),
   kills: __t.u32(),
   deaths: __t.u32(),
+  assists: __t.u32(),
   score: __t.u32(),
-  captures: __t.u32(),
-  respawnAt: __t.f32(),
-  protect: __t.bool(),
   lastAttacker: __t.i32(),
   corrections: __t.u32(),
   weapon0: __t.string(),
@@ -157,6 +157,7 @@ export const Roster = __t.object("Roster", {
   reserve0: __t.u16(),
   reserve1: __t.u16(),
   money: __t.u32(),
+  gearJson: __t.string(),
 });
 export type Roster = __Infer<typeof Roster>;
 
@@ -215,6 +216,7 @@ export const Soldier = __t.object("Soldier", {
   bought0: __t.string(),
   bought1: __t.string(),
   sinceSpawn: __t.f32(),
+  gearJson: __t.string(),
 });
 export type Soldier = __Infer<typeof Soldier>;
 

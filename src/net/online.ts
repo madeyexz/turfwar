@@ -1,14 +1,13 @@
 import type { Identity, Infer } from 'spacetimedb';
 import type { Vec3 } from '../../shared/math';
-import type { ClientReport, MatchEvent, MatchState, PointState, ShotClaim, Soldier, Team } from '../../shared/match/state';
+import type { ClientReport, MatchEvent, MatchState, ShotClaim, Soldier, Team } from '../../shared/match/state';
 import type { Body } from '../../shared/world';
 import type { GameLink } from '../game/link';
 import type { DbConnection } from '../module_bindings';
 import type RosterTable from '../module_bindings/roster_table';
-import { loadMap } from '../../shared/maps/index';
-import { decodeFrame, framePoints, type DecodedFrame, type FramePose } from '../../shared/match/frame';
-import { LOADOUTS, WEAPONS, type LoadoutId, type WeaponId } from '../../shared/weapons';
-import type { BuyItem } from '../../shared/match/economy';
+import { decodeFrame, type DecodedFrame, type FramePose } from '../../shared/match/frame';
+import { DEFAULT_WEAPONS, STAMINA, WEAPONS, weaponStats, type AttachmentId, type Attachments, type Slot, type WeaponId } from '../../shared/weapons';
+import { newRoundStats, type BuyItem } from '../../shared/match/economy';
 
 type RosterRow = Infer<typeof RosterTable>;
 
@@ -34,21 +33,24 @@ export function onlineAvailable(): { ok: boolean; reason: string } {
   return { ok: true, reason: `Server: ${database}` };
 }
 
-/** Rebuild a shared Soldier from its roster row and its pose in the latest frame. */
-const weaponOr = (id: string, fallback: WeaponId): WeaponId => (id in WEAPONS ? id as WeaponId : fallback);
+const weaponOr = (id: string, fallback: WeaponId): WeaponId => (id in WEAPONS && id !== 'knife' ? id as WeaponId : fallback);
+const gearOf = (json: string): { owned: WeaponId[]; attachments: Partial<Record<WeaponId, Attachments>> } => {
+  try { const g = JSON.parse(json); return { owned: g.owned ?? [...DEFAULT_WEAPONS], attachments: g.attachments ?? {} }; } catch { return { owned: [...DEFAULT_WEAPONS], attachments: {} }; }
+};
 
-function soldierFrom(r: RosterRow, p: FramePose, time: number, reloadLeft: number, sinceShot: number): Soldier {
-  const kit = LOADOUTS[r.loadout as LoadoutId]?.weapons ?? LOADOUTS.assault.weapons;
+/** Rebuild a shared Soldier from its roster row and its pose in the latest frame. */
+function soldierFrom(r: RosterRow, p: FramePose, reloadLeft: number, sinceShot: number): Soldier {
+  const gear = gearOf(r.gearJson);
   return {
-    id: r.id, name: r.name, team: r.team as Team, bot: r.bot, loadout: r.loadout as LoadoutId,
+    id: r.id, name: r.name, team: r.team as Team, bot: r.bot,
     m: { x: p.x, y: p.y, z: p.z, vx: p.vx, vy: p.vy, vz: p.vz, grounded: p.grounded, crouch: p.crouch, slideTime: p.slide ? 0.2 : 0, slideCooldown: 0, airTime: 0, prevCrouchInput: false, prevJumpInput: false },
-    yaw: p.yaw, pitch: p.pitch, alive: p.alive, health: p.health, shield: p.shield, weapon: p.weapon, ammo: [0, 0],
-    reloadLeft, fireCooldown: 0, switchLeft: 0, grenades: r.grenades, respawnLeft: Math.max(0, r.respawnAt - time),
-    protectLeft: r.protect ? 1 : 0, sinceHit: 99, lastAttacker: r.lastAttacker, kills: r.kills, deaths: r.deaths, score: r.score,
-    captures: r.captures, sprint: p.sprint, ads: p.ads, sinceShot, corrections: r.corrections,
-    idle: 0, moveSlack: 0, groundY: 0,
-    weapons: [weaponOr(r.weapon0, kit[0]), weaponOr(r.weapon1, kit[1])], reserve: [r.reserve0, r.reserve1], money: r.money,
-    bought: ['', ''], sinceSpawn: 0,
+    yaw: p.yaw, pitch: p.pitch, alive: p.alive, health: p.health, weapon: p.weapon,
+    weapons: [weaponOr(r.weapon0, DEFAULT_WEAPONS[0]), weaponOr(r.weapon1, DEFAULT_WEAPONS[1])], owned: gear.owned, attachments: gear.attachments,
+    ammo: [0, 0], reserve: [r.reserve0, r.reserve1],
+    reloadLeft, fireCooldown: 0, switchLeft: 0, grenades: r.grenades, grenadeHE: r.grenadeHe, stamina: STAMINA.max, money: r.money,
+    sinceHit: 99, lastAttacker: r.lastAttacker, kills: r.kills, deaths: r.deaths, assists: r.assists, score: r.score,
+    sprint: p.sprint, ads: p.ads, sinceShot, using: p.using, corrections: r.corrections,
+    idle: 0, moveSlack: 0, groundY: 0, round: newRoundStats(), roundsHere: 0,
   };
 }
 
@@ -67,7 +69,7 @@ export class OnlineLink implements GameLink {
   private disconnected = false;
   private rejoining = false;
   /** Join parameters, kept so the client can rejoin if the server drops an idle soldier. */
-  joinArgs?: { name: string; loadout: string; team: number };
+  joinArgs?: { name: string; team: number };
 
   private frame?: DecodedFrame;
   private frameMap = '';
@@ -112,18 +114,15 @@ export class OnlineLink implements GameLink {
       let reloadLeft = 0;
       if (p.reloading) {
         if (!this.reloadStart.has(r.id)) this.reloadStart.set(r.id, now);
-        const total = WEAPONS[weaponOr(p.weapon ? r.weapon1 : r.weapon0, 'carbine')].reload;
+        const total = p.weapon === 2 ? 0.01 : weaponStats(p.weaponId, gearOf(r.gearJson).attachments[p.weaponId]).reload;
         reloadLeft = Math.max(0.01, total - (now - this.reloadStart.get(r.id)!) / 1000);
       } else this.reloadStart.delete(r.id);
       const shot = this.lastShot.get(r.id);
       const sinceShot = p.firing ? 0 : shot === undefined ? 99 : (now - shot) / 1000;
-      soldiers.push(soldierFrom(r, p, frame.time, reloadLeft, sinceShot));
+      soldiers.push(soldierFrom(r, p, reloadLeft, sinceShot));
     }
     soldiers.sort((a, b) => a.id - b.id);
     const bodies: Body[] = frame.bodies.map(b => ({ ...b, age: 0, owner: -1, hp: 1, timer: 0 }));
-    // Capture points travel by index in the frame's battlefield; mid-rotation, fall back to neutral.
-    const defs = loadMap(match.mapId).def.points;
-    const points: PointState[] = framePoints(defs, this.frameMap === match.mapId ? frame.points : []);
     const mine = db.player.identity.find(this.identity);
     this.me = mine?.soldierId ?? -1;
     if (this.me < 0 && this.joinArgs && !this.rejoining && !this.disconnected) {
@@ -131,10 +130,15 @@ export class OnlineLink implements GameLink {
       this.rejoining = true;
       void this.conn.reducers.join(this.joinArgs).catch(() => undefined).finally(() => { setTimeout(() => { this.rejoining = false; }, 2000); });
     }
+    // Mid-rotation the frame may still describe the previous map: hold its bomb back.
+    const sameMap = this.frameMap === match.mapId;
     this.view = {
-      mapId: match.mapId, phase: match.phase as MatchState['phase'], phaseLeft: frame.phaseLeft, time: frame.time,       tick: frame.tick, scores: [match.score0, match.score1], scoreTimer: 0, soldiers, points, bodies, nextId: match.nextId,
+      mapId: match.mapId, phase: match.phase as MatchState['phase'], phaseLeft: frame.phaseLeft, time: frame.time, tick: frame.tick,
+      scores: [match.score0, match.score1], soldiers, bodies, nextId: match.nextId,
       winner: match.winner as -1 | Team, config: JSON.parse(match.configJson),
-      pickupLeft: this.frameMap === match.mapId ? frame.pickups : [],
+      round: frame.round, roundPhase: frame.roundPhase, roundClock: 0, roundWinner: -1, lossStreak: [0, 0],
+      firstKill: false, firstBlood: false, lastKillTeam: -1,
+      bomb: sameMap ? frame.bomb : { site: -1, armed: false, progress: 0, by: -1 },
     };
     this.dirty = false;
     this.ver++;
@@ -154,7 +158,7 @@ export class OnlineLink implements GameLink {
     if (this.reportsInFlight > 3) return; // never queue up stale movement
     this.reportsInFlight++;
     const sent = performance.now();
-    void this.conn.reducers.report({ ...r, slide: !!r.slide, weapon: r.weapon })
+    void this.conn.reducers.report({ ...r, slide: !!r.slide, weapon: r.weapon, use: !!r.use })
       .then(() => { if (sent - this.lastPing > 500) { this.pingMs = this.pingMs ? this.pingMs * 0.7 + (performance.now() - sent) * 0.3 : performance.now() - sent; this.lastPing = sent; } })
       .catch(() => undefined)
       .finally(() => { this.reportsInFlight--; });
@@ -163,11 +167,12 @@ export class OnlineLink implements GameLink {
     void this.conn.reducers.fire({ weapon: c.weapon, ox: c.origin.x, oy: c.origin.y, oz: c.origin.z, dx: c.dir.x, dy: c.dir.y, dz: c.dir.z, target: c.target, zone: c.zone, px: c.point.x, py: c.point.y, pz: c.point.z }).catch(() => undefined);
   }
   buy(item: BuyItem) { void this.conn.reducers.buy({ item }).catch(() => undefined); }
-  pickup(index: number) { void this.conn.reducers.pickupItem({ index }).catch(() => undefined); }
+  attach(weapon: WeaponId, attachment: AttachmentId) { void this.conn.reducers.buyAttachment({ weapon, attachment }).catch(() => undefined); }
+  useCrate(index: number) { void this.conn.reducers.useCrate({ index }).catch(() => undefined); }
+  say(text: string, team: boolean) { void this.conn.reducers.say({ text, team }).catch(() => undefined); }
   grenade(o: Vec3, d: Vec3) { void this.conn.reducers.grenade({ ox: o.x, oy: o.y, oz: o.z, dx: d.x, dy: d.y, dz: d.z }).catch(() => undefined); }
   reload() { void this.conn.reducers.reloadWeapon({}).catch(() => undefined); }
-  switchWeapon(slot: 0 | 1) { void this.conn.reducers.switchSlot({ slot }).catch(() => undefined); }
-  setLoadout(loadout: LoadoutId) { void this.conn.reducers.chooseLoadout({ loadout }).catch(() => undefined); }
+  switchWeapon(slot: Slot) { void this.conn.reducers.switchSlot({ slot }).catch(() => undefined); }
   dispose() {
     void this.conn.reducers.leave({}).catch(() => undefined);
     setTimeout(() => { try { this.conn.disconnect(); } catch { /* already closed */ } }, 300);
@@ -175,7 +180,7 @@ export class OnlineLink implements GameLink {
 }
 
 /** Connect, subscribe, join the match and wait until our soldier exists. */
-export async function connectOnline(name: string, loadout: LoadoutId, team: Team | undefined, status: (s: string) => void): Promise<GameLink> {
+export async function connectOnline(name: string, team: Team | undefined, status: (s: string) => void): Promise<GameLink> {
   const { uri, database } = onlineConfig();
   if (!uri || !database) throw new Error('No SpacetimeDB server configured.');
   status('Connecting to SpacetimeDB…');
@@ -194,7 +199,7 @@ export async function connectOnline(name: string, loadout: LoadoutId, team: Team
         connection.subscriptionBuilder()
           .onApplied(async () => {
             try {
-              link!.joinArgs = { name, loadout, team: team ?? -1 };
+              link!.joinArgs = { name, team: team ?? -1 };
               await connection.reducers.join(link!.joinArgs);
               const wait = () => {
                 if (link!.myId() >= 0) { clearTimeout(timer); resolve(link!); } else setTimeout(wait, 50);
@@ -203,7 +208,7 @@ export async function connectOnline(name: string, loadout: LoadoutId, team: Team
             } catch (error) { clearTimeout(timer); reject(error); }
           })
           .onError(() => { clearTimeout(timer); reject(new Error('Subscription failed.')); })
-          // Per-tick state arrives packed in `frame`; `soldier`, `point` and `body` are server-side detail.
+          // Per-tick state arrives packed in `frame`; `soldier` and `body` are server-side detail.
           .subscribe(['SELECT * FROM match', 'SELECT * FROM roster', 'SELECT * FROM frame', 'SELECT * FROM player', 'SELECT * FROM match_event']);
       })
       .onConnectError((_ctx, error) => { clearTimeout(timer); reject(new Error(`Could not reach the match server (${error?.message ?? 'connection refused'}).`)); })

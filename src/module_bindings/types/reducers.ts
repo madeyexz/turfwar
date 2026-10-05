@@ -7,24 +7,26 @@ import { type Infer as __Infer } from "spacetimedb";
 
 // Import all reducer arg schemas
 import BuyReducer from "../buy_reducer";
-import ChooseLoadoutReducer from "../choose_loadout_reducer";
+import BuyAttachmentReducer from "../buy_attachment_reducer";
 import FireReducer from "../fire_reducer";
 import GrenadeReducer from "../grenade_reducer";
 import JoinReducer from "../join_reducer";
 import LeaveReducer from "../leave_reducer";
-import PickupItemReducer from "../pickup_item_reducer";
 import ReloadWeaponReducer from "../reload_weapon_reducer";
 import ReportReducer from "../report_reducer";
+import SayReducer from "../say_reducer";
 import SwitchSlotReducer from "../switch_slot_reducer";
+import UseCrateReducer from "../use_crate_reducer";
 
 export type BuyParams = __Infer<typeof BuyReducer>;
-export type ChooseLoadoutParams = __Infer<typeof ChooseLoadoutReducer>;
+export type BuyAttachmentParams = __Infer<typeof BuyAttachmentReducer>;
 export type FireParams = __Infer<typeof FireReducer>;
 export type GrenadeParams = __Infer<typeof GrenadeReducer>;
 export type JoinParams = __Infer<typeof JoinReducer>;
 export type LeaveParams = __Infer<typeof LeaveReducer>;
-export type PickupItemParams = __Infer<typeof PickupItemReducer>;
 export type ReloadWeaponParams = __Infer<typeof ReloadWeaponReducer>;
 export type ReportParams = __Infer<typeof ReportReducer>;
+export type SayParams = __Infer<typeof SayReducer>;
 export type SwitchSlotParams = __Infer<typeof SwitchSlotReducer>;
+export type UseCrateParams = __Infer<typeof UseCrateReducer>;
 

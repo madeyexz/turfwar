@@ -30,7 +30,7 @@ export class Input {
     canvas.addEventListener('mousedown', e => {
       if (!this.locked) return;
       if (e.button === 0) { this.fire = true; this.pressed.add('Mouse0'); }
-      if (e.button === 2) this.aim = true;
+      if (e.button === 2) { this.aim = true; this.pressed.add('Mouse2'); }
       if (e.button === 1) this.pressed.add('Mouse1');
     }, { signal });
     document.addEventListener('mouseup', e => { if (e.button === 0) this.fire = false; if (e.button === 2) this.aim = false; }, { signal });

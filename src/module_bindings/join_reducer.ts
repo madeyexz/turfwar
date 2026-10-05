@@ -12,6 +12,5 @@ import {
 
 export default {
   name: __t.string(),
-  loadout: __t.string(),
   team: __t.i8(),
 };

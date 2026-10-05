@@ -35,15 +35,16 @@ import {
 
 // Import all reducer arg schemas
 import BuyReducer from "./buy_reducer";
-import ChooseLoadoutReducer from "./choose_loadout_reducer";
+import BuyAttachmentReducer from "./buy_attachment_reducer";
 import FireReducer from "./fire_reducer";
 import GrenadeReducer from "./grenade_reducer";
 import JoinReducer from "./join_reducer";
 import LeaveReducer from "./leave_reducer";
-import PickupItemReducer from "./pickup_item_reducer";
 import ReloadWeaponReducer from "./reload_weapon_reducer";
 import ReportReducer from "./report_reducer";
+import SayReducer from "./say_reducer";
 import SwitchSlotReducer from "./switch_slot_reducer";
+import UseCrateReducer from "./use_crate_reducer";
 
 // Import all procedure arg schemas
 
@@ -151,15 +152,16 @@ const tablesSchema = __schema({
 /** The schema information for all reducers in this module. This is defined the same way as the reducers would have been defined in the server, except the body of the reducer is omitted in code generation. */
 const reducersSchema = __reducers(
   __reducerSchema("buy", BuyReducer),
-  __reducerSchema("choose_loadout", ChooseLoadoutReducer),
+  __reducerSchema("buy_attachment", BuyAttachmentReducer),
   __reducerSchema("fire", FireReducer),
   __reducerSchema("grenade", GrenadeReducer),
   __reducerSchema("join", JoinReducer),
   __reducerSchema("leave", LeaveReducer),
-  __reducerSchema("pickup_item", PickupItemReducer),
   __reducerSchema("reload_weapon", ReloadWeaponReducer),
   __reducerSchema("report", ReportReducer),
+  __reducerSchema("say", SayReducer),
   __reducerSchema("switch_slot", SwitchSlotReducer),
+  __reducerSchema("use_crate", UseCrateReducer),
 );
 
 /** The schema information for all procedures in this module. This is defined the same way as the procedures would have been defined in the server. */

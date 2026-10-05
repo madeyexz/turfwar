@@ -11,19 +11,6 @@ import {
 } from "spacetimedb";
 
 export default {
-  x: __t.f32(),
-  y: __t.f32(),
-  z: __t.f32(),
-  vx: __t.f32(),
-  vy: __t.f32(),
-  vz: __t.f32(),
-  yaw: __t.f32(),
-  pitch: __t.f32(),
-  crouch: __t.f32(),
-  grounded: __t.bool(),
-  sprint: __t.bool(),
-  ads: __t.bool(),
-  slide: __t.bool(),
-  weapon: __t.u8(),
-  use: __t.bool(),
+  weapon: __t.string(),
+  attachment: __t.string(),
 };

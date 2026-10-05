@@ -1,9 +1,12 @@
 /**
- * Online economy check against a LOCAL server: one identity buys an affordable pistol (accepted),
- * then a sniper it cannot afford (refused); a second identity sees the purchase in the roster.
+ * Online rules check against a LOCAL server with two identities: rounds run (the frame carries the
+ * round and its phase), the store refuses what the new-match bonus cannot pay for and sells an
+ * attachment, chat reaches the other client and is rate-limited.
  *
  *   bun scripts/econcheck.ts ws://127.0.0.1:3100 lawload
  */
+import { decodeFrame } from '../shared/match/frame';
+
 const uri = process.argv[2] ?? 'ws://127.0.0.1:3100';
 const db = process.argv[3] ?? 'lawload';
 if (!/^wss?:\/\/(127\.0\.0\.1|localhost)(:\d+)?\/?$/.test(uri)) throw new Error(`Refusing non-local server ${uri}`);
@@ -21,35 +24,43 @@ if (typeof DecompressionStream === 'undefined') {
 const { DbConnection } = await import('../src/module_bindings');
 type Conn = InstanceType<typeof DbConnection>;
 
+const chat: Record<string, string[]> = {};
 const connect = (name: string) => new Promise<Conn>((resolve, reject) => {
+  chat[name] = [];
   DbConnection.builder().withUri(uri).withDatabaseName(db)
     .onConnect(conn => {
+      conn.db.matchEvent.onInsert((_c, row) => { const e = JSON.parse(row.json); if (e.type === 'chat') chat[name].push(`${e.name}: ${e.text}`); });
       conn.subscriptionBuilder().onApplied(async () => {
-        await conn.reducers.join({ name, loadout: 'assault', team: -1 });
+        await conn.reducers.join({ name, team: -1 });
         resolve(conn);
-      }).subscribe(['SELECT * FROM match', 'SELECT * FROM roster', 'SELECT * FROM player']);
+      }).subscribe(['SELECT * FROM match', 'SELECT * FROM roster', 'SELECT * FROM player', 'SELECT * FROM frame', 'SELECT * FROM match_event']);
     })
     .onConnectError((_c, e) => reject(e)).build();
 });
 const wait = (ms: number) => new Promise(r => setTimeout(r, ms));
 const mine = (c: Conn) => c.db.roster.id.find(c.db.player.identity.find(c.identity!)!.soldierId)!;
+const frame = (c: Conn) => { const f = c.db.frame.id.find(0); return f ? decodeFrame(f.data) : undefined; };
 
 const a = await connect('BuyerA');
 const b = await connect('WatcherB');
-await wait(1500); // deployed (buy time is 15 s)
+await wait(1500);
 const before = mine(a);
-await a.reducers.buy({ item: 'hornet' });
-await wait(500);
-const afterPistol = mine(a);
-await a.reducers.buy({ item: 'longbow' });
-await wait(500);
-const afterSniper = mine(a);
-const seenByB = b.db.roster.id.find(afterPistol.id);
+await a.reducers.buy({ item: 'm4a1' });
+await a.reducers.buyAttachment({ weapon: 'mp5', attachment: 'ammoCounter' });
+await wait(600);
+const after = mine(a);
+await a.reducers.say({ text: 'hello from A', team: false });
+let limited = false;
+for (let i = 0; i < 6; i++) await a.reducers.say({ text: `spam ${i}`, team: false }).catch(() => { limited = true; });
+await wait(600);
+const f = frame(b);
+const seenByB = b.db.roster.id.find(after.id);
 console.log(JSON.stringify({
-  before: { money: before.money, weapons: [before.weapon0, before.weapon1] },
-  afterHornet: { money: afterPistol.money, weapons: [afterPistol.weapon0, afterPistol.weapon1] },
-  afterUnaffordableLongbow: { money: afterSniper.money, weapons: [afterSniper.weapon0, afterSniper.weapon1] },
-  otherClientSees: seenByB && [seenByB.weapon0, seenByB.weapon1, seenByB.money],
+  match: { phase: b.db.match.id.find(0)?.phase, mode: JSON.parse(b.db.match.id.find(0)?.configJson ?? '{}').mode, round: f?.round, roundPhase: f?.roundPhase, soldiers: f?.poses.length },
+  before: { money: before.money, weapons: [before.weapon0, before.weapon1], gear: before.gearJson },
+  afterUnaffordableM4AndAmmoCounter: { money: after.money, weapons: [after.weapon0, after.weapon1], gear: after.gearJson },
+  otherClientSees: seenByB && { money: seenByB.money, gear: seenByB.gearJson },
+  chatSeenByB: chat.WatcherB, chatRateLimited: limited,
 }, null, 1));
 a.disconnect(); b.disconnect();
 process.exit(0);

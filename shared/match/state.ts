@@ -198,6 +198,7 @@ export type MatchEvent =
   | { type: 'round'; phase: RoundPhase; round: number; winner: -1 | Team; reason?: RoundEnd }
   | { type: 'bomb'; action: 'armed' | 'disarmed' | 'exploded'; site: number; by: number }
   | { type: 'reward'; id: number; amount: number; reason: string }
+  | { type: 'chat'; id: number; name: string; team: Team; text: string; teamOnly: boolean }
   | { type: 'join'; id: number; name: string; team: Team }
   | { type: 'leave'; id: number; name: string };
 

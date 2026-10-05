@@ -65,4 +65,5 @@ export default __t.row({
   bought0: __t.string().name("bought_0"),
   bought1: __t.string().name("bought_1"),
   sinceSpawn: __t.f32().name("since_spawn"),
+  gearJson: __t.string().name("gear_json"),
 });
