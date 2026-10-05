@@ -25,13 +25,16 @@ export function equip(s: Soldier, id: WeaponId) {
 }
 
 /** Fresh deployment: the kit's weapons, full ammo, then rebuy what this soldier last bought. */
-export function outfit(s: Soldier, random: () => number) {
+export function outfit(s: Soldier, random: () => number, free = false) {
   s.weapons = kitWeapons(s.loadout);
   s.ammo = [WEAPONS[s.weapons[0]].magazine, WEAPONS[s.weapons[1]].magazine];
   s.reserve = [spare(WEAPONS[s.weapons[0]]), spare(WEAPONS[s.weapons[1]])];
   s.sinceSpawn = 0;
   if (s.bot) botShop(s, random);
-  else for (const id of s.bought) if (id && WEAPONS[id].price <= s.money && s.weapons[slotOf(WEAPONS[id])] !== id) { s.money -= WEAPONS[id].price; equip(s, id); }
+  else for (const id of s.bought) {
+    const price = free ? 0 : WEAPONS[id || 'sidearm'].price;
+    if (id && price <= s.money && s.weapons[slotOf(WEAPONS[id])] !== id) { s.money -= price; equip(s, id); }
+  }
   s.weapon = 0; s.switchLeft = WEAPONS[s.weapons[0]].equipTime;
 }
 
@@ -39,27 +42,31 @@ export function award(s: Soldier | undefined, amount: number) {
   if (s) s.money = Math.min(ECONOMY.max, s.money + amount);
 }
 
-/** Buying works for a short while after deploying, and always near your own team's spawn. */
-export function canBuy(s: Soldier, map: MapDef) {
+/** Buying works for a short while after deploying, and always near your own team's spawn (anywhere with free buying). */
+export function canBuy(s: Soldier, map: MapDef, free = false) {
   if (!s.alive) return false;
+  if (free) return true;
   if (s.sinceSpawn < ECONOMY.buyTime) return true;
   return map.spawns.some(p => p.team === s.team && !p.point && Math.hypot(p.x - s.m.x, p.z - s.m.z) < ECONOMY.buyRadius);
 }
 
 export function buy(state: MatchState, map: MapDef, s: Soldier | undefined, item: BuyItem): { ok: boolean; message: string } {
   if (!s || !s.alive || state.phase === 'ended') return { ok: false, message: 'Deploy first.' };
-  if (!canBuy(s, map)) return { ok: false, message: 'Buy time is over — return to your spawn.' };
+  const free = !!state.config.freeBuy;
+  if (!canBuy(s, map, free)) return { ok: false, message: 'Buy time is over — return to your spawn.' };
   if (item === 'grenade') {
     if (s.grenades >= GRENADE.perLife) return { ok: false, message: 'Grenades full.' };
-    if (s.money < ECONOMY.grenade) return { ok: false, message: 'Not enough credits.' };
-    s.money -= ECONOMY.grenade; s.grenades++;
+    const cost = free ? 0 : ECONOMY.grenade;
+    if (s.money < cost) return { ok: false, message: 'Not enough credits.' };
+    s.money -= cost; s.grenades++;
     return { ok: true, message: 'Grenade' };
   }
   const w = WEAPONS[item];
   if (!w) return { ok: false, message: 'Unknown item.' };
   if (s.weapons[slotOf(w)] === item) return { ok: false, message: `${w.short} already equipped.` };
-  if (s.money < w.price) return { ok: false, message: 'Not enough credits.' };
-  s.money -= w.price;
+  const price = free ? 0 : w.price;
+  if (s.money < price) return { ok: false, message: 'Not enough credits.' };
+  s.money -= price;
   equip(s, item);
   s.bought[slotOf(w)] = item;
   return { ok: true, message: w.name };

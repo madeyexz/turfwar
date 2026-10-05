@@ -7,7 +7,7 @@ import { hitShape } from '../hitbox';
 import { ECONOMY, GRENADE, LOADOUTS, WEAPONS, pelletCone, pelletDirs } from '../weapons';
 import { findPath, nearestNode } from './nav';
 import { addSoldier, balanceTeams, buyItem, createContext, createMatch, fireShot, pickUp, reload, reportState, teamSizeFor, tickMatch, TICK_RATE } from './sim';
-import { OFFLINE_CONFIG, ONLINE_CONFIG, type MatchEvent, type MatchState, type Soldier } from './state';
+import { OFFLINE_CONFIG, ONLINE_CONFIG, PRACTICE_CONFIG, type MatchEvent, type MatchState, type Soldier } from './state';
 import { MOVE_SLACK, eyeOf, killSoldier, spawnSoldier, type SimContext } from './combat';
 import { decodeFrame, encodeFrame } from './frame';
 
@@ -509,6 +509,18 @@ describe('credits, buying and pickups', () => {
     expect(a.health).toBe(100); expect(a.shield).toBe(50);
     tick(state, ctx, 31);
     expect(state.pickupLeft[0]).toBe(0);
+  });
+
+  it('free buying (practice range and ?freebuy) costs nothing and works anywhere', () => {
+    const { state, ctx, a } = armed();
+    state.config.freeBuy = true;
+    a.money = 0; a.sinceSpawn = 999;
+    place(a, 0, 22, ctx);
+    expect(buyItem(state, ctx, a.id, 'lancer').ok).toBe(true);
+    expect(a.weapons[0]).toBe('lancer'); expect(a.money).toBe(0);
+    a.grenades = 0;
+    expect(buyItem(state, ctx, a.id, 'grenade').ok).toBe(true);
+    expect(PRACTICE_CONFIG.freeBuy).toBe(true);
   });
 
   it('bots spend their credits on better guns when they deploy', () => {

@@ -272,8 +272,9 @@ export class Game {
       this.hud.tick(this.player, state, me, this.map.def.points);
       // Buy time counts from our own deployment (the host checks the same rule).
       const since = this.time - this.spawnedAt;
-      const buyable = !!me && canBuy({ ...me, sinceSpawn: since }, this.map.def) && state.phase !== 'ended';
-      this.buymenu.update(me, buyable, ECONOMY.buyTime - since);
+      const free = !!state.config.freeBuy;
+      const buyable = !!me && canBuy({ ...me, sinceSpawn: since }, this.map.def, free) && state.phase !== 'ended';
+      this.buymenu.update(me, buyable, free ? -1 : ECONOMY.buyTime - since, free);
       this.hud.buyHint(buyable && !this.buymenu.open);
       const near = me?.alive ? this.pickups.nearestWeapon(this.player.m.x, this.player.m.y, this.player.m.z, PICKUP_REACH, state.pickupLeft) : -1;
       const item = near >= 0 ? this.map.def.pickups![near].item : undefined;

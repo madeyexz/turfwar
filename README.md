@@ -111,6 +111,11 @@ game and the match server. After changing the module, regenerate client bindings
 `spacetime generate --lang typescript --out-dir src/module_bindings --module-path spacetimedb`.
 In Amp orbs, `.amp/services.yaml` declares both services (`amp orb services ensure`).
 
+Testing the arsenal: the practice range always buys for free, anywhere; add `&freebuy` to the URL for a free-buy
+Solo skirmish; for a **local** Online database, set `"freeBuy":true` in the match's `configJson` with
+`spacetime sql <db> "UPDATE match SET configJson = '…' WHERE id = 0" --server http://127.0.0.1:3000`
+(owner-only; never on Maincloud).
+
 Development pages (dev server only): `/dev/level.html?map=verdant` (battlefield preview),
 `/dev/soldier.html` (animation/IK pose sheet), `/dev/viewmodel.html?ads=1` (first-person weapon),
 `/dev/viewer.html?model=/assets/props.glb` (asset viewer). Dev-only URL flags `debuginput`,

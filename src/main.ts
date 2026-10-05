@@ -162,7 +162,7 @@ async function start() {
   try {
     link = mode === 'online'
       ? await connectOnline(name, loadout, teamChoice, s => { status.textContent = s; })
-      : new OfflineLink(mapId, name, loadout, teamChoice, { botSkill: Math.max(0.1, Math.min(0.95, Number(skill) || 0.45)) }, mode === 'lab');
+      : new OfflineLink(mapId, name, loadout, teamChoice, { botSkill: Math.max(0.1, Math.min(0.95, Number(skill) || 0.45)), freeBuy: params.has('freebuy') }, mode === 'lab');
   } catch (error) {
     status.textContent = `Could not deploy: ${(error as Error).message}`;
     deploy.disabled = false; deploy.textContent = 'Deploy';

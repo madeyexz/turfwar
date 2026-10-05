@@ -53,7 +53,7 @@ export function spawnSoldier(state: MatchState, ctx: SimContext, s: Soldier) {
   s.m.y = ctx.world.groundHeight(s.m.x, s.m.z, best.y + 1, 0.3);
   s.yaw = best.yaw; s.pitch = 0;
   s.alive = true; s.health = HEALTH.max; s.shield = HEALTH.shield;
-  outfit(s, ctx.random);
+  outfit(s, ctx.random, state.config.freeBuy);
   s.reloadLeft = 0; s.fireCooldown = 0; s.switchLeft = 0; s.grenades = GRENADE.perLife;
   s.protectLeft = RESPAWN_PROTECT; s.sinceHit = 99; s.lastAttacker = -1; s.sinceShot = 99; s.moveSlack = MOVE_SLACK.max; s.groundY = s.m.y;
   if (s.brain) { s.brain.path = []; s.brain.target = -1; s.brain.repath = 0; s.brain.goal = ''; }

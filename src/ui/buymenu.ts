@@ -54,13 +54,13 @@ export class BuyMenu {
   close() { if (!this.open) return; this.root.hidden = true; this.onClose?.(); }
 
   /** Refresh credits, buy-zone status and which items are affordable / already carried. */
-  update(me: Soldier | undefined, canBuy: boolean, buyLeft: number) {
+  update(me: Soldier | undefined, canBuy: boolean, buyLeft: number, free = false) {
     if (!this.open || !me) return;
-    this.money.textContent = `$${me.money}`;
+    this.money.textContent = free ? 'FREE BUY' : `$${me.money}`;
     this.status.textContent = canBuy ? (buyLeft > 0 ? `BUY TIME ${Math.ceil(buyLeft)}s · or at your spawn` : 'AT YOUR SPAWN') : 'BUY TIME OVER · RETURN TO YOUR SPAWN';
     this.status.classList.toggle('closed', !canBuy);
     for (const [item, b] of this.buttons) {
-      const price = item === 'grenade' ? ECONOMY.grenade : WEAPONS[item].price;
+      const price = free ? 0 : item === 'grenade' ? ECONOMY.grenade : WEAPONS[item].price;
       const owned = item !== 'grenade' && me.weapons.includes(item);
       b.classList.toggle('owned', owned);
       b.disabled = !canBuy || owned || price > me.money;

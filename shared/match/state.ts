@@ -103,10 +103,12 @@ export interface MatchConfig {
   botSkill: number;
   /** Practice range: no bots and no score limit — try weapons and routes in peace. */
   practice?: boolean;
+  /** Testing: everything in the buy menu is free and buying works anywhere, any time. */
+  freeBuy?: boolean;
 }
 
 export const OFFLINE_CONFIG: MatchConfig = { teamSize: 6, scoreLimit: 200, timeLimit: 600, warmup: 3, respawn: 4, botSkill: 0.45 };
-export const PRACTICE_CONFIG: MatchConfig = { teamSize: 0, scoreLimit: 100000, timeLimit: 36000, warmup: 1, respawn: 2, botSkill: 0.4, practice: true };
+export const PRACTICE_CONFIG: MatchConfig = { teamSize: 0, scoreLimit: 100000, timeLimit: 36000, warmup: 1, respawn: 2, botSkill: 0.4, practice: true, freeBuy: true };
 export const ONLINE_CONFIG: MatchConfig = { teamSize: 6, scoreLimit: 200, timeLimit: 600, warmup: 8, respawn: 5, botSkill: 0.55 };
 
 export interface MatchState {
