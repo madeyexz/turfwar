@@ -1,8 +1,11 @@
 import { MapBuilder } from './builder';
 import {
-  AREA, BILLBOARDS, BRANDS, EXPRESSWAY, HEDGES, LOTS, POIS, RED_HOUSE, ROADS, START, XIMEN_SHELLS, XIMEN_SHOPS, XIMEN_SIGNS, XIMEN_SOLIDS,
+  AREA, BRANDS, EXPRESSWAY, HEDGES, LOTS, POIS, RED_HOUSE, ROADS, START, XIMEN_SHOPS, XIMEN_SOLIDS,
 } from './taipei-data';
-import { parkTaipeiVehicles } from './taipei-vehicles';
+import { mrtExit, parkedCars, streetFurniture, type Keep, type Shift } from './taipei-decor';
+import { INTERIOR_BUILDINGS, interiors } from './taipei-interiors';
+import { TAIPEI_VEHICLES, parkTaipeiVehicles } from './taipei-vehicles';
+import { minusHoles, underpass, underpassGround } from './taipei-underpass';
 import type { BlockStyle, Decor, MapDef, SignStyle } from './types';
 
 /**
@@ -23,9 +26,11 @@ import type { BlockStyle, Decor, MapDef, SignStyle } from './types';
  *   C–E are landmarks bots roam to: the Red House, the Ximen gateway and the Emei St stage.
  * Plus ammo crates and the playable bounds.
  *
- * Approximations: the octagonal Red House is a round drum (collision as in the source up to its
- * eaves, its roof stepped), median floors follow the junction gaps by rule, and the source's MRT
- * exits, street furniture, traffic, pedestrians and generic facade signs are not carried over.
+ * The look of the district, its street furniture and the skyline (with Taipei 101) come from the
+ * source too, as a dressing set the renderer loads on demand (taipei-decor.ts places it and its
+ * colliders); taipei-interiors.ts and taipei-underpass.ts add enterable shops, roof access and the
+ * Ximen station underpass. Approximations: median floors follow the junction gaps by rule, and the
+ * source's traffic and pedestrians are not carried over.
  *
  * Coordinates: the source's (+x east, +z south, metres), shifted so the area is centred on 0.
  */
@@ -91,7 +96,48 @@ function paving(b: B) {
       j1++;
     }
     for (let jj = j; jj <= j1; jj++) for (let ii = i; ii <= i1; ii++) done.add(`${ii},${jj}`);
-    boxAt(b, xs[i], zs[j], xs[i1 + 1], zs[j1 + 1], -0.35, KERB, 'slab', 0xb8b4ac);
+    // Less the stair wells down to the Ximen station underpass.
+    for (const [x0, z0, x1, z1] of minusHoles([xs[i], zs[j], xs[i1 + 1], zs[j1 + 1]])) boxAt(b, x0, z0, x1, z1, -0.35, KERB, 'paving', 0xd8d6d0);
+  }
+}
+
+/** Asphalt over every traffic carriageway (visual: the ground under it is the road). */
+function asphalt(b: B) {
+  for (const r of ROADS) {
+    if (r[12]) continue;
+    const c = carriageway(r);
+    const x0 = Math.max(c.x0, AREA.x0 - BACKDROP), x1 = Math.min(c.x1, AREA.x1 + BACKDROP), z0 = Math.max(c.z0, AREA.z0 - BACKDROP), z1 = Math.min(c.z1, AREA.z1 + BACKDROP);
+    if (x1 <= x0 || z1 <= z0) continue;
+    // Cross roads lie a few millimetres apart so their overlaps never flicker.
+    const top = r[3] === 'x' ? 0.004 : 0.008;
+    b.shape(X((x0 + x1) / 2), top - 0.02, Z((z0 + z1) / 2), x1 - x0, 0.02, z1 - z0, 'asphalt');
+  }
+}
+
+/**
+ * The pedestrian streets' paving as the source lays it: warm clay tiles kerb to kerb with a red
+ * stripe down the middle (visual, on the paving's top; crossings with the traffic roads excluded).
+ */
+function pedestrianPaving(b: B) {
+  const traffic = ROADS.filter(r => !r[12]).map(carriageway);
+  for (const r of ROADS) {
+    if (!r[12]) continue;
+    const [, , , axis, at, from, to, , hw] = r;
+    // Runs between the traffic roads it crosses.
+    const cuts = traffic.filter(c => axis === 'x' ? at > c.z0 && at < c.z1 : at > c.x0 && at < c.x1).map(c => axis === 'x' ? [c.x0, c.x1] : [c.z0, c.z1]).sort((p, q) => p[0] - q[0]);
+    let a = from;
+    const runs: [number, number][] = [];
+    for (const [c0, c1] of cuts) { if (c0 > a) runs.push([a, Math.min(c0, to)]); a = Math.max(a, c1); }
+    if (a < to) runs.push([a, to]);
+    for (const [s0, s1] of runs) {
+      if (s1 - s0 < 1) continue;
+      const strip = (o0: number, o1: number, y: number, color: number) => {
+        const [x0, z0, x1, z1] = axis === 'x' ? [s0, at + o0, s1, at + o1] : [at + o0, s0, at + o1, s1];
+        b.shape(X((x0 + x1) / 2), KERB, Z((z0 + z1) / 2), x1 - x0, y, z1 - z0, 'paving', color);
+      };
+      strip(-hw, hw, 0.004, 0xd8b2a0);
+      strip(-0.8, 0.8, 0.007, 0xa85a44);
+    }
   }
 }
 
@@ -161,25 +207,17 @@ function expressway(b: B) {
   e.piers.forEach((x, i) => boxAt(b, x - 1.1, e.z - 1.25, x + 1.1, e.z + 1.25, 0, e.pierTop[i], 'concrete', 0xb8b8b2));
 }
 
-/** Facade colour of the district building the point (x, z) belongs to. */
-function shellColor(x: number, z: number) {
-  const s = XIMEN_SHELLS.find(([x0, z0, x1, z1]) => x >= x0 - 0.05 && x <= x1 + 0.05 && z >= z0 - 0.05 && z <= z1 + 0.05);
-  return s ? s[5] : 0xc8c4bc;
-}
-
-/** The Ximending district's own collision boxes, styled by what they are. */
+/**
+ * The Ximending district's own collision boxes. The district is drawn by the source's own meshes
+ * (the 'taipei' dressing set: facades, signs, shopfronts, the cinema and arcade interiors), so its
+ * boxes only collide, each with the surface it stands for.
+ */
 function ximending(b: B) {
   for (const [x0, z0, x1, z1, y0, y1, tag] of XIMEN_SOLIDS) {
-    const cx = (x0 + x1) / 2, cz = (z0 + z1) / 2, h = y1 - y0;
-    switch (tag) {
-      case 'building': boxAt(b, x0, z0, x1, z1, y0, y1, 'facade', shellColor(cx, cz)); break;
-      case 'wall': boxAt(b, x0, z0, x1, z1, y0, y1, 'plaster', shellColor(cx, cz)); break;
-      case 'pillar': boxAt(b, x0, z0, x1, z1, y0, y1, 'concrete', 0x4a4458); break;
-      case 'pole': boxAt(b, x0, z0, x1, z1, y0, y1, 'steel', h > 8 ? 0xb8141a : 0x7a7a7c); break;
-      case 'floor': boxAt(b, x0, z0, x1, z1, 0, y1, 'slab'); break;
-      // Claw machines and game cabinets stand tall; counters, seats and tables are low.
-      default: boxAt(b, x0, z0, x1, z1, y0, y1, h > 2 ? 'steel' : 'wood', h > 2 ? 0xd85aa8 : 0x8a6a4a);
-    }
+    // Buildings with enterable ground floors are built by taipei-interiors.ts.
+    if (tag === 'building' && INTERIOR_BUILDINGS.some(r => r[0] === x0 && r[1] === z0 && r[2] === x1 && r[3] === z1 && r[4] === y1)) continue;
+    const surface = tag === 'pole' ? 'metal' : tag === 'prop' ? (y1 - y0 > 2 ? 'metal' : 'concrete') : 'concrete';
+    b.box(X((x0 + x1) / 2), tag === 'floor' ? 0 : y0, Z((z0 + z1) / 2), x1 - x0, y1 - (tag === 'floor' ? 0 : y0), z1 - z0, 'invisible', surface);
   }
 }
 
@@ -195,16 +233,24 @@ function lots(b: B) {
 
 /** The Red House (西門紅樓): octagon, cross wing, gate piers, plaza tables, trees and poles. */
 function redHouse(b: B) {
-  const RED = 0xe0907c;
+  const RED = 0xffffff;
   for (const c of RED_HOUSE) {
     if (c[0] === 'circle') {
       const [, x, z, r, , y1, tag] = c as [string, number, number, number, number, number, string];
       if (tag === 'landmark') {
-        // The octagonal hall to its eaves, then the roof and lantern up to the source's 22 m.
-        b.cylinder(X(x), 0, Z(z), r, 12, 'brick', 'y', RED);
-        b.cylinder(X(x), 12, Z(z), r * 0.8, 2.5, 'roof', 'y', 0x5a4a44);
-        b.cylinder(X(x), 14.5, Z(z), r * 0.4, 4.5, 'brick', 'y', RED);
-        b.cylinder(X(x), 19, Z(z), r * 0.25, y1 - 19, 'roof', 'y', 0x5a4a44);
+        // The octagon as the source builds it: a brick storey with arched windows, a stone band, a
+        // second brick storey, the cornice, a hipped octagonal roof, the lantern storey and its cap.
+        // Collision is the source's: its circle up to the roof.
+        b.cylinder(X(x), 0, Z(z), r * 0.9, y1, 'invisible', 'y');
+        const oct = (radius: number, y0: number, ya: number, style: BlockStyle, color: number, top = radius) =>
+          b.raw({ kind: 'cylinder', x: X(x), y: y0, z: Z(z), radius, height: ya - y0, axis: 'y', style, color, sides: 8, top });
+        const STONE = 0xf0e8dc, TILE = 0x7a8478;
+        oct(9.5, 0, 5.4, 'brick', RED); oct(9.9, 5.2, 6.1, 'plaster', STONE);
+        oct(9.3, 6, 10.6, 'brick', RED); oct(10, 10.5, 11.5, 'plaster', STONE);
+        oct(10.4, 11.5, 13.7, 'slab', TILE, 4.2);
+        oct(4.2, 13.7, 16.4, 'brick', RED); oct(4.6, 16.4, 17.1, 'plaster', STONE);
+        oct(4.8, 17.1, 20.5, 'slab', TILE, 0.2);
+        oct(0.12, 20.5, y1, 'steel', 0x3a3a3c);
       } else if (tag === 'tree') b.tree(X(x), Z(z), (y1 + 0.2) / 3.2, 1);
       else if (tag === 'wall') b.cylinder(X(x), 0, Z(z), r, y1, 'wood', 'y', 0x6b4a2a);
       else b.cylinder(X(x), 0, Z(z), Math.max(r, 0.08), y1, 'steel', 'y', 0x3a3a3c);
@@ -222,40 +268,18 @@ function sign(b: B, style: SignStyle, x: number, y0: number, y1: number, z: numb
   b.raw(d);
 }
 
-/** Every sign the district hangs, the shopfronts it opened, and the chain stores of the plan. */
+/** Shop signboards of the plan's chain stores outside the district (whose own storefronts are in its meshes). */
 function signage(b: B) {
-  for (const [kind, x, z, y0, y1, facing, w, text, sub, bg, fg] of XIMEN_SIGNS) {
-    if (kind === 'billboard') {
-      const art = BILLBOARDS[Number(text.replace('bill', ''))] ?? ['', '#202020', '#ffffff'];
-      const lines = art[0].split(' / ');
-      sign(b, 'billboard', x, y0, y1, z, facing, w, lines[0], art[1], contrast(art[1]), lines.slice(1).join(' · '));
-    } else if (kind === 'screen') sign(b, 'screen', x, y0, y1, z, facing, w, '', '#101826', '#5ad8ff');
-    else if (kind === 'marquee') sign(b, 'marquee', x, y0, y1, z, facing, w, '', fg || '#14161c', '#ffd890');
-    else sign(b, kind === 'blade' ? 'blade' : 'board', x, y0, y1, z, facing, w, text, bg || '#202020', fg || '#ffffff', sub);
-  }
-  // Shopfront signboards over the ground floor: district storefronts first, then the plan's other stores.
-  const fronts: [number, number, number, number, string][] = XIMEN_SHOPS.map(([x, z, f, w, name]) => [x, z, f, w, name]);
   for (const [kind, brand, x, z, f, w] of POIS) {
-    if (kind === 'claw' || fronts.some(s => Math.hypot(s[0] - x, s[1] - z) < 3)) continue;
+    if (kind === 'claw' || XIMEN_SHOPS.some(s => Math.hypot(s[0] - x, s[1] - z) < 3)) continue;
     if (x < AREA.x0 - BACKDROP || x > AREA.x1 + BACKDROP) continue;
-    fronts.push([x + Math.sin(f) * 0.6, z - Math.cos(f) * 0.6, f, w, brand]);
-  }
-  for (const [x, z, f, w, name] of fronts) {
-    const colors = BRANDS[name] ?? ['#c8141a', '#ffffff'];
-    sign(b, 'board', x, 3.2, 4.1, z, f, Math.min(w, 9) - 0.4, name, colors[0], colors[0] === '#ffffff' || colors[0] === '#f7f3e8' ? colors[1] : colors[1] ?? '#ffffff');
+    const colors = BRANDS[brand] ?? ['#c8141a', '#ffffff'];
+    sign(b, 'board', x + Math.sin(f) * 0.6, 3.2, 4.1, z - Math.cos(f) * 0.6, f, Math.min(w, 9) - 0.4, brand, colors[0], colors[1] ?? '#ffffff');
   }
 }
 
-function contrast(bg: string) {
-  const v = parseInt(bg.slice(1), 16), l = ((v >> 16) & 255) * 0.3 + ((v >> 8) & 255) * 0.59 + (v & 255) * 0.11;
-  return l > 150 ? '#1a1a1a' : '#ffffff';
-}
-
-/** The Ximen gateway (西門町牌樓) over Hanzhong St at Zhongxiao W. Rd: its arch sign between the posts. */
+/** The Red House's name board on its gate (the Ximen gateway's arch sign is in the district meshes). */
 function gateway(b: B) {
-  const [px0, px1] = XIMEN_SOLIDS.filter(s => s[6] === 'pole' && s[5] > 8).map(s => (s[0] + s[2]) / 2).sort((p, q) => p - q);
-  const z = -176.6;
-  for (const f of [0, Math.PI]) sign(b, 'gate', (px0 + px1) / 2, 6.6, 8.6, z + (f ? 0.12 : -0.12), f, px1 - px0 + 1.2, '西門町', '#c8141e', '#fff4f0', 'XIMENDING · 徒步區 WALKING ZONE');
   sign(b, 'board', -725.7, 6.1, 7.1, -90, Math.PI / 2, 8, '西門紅樓', '#5a1a14', '#ffd890', 'THE RED HOUSE');
 }
 
@@ -267,12 +291,15 @@ export function taipei(): MapDef {
     sabotage: { sites: ['A', 'B'], attackerSpawn: 1 },
     // Low evening sun from the west, down Wuchang and Emei streets.
     sun: { x: -0.78, y: 0.4, z: 0.2 },
-    ground: () => 0,
+    // Flat streets, but for the pit of the Ximen station underpass (taipei-underpass.ts).
+    ground: underpassGround({ X, Z, ox: OX, oz: OZ }),
   });
   b.buildTerrain(4);
 
   paving(b);
+  asphalt(b);
   streets(b);
+  pedestrianPaving(b);
   expressway(b);
   for (const [x0, z0, x1, z1, top] of HEDGES) boxAt(b, x0, z0, x1, z1, MEDIAN, top, 'hedge');
   ximending(b);
@@ -296,6 +323,22 @@ export function taipei(): MapDef {
 
   // ---- Drivable vehicles (shared/maps/taipei-vehicles.ts) ----------------------------------
   parkTaipeiVehicles(b, X, Z, floorAt);
+
+  // ---- Dressing (taipei-decor.ts), kept clear of the spawns, crates and vehicle spots -------
+  const shift: Shift = { X, Z, ox: OX, oz: OZ };
+  const vehicleRoom = { car: 3.4, scooter: 1.6, heli: 9 } as Record<string, number>;
+  const keep: Keep = [
+    ...b.spawns.map(p => [p.x, p.z, 1.4] as [number, number, number]),
+    ...b.pickups.map(p => [p.x, p.z, 1.6] as [number, number, number]),
+    ...TAIPEI_VEHICLES.map(([kind, x, z]) => [X(x), Z(z), vehicleRoom[kind] ?? 3.4] as [number, number, number]),
+  ];
+  const cuts = [...interiors(b, shift), ...underpass(b, shift, [-160 - 12.4, -160 + 12.4])];
+  // Nothing of the street dressing (look or collider) stands where a vehicle parks.
+  // Nor round the spawns, crates and vehicle spots.
+  const clear = keep.flatMap(([x, z, r]) => [x - r, 0.05, z - r, x + r, 3, z + r]);
+  streetFurniture(b, shift, keep, cuts, clear);
+  parkedCars(b, shift, keep);
+  mrtExit(b, shift, KERB);
 
   return b.build();
 }

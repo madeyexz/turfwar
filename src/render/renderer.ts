@@ -20,7 +20,7 @@ export const QUALITY: Record<'low' | 'medium' | 'high' | 'test', Quality> = {
 export class Renderer {
   readonly renderer: THREE.WebGLRenderer;
   readonly scene = new THREE.Scene();
-  readonly camera = new THREE.PerspectiveCamera(78, 1, 0.05, 1200);
+  readonly camera = new THREE.PerspectiveCamera(78, 1, 0.05, 4000);
   /** First-person weapon rendered on top with its own projection (never clips into walls). */
   readonly viewScene = new THREE.Scene();
   readonly viewCamera = new THREE.PerspectiveCamera(58, 1, 0.01, 10);

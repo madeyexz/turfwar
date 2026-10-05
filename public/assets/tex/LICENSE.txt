@@ -1,5 +1,5 @@
 Surface textures from Poly Haven (https://polyhaven.com), CC0 1.0 Universal.
-Resized to 1024px WebP by tools/fetch-textures.ts (icerock diffuse desaturated to 20%).
+Resized to 1024px WebP by tools/fetch-textures.ts (icerock diffuse desaturated to 20%, sidewalk fully).
 
 sand: https://polyhaven.com/a/sand_01
 cliff: https://polyhaven.com/a/rock_face
@@ -17,3 +17,7 @@ planks: https://polyhaven.com/a/raw_plank_wall
 corrugated: https://polyhaven.com/a/worn_corrugated_iron
 plaster: https://polyhaven.com/a/worn_mossy_plasterwall
 cobble: https://polyhaven.com/a/cobblestone_floor_08
+asphalt: https://polyhaven.com/a/asphalt_02
+sidewalk: https://polyhaven.com/a/grey_tiles
+floortile: https://polyhaven.com/a/floor_tiles_06
+facadetile: https://polyhaven.com/a/long_white_tiles
