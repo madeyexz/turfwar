@@ -1,6 +1,7 @@
-/* ---------- Deploy screen ----------
- * Left: a scrolling panel of choices with the Deploy bar pinned to its foot.
- * Right: the live battlefield backdrop, a showcase of the selected server and the server browser.
+/* ---------- Home page / lobby ----------
+ * Left: callsign and team, then PLAY ONLINE (Quick Play, with private rooms as inline drawers) and
+ * PLAY OFFLINE (bots, practice range), then the options drawer. One decision on screen at a time.
+ * Right: the live battlefield backdrop, a showcase of the current choice and the live public rooms.
  */
 #menu {
   position: fixed; inset: 0; z-index: 5;
@@ -12,61 +13,126 @@
 
 /* ---- Panel ---- */
 #menu .panel { display: flex; flex-direction: column; min-height: 0; border-right: 1px solid rgba(190, 236, 244, 0.08); }
-#menu .brand { padding: 40px 36px 0; }
+#menu .brand { padding: 30px 36px 0; }
 #menu .tag { color: var(--muted); font-weight: 700; letter-spacing: 0.28em; font-size: 12px; text-transform: uppercase; }
-#menu h1 { margin: 14px 0 0; font-size: clamp(38px, 3.6vw, 52px); line-height: 0.95; letter-spacing: 0.04em; font-weight: 700; text-transform: uppercase; }
-#menu h1 span, #menu h1 em { display: block; white-space: nowrap; }
+#menu h1 { margin: 8px 0 0; font-size: clamp(32px, 2.9vw, 40px); line-height: 1; letter-spacing: 0.04em; font-weight: 700; text-transform: uppercase; white-space: nowrap; }
 #menu h1 em { font-style: normal; color: var(--accent); }
-#menu .lede { margin: 14px 0 0; color: #c3d1d5; font-size: 16px; line-height: 1.35; font-weight: 500; max-width: 34ch; }
+#menu .lede { margin: 8px 0 0; color: #c3d1d5; font-size: 15px; line-height: 1.3; font-weight: 500; max-width: 36ch; }
 
-#menu .form { flex: 1; min-height: 0; overflow-y: auto; padding: 26px 36px 20px; display: flex; flex-direction: column; gap: 18px; scrollbar-width: thin; scrollbar-color: rgba(190, 236, 244, 0.2) transparent; }
-#menu .field { display: flex; flex-direction: column; gap: 7px; min-width: 0; }
+#menu .form { flex: 1; min-height: 0; overflow-y: auto; padding: 20px 36px 20px; display: flex; flex-direction: column; gap: 18px; scrollbar-width: thin; scrollbar-color: rgba(190, 236, 244, 0.2) transparent; }
+#menu .field { display: flex; flex-direction: column; gap: 6px; min-width: 0; }
 #menu .label { display: flex; justify-content: space-between; gap: 8px; font-size: 11px; letter-spacing: 0.2em; color: var(--muted); font-weight: 700; text-transform: uppercase; }
 #menu .label output { color: var(--ink); letter-spacing: 0.04em; font-weight: 600; text-transform: none; }
-#menu input[type='text'] { width: 100%; background: rgba(255, 255, 255, 0.05); border: 1px solid var(--line); border-radius: 3px; padding: 9px 12px; font-size: 18px; font-weight: 600; letter-spacing: 0.04em; outline: none; transition: border-color 0.15s; }
+#menu input[type='text'] { width: 100%; min-width: 0; background: rgba(255, 255, 255, 0.05); border: 1px solid var(--line); border-radius: 3px; padding: 7px 11px; font-size: 17px; font-weight: 600; letter-spacing: 0.04em; outline: none; transition: border-color 0.15s; }
 #menu input[type='text']:focus { border-color: var(--accent); }
-#menu .row { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; }
-#menu:not(.mode-offline) .row { grid-template-columns: 1fr; }
+#menu .who { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 12px; align-items: end; }
+#menu .who .segmented .choice { padding: 9px 2px; }
 
-/* Choice cards */
+/* Choice cards and segmented controls */
 #menu .choices { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; }
-#menu .choices.modes { grid-template-columns: repeat(3, 1fr); }
 #menu .choice {
-  display: flex; flex-direction: column; gap: 3px; padding: 9px 11px; text-align: left;
+  display: flex; flex-direction: column; gap: 2px; padding: 9px 11px; text-align: left;
   border: 1px solid var(--line); border-radius: 3px; background: rgba(255, 255, 255, 0.035);
   transition: border-color 0.15s, background 0.15s;
 }
 #menu .choice:hover:not(:disabled) { border-color: rgba(127, 246, 255, 0.5); background: rgba(127, 246, 255, 0.05); }
 #menu .choice b { font-size: 16px; letter-spacing: 0.08em; text-transform: uppercase; }
-#menu .choice small { color: var(--muted); font-size: 13px; font-weight: 500; line-height: 1.2; }
+#menu .choice small { color: var(--muted); font-size: 12px; font-weight: 500; line-height: 1.15; }
 #menu .choice[aria-pressed='true'] { border-color: var(--accent); background: rgba(127, 246, 255, 0.09); box-shadow: inset 3px 0 0 var(--accent); }
 #menu .choice:disabled { opacity: 0.4; cursor: not-allowed; }
-#menu .choices.sizes { grid-template-columns: repeat(3, 1fr); }
-#menu .sizes .choice { padding: 7px 9px; }
-#menu .sizes .choice b { font-size: 14px; }
-#menu .sizes .choice small { font-size: 12px; letter-spacing: 0.04em; }
 #menu .mtag { color: var(--accent); letter-spacing: 0.02em; }
-/* Segmented controls: one line of short labels. */
-#menu .choices.segmented { grid-template-columns: repeat(var(--n, 3), 1fr); gap: 0; border: 1px solid var(--line); border-radius: 3px; overflow: hidden; }
-#menu .segmented .choice { border: none; border-radius: 0; padding: 8px 4px; align-items: center; background: transparent; }
+#menu .choices.segmented { grid-template-columns: repeat(var(--n, 3), minmax(0, 1fr)); gap: 0; border: 1px solid var(--line); border-radius: 3px; overflow: hidden; }
+#menu .segmented .choice { border: none; border-radius: 0; padding: 8px 4px; align-items: center; text-align: center; background: transparent; min-width: 0; }
 #menu .segmented .choice + .choice { border-left: 1px solid var(--line); }
-#menu .segmented .choice b { font-size: 13px; }
+#menu .segmented .choice b { font-size: 13px; white-space: nowrap; }
 #menu .segmented .choice[aria-pressed='true'] { box-shadow: inset 0 -2px 0 var(--accent); }
+#menu .segmented.sizes .choice { padding: 6px 4px; }
+#menu .segmented.sizes .choice b { font-size: 15px; letter-spacing: 0.06em; }
+#menu .segmented.sizes .choice small { font-size: 11px; letter-spacing: 0.06em; text-transform: uppercase; white-space: nowrap; }
 #menu .swat { color: var(--aegis); }
 #menu .militia { color: var(--crimson); }
 #menu .crosshairs .choice { flex-direction: row; justify-content: center; gap: 6px; }
 #menu .crosshairs svg { width: 18px; height: 18px; stroke: currentColor; stroke-width: 2; fill: currentColor; color: var(--accent); flex: none; }
 #menu .crosshairs .choice b { text-transform: capitalize; }
 
-/* Which fields each way of playing shows. */
-#menu:not(.mode-offline) .solo-only, #menu:not(.mode-online) .online-only, #menu:not(.mode-lab) .lab-only { display: none; }
-#menu .note { margin: 0; color: #c3d1d5; font-size: 14px; line-height: 1.4; font-weight: 500; }
-#menu .server-card { border: 1px solid var(--line); border-radius: 3px; background: rgba(255, 255, 255, 0.035); padding: 12px 14px; }
-#menu .server-name { display: flex; align-items: center; gap: 9px; font-size: 18px; letter-spacing: 0.06em; }
-#menu .live { width: 8px; height: 8px; border-radius: 50%; background: #5df29a; box-shadow: 0 0 10px #5df29a; }
-#menu .server-card dl { display: grid; grid-template-columns: auto 1fr; gap: 3px 12px; margin: 10px 0 0; font-size: 13px; font-weight: 600; }
-#menu .server-card dt { color: var(--muted); letter-spacing: 0.14em; text-transform: uppercase; font-size: 11px; padding-top: 2px; }
-#menu .server-card dd { margin: 0; color: var(--ink); }
+/* ---- Play blocks ---- */
+#menu .block { display: flex; flex-direction: column; gap: 9px; }
+#menu .block-head { display: flex; justify-content: space-between; align-items: baseline; gap: 10px; }
+#menu .block > .label { color: var(--ink); }
+#menu .block-head .label { color: var(--ink); }
+#menu .hint { margin: 0; color: var(--muted); font-size: 13px; line-height: 1.3; font-weight: 500; }
+#menu .hint:empty { display: none; }
+#menu .unavailable { margin: 0; color: var(--amber); font-size: 13px; line-height: 1.3; font-weight: 600; }
+#menu .unavailable:empty { display: none; }
+#menu .block.off > :not(.block-head):not(.unavailable) { opacity: 0.45; }
+
+/* Primary: Quick Play */
+#menu .deploy {
+  width: 100%; padding: 13px 18px; font-size: 20px; font-weight: 700; letter-spacing: 0.22em; text-transform: uppercase;
+  border: 1px solid var(--accent); border-radius: 3px; color: #031014; background: var(--accent);
+  box-shadow: 0 0 28px rgba(127, 246, 255, 0.25); transition: filter 0.15s, box-shadow 0.15s;
+}
+#menu .deploy:hover:not(:disabled) { filter: brightness(1.08); box-shadow: 0 0 36px rgba(127, 246, 255, 0.4); }
+#menu .deploy:disabled { background: transparent; color: var(--muted); border-color: var(--line); box-shadow: none; cursor: not-allowed; }
+/* Another choice is in focus (a drawer or a public room): Quick Play steps back to an outline. */
+#menu:not(.focus-quick) .deploy:not(:disabled) { background: rgba(127, 246, 255, 0.08); color: var(--accent); box-shadow: none; padding: 10px 18px; font-size: 18px; }
+
+/* Secondary actions: each opens its drawer right below. */
+#menu .subs { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; }
+#menu .sub {
+  display: flex; flex-direction: column; gap: 2px; align-items: flex-start; text-align: left; min-width: 0;
+  padding: 7px 10px; border: 1px solid var(--line); border-radius: 3px; background: rgba(255, 255, 255, 0.035);
+  font-size: 13px; font-weight: 700; letter-spacing: 0.1em; text-transform: uppercase; color: var(--ink);
+  transition: border-color 0.15s, background 0.15s;
+}
+#menu .sub::after { content: ''; }
+#menu .subs:not(.big) .sub { flex-direction: row; justify-content: space-between; align-items: center; }
+#menu .subs:not(.big) .sub::after { content: '+'; color: var(--accent); font-size: 15px; }
+#menu .subs:not(.big) .sub[aria-expanded='true']::after { content: '–'; }
+#menu .subs.big .sub { padding: 9px 11px; }
+#menu .subs.big .sub b { font-size: 15px; letter-spacing: 0.08em; }
+#menu .subs.big .sub small { color: var(--muted); font-size: 12px; font-weight: 500; letter-spacing: 0.02em; text-transform: none; }
+#menu .sub:hover:not(:disabled) { border-color: rgba(127, 246, 255, 0.5); background: rgba(127, 246, 255, 0.05); }
+#menu .sub[aria-expanded='true'] { border-color: var(--accent); background: rgba(127, 246, 255, 0.09); box-shadow: inset 0 -2px 0 var(--accent); }
+#menu .sub:disabled { cursor: not-allowed; }
+
+#menu .drawer { display: none; flex-direction: column; gap: 12px; padding: 12px; border: 1px solid rgba(127, 246, 255, 0.35); border-radius: 3px; background: rgba(127, 246, 255, 0.04); }
+#menu .drawer.open { display: flex; }
+#menu .go {
+  width: 100%; padding: 11px 14px; font-size: 17px; font-weight: 700; letter-spacing: 0.2em; text-transform: uppercase;
+  border: 1px solid var(--accent); border-radius: 3px; color: #031014; background: var(--accent);
+  box-shadow: 0 0 22px rgba(127, 246, 255, 0.22); transition: filter 0.15s, box-shadow 0.15s;
+}
+#menu .go:hover:not(:disabled) { filter: brightness(1.08); box-shadow: 0 0 30px rgba(127, 246, 255, 0.36); }
+#menu .go:disabled { color: var(--muted); border-color: var(--line); background: transparent; box-shadow: none; cursor: not-allowed; }
+#menu .code-row { display: grid; grid-template-columns: minmax(0, 1fr) 110px; gap: 8px; }
+#menu .code-row input[type='text'] { text-transform: uppercase; letter-spacing: 0.4em; font-size: 20px; text-align: center; }
+#menu .code-row .go { padding: 8px 10px; }
+
+/* Map picker: a compact grid; maps the size or mode cannot host are hidden. */
+#menu .maps { display: grid; grid-template-columns: 1fr 1fr; gap: 5px; }
+#menu .map {
+  position: relative; display: flex; flex-direction: column; min-width: 0; padding: 5px 8px 5px 12px; text-align: left;
+  border: 1px solid var(--line); border-radius: 3px; background: rgba(255, 255, 255, 0.03); transition: border-color 0.15s, background 0.15s;
+}
+#menu .map[hidden] { display: none; }
+#menu .map::before { content: ''; position: absolute; left: 4px; top: 6px; bottom: 6px; width: 3px; border-radius: 2px; background: var(--swatch, var(--muted)); opacity: 0.85; }
+#menu .map b { font-size: 13px; letter-spacing: 0.06em; text-transform: uppercase; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+#menu .map small { font-size: 11px; color: var(--muted); letter-spacing: 0.06em; text-transform: uppercase; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+#menu .map:hover { border-color: rgba(127, 246, 255, 0.5); }
+#menu .map[aria-pressed='true'] { border-color: var(--accent); background: rgba(127, 246, 255, 0.1); }
+#menu [data-theme='desert'] { --swatch: #d9a75e; }
+#menu [data-theme='snow'] { --swatch: #cfe8f2; }
+#menu [data-theme='forest'] { --swatch: #7fc56b; }
+
+/* Connection badge (online block and public rooms) */
+#menu .conn { display: inline-flex; align-items: center; gap: 7px; font-size: 11px; font-weight: 700; letter-spacing: 0.14em; text-transform: uppercase; color: var(--muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; min-width: 0; }
+#menu .conn i { flex: none; width: 7px; height: 7px; border-radius: 50%; background: var(--muted); }
+#menu .conn.live i { background: #5df29a; box-shadow: 0 0 8px #5df29a; }
+#menu .conn.live { color: #9be8b9; }
+#menu .conn.wait i { background: var(--amber); animation: lobby-pulse 1s ease-in-out infinite; }
+#menu .conn.off i { background: var(--crimson); }
+@keyframes lobby-pulse { 50% { opacity: 0.3; } }
 
 /* Settings drawer */
 #menu .settings { border-top: 1px solid rgba(190, 236, 244, 0.1); padding-top: 14px; }
@@ -86,64 +152,67 @@
 #menu .bench-link:hover { color: var(--accent); }
 #menu .credits { margin: 0; font-size: 12px; color: #7c8e94; line-height: 1.35; }
 
-/* Deploy bar, always in view */
-#menu .launch { padding: 16px 36px 22px; border-top: 1px solid rgba(190, 236, 244, 0.1); background: rgba(4, 9, 12, 0.6); }
-#menu .deploy {
-  width: 100%; padding: 14px 18px; font-size: 20px; font-weight: 700; letter-spacing: 0.24em; text-transform: uppercase;
-  border: 1px solid var(--accent); border-radius: 3px; color: #031014; background: var(--accent);
-  box-shadow: 0 0 28px rgba(127, 246, 255, 0.25); transition: filter 0.15s, box-shadow 0.15s;
-}
-#menu .deploy:hover:not(:disabled) { filter: brightness(1.08); box-shadow: 0 0 36px rgba(127, 246, 255, 0.4); }
-#menu .deploy:disabled { background: transparent; color: var(--muted); border-color: var(--line); box-shadow: none; cursor: wait; }
-#menu .status { margin-top: 8px; min-height: 16px; font-size: 13px; color: var(--muted); letter-spacing: 0.06em; font-weight: 600; }
+/* Status line (connecting, errors): pinned under the panel, only when there is something to say. */
+#menu .status { padding: 10px 36px 12px; border-top: 1px solid rgba(190, 236, 244, 0.1); background: rgba(4, 9, 12, 0.7); font-size: 13px; color: var(--ink); letter-spacing: 0.06em; font-weight: 600; }
+#menu .status:empty { display: none; }
 
-/* ---- Stage: selected map and the map strip ---- */
-#menu .stage { position: relative; display: flex; flex-direction: column; justify-content: space-between; padding: 40px 40px 28px; min-width: 0; pointer-events: none; }
+/* ---- Stage: showcase of the current choice and the public rooms ---- */
+#menu .stage { position: relative; display: flex; flex-direction: column; justify-content: space-between; gap: 20px; padding: 36px 40px 28px; min-width: 0; min-height: 0; pointer-events: none; }
 #menu .stage > * { pointer-events: auto; }
-#menu .showcase { align-self: flex-end; max-width: 420px; text-align: right; text-shadow: 0 2px 18px rgba(0, 0, 0, 0.7); }
+#menu .showcase { align-self: flex-end; max-width: 440px; text-align: right; text-shadow: 0 2px 18px rgba(0, 0, 0, 0.7); }
 #menu .showcase .region { font-size: 12px; font-weight: 700; letter-spacing: 0.24em; color: var(--accent); text-transform: uppercase; }
-#menu .showcase h2 { margin: 6px 0 0; font-size: clamp(34px, 3.4vw, 48px); line-height: 1; letter-spacing: 0.05em; text-transform: uppercase; }
-#menu .showcase .meta { margin-top: 8px; display: inline-block; padding: 3px 10px; font-size: 13px; font-weight: 700; letter-spacing: 0.14em; text-transform: uppercase; border: 1px solid var(--line); border-radius: 999px; background: rgba(4, 9, 12, 0.55); }
-#menu .showcase .about { margin: 12px 0 0; font-size: 16px; line-height: 1.4; color: #d3dee1; font-weight: 500; }
+#menu .showcase h2 { margin: 6px 0 0; font-size: clamp(32px, 3.4vw, 48px); line-height: 1; letter-spacing: 0.05em; text-transform: uppercase; }
+#menu .showcase .meta { margin-top: 8px; display: inline-block; padding: 3px 10px; font-size: 13px; font-weight: 700; letter-spacing: 0.12em; text-transform: uppercase; border: 1px solid var(--line); border-radius: 999px; background: rgba(4, 9, 12, 0.55); }
+#menu .showcase .about { margin: 10px 0 0; font-size: 15px; line-height: 1.4; color: #d3dee1; font-weight: 500; }
 
-/* Server browser: BeGone-style list of servers (one per map here); the selected row is what Start plays. */
-#menu .browser { border: 1px solid var(--line); border-radius: 4px; background: rgba(6, 12, 16, 0.78); backdrop-filter: blur(6px); max-width: 760px; width: 100%; align-self: flex-end; overflow: hidden; }
-#menu .browser-head { display: flex; justify-content: space-between; align-items: baseline; padding: 10px 14px 8px; border-bottom: 1px solid rgba(190, 236, 244, 0.1); }
-#menu .browser-head b { font-size: 13px; letter-spacing: 0.24em; text-transform: uppercase; color: var(--accent); }
-#menu .browser-head span { font-size: 12px; color: var(--muted); font-weight: 600; letter-spacing: 0.1em; text-transform: uppercase; }
-#menu .browser-cols, #menu .server { display: grid; grid-template-columns: minmax(0, 1fr) 150px 80px 56px; gap: 12px; align-items: center; }
-#menu .browser-cols { padding: 6px 14px; font-size: 11px; font-weight: 700; letter-spacing: 0.2em; color: var(--muted); text-transform: uppercase; background: rgba(255, 255, 255, 0.03); }
-#menu .browser-cols span:nth-child(n + 3), #menu .server span:nth-child(n + 3) { text-align: right; }
-#menu .browser-rows { max-height: min(46vh, 400px); overflow-y: auto; scrollbar-width: thin; scrollbar-color: rgba(190, 236, 244, 0.2) transparent; }
-#menu .server {
-  position: relative; width: 100%; padding: 6px 14px 6px 17px; text-align: left; border: none; border-top: 1px solid rgba(190, 236, 244, 0.06);
-  background: transparent; font-size: 14px; font-weight: 600; transition: background 0.12s;
+/* Public rooms: the live list from the server. */
+#menu .browser { display: flex; flex-direction: column; min-height: 0; border: 1px solid var(--line); border-radius: 4px; background: rgba(6, 12, 16, 0.8); backdrop-filter: blur(6px); max-width: 760px; width: 100%; align-self: flex-end; overflow: hidden; }
+#menu .browser-head { display: flex; justify-content: space-between; align-items: center; gap: 12px; padding: 10px 14px 8px; border-bottom: 1px solid rgba(190, 236, 244, 0.1); }
+#menu .browser-head b { font-size: 13px; letter-spacing: 0.24em; text-transform: uppercase; color: var(--accent); white-space: nowrap; }
+#menu .browser-cols, #menu .room { display: grid; grid-template-columns: minmax(0, 1fr) 130px 52px 76px 84px 64px; gap: 10px; align-items: center; }
+#menu .browser-cols { padding: 6px 14px 6px 17px; font-size: 11px; font-weight: 700; letter-spacing: 0.2em; color: var(--muted); text-transform: uppercase; background: rgba(255, 255, 255, 0.03); }
+#menu .browser-rows { max-height: min(40vh, 340px); overflow-y: auto; scrollbar-width: thin; scrollbar-color: rgba(190, 236, 244, 0.2) transparent; }
+#menu .room {
+  position: relative; padding: 6px 14px 6px 17px; border-top: 1px solid rgba(190, 236, 244, 0.06);
+  font-size: 14px; font-weight: 600; cursor: pointer; outline: none; transition: background 0.12s;
 }
-#menu .server[hidden] { display: none; }
-#menu .server::before { content: ''; position: absolute; left: 0; top: 7px; bottom: 7px; width: 3px; border-radius: 2px; background: var(--swatch, var(--muted)); opacity: 0.8; }
-#menu .server[data-theme='desert'] { --swatch: #d9a75e; }
-#menu .server[data-theme='snow'] { --swatch: #cfe8f2; }
-#menu .server[data-theme='forest'] { --swatch: #7fc56b; }
-#menu .server.online-row { --swatch: #5df29a; }
-#menu .server:hover { background: rgba(127, 246, 255, 0.06); }
-#menu .server[aria-pressed='true'] { background: rgba(127, 246, 255, 0.12); box-shadow: inset 0 0 0 1px rgba(127, 246, 255, 0.55); }
-#menu .server .srv { display: flex; flex-direction: column; min-width: 0; }
-#menu .server .srv b { font-size: 15px; letter-spacing: 0.07em; text-transform: uppercase; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-#menu .server .srv small { font-size: 12px; color: var(--muted); letter-spacing: 0.08em; text-transform: uppercase; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-#menu .server .mode { color: var(--ink); letter-spacing: 0.04em; }
-#menu .server .players { font-variant-numeric: tabular-nums; }
-#menu .server .ping { color: #5df29a; font-size: 12px; letter-spacing: 0.1em; text-transform: uppercase; }
+#menu .room::before { content: ''; position: absolute; left: 0; top: 7px; bottom: 7px; width: 3px; border-radius: 2px; background: var(--swatch, var(--muted)); opacity: 0.8; }
+#menu .room:hover, #menu .room:focus-visible { background: rgba(127, 246, 255, 0.06); }
+#menu .room.selected { background: rgba(127, 246, 255, 0.12); box-shadow: inset 0 0 0 1px rgba(127, 246, 255, 0.55); }
+#menu .room .srv { display: flex; flex-direction: column; min-width: 0; }
+#menu .room .srv b { font-size: 15px; letter-spacing: 0.07em; text-transform: uppercase; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+#menu .room .srv small, #menu .room .players small { font-size: 11px; color: var(--muted); letter-spacing: 0.08em; text-transform: uppercase; white-space: nowrap; }
+#menu .room .mode { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+#menu .room .players { display: flex; flex-direction: column; font-variant-numeric: tabular-nums; line-height: 1.1; }
+#menu .room .state { font-size: 12px; letter-spacing: 0.1em; text-transform: uppercase; color: #5df29a; white-space: nowrap; }
+#menu .room .state.warmup { color: var(--amber); }
+#menu .room .state.ended { color: var(--muted); }
+#menu .room .join { padding: 5px 0; border: 1px solid var(--accent); border-radius: 3px; background: rgba(127, 246, 255, 0.1); color: var(--accent); font-size: 12px; font-weight: 700; letter-spacing: 0.16em; text-transform: uppercase; }
+#menu .room .join:hover:not(:disabled) { background: rgba(127, 246, 255, 0.22); }
+#menu .room .join:disabled { color: var(--muted); border-color: var(--line); background: transparent; cursor: not-allowed; }
+#menu .room .nm { display: none; }
+#menu .empty { margin: 0; padding: 18px 14px; color: var(--muted); font-size: 14px; font-weight: 600; letter-spacing: 0.04em; }
+
+/* Less room for the list: mode and status move under the map name. */
+@media (max-width: 1180px) {
+  #menu .browser-cols, #menu .room { grid-template-columns: minmax(0, 1fr) 46px 64px 60px; }
+  #menu .browser-cols span:nth-child(2), #menu .browser-cols span:nth-child(5), #menu .room .mode, #menu .room .state { display: none; }
+  #menu .room .nm { display: inline; }
+}
 
 /* ---- Narrow screens: one scrolling column ---- */
 @media (max-width: 900px) {
-  #menu { display: block; overflow-y: auto; background: rgba(4, 9, 12, 0.92); }
+  #menu { display: block; overflow-y: auto; overflow-x: hidden; background: rgba(4, 9, 12, 0.92); }
   #menu .panel { border-right: none; min-height: auto; }
   #menu .form { flex: none; overflow: visible; }
-  #menu .brand, #menu .form, #menu .launch { padding-left: 16px; padding-right: 16px; }
+  #menu .brand, #menu .form, #menu .status { padding-left: 16px; padding-right: 16px; }
+  #menu .status { position: sticky; bottom: 0; }
   #menu .stage { padding: 0 16px 24px; gap: 16px; }
   #menu .showcase { align-self: stretch; text-align: left; max-width: none; }
   #menu .browser { align-self: stretch; }
-  #menu .browser-cols, #menu .server { grid-template-columns: minmax(0, 1fr) 110px 60px; }
-  #menu .browser-cols span:nth-child(4), #menu .server .ping { display: none; }
-  #menu .launch { position: sticky; bottom: 0; }
+  #menu .browser-rows { max-height: none; }
+}
+@media (max-width: 400px) {
+  #menu .who { grid-template-columns: 1fr; }
+  #menu h1 { font-size: 28px; }
 }

@@ -1,7 +1,7 @@
 import { inject } from '@vercel/analytics';
 import { loadMap, mapSummaries } from '../shared/maps/index';
-import { ROOM_SIZES } from '../shared/match/rooms';
-import { ELIMINATION, ONLINE_CONFIG, SABOTAGE, type Mode, type Team } from '../shared/match/state';
+import { cleanCode, ROOM_SIZES, sizeLabel } from '../shared/match/rooms';
+import { ELIMINATION, SABOTAGE, type Mode, type Team } from '../shared/match/state';
 import { loadAssets, type Assets } from './assets';
 import { Audio } from './audio';
 import { Game } from './game/game';
@@ -9,7 +9,7 @@ import { OPTIC_DETAILS, RETICLE_COLORS, RETICLE_STYLES, SCOPE_MODES, settings, t
 import type { GameLink } from './game/link';
 import { OfflineLink } from './game/offline';
 import { Bench, BENCH_SECONDS, benchReport, type BenchResult } from './game/bench';
-import { onlineAvailable, onlineConfig, connectOnline } from './net/online';
+import { onlineAvailable, onlineConfig, connectOnline, watchRooms, type OnlineEntry, type PublicRoom } from './net/online';
 import { LevelView } from './render/level';
 import { THEMES } from './render/materials';
 import { QUALITY, Renderer } from './render/renderer';
@@ -32,16 +32,17 @@ const store = {
 const SIZES = ROOM_SIZES;
 type SizeId = (typeof SIZES)[number]['id'];
 const sizeOf = (id: string) => SIZES.find(s => s.id === id) ?? SIZES[1];
-/** Online: Quick Play into a public room, open a private room, or join one by its code. */
-type OnlineKind = 'quick' | 'create' | 'code';
-const ONLINE_KINDS: [OnlineKind, string, string][] = [
-  ['quick', 'Quick Play', 'Fullest public room of your size'],
-  ['create', 'Private room', 'Your map, mode and size; share the code'],
-  ['code', 'Join by code', 'A friend\'s private room'],
-];
-const MODES: Record<Mode, { tag: string; name: string; blurb: string }> = {
-  elimination: { tag: 'E', name: 'Elimination', blurb: 'Wipe out the other team. One life per round.' },
-  sabotage: { tag: 'S', name: 'Sabotage', blurb: 'Militia arms the bomb at a site; SWAT defends.' },
+/**
+ * What the lobby is pointed at. Quick Play is the default; every other way in is an inline drawer
+ * (or a selected public room) with its own button. Enter runs whichever is in focus.
+ */
+type Focus = 'quick' | 'create' | 'join' | 'room' | 'bots' | 'range';
+/** How the match is reached: the old `mode` / `onlineKind` pair, still what storage and URLs speak. */
+const modeOf = (f: Focus) => f === 'bots' ? 'offline' : f === 'range' ? 'lab' : 'online';
+const kindOf = (f: Focus) => f === 'create' ? 'create' : f === 'join' ? 'code' : f === 'room' ? 'room' : 'quick';
+const MODES: Record<Mode, { tag: string; name: string }> = {
+  elimination: { tag: 'E', name: 'Elimination' },
+  sabotage: { tag: 'S', name: 'Sabotage' },
 };
 const CROSSHAIRS = {
   classic: '<path d="M12 2.5v6M12 15.5v6M2.5 12h6M15.5 12h6"/><circle cx="12" cy="12" r="1.3"/>',
@@ -59,43 +60,83 @@ const RETICLES: Record<ReticleStyle, string> = {
   cross: '<path d="M12 3v6M12 15v6M3 12h6M15 12h6"/><circle cx="12" cy="12" r="1.3"/>',
 };
 const cap = (s: string) => s[0].toUpperCase() + s.slice(1);
+const esc = (s: string) => s.replace(/[&<>"']/g, c => `&#${c.charCodeAt(0)};`);
 
 const menu = document.createElement('div');
 menu.id = 'menu';
 const maps = mapSummaries();
+const mapName = (id: string) => maps.find(m => m.id === id)?.name ?? id;
 const server = onlineConfig();
 const online = onlineAvailable();
 const vs = (n: number) => `${n}v${n}`;
 const choice = (group: string, attr: string, items: [string, string][]) =>
   `<div class="choices segmented" id="${group}" style="--n:${items.length}">${items.map(([v, label]) => `<button class="choice" data-${attr}="${v}"><b>${label}</b></button>`).join('')}</div>`;
+const sizeChoice = (group: string) =>
+  `<div class="choices segmented sizes" id="${group}" style="--n:${SIZES.length}">${SIZES.map(s => `<button class="choice" data-size="${s.id}"><b>${s.label}</b><small>${s.name}${s.perTeam > 12 ? ' · big map' : ''}</small></button>`).join('')}</div>`;
+const modeChoice = (group: string) => choice(group, 'gamemode', Object.entries(MODES).map(([id, m]) => [id, `<span class="mtag">[${m.tag}]</span> ${m.name}`]));
+const mapChoice = (group: string) =>
+  `<div class="maps" id="${group}">${maps.map(m => `<button class="map" data-map="${m.id}" data-theme="${m.theme}"><b>${m.name}</b><small></small></button>`).join('')}</div>`;
+const field = (label: string, body: string) => `<div class="field"><span class="label">${label}</span>${body}</div>`;
+
 menu.innerHTML = `
   <section class="panel">
     <header class="brand">
       <div class="tag">Lawbreaker // Frontline</div>
-      <h1><span>SWAT</span><em>vs Militia</em></h1>
-      <p class="lede">Round-based team combat. One life a round, cash for every kill, guns and attachments from the store in your base. First team to ten rounds wins.</p>
+      <h1>SWAT <em>vs Militia</em></h1>
+      <p class="lede">Round-based team combat. One life a round, cash for every kill, first team to ten rounds wins.</p>
     </header>
     <div class="form">
-      <label class="field"><span class="label">Callsign</span><input type="text" id="callsign" maxlength="16" autocomplete="off" spellcheck="false"></label>
-      <div class="field"><span class="label">Play</span><div class="choices modes" id="modes">
-        <button class="choice" data-mode="offline"><b>Solo</b><small>Your server. Bots fill free slots.</small></button>
-        <button class="choice" data-mode="online"><b>Online</b><small id="online-note">The live server with other players.</small></button>
-        <button class="choice" data-mode="lab"><b>Practice</b><small>The range: no bots, free store.</small></button>
-      </div></div>
-      <div class="field online-only" id="online-kind-field"><span class="label">Online</span><div class="choices" id="onlinekinds">${ONLINE_KINDS.map(([id, name, blurb]) => `<button class="choice" data-onlinekind="${id}"><b>${name}</b><small>${blurb}</small></button>`).join('')}</div></div>
-      <label class="field" id="code-field"><span class="label">Room code</span><input type="text" id="roomcode" maxlength="4" autocomplete="off" spellcheck="false" placeholder="ABCD" style="text-transform:uppercase;letter-spacing:.3em"></label>
-      <div class="field" id="gamemode-field"><span class="label">Game mode</span><div class="choices" id="gamemodes">${Object.entries(MODES).map(([id, m]) => `<button class="choice" data-gamemode="${id}"><b><span class="mtag">[${m.tag}]</span> ${m.name}</b><small>${m.blurb}</small></button>`).join('')}</div></div>
-      <div class="field" id="size-field"><span class="label">Room size</span><div class="choices sizes" id="sizes" style="--n:3">${SIZES.map(s => `<button class="choice" data-size="${s.id}"><b>${s.label}</b><small>${s.name}${s.perTeam > 12 ? ' · big map' : ''}</small></button>`).join('')}</div></div>
-      <div class="online-only server-card" id="server-card">
-        <div class="server-name"><span class="live"></span><b id="server-name"></b></div>
-        <dl id="server-facts"></dl>
+      <div class="who">
+        <label class="field"><span class="label">Callsign</span><input type="text" id="callsign" maxlength="16" autocomplete="off" spellcheck="false"></label>
+        ${field('Team', choice('teams', 'team', [['auto', 'Auto'], ['0', '<span class="swat">SWAT</span>'], ['1', '<span class="militia">Militia</span>']]))}
       </div>
-      <p class="lab-only note">The practice range runs on the selected map with the whole store free and no round limit. Shoot at walls, try every attachment and learn the routes.</p>
-      <div class="row">
-        <div class="field"><span class="label">Team</span>${choice('teams', 'team', [['auto', 'Auto'], ['0', '<span class="swat">SWAT</span>'], ['1', '<span class="militia">Militia</span>']])}</div>
-        <div class="field solo-only"><span class="label">Bots</span>${choice('skills', 'skill', [['0.25', 'Recruit'], ['0.45', 'Veteran'], ['0.75', 'Elite']])}</div>
-        <div class="field" id="botsfill-field"><span class="label">Bots</span>${choice('botsfills', 'botsfill', [['on', 'Fill slots'], ['off', 'Humans only']])}</div>
-      </div>
+
+      <section class="block" id="online-block">
+        <div class="block-head"><span class="label">Play online</span><span class="conn" id="conn"></span></div>
+        ${sizeChoice('sizes-online')}
+        <button class="deploy" id="quick" data-act="quick" disabled>Loading…</button>
+        <p class="hint" id="quick-hint"></p>
+        <div class="subs">
+          <button class="sub" data-toggle="create" aria-expanded="false">Create private room</button>
+          <button class="sub" data-toggle="join" aria-expanded="false">Join with code</button>
+        </div>
+        <div class="drawer" id="drawer-create">
+          ${field('Mode', modeChoice('modes-create'))}
+          ${field('Map', mapChoice('maps-create'))}
+          ${field('Bots', choice('botsfills', 'botsfill', [['on', 'Fill empty slots'], ['off', 'Humans only']]))}
+          <button class="go" id="create-go" data-act="create">Create room</button>
+          <p class="hint">You get a four-letter code to share. Size: the chip above.</p>
+        </div>
+        <div class="drawer" id="drawer-join">
+          <div class="code-row">
+            <input type="text" id="roomcode" maxlength="4" autocomplete="off" spellcheck="false" placeholder="ABCD" aria-label="Room code">
+            <button class="go" id="join-go" data-act="join">Join</button>
+          </div>
+          <p class="hint">The host's code is on their status line (ROOM ABCD) and in their invite link.</p>
+        </div>
+        <p class="unavailable" id="online-off"></p>
+      </section>
+
+      <section class="block" id="offline-block">
+        <span class="label">Play offline</span>
+        <div class="subs big">
+          <button class="sub" data-toggle="bots" aria-expanded="false"><b>Play vs bots</b><small>Your own match, any map</small></button>
+          <button class="sub" data-toggle="range" aria-expanded="false"><b>Practice range</b><small>No bots · free store</small></button>
+        </div>
+        <div class="drawer" id="drawer-bots">
+          ${field('Mode', modeChoice('modes-bots'))}
+          ${field('Size', sizeChoice('sizes-bots'))}
+          ${field('Map', mapChoice('maps-bots'))}
+          ${field('Bot difficulty', choice('skills', 'skill', [['0.25', 'Recruit'], ['0.45', 'Veteran'], ['0.75', 'Elite']]))}
+          <button class="go" id="bots-go" data-act="bots">Start match</button>
+        </div>
+        <div class="drawer" id="drawer-range">
+          ${field('Map', mapChoice('maps-range'))}
+          <button class="go" id="range-go" data-act="range">Enter the range</button>
+          <p class="hint">The whole store is free and there is no round limit: try every gun and attachment, learn the routes.</p>
+        </div>
+      </section>
+
       <details class="settings">
         <summary>Options &amp; controls</summary>
         <div class="settings-body">
@@ -125,19 +166,17 @@ menu.innerHTML = `
           <dt>R · E</dt><dd>Reload · use (bomb, ammo crate)</dd>
           <dt>Z · B</dt><dd>Binoculars · store</dd>
           <dt>Enter · T</dt><dd>Chat · team chat</dd>
-          <dt>Tab · F</dt><dd>Scoreboard · fullscreen</dd>
+          <dt>Tab</dt><dd>Scoreboard</dd>
+          <dt>Esc / P · F</dt><dd>Menu (settings) · fullscreen</dd>
           <dt>V</dt><dd>Camera view (reserved)</dd>
-          <dt>Esc · M</dt><dd>Release mouse · back to the lobby</dd>
+          <dt>M</dt><dd>Back to the lobby (mouse released)</dd>
         </dl>
         <button class="bench-link" id="bench">Run the ${BENCH_SECONDS}-second performance check</button>
         <p class="credits">Characters, weapons and props: CC0 packs by Quaternius. Gunshots: CC0 Free Firearm Sound Library. Textures: CC0 Poly Haven. Font: Rajdhani (OFL). No proprietary game assets.</p>
         </div>
       </details>
     </div>
-    <footer class="launch">
-      <button class="deploy" id="deploy" disabled>Loading…</button>
-      <div class="status" id="status"></div>
-    </footer>
+    <div class="status" id="status" role="status"></div>
   </section>
   <section class="stage">
     <div class="showcase" id="showcase">
@@ -147,135 +186,230 @@ menu.innerHTML = `
       <p class="about"></p>
     </div>
     <div class="browser">
-      <div class="browser-head"><b>Server browser</b><span id="browser-count"></span></div>
-      <div class="browser-cols"><span>Server</span><span>Mode</span><span>Players</span><span>Ping</span></div>
-      <div class="browser-rows" id="servers">
-        ${maps.map(m => `<button class="server" data-map="${m.id}" data-theme="${m.theme}"><span class="srv"><b>${m.name}</b><small></small></span><span class="mode"></span><span class="players"></span><span class="ping"></span></button>`).join('')}
-        <button class="server online-row" data-server="online"><span class="srv"><b></b><small></small></span><span class="mode"></span><span class="players"></span><span class="ping">Online</span></button>
-      </div>
+      <div class="browser-head"><b>Public rooms</b><span id="rooms-state"></span></div>
+      <div class="browser-cols"><span>Map</span><span>Mode</span><span>Size</span><span>Players</span><span>Status</span><span></span></div>
+      <div class="browser-rows" id="rooms"></div>
     </div>
   </section>`;
 app.appendChild(menu);
 document.body.classList.add('menu-open');
 
+const $ = <T extends HTMLElement = HTMLElement>(sel: string) => menu.querySelector<T>(sel)!;
 const select = (group: string, attr: string, value: string) => menu.querySelectorAll<HTMLButtonElement>(`#${group} [data-${attr}]`).forEach(b => b.setAttribute('aria-pressed', String(b.dataset[attr] === value)));
+
+// ---- Initial choices: URL flags first, then what this browser remembered. ----
 const MODE_ALIASES: Record<string, string> = { solo: 'offline', practice: 'lab' };
-let mode = params.get('mode') ?? store.get('mode', 'offline');
-mode = MODE_ALIASES[mode] ?? mode;
-if (!['offline', 'online', 'lab'].includes(mode)) mode = 'offline';
+let startMode = params.get('mode') ?? store.get('mode', online.ok ? 'online' : 'offline');
+startMode = MODE_ALIASES[startMode] ?? startMode;
+const storedKind = store.get('onlineKind', 'quick');
+let focus: Focus = params.get('room') ? 'join'
+  : startMode === 'offline' ? 'bots' : startMode === 'lab' ? 'range'
+  : storedKind === 'create' ? 'create' : storedKind === 'code' && params.get('mode') ? 'join' : 'quick';
+if (!online.ok && modeOf(focus) === 'online') focus = 'bots';
 let mapId = params.get('map') ?? store.get('map', maps[0].id);
 if (!maps.some(m => m.id === mapId)) mapId = maps[0].id;
 let gameMode = (params.get('game') ?? store.get('gameMode', 'elimination')) as Mode;
 if (!MODES[gameMode]) gameMode = 'elimination';
 let size: SizeId = sizeOf(params.get('size') ?? store.get('size', 'squad')).id;
-let onlineKind: OnlineKind = params.get('room') ? 'code' : (store.get('onlineKind', 'quick') as OnlineKind);
-if (!ONLINE_KINDS.some(([id]) => id === onlineKind)) onlineKind = 'quick';
 let botsFill = store.get('botsFill', 'on');
 let team = params.get('team') ?? store.get('team', 'auto');
 let skill = params.get('skill') ?? store.get('skill', '0.45');
 let crosshair = store.get('crosshair', 'classic') as Crosshair;
-if (!(crosshair in CROSSHAIRS)) crosshair = 'classic';
 let quality = (params.get('quality') ?? store.get('quality', 'medium')) as keyof typeof QUALITY;
 if (!QUALITY[quality]) quality = 'medium';
-/** ?bench: scripted solo run that measures frame times on this device (Elimination, Large unless ?size). */
+/** ?bench: scripted solo run that measures frame times on this device (Elimination, Squad unless ?size). */
 const benchMode = params.has('bench');
-if (benchMode) { mode = 'offline'; gameMode = 'elimination'; size = sizeOf(params.get('size') ?? 'squad').id; }
-const callsign = menu.querySelector<HTMLInputElement>('#callsign')!;
+if (benchMode) { focus = 'bots'; gameMode = 'elimination'; size = sizeOf(params.get('size') ?? 'squad').id; }
+const callsign = $<HTMLInputElement>('#callsign');
 callsign.value = params.get('name') ?? store.get('name', `Lawbreaker-${Math.floor(Math.random() * 900 + 100)}`);
-menu.querySelector('#server-name')!.textContent = server.database ?? 'No server';
-menu.querySelector('.online-row .srv b')!.textContent = server.database ?? 'No server configured';
+const roomCode = $<HTMLInputElement>('#roomcode');
+roomCode.value = cleanCode(params.get('room') ?? '');
+const quickBtn = $<HTMLButtonElement>('#quick');
+const status = $('#status');
 if (!online.ok) {
-  (menu.querySelector('[data-mode="online"]') as HTMLButtonElement).disabled = true;
-  const note = menu.querySelector<HTMLElement>('#online-note')!;
-  note.textContent = 'Not set up in this build.';
-  note.parentElement!.title = online.reason;
-  if (mode === 'online') mode = 'offline';
+  $('#online-block').classList.add('off');
+  $('#online-off').textContent = online.reason;
+  menu.querySelectorAll<HTMLButtonElement>('#online-block button').forEach(b => { b.disabled = true; });
 }
 
-const sabotageReady = (id: string) => (maps.find(m => m.id === id)?.sites ?? 0) > 0;
-/** Sabotage needs bomb sites: keep the selection on a map that has them. */
-/** Maps the current choice can play: the room size decides big or small maps, Sabotage needs bomb sites. */
-const choosingMap = () => mode !== 'online' || onlineKind === 'create';
-const mapFits = (m: (typeof maps)[number]) => mode === 'lab' || ((sizeOf(size).perTeam > 12) === m.big && (gameMode !== 'sabotage' || m.sites > 0));
-const fitMap = () => { const m = maps.find(x => x.id === mapId); if (!m || !mapFits(m)) mapId = maps.find(mapFits)?.id ?? mapId; };
-const deployLabel = () => mode === 'lab' ? 'Enter the range' : mode !== 'online' ? 'Start match'
-  : onlineKind === 'quick' ? `Quick Play ${sizeOf(size).label}` : onlineKind === 'create' ? 'Create room' : 'Join room';
-const roomCode = menu.querySelector<HTMLInputElement>('#roomcode')!;
-roomCode.value = (params.get('room') ?? '').toUpperCase().slice(0, 4);
-const display = (id: string, on: boolean) => { menu.querySelector<HTMLElement>(`#${id}`)!.style.display = on ? '' : 'none'; };
+// ---- Public rooms: a live list from the server while the lobby is open. ----
+let rooms: PublicRoom[] = [];
+let roomsState: 'connecting' | 'live' | 'offline' = 'offline';
+let roomId = -1;
+let stopRooms: (() => void) | undefined;
+let roomsGen = 0;
+let roomsRetry: ReturnType<typeof setTimeout> | undefined;
+function watchLobbyRooms() {
+  unwatchRooms();
+  if (!online.ok || benchMode) { renderRooms(); return; }
+  const gen = ++roomsGen;
+  void watchRooms(list => { if (gen !== roomsGen) return; rooms = list; renderRooms(); refresh(); }, state => {
+    if (gen !== roomsGen) return;
+    roomsState = state;
+    if (state === 'offline') {
+      rooms = [];
+      // The server may come back: try again while the lobby stays open.
+      roomsRetry = setTimeout(() => { if (gen === roomsGen && inMenu) watchLobbyRooms(); }, 5000);
+    }
+    renderRooms(); refresh();
+  }).then(stop => { if (gen === roomsGen) stopRooms = stop; else stop(); }, () => { if (gen === roomsGen) { roomsState = 'offline'; renderRooms(); } });
+}
+function unwatchRooms() {
+  roomsGen++;
+  clearTimeout(roomsRetry);
+  stopRooms?.(); stopRooms = undefined;
+}
+const full = (r: PublicRoom) => r.humans >= r.size * 2;
+const roomStatus = (r: PublicRoom) => r.phase === 'warmup' ? 'Warm-up' : r.phase === 'ended' ? 'Match over' : `Round ${r.round}`;
+/** The room Quick Play would put us in: the fullest public room of our size with a free slot (as the server picks). */
+const quickTarget = () => rooms.find(r => r.size === sizeOf(size).perTeam && !full(r));
+const selectedRoom = () => rooms.find(r => r.room === roomId);
 
-/** Server-browser rows and the showcase follow the current choices. */
-const refresh = () => {
-  fitMap();
-  const m = maps.find(x => x.id === mapId)!, s = sizeOf(size), md = MODES[gameMode];
-  menu.classList.remove('mode-offline', 'mode-online', 'mode-lab');
-  menu.classList.add(`mode-${mode}`);
-  select('modes', 'mode', mode); select('gamemodes', 'gamemode', gameMode); select('sizes', 'size', size);
-  select('onlinekinds', 'onlinekind', onlineKind); select('botsfills', 'botsfill', botsFill);
-  const online = mode === 'online';
-  display('gamemode-field', mode === 'offline' || (online && onlineKind === 'create'));
-  display('size-field', mode === 'offline' || (online && onlineKind !== 'code'));
-  display('code-field', online && onlineKind === 'code');
-  display('botsfill-field', online && onlineKind === 'create');
-  display('server-card', online && onlineKind !== 'create');
-  const facts = onlineKind === 'quick'
-    ? [['Room', `${s.name} · ${s.label} · bots hold empty slots`], ['Rotation', `New map every match${s.perTeam > 12 ? ' (big maps)' : ''}, alternating Elimination and Sabotage`], ['Rules', `First to ${ONLINE_CONFIG.roundsToWin} rounds · server-authoritative damage and cash`]]
-    : [['Room', 'Private · the host chose map, mode and size'], ['Code', 'Four letters, shown in-game on the status line'], ['Rules', `First to ${ONLINE_CONFIG.roundsToWin} rounds`]];
-  menu.querySelector('#server-facts')!.innerHTML = facts.map(([k, v]) => `<dt>${k}</dt><dd>${v}</dd>`).join('');
-  let shown = 0;
-  menu.querySelectorAll<HTMLButtonElement>('#servers [data-map]').forEach(row => {
-    const r = maps.find(x => x.id === row.dataset.map)!;
-    row.hidden = !choosingMap() || !mapFits(r);
-    if (!row.hidden) shown++;
-    row.setAttribute('aria-pressed', String(r.id === mapId));
-    row.querySelector('.srv small')!.textContent = mode === 'lab' ? 'Practice range' : `${s.label}${gameMode === 'sabotage' ? ` · ${r.sites > 1 ? 'sites A B' : 'site A'}` : ''}${online ? ' · private' : ''}`;
-    row.querySelector('.mode')!.textContent = mode === 'lab' ? 'Range' : `[${md.tag}] ${md.name}`;
-    row.querySelector('.players')!.textContent = mode === 'lab' ? '1 / 1' : `1 / ${s.perTeam * 2}`;
-    row.querySelector('.ping')!.textContent = online ? 'Online' : 'Local';
-  });
-  const onlineRow = menu.querySelector<HTMLButtonElement>('.online-row')!;
-  onlineRow.hidden = choosingMap();
-  onlineRow.setAttribute('aria-pressed', 'true');
-  onlineRow.querySelector('.srv small')!.textContent = onlineKind === 'quick' ? 'Map and mode rotate every match' : 'Private room';
-  onlineRow.querySelector('.mode')!.textContent = onlineKind === 'quick' ? '[E] ⇄ [S]' : 'Host\'s choice';
-  onlineRow.querySelector('.players')!.textContent = onlineKind === 'quick' ? `${s.label}` : roomCode.value || '····';
-  menu.querySelector('#browser-count')!.textContent = online ? (choosingMap() ? `${shown} maps` : '1 server') : `${shown} ${mode === 'lab' ? 'ranges' : 'local servers'}`;
-
-  const box = menu.querySelector<HTMLElement>('#showcase')!;
-  if (online && onlineKind !== 'create') {
-    box.querySelector('.region')!.textContent = `Online · ${server.database ?? 'not configured'}`;
-    box.querySelector('h2')!.textContent = onlineKind === 'quick' ? `Quick Play ${s.label}` : 'Join a private room';
-    box.querySelector('.meta')!.textContent = onlineKind === 'quick' ? `${s.name} · [E] ⇄ [S]${s.perTeam > 12 ? ' · big maps' : ''}` : 'Enter the four-letter code';
-    box.querySelector('.about')!.textContent = onlineKind === 'quick'
-      ? 'You join the fullest public room of this size, or open a new one. Every match moves on to the next map and alternates Elimination and Sabotage; bots hold the empty slots and step aside for players.'
-      : 'Ask the host for the code shown on their status line (ROOM ABCD), or open their invite link.';
-  } else {
-    box.querySelector('.region')!.textContent = m.region;
-    box.querySelector('h2')!.textContent = m.name;
-    box.querySelector('.meta')!.textContent = mode === 'lab' ? 'Practice range · free store' : `[${md.tag}] ${md.name} · ${s.name} ${vs(s.perTeam)}${gameMode === 'sabotage' ? ` · ${m.sites} bomb site${m.sites > 1 ? 's' : ''}` : ''}`;
-    box.querySelector('.about')!.textContent = m.description;
+function renderRooms() {
+  const list = $('#rooms');
+  const stateEl = $('#rooms-state');
+  const humans = rooms.reduce((n, r) => n + r.humans, 0);
+  const state = !online.ok ? ['off', 'No server in this build']
+    : roomsState === 'connecting' ? ['wait', 'Connecting…']
+    : roomsState === 'offline' ? ['off', 'Server offline']
+    : ['live', `Live · ${rooms.length} room${rooms.length === 1 ? '' : 's'} · ${humans} player${humans === 1 ? '' : 's'}`];
+  stateEl.className = `conn ${state[0]}`;
+  stateEl.innerHTML = `<i></i>${state[1]}`;
+  const connEl = $('#conn');
+  connEl.className = stateEl.className;
+  connEl.innerHTML = `<i></i>${!online.ok ? 'Unavailable' : roomsState === 'live' ? esc(server.database ?? 'Online') : roomsState === 'connecting' ? 'Connecting…' : 'Server offline'}`;
+  if (!rooms.length) {
+    list.innerHTML = `<p class="empty">${!online.ok ? 'Online play is not set up in this build. Play vs bots works offline.'
+      : roomsState === 'live' ? 'No public rooms yet — Quick Play opens one.'
+      : roomsState === 'connecting' ? 'Looking for rooms…' : 'Cannot reach the match server. Play vs bots works offline.'}</p>`;
+    return;
   }
-  if (!deploy.disabled) deploy.textContent = deployLabel();
+  list.innerHTML = rooms.map(r => {
+    const m = maps.find(x => x.id === r.mapId), md = MODES[r.mode] ?? MODES.elimination;
+    return `<div class="room${focus === 'room' && r.room === roomId ? ' selected' : ''}" data-room="${r.room}" data-theme="${m?.theme ?? ''}" tabindex="0" role="button" aria-label="${esc(mapName(r.mapId))} ${md.name} ${sizeLabel(r.size)}">
+      <span class="srv"><b>${esc(mapName(r.mapId))}</b><small>Room ${r.room}<span class="nm"> · [${md.tag}] ${md.name} · ${roomStatus(r)}</span></small></span>
+      <span class="mode"><span class="mtag">[${md.tag}]</span> ${md.name}</span>
+      <span class="size">${sizeLabel(r.size)}</span>
+      <span class="players">${r.humans} / ${r.size * 2}<small>${full(r) ? 'full' : '+ bots'}</small></span>
+      <span class="state ${r.phase}">${roomStatus(r)}</span>
+      <button class="join" data-joinroom="${r.room}"${full(r) || !ready || starting ? ' disabled' : ''}>${full(r) ? 'Full' : 'Join'}</button>
+    </div>`;
+  }).join('');
+}
+
+/** Maps the current choice can play: the room size decides big or small maps, Sabotage needs bomb sites. */
+const mapFits = (m: (typeof maps)[number]) => focus === 'range'
+  || ((sizeOf(size).perTeam > 12) === m.big && (!(focus === 'create' || focus === 'bots') || gameMode !== 'sabotage' || m.sites > 0));
+const fitMap = () => { const m = maps.find(x => x.id === mapId); if (!m || !mapFits(m)) mapId = maps.find(mapFits)?.id ?? mapId; };
+/** The map the backdrop and showcase present for the current choice. */
+const shownMap = () => {
+  const id = focus === 'quick' ? quickTarget()?.mapId : focus === 'room' ? selectedRoom()?.mapId : undefined;
+  return id && maps.some(m => m.id === id) ? id : mapId;
 };
-select('teams', 'team', team); select('skills', 'skill', skill); select('qualities', 'quality', quality); select('crosshairs', 'crosshair', crosshair);
+
+// ---- Buttons: one per way in; labels follow the choices. ----
+let ready = false;
+let starting = false;
+let loading = 'Loading…';
+const LABELS: Record<Exclude<Focus, 'room'>, () => string> = {
+  quick: () => `Quick Play ${sizeOf(size).label}`,
+  create: () => `Create room · ${sizeOf(size).label}`,
+  join: () => 'Join',
+  bots: () => 'Start match',
+  range: () => 'Enter the range',
+};
+const ACT_BUTTONS: [Exclude<Focus, 'room'>, HTMLButtonElement][] = [
+  ['quick', quickBtn], ['create', $<HTMLButtonElement>('#create-go')], ['join', $<HTMLButtonElement>('#join-go')],
+  ['bots', $<HTMLButtonElement>('#bots-go')], ['range', $<HTMLButtonElement>('#range-go')],
+];
+function syncButtons() {
+  for (const [f, b] of ACT_BUTTONS) {
+    const needsServer = modeOf(f) === 'online';
+    b.disabled = !ready || starting || (needsServer && !online.ok) || (f === 'join' && roomCode.value.length < 4);
+    b.textContent = !ready ? (f === 'quick' || f === 'bots' || f === 'range' ? loading : LABELS[f]())
+      : starting && focus === f ? (needsServer ? 'Joining…' : 'Starting…') : LABELS[f]();
+  }
+  menu.querySelectorAll<HTMLButtonElement>('#rooms .join').forEach(b => {
+    const r = rooms.find(x => x.room === Number(b.dataset.joinroom));
+    b.disabled = !ready || starting || !r || full(r);
+    b.textContent = starting && focus === 'room' && r?.room === roomId ? 'Joining…' : r && full(r) ? 'Full' : 'Join';
+  });
+}
+
+/** Everything on screen follows the current choices. */
+const refresh = () => {
+  if (focus === 'room' && !selectedRoom()) focus = 'quick';
+  fitMap();
+  const s = sizeOf(size), md = MODES[gameMode];
+  for (const g of ['sizes-online', 'sizes-bots']) select(g, 'size', size);
+  for (const g of ['modes-create', 'modes-bots']) select(g, 'gamemode', gameMode);
+  select('botsfills', 'botsfill', botsFill);
+  for (const d of ['create', 'join', 'bots', 'range'] as const) {
+    $(`#drawer-${d}`).classList.toggle('open', focus === d);
+    $(`[data-toggle="${d}"]`).setAttribute('aria-expanded', String(focus === d));
+  }
+  menu.classList.toggle('focus-quick', focus === 'quick');
+  for (const g of ['maps-create', 'maps-bots', 'maps-range']) {
+    menu.querySelectorAll<HTMLButtonElement>(`#${g} [data-map]`).forEach(b => {
+      const m = maps.find(x => x.id === b.dataset.map)!;
+      b.hidden = !mapFits(m);
+      b.setAttribute('aria-pressed', String(m.id === mapId));
+      b.querySelector('small')!.textContent = g === 'maps-range' ? (m.big ? 'Big map' : m.region.split('/')[0].trim().toLowerCase())
+        : gameMode === 'sabotage' ? (m.sites > 1 ? 'Sites A · B' : 'Site A') : m.region.split('/')[1]?.trim().toLowerCase() ?? '';
+    });
+  }
+  // Quick Play says where it is about to put you.
+  const target = quickTarget();
+  $('#quick-hint').textContent = !online.ok ? ''
+    : target ? `Joins ${mapName(target.mapId)} — ${target.humans} player${target.humans === 1 ? '' : 's'} in that ${s.label} room now.`
+    : `Opens a new ${s.label} room${roomsState === 'live' ? ' (none open yet)' : ''}. Bots fill empty slots and step aside for players.`;
+
+  const box = $('#showcase');
+  const set = (region: string, title: string, meta: string, about: string) => {
+    box.querySelector('.region')!.textContent = region; box.querySelector('h2')!.textContent = title;
+    box.querySelector('.meta')!.textContent = meta; box.querySelector('.about')!.textContent = about;
+  };
+  const shown = maps.find(x => x.id === shownMap())!;
+  const room = focus === 'room' ? selectedRoom() : focus === 'quick' ? target : undefined;
+  if (room) {
+    const rm = MODES[room.mode] ?? MODES.elimination;
+    set(`${focus === 'quick' ? 'Quick Play' : 'Public room'} · ${shown.region}`, shown.name,
+      `[${rm.tag}] ${rm.name} · ${sizeLabel(room.size)} · ${room.humans}/${room.size * 2} players · ${roomStatus(room)}`, shown.description);
+  } else if (focus === 'quick') {
+    set(`Online · ${server.database ?? 'not configured'}`, `Quick Play ${s.label}`, `${s.name} · [E] ⇄ [S]${s.perTeam > 12 ? ' · big maps' : ''}`,
+      'You join the fullest public room of this size, or open a new one. Every match moves on to the next map and alternates Elimination and Sabotage; bots hold the empty slots.');
+  } else if (focus === 'join') {
+    set(`Online · ${server.database ?? 'not configured'}`, 'Join a private room', roomCode.value ? `Room ${roomCode.value}` : 'Four-letter code', 'Ask the host for the code shown on their status line (ROOM ABCD), or open their invite link.');
+  } else if (focus === 'range') {
+    set(shown.region, shown.name, 'Practice range · free store', shown.description);
+  } else {
+    set(shown.region, shown.name, `${focus === 'create' ? 'Private · ' : ''}[${md.tag}] ${md.name} · ${s.name} ${vs(s.perTeam)}${gameMode === 'sabotage' ? ` · ${shown.sites} bomb site${shown.sites > 1 ? 's' : ''}` : ''}`, shown.description);
+  }
+  menu.querySelectorAll<HTMLElement>('#rooms .room').forEach(r => r.classList.toggle('selected', focus === 'room' && Number(r.dataset.room) === roomId));
+  syncButtons();
+  showBackdrop();
+};
+const audio = new Audio();
+select('teams', 'team', team); select('skills', 'skill', skill);
 /** Sight options live in `settings` (read from storage there); the buttons write them back. */
 const selectSights = () => {
   select('scopemodes', 'scopemode', settings.scopeMode); select('reticlecolors', 'reticlecolor', settings.reticleColor);
   select('reticlestyles', 'reticlestyle', settings.reticleStyle); select('opticdetails', 'opticdetail', settings.opticDetail);
 };
-selectSights();
-const deploy = menu.querySelector<HTMLButtonElement>('#deploy')!;
-const status = menu.querySelector<HTMLElement>('#status')!;
-refresh();
 
 const onClick = (attr: string, fn: (value: string) => void) => menu.querySelectorAll<HTMLButtonElement>(`[data-${attr}]`).forEach(b => b.addEventListener('click', () => { fn(b.dataset[attr]!); audio.ui(); }));
-onClick('mode', v => { mode = v; status.textContent = mode === 'online' ? online.reason : ''; refresh(); showBackdrop(); });
-onClick('gamemode', v => { gameMode = v as Mode; refresh(); showBackdrop(); });
-onClick('size', v => { size = sizeOf(v).id; refresh(); showBackdrop(); });
-onClick('onlinekind', v => { onlineKind = v as OnlineKind; refresh(); showBackdrop(); });
+onClick('toggle', v => {
+  focus = focus === v ? (online.ok ? 'quick' : focus) : v as Focus;
+  refresh();
+  if (focus === 'join') roomCode.focus({ preventScroll: true });
+  // Bring the whole drawer, its button included, into view.
+  if (focus === v) menu.querySelector(`#drawer-${v}`)?.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
+});
+onClick('act', v => act(v as Focus));
+onClick('gamemode', v => { gameMode = v as Mode; refresh(); });
+onClick('size', v => { size = sizeOf(v).id; if (focus === 'room' || focus === 'join') focus = 'quick'; refresh(); });
 onClick('botsfill', v => { botsFill = v; refresh(); });
-roomCode.addEventListener('input', () => { roomCode.value = roomCode.value.toUpperCase().replace(/[^A-Z]/g, '').slice(0, 4); refresh(); });
-onClick('map', v => { mapId = v; refresh(); showBackdrop(); });
+onClick('map', v => { mapId = v; refresh(); });
 onClick('team', v => { team = v; select('teams', 'team', team); });
 onClick('skill', v => { skill = v; select('skills', 'skill', skill); });
 onClick('crosshair', v => { crosshair = v as Crosshair; select('crosshairs', 'crosshair', crosshair); store.set('crosshair', crosshair); });
@@ -287,38 +421,63 @@ onClick('quality', v => {
   quality = v as keyof typeof QUALITY; select('qualities', 'quality', quality); store.set('quality', quality);
   renderer?.applyQuality(QUALITY[quality]);
 });
-// Server browser: double-click a row to join it, like the real thing.
-menu.querySelectorAll<HTMLButtonElement>('#servers .server').forEach(b => b.addEventListener('dblclick', () => { if (!deploy.disabled) void start(); }));
+roomCode.addEventListener('input', () => { roomCode.value = cleanCode(roomCode.value); refresh(); });
+roomCode.addEventListener('focus', () => { if (focus !== 'join' && online.ok) { focus = 'join'; refresh(); } });
 
-const sens = menu.querySelector<HTMLInputElement>('#sens')!, fov = menu.querySelector<HTMLInputElement>('#fov')!, adsSens = menu.querySelector<HTMLInputElement>('#adssens')!;
-const volume = menu.querySelector<HTMLInputElement>('#volume')!, music = menu.querySelector<HTMLInputElement>('#music')!;
+// Public rooms: click a row to preview it, Join (or double-click, or Enter on the row) to play there.
+const roomList = $('#rooms');
+const roomOf = (e: Event) => (e.target as HTMLElement).closest<HTMLElement>('.room');
+roomList.addEventListener('click', e => {
+  const row = roomOf(e);
+  if (!row) return;
+  roomId = Number(row.dataset.room); focus = 'room'; audio.ui();
+  if ((e.target as HTMLElement).closest('.join')) void act('room'); else refresh();
+});
+roomList.addEventListener('dblclick', e => { const row = roomOf(e); if (row) { roomId = Number(row.dataset.room); void act('room'); } });
+roomList.addEventListener('keydown', e => {
+  const row = roomOf(e);
+  if (!row || e.key !== 'Enter' || (e.target as HTMLElement).tagName === 'BUTTON') return;
+  e.preventDefault(); e.stopPropagation(); roomId = Number(row.dataset.room); void act('room');
+});
+
+const sens = $<HTMLInputElement>('#sens'), fov = $<HTMLInputElement>('#fov'), adsSens = $<HTMLInputElement>('#adssens');
+const volume = $<HTMLInputElement>('#volume'), music = $<HTMLInputElement>('#music');
 const clamp01 = (v: string) => Math.max(0, Math.min(1, Number(v) || 0));
-settings.sensitivity = Math.max(0.2, Math.min(3, Number(store.get('sensitivity', '1')) || 1));
-settings.fov = Math.max(65, Math.min(95, Number(store.get('fov', '78')) || 78));
-settings.adsSensitivity = Math.max(0.5, Math.min(1.5, Number(store.get('adsSensitivity', '1')) || 1));
-sens.value = String(settings.sensitivity); fov.value = String(settings.fov); adsSens.value = String(settings.adsSensitivity);
-const audio = new Audio();
-audio.volume = clamp01(store.get('volume', '0.8'));
-audio.musicVolume = clamp01(store.get('music', '0.6'));
-volume.value = String(audio.volume); music.value = String(audio.musicVolume);
 /** Vertical FOV (what three.js uses) with its 16:9 horizontal equivalent, which players usually quote. */
 const horizontal = (v: number) => Math.round(2 * Math.atan(Math.tan(v * Math.PI / 360) * 16 / 9) * 180 / Math.PI);
 const percent = (v: number) => v > 0 ? `${Math.round(v * 100)}%` : 'Off';
 const showSettings = () => {
-  menu.querySelector('#sens-out')!.textContent = `${settings.sensitivity.toFixed(2)}×`;
-  menu.querySelector('#adssens-out')!.textContent = `${settings.adsSensitivity.toFixed(2)}×${settings.adsSensitivity === 1 ? ' · matched' : ''}`;
-  menu.querySelector('#fov-out')!.textContent = `${settings.fov}° · ${horizontal(settings.fov)}° horizontal`;
-  menu.querySelector('#volume-out')!.textContent = percent(audio.volume);
-  menu.querySelector('#music-out')!.textContent = percent(audio.musicVolume);
+  $('#sens-out').textContent = `${settings.sensitivity.toFixed(2)}×`;
+  $('#adssens-out').textContent = `${settings.adsSensitivity.toFixed(2)}×${settings.adsSensitivity === 1 ? ' · matched' : ''}`;
+  $('#fov-out').textContent = `${settings.fov}° · ${horizontal(settings.fov)}° horizontal`;
+  $('#volume-out').textContent = percent(audio.volume);
+  $('#music-out').textContent = percent(audio.musicVolume);
 };
-showSettings();
+/**
+ * Options from storage into `settings`, the audio and every lobby control. Runs at start and again on
+ * returning to the lobby: the in-game menu changes the same keys mid-match.
+ */
+function syncOptions() {
+  settings.sensitivity = Math.max(0.2, Math.min(3, Number(store.get('sensitivity', '1')) || 1));
+  settings.fov = Math.max(65, Math.min(95, Number(store.get('fov', '78')) || 78));
+  settings.adsSensitivity = Math.max(0.5, Math.min(1.5, Number(store.get('adsSensitivity', '1')) || 1));
+  sens.value = String(settings.sensitivity); fov.value = String(settings.fov); adsSens.value = String(settings.adsSensitivity);
+  audio.setVolume(clamp01(store.get('volume', '0.8')));
+  audio.setMusicVolume(clamp01(store.get('music', '0.6')));
+  volume.value = String(audio.volume); music.value = String(audio.musicVolume);
+  crosshair = store.get('crosshair', crosshair) as Crosshair;
+  if (!(crosshair in CROSSHAIRS)) crosshair = 'classic';
+  if (game || ready) { const q = store.get('quality', quality) as keyof typeof QUALITY; if (QUALITY[q]) quality = q; }
+  select('qualities', 'quality', quality); select('crosshairs', 'crosshair', crosshair);
+  selectSights(); showSettings();
+}
 sens.addEventListener('input', () => { settings.sensitivity = Number(sens.value); store.set('sensitivity', sens.value); showSettings(); });
 adsSens.addEventListener('input', () => { settings.adsSensitivity = Number(adsSens.value); store.set('adsSensitivity', adsSens.value); showSettings(); });
 fov.addEventListener('input', () => { settings.fov = Number(fov.value); store.set('fov', fov.value); showSettings(); });
 volume.addEventListener('input', () => { audio.setVolume(Number(volume.value)); store.set('volume', volume.value); showSettings(); });
 volume.addEventListener('change', () => audio.cash());
 music.addEventListener('input', () => { audio.setMusicVolume(Number(music.value)); store.set('music', music.value); showSettings(); });
-menu.querySelector('#bench')!.addEventListener('click', () => { location.search = `?bench&map=${mapId}&quality=${quality}`; });
+$('#bench').addEventListener('click', () => { location.search = `?bench&map=${mapId}&quality=${quality}`; });
 
 let assets: Assets;
 let renderer: Renderer;
@@ -331,6 +490,10 @@ let theme: Promise<AudioBuffer> | undefined;
 let inMenu = !benchMode;
 let gestured = false;
 
+syncOptions();
+refresh();
+watchLobbyRooms();
+
 /** Loops the menu theme once the player has interacted (browsers block audio before a gesture). */
 function menuMusic() {
   if (!inMenu || !gestured || !theme) return;
@@ -340,40 +503,62 @@ function menuMusic() {
 for (const type of ['pointerdown', 'keydown'] as const) document.addEventListener(type, () => { gestured = true; menuMusic(); });
 
 function showBackdrop() {
-  if (!assets || game || backdropMap === mapId) return;
+  const id = shownMap();
+  if (!assets || game || backdropMap === id) return;
   if (backdrop) renderer.scene.remove(backdrop.group);
-  const def = loadMap(mapId).def;
+  const def = loadMap(id).def;
   renderer.setTheme(THEMES[def.theme], def.sun);
   backdrop = new LevelView(assets, def, THEMES[def.theme]);
-  backdropMap = mapId;
+  backdropMap = id;
   renderer.scene.add(backdrop.group);
+}
+
+/** Run one way in: point the lobby at it, then start. */
+function act(f: Focus) {
+  if (!ready || starting) return;
+  if (modeOf(f) === 'online' && !online.ok) return;
+  if (f === 'join' && roomCode.value.length < 4) { focus = 'join'; refresh(); roomCode.focus(); return; }
+  if (f === 'room' && !selectedRoom()) { focus = 'quick'; refresh(); return; }
+  focus = f;
+  void start();
 }
 
 async function start() {
   const name = callsign.value.trim().slice(0, 16) || 'Lawbreaker';
   fitMap();
-  if (!benchMode) { store.set('name', name); store.set('mode', mode); store.set('map', mapId); store.set('gameMode', gameMode); store.set('size', size); store.set('team', team); store.set('skill', skill); store.set('onlineKind', onlineKind); store.set('botsFill', botsFill); }
-  deploy.disabled = true; deploy.textContent = mode === 'online' ? 'Joining…' : 'Starting…';
+  const mode = modeOf(focus), kind = kindOf(focus);
+  if (!benchMode) {
+    store.set('name', name); store.set('mode', mode); store.set('map', mapId); store.set('gameMode', gameMode); store.set('size', size);
+    store.set('team', team); store.set('skill', skill); store.set('onlineKind', kind === 'room' ? 'quick' : kind); store.set('botsFill', botsFill);
+  }
+  starting = true; refresh();
+  status.textContent = '';
+  unwatchRooms();
   inMenu = false;
   audio.start();
   audio.stopMusic();
   const teamChoice = team === 'auto' ? undefined : (Number(team) as Team);
   const botSkill = Math.max(0.1, Math.min(0.95, Number(skill) || 0.45));
+  const how: OnlineEntry = kind === 'code' ? { kind: 'code', code: cleanCode(roomCode.value) }
+    : kind === 'create' ? { kind: 'create', size: sizeOf(size).perTeam, mode: gameMode, mapId, bots: botsFill === 'on' }
+    : kind === 'room' ? { kind: 'room', room: roomId }
+    : { kind: 'quick', size: sizeOf(size).perTeam };
   let link: GameLink;
   try {
     link = mode === 'online'
-      ? await connectOnline(name, teamChoice, onlineKind === 'code' ? { kind: 'code', code: roomCode.value }
-        : onlineKind === 'create' ? { kind: 'create', size: sizeOf(size).perTeam, mode: gameMode, mapId, bots: botsFill === 'on' }
-        : { kind: 'quick', size: sizeOf(size).perTeam }, s => { status.textContent = s; })
+      ? await connectOnline(name, teamChoice, how, s => { status.textContent = s; })
       : mode === 'lab'
         ? new OfflineLink(mapId, name, teamChoice, {}, true)
         : new OfflineLink(mapId, name, teamChoice, { ...(gameMode === 'sabotage' ? SABOTAGE : ELIMINATION), teamSize: sizeOf(size).perTeam, botSkill, freeBuy: params.has('freebuy') });
   } catch (error) {
     status.textContent = `Could not join: ${(error as Error).message}`;
-    deploy.disabled = false; deploy.textContent = deployLabel();
+    starting = false;
     inMenu = !benchMode; menuMusic();
+    watchLobbyRooms(); refresh();
     return;
   }
+  starting = false;
+  status.textContent = '';
   if (backdrop) { renderer.scene.remove(backdrop.group); backdrop = undefined; backdropMap = undefined; }
   const linkMap = link.state()?.mapId ?? mapId;
   launch(link, linkMap);
@@ -389,13 +574,17 @@ function launch(link: GameLink, map: string) {
   game.onExit = () => {
     game?.stop(); game = undefined;
     document.body.classList.add('menu-open'); menu.hidden = false;
-    deploy.disabled = false; deploy.textContent = deployLabel();
-    showBackdrop();
+    syncOptions();
     inMenu = !benchMode; menuMusic();
+    watchLobbyRooms(); refresh();
   };
 }
-deploy.addEventListener('click', () => void start());
 const typing = (e: KeyboardEvent) => { const t = e.target as HTMLElement | null; return !!t && (t.tagName === 'INPUT' || t.tagName === 'TEXTAREA' || t.isContentEditable); };
+/** Enter: the code box joins; anywhere else it runs the choice in focus (Quick Play unless a drawer or room is picked). */
+function primary() {
+  if (focus === 'quick' && !online.ok) return;
+  act(focus);
+}
 document.addEventListener('keydown', e => {
   if (e.code === 'KeyM' && game && !game.input.locked && e.target === document.body) game.onExit?.();
   // F: fullscreen (BeGone's default key). Entering it can drop pointer lock, so recapture after.
@@ -405,6 +594,13 @@ document.addEventListener('keydown', e => {
     void document.documentElement.requestFullscreen?.({ navigationUI: 'hide' }).then(() => {
       if (relock && game && !game.input.locked) void game.input.lock()?.catch?.(() => undefined);
     }, () => undefined);
+  }
+  if (e.key === 'Enter' && !e.repeat && !game && !menu.hidden && !e.isComposing) {
+    const t = e.target as HTMLElement;
+    if (t === roomCode) { e.preventDefault(); act('join'); return; }
+    // Buttons, toggles and the options drawer keep their own Enter.
+    if (t.closest('button, summary, a, .room')) return;
+    e.preventDefault(); primary();
   }
 });
 
@@ -440,10 +636,9 @@ function showBenchResult(r: BenchResult) {
 
 async function boot() {
   renderer = new Renderer(app, QUALITY[quality]);
-  assets = await loadAssets(f => { deploy.textContent = `Loading ${(f * 100).toFixed(0)}%`; });
-  showBackdrop();
-  deploy.disabled = false; deploy.textContent = deployLabel();
-  status.textContent = mode === 'online' ? online.reason : '';
+  assets = await loadAssets(f => { loading = `Loading ${(f * 100).toFixed(0)}%`; syncButtons(); });
+  ready = true;
+  refresh();
   if (!benchMode) {
     theme = renderTheme();
     theme.then(menuMusic, error => console.warn('Menu theme unavailable', error));
