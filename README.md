@@ -4,7 +4,8 @@ A browser-first, keyboard-and-mouse team shooter faithful to **BeGone** (nPlay's
 SWAT against Militia in short rounds with one life each, cash for every kill, a store in your
 base with five primaries, two secondaries, a grenade and BeGone's attachments, and two modes,
 **Elimination** and **Sabotage**. Play solo on your own server with bots, on the live server
-through SpacetimeDB, or alone on the practice range, across eight original maps.
+through SpacetimeDB, or alone on the practice range, on BeGone's six maps (rebuilt as homages) and
+eight original battlefields.
 
 Built with Vite, TypeScript, Three.js and SpacetimeDB. Bun is the package manager and script
 runner (`bun` / `bunx`, never npm/npx).
@@ -72,13 +73,31 @@ runner (`bun` / `bunx`, never npm/npx).
 
 ### Maps
 
-**Cinder Basin** (desert outpost), **Frostline Reach** (arctic relay courtyard), **Verdant Divide**
-(jungle uplink plateau), **Ochre Quarter** (desert old town: an original homage to the classic
-two-site layout of CS:GO's Dust II, built from our own geometry and CC0 assets), **Citadel Keep**
-(hilltop castle), **Railyard** (freight yard), **Skyline Rooftops** (rooftops high above a city; the
-street is fatal) and **Meridian District** (a large war-torn city quarter). Every map has bomb sites
-for Sabotage (two on Ochre Quarter and Meridian District, one elsewhere), ammo crates, and team bases
-with spawn barriers only their own team can pass.
+**BeGone's six maps** come first in every map list, rebuilt from the originals' top-down layouts
+and wiki descriptions with our own geometry and CC0 textures (brick, planks, corrugated iron, mossy
+plaster, cobblestone). Ladders stand where BeGone had them, and stairs were added beside them.
+
+| Map | Size, light | Modes | Landmarks |
+| --- | --- | --- | --- |
+| **Crane** | Large and open, dusk | [E] · [S] A Ammo house, B SWAT base | Militia building and its roof, tank platform and L fence, the Silo, the fallen crane, broken house, trench, SWAT gantry, helicopter |
+| **Tower** | Mid-sized, dusk | [E] | Militia warehouse with its broken window, the catwalk, the Roof, the round brick tower and its crow's nest, containers, ammo house, clockhouse, fence |
+| **Warehouse** | One crate hall, snow outside | [E] | Crate maze, the bridge (two offset lanes, team boxes, the ammo crate), sniping decks over both bays |
+| **Pipeline** | The largest, meadow | [E] · [S] A Ammo, B SWAT base | The pipe and the hole under it, Militia shed and its L roof, the three connected buildings and their roof, tunnel house, ditch, SWAT ridge and valley |
+| **Courtyard** | The smallest, blue hour | [E] | Four pools with flamingo statues, hedges, the statue with the ammo crate, climbable crate stacks, team crates in the corner bases |
+| **Timbertown** | Large but plays medium, dry steppe | [E] · [S] one site, by the cabin | Militia hills and log stack, the Militia and SWAT roofs, the platform, garage, alleys, the cabin |
+
+Crane, Tower, Pipeline and Timbertown keep their originals' asymmetry; Warehouse and Courtyard are
+mirrored, as BeGone's were.
+
+**The original battlefields**: **Cinder Basin** (desert outpost), **Frostline Reach** (arctic relay
+courtyard), **Verdant Divide** (jungle uplink plateau), **Ochre Quarter** (desert old town: an original
+homage to the classic two-site layout of CS:GO's Dust II, built from our own geometry and CC0 assets),
+**Citadel Keep** (hilltop castle), **Railyard** (freight yard), **Skyline Rooftops** (rooftops high
+above a city; the street is fatal) and **Meridian District** (a large war-torn city quarter), each with
+bomb sites (two on Ochre Quarter and Meridian District, one elsewhere).
+
+Every map has ammo crates (one more stands in each base) and open team bases. Sabotage lists only the
+maps with bomb sites.
 
 ## Controls
 
@@ -92,6 +111,7 @@ with spawn barriers only their own team can pass.
 | 4 or G | M67 grenade |
 | Q or wheel | Cycle weapons |
 | R · E | Reload · use (arm or disarm the bomb, ammo crate) |
+| On a ladder: toward it · away · Space | Climb up · climb down · let go (walk off its top to climb down) |
 | Z · B | Binoculars · store |
 | Enter · T | Chat · team chat |
 | Tab · F | Scoreboard · fullscreen |
@@ -131,7 +151,8 @@ with spawn barriers only their own team can pass.
 - Clients send their own movement (`report`, 20 Hz) and shots (`fire`) with an optional claimed hit.
   Movement spends a distance budget measured against server time, so bunched reports after a network
   stall pass but sending reports faster never buys distance; climbing higher than a jump plus a ledge
-  step-up or staying airborne too long drops the soldier back down; bounds, solid geometry and the
+  step-up or staying airborne too long drops the soldier back down, except on a ladder, which holds a
+  climbing soldier up (only within reach of its rungs); bounds, solid geometry and the
   other team's base barriers are enforced, and nobody moves during freeze time. Each shot claim is
   checked for alive shooter, weapon, magazine, fire rate, origin near the shooter, range, line of
   sight through static geometry, a claimed point within a speed-scaled tolerance of the target's hit
@@ -185,7 +206,8 @@ free-buy Solo match; for a **local** Online database, set `"freeBuy":true` in th
 `spacetime sql <db> "UPDATE match SET configJson = '…' WHERE id = 0" --server http://127.0.0.1:3000`
 (owner-only; never on Maincloud).
 
-Development pages (dev server only): `/dev/level.html?map=verdant` (map preview),
+Development pages (dev server only): `/dev/level.html?map=verdant` (map preview; `&cut=6` clips
+everything above 6 m to see under roofs),
 `/dev/soldier.html` (animation/IK pose sheet), `/dev/viewmodel.html?ads=1` (first-person weapon),
 `/dev/viewer.html?model=/assets/props.glb` (asset viewer). Dev-only URL flags `debuginput`,
 `fixeddt` and `capture` make automated runs deterministic on software renderers.
@@ -242,7 +264,8 @@ texture, sound and line of code here is original or CC0/OFL.
   (`src/audio.ts`) each shot layers the recording with a synthesized crack and low thump, the
   recorded action, an outdoor tail and casing bounces; remote shots are delayed by distance and
   crossfade to the distant take, and suppressed shots are muffled.
-- Terrain and surface textures: Poly Haven, CC0 1.0, fetched by `tools/fetch-textures.ts`; see
+- Terrain and surface textures (including the brick, plank, corrugated-iron, plaster and
+  cobblestone architecture of the BeGone maps): Poly Haven, CC0 1.0, fetched by `tools/fetch-textures.ts`; see
   `public/assets/tex/LICENSE.txt`.
 - Font: Rajdhani by Indian Type Foundry, SIL Open Font License 1.1 (`public/fonts/OFL.txt`).
 - Sky, terrain, architecture, effects and the remaining audio (knife, casings, footsteps,
@@ -289,7 +312,8 @@ screens can exceed 60. The lobby also has Low / Medium / High graphics presets (
 - Third-person camera (V), key rebinding and the toggle/hold options for crouch and accuracy are not
   implemented.
 - First-person and third-person animation is code-driven on CC0 clips; there are no authored
-  weapon-specific reload animations, and fingers are posed procedurally.
+  weapon-specific reload animations, fingers are posed procedurally, and a soldier on a ladder shows
+  the airborne pose (the clip library has no climb).
 - Reloads, actions, footsteps and impacts are synthesized; only gunshots are recorded.
 - Mobile/touch is not supported. Not tested on Safari/Firefox in this environment.
 
@@ -313,11 +337,12 @@ both: each sees the other move, fight, buy and arm, all validated by the server.
 
 ```
 shared/        Pure TypeScript shared by browser, tests and the SpacetimeDB module
-  collision.ts   AABB/ramp/heightfield world, raycasts, cylinder resolution
+  collision.ts   AABB/ramp/heightfield world, ladders, raycasts, cylinder resolution
   movement.ts    Infantry controller        hitbox.ts  hit volumes      weapons.ts  roster + attachments
   world.ts       Grenades under gravity
-  maps/          Builder + eight maps (Cinder, Frostline, Verdant, Ochre, Citadel, Railyard,
-                 Skyline, Meridian) with bomb sites and ammo crates
+  maps/          Builder + BeGone's six maps (Crane, Tower, Warehouse, Pipeline, Courtyard,
+                 Timbertown) and eight originals (Cinder, Frostline, Verdant, Ochre, Citadel,
+                 Railyard, Skyline, Meridian) with ladders, bomb sites and ammo crates
   match/         State, rounds and bomb, combat validation, economy, bots, navigation, packed frame
 src/           Browser client: lobby, game loop, prediction, rendering, view model, soldiers, HUD, store, audio, net
 spacetimedb/   SpacetimeDB module (tables, scheduled tick, validated reducers)
@@ -328,5 +353,5 @@ dev/           Development preview pages
 
 ## References
 
-[BeGone wiki](https://begone.fandom.com) (rules and numbers) · [SpacetimeDB](https://spacetimedb.com/docs/) ·
+[BeGone wiki](https://begone.fandom.com) (rules, numbers and map layouts) · [SpacetimeDB](https://spacetimedb.com/docs/) ·
 [Three.js](https://threejs.org) · [Quaternius](https://quaternius.com) · [Poly Haven](https://polyhaven.com)

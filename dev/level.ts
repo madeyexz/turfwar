@@ -1,5 +1,5 @@
 // Development-only battlefield preview: /dev/level.html?map=cinder&cam=x,y,z&look=x,y,z&q=medium&solids=rock,glass&bomb=armed|arming&site=0
-// &crate=0 / &siteview=0 point the camera at a crate or a bomb site.
+// &crate=0 / &siteview=0 point the camera at a crate or a bomb site; &cut=6 clips everything above y=6 (roofs off).
 import * as THREE from 'three';
 import { loadAssets } from '../src/assets';
 import { BombSitesView } from '../src/render/bombsite';
@@ -36,6 +36,7 @@ const focus = params.has('crate') ? map.pickups?.[Number(params.get('crate'))] :
 const near = params.has('crate') ? 0.5 : 1;
 if (focus) { r.camera.position.set(focus.x + 2.2 * near, focus.y + 1.8 * near, focus.z + 2.6 * near); r.camera.lookAt(focus.x, focus.y + 0.3, focus.z); }
 if (params.get('fov')) { r.camera.fov = Number(params.get('fov')); r.camera.updateProjectionMatrix(); }
+if (params.get('cut')) r.renderer.clippingPlanes = [new THREE.Plane(new THREE.Vector3(0, -1, 0), Number(params.get('cut')))];
 let frames = 0; const start = performance.now();
 r.renderer.setAnimationLoop(() => {
   const t = (performance.now() - start) / 1000;
