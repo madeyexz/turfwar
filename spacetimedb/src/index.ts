@@ -5,8 +5,8 @@ import { cleanCode, isRoomSize, mapsFor, roomCode } from '../../shared/match/roo
 import type { SimContext } from '../../shared/match/combat';
 import { encodeFrame } from '../../shared/match/frame';
 import {
-  addSoldier, balanceTeams, buyAttachmentFor, buyItem, createMatch, fireShot, reload, removeSoldier, reportState, resetMatch,
-  switchWeapon, throwGrenade, tickMatch, useAmmoCrate, TICK_RATE,
+  addSoldier, balanceTeams, buyAttachmentFor, buyItem, createMatch, enterVehicle as getIn, exitVehicle as getOut, fireShot, reload, removeSoldier, reportState,
+  reportVehicle, resetMatch, switchWeapon, throwGrenade, tickMatch, useAmmoCrate, TICK_RATE,
 } from '../../shared/match/sim';
 import {
   ONLINE_CONFIG, type BombState, type BotBrain, type MatchConfig, type MatchEvent, type MatchState, type Mode, type RoundStats, type Soldier, type Team,
@@ -14,6 +14,7 @@ import {
 import { ATTACHMENTS, DEFAULT_WEAPONS, STAMINA, WEAPONS, normalizeAttachments, type AttachmentId, type Attachments, type Slot, type WeaponId } from '../../shared/weapons';
 import { newRoundStats, type BuyItem } from '../../shared/match/economy';
 import { BODY_RADIUS, type Body } from '../../shared/world';
+import { VEHICLE_KINDS, type Vehicle, type VehicleKind } from '../../shared/vehicles';
 
 /**
  * Authoritative multiplayer: the same shared match simulation the offline client runs, executed
@@ -134,12 +135,30 @@ const profileTable = table({ name: 'profile', public: true }, {
   roundsWon: t.u32(), roundsPlayed: t.u32(), matchesWon: t.u32(), matchesPlayed: t.u32(),
 });
 
+/**
+ * Drivable vehicles per room (key = room * 256 + the map spot's index), rewritten while they move.
+ * Private: clients see vehicles in the packed frame.
+ */
+const vehicleTable = table({ name: 'vehicle' }, {
+  key: t.u32().primaryKey(), room: t.u8().index('btree'), id: t.u8(), kind: t.string(),
+  x: t.f32(), y: t.f32(), z: t.f32(), vx: t.f32(), vy: t.f32(), vz: t.f32(), yaw: t.f32(), pitch: t.f32(), roll: t.f32(),
+  steer: t.f32(), rotor: t.f32(), grounded: t.bool(), health: t.f32(), driver: t.i32(), passenger: t.i32(), wrecked: t.bool(),
+  slack: t.f32(), lastAttacker: t.i32(), lastRun: t.f64(),
+});
+
+/** Latest vehicle report per driver (like `inbox`), applied and marked consumed by the next tick. */
+const vehicleInboxTable = table({ name: 'vehicle_inbox' }, {
+  soldierId: t.u32().primaryKey(), vehicle: t.u8(), lastMicros: t.u64(), elapsed: t.f32(), pending: t.bool(),
+  x: t.f32(), y: t.f32(), z: t.f32(), vx: t.f32(), vy: t.f32(), vz: t.f32(), yaw: t.f32(), pitch: t.f32(), roll: t.f32(),
+});
+
 const tickTable = table({ name: 'tick_schedule' }, { scheduledId: t.u64().primaryKey().autoInc(), scheduledAt: t.scheduleAt(), room: t.u8().default(0) });
 
 const spacetimedb = schema({
   match: matchTable, clock: clockTable, soldier: soldierTable, roster: rosterTable, frame: frameTable, botBrain: brainTable,
   point: pointTable, body: bodyTable, player: playerTable, inbox: inboxTable, command: commandTable, history: historyTable,
   matchEvent: eventTable, tickSchedule: tickTable, profile: profileTable, counter: counterTable,
+  vehicle: vehicleTable, vehicleInbox: vehicleInboxTable,
 });
 export default spacetimedb;
 
@@ -149,6 +168,7 @@ type RosterRow = Parameters<Ctx['db']['roster']['insert']>[0];
 type BodyRow = Parameters<Ctx['db']['body']['insert']>[0];
 type MatchRow = Parameters<Ctx['db']['match']['insert']>[0];
 type ClockRow = Parameters<Ctx['db']['clock']['insert']>[0];
+type VehicleRow = Parameters<Ctx['db']['vehicle']['insert']>[0];
 type RoundRow = Pick<MatchState, 'round' | 'roundPhase' | 'roundClock' | 'roundWinner' | 'lossStreak' | 'firstKill' | 'firstBlood' | 'lastKillTeam'> & { bomb: BombState };
 
 type Command =
@@ -158,7 +178,8 @@ type Command =
   | { kind: 'switch'; slot: Slot }
   | { kind: 'buy'; item: BuyItem }
   | { kind: 'attach'; weapon: WeaponId; attachment: AttachmentId }
-  | { kind: 'crate'; index: number };
+  | { kind: 'crate'; index: number }
+  | { kind: 'vehicle'; enter: boolean; index: number };
 
 /** Soldier state without a typed column of its own. */
 interface Gear {
@@ -225,6 +246,18 @@ const rosterKey = (r: RosterRow) => JSON.stringify(r);
 const bodyToRow = (b: Body, room: number): BodyRow => ({ id: b.id, kind: b.kind, x: b.x, y: b.y, z: b.z, vx: b.vx, vy: b.vy, vz: b.vz, age: Math.min(b.age, 9999), owner: b.owner, team: b.team, hp: b.hp, timer: b.timer, room });
 const bodyFromRow = (r: BodyRow): Body => ({ id: r.id, kind: r.kind as Body['kind'], x: r.x, y: r.y, z: r.z, vx: r.vx, vy: r.vy, vz: r.vz, age: r.age, owner: r.owner, team: r.team, hp: r.hp, timer: r.timer });
 
+const vehicleKey = (room: number, id: number) => room * 256 + id;
+const vehicleToRow = (v: Vehicle, room: number): VehicleRow => ({
+  key: vehicleKey(room, v.id), room, id: v.id, kind: v.kind, x: v.x, y: v.y, z: v.z, vx: v.vx, vy: v.vy, vz: v.vz,
+  yaw: v.yaw, pitch: v.pitch, roll: v.roll, steer: v.steer, rotor: v.rotor, grounded: v.grounded, health: v.health,
+  driver: v.driver, passenger: v.passenger, wrecked: v.wrecked, slack: v.slack, lastAttacker: v.lastAttacker, lastRun: v.lastRun,
+});
+const vehicleFromRow = (r: VehicleRow): Vehicle => ({
+  id: r.id, kind: (VEHICLE_KINDS.includes(r.kind as VehicleKind) ? r.kind : 'car') as VehicleKind, x: r.x, y: r.y, z: r.z, vx: r.vx, vy: r.vy, vz: r.vz,
+  yaw: r.yaw, pitch: r.pitch, roll: r.roll, steer: r.steer, rotor: r.rotor, grounded: r.grounded, health: r.health,
+  driver: r.driver, passenger: r.passenger, wrecked: r.wrecked, slack: r.slack, lastAttacker: r.lastAttacker, lastRun: r.lastRun,
+});
+
 /** The broadcast part of the match row: only these fields trigger a row update. */
 const slowKey = (r: MatchRow) => JSON.stringify([r.mapId, r.phase, r.score0, r.score1, r.winner, r.configJson, r.humans, r.code]);
 
@@ -232,6 +265,7 @@ interface Loaded {
   room: number;
   state: MatchState; row: MatchRow; clock: ClockRow; clockExists: boolean;
   soldierKeys: Map<number, string>; rosterKeys: Map<number, string>; bodyKeys: Map<number, string>; brainKeys: Map<number, string>;
+  vehicleKeys: Map<number, string>;
 }
 
 function load(ctx: Ctx, room: number): Loaded {
@@ -261,6 +295,10 @@ function load(ctx: Ctx, room: number): Loaded {
     if (r.kind in BODY_RADIUS) bodies.push(bodyFromRow(r));
   }
   bodies.sort((a, b) => a.id - b.id);
+  const vehicleKeys = new Map<number, string>();
+  const vehicles: Vehicle[] = [];
+  for (const r of ctx.db.vehicle.room.filter(room)) { vehicleKeys.set(r.key, JSON.stringify(r)); vehicles.push(vehicleFromRow(r)); }
+  vehicles.sort((a, b) => a.id - b.id);
   const round: Partial<RoundRow> = clock.roundJson ? JSON.parse(clock.roundJson) : {};
   // A match from before rounds (Domination) restarts in warm-up with the BeGone rules; a room
   // opened just now has no clock yet and keeps its own settings.
@@ -268,13 +306,13 @@ function load(ctx: Ctx, room: number): Loaded {
   const state: MatchState = {
     mapId: row.mapId, phase: legacy ? 'warmup' : row.phase as MatchState['phase'], phaseLeft: legacy ? ONLINE_CONFIG.warmup : clock.phaseLeft,
     time: clock.time, tick: clock.tick,
-    scores: legacy ? [0, 0] : [row.score0, row.score1], soldiers, bodies, nextId: clock.nextId,
+    scores: legacy ? [0, 0] : [row.score0, row.score1], soldiers, bodies, vehicles, nextId: clock.nextId,
     winner: legacy ? -1 : row.winner as -1 | Team, config: legacy ? { ...ONLINE_CONFIG } : { ...ONLINE_CONFIG, ...JSON.parse(row.configJson) },
     round: round.round ?? 0, roundPhase: round.roundPhase ?? 'freeze', roundClock: round.roundClock ?? 0, roundWinner: round.roundWinner ?? -1,
     lossStreak: round.lossStreak ?? [0, 0], firstKill: round.firstKill ?? false, firstBlood: round.firstBlood ?? false,
     lastKillTeam: round.lastKillTeam ?? -1, bomb: round.bomb ?? { site: -1, armed: false, progress: 0, by: -1 },
   };
-  return { room, state, row, clock: { ...clock }, clockExists: !!existing, soldierKeys, rosterKeys, bodyKeys, brainKeys };
+  return { room, state, row, clock: { ...clock }, clockExists: !!existing, soldierKeys, rosterKeys, bodyKeys, brainKeys, vehicleKeys };
 }
 
 function save(ctx: Ctx, loaded: Loaded, events: MatchEvent[], frame: boolean) {
@@ -325,6 +363,15 @@ function save(ctx: Ctx, loaded: Loaded, events: MatchEvent[], frame: boolean) {
     else if (prev !== JSON.stringify(nextBody)) ctx.db.body.id.update(nextBody);
   }
   for (const id of loaded.bodyKeys.keys()) if (!bodySeen.has(id)) ctx.db.body.id.delete(id);
+  const vehicleSeen = new Set<number>();
+  for (const v of state.vehicles) {
+    const next = vehicleToRow(v, room);
+    vehicleSeen.add(next.key);
+    const prev = loaded.vehicleKeys.get(next.key);
+    if (prev === undefined) ctx.db.vehicle.insert(next);
+    else if (prev !== JSON.stringify(next)) ctx.db.vehicle.key.update(next);
+  }
+  for (const key of loaded.vehicleKeys.keys()) if (!vehicleSeen.has(key)) ctx.db.vehicle.key.delete(key);
   // Shots ride in the packed frame; everything else is a (rarer) JSON event.
   const shots = frame ? events.filter((e): e is Extract<MatchEvent, { type: 'shot' }> => e.type === 'shot') : [];
   let seq = 0;
@@ -451,8 +498,9 @@ function closeRoom(ctx: Ctx, room: number) {
   for (const t of [...ctx.db.tickSchedule.iter()]) if (t.room === room) ctx.db.tickSchedule.scheduledId.delete(t.scheduledId);
   for (const r of [...ctx.db.soldier.iter()]) {
     if (r.room !== room) continue;
-    ctx.db.soldier.id.delete(r.id); ctx.db.botBrain.id.delete(r.id); ctx.db.inbox.soldierId.delete(r.id);
+    ctx.db.soldier.id.delete(r.id); ctx.db.botBrain.id.delete(r.id); ctx.db.inbox.soldierId.delete(r.id); ctx.db.vehicleInbox.soldierId.delete(r.id);
   }
+  for (const r of [...ctx.db.vehicle.room.filter(room)]) ctx.db.vehicle.key.delete(r.key);
   for (const r of [...ctx.db.roster.room.filter(room)]) ctx.db.roster.id.delete(r.id);
   for (const r of [...ctx.db.body.iter()]) if (r.room === room) ctx.db.body.id.delete(r.id);
   ctx.db.frame.id.delete(room); ctx.db.clock.id.delete(room); ctx.db.match.id.delete(room);
@@ -528,6 +576,14 @@ function applyInputs(ctx: Ctx, state: MatchState, sim: SimContext) {
     }, row.elapsed);
     ctx.db.inbox.soldierId.update({ ...row, pending: false, elapsed: 0 });
   }
+  for (const row of [...ctx.db.vehicleInbox.iter()]) {
+    if (!present.has(row.soldierId)) { if (!ctx.db.soldier.id.find(row.soldierId)) ctx.db.vehicleInbox.soldierId.delete(row.soldierId); continue; }
+    if (!row.pending) continue;
+    reportVehicle(state, sim, row.soldierId, {
+      vehicle: row.vehicle, x: row.x, y: row.y, z: row.z, vx: row.vx, vy: row.vy, vz: row.vz, yaw: row.yaw, pitch: row.pitch, roll: row.roll,
+    }, row.elapsed);
+    ctx.db.vehicleInbox.soldierId.update({ ...row, pending: false, elapsed: 0 });
+  }
   const commands = [...ctx.db.command.iter()].sort((a, b) => (a.id < b.id ? -1 : a.id > b.id ? 1 : 0));
   const applied = new Map<number, number>();
   for (const c of commands) {
@@ -546,6 +602,7 @@ function applyInputs(ctx: Ctx, state: MatchState, sim: SimContext) {
       case 'buy': buyItem(state, sim, c.soldierId, cmd.item); break;
       case 'attach': buyAttachmentFor(state, c.soldierId, cmd.weapon, cmd.attachment); break;
       case 'crate': useAmmoCrate(state, sim, c.soldierId, cmd.index); break;
+      case 'vehicle': if (cmd.enter) getIn(state, sim, c.soldierId, cmd.index); else getOut(state, sim, c.soldierId); break;
     }
   }
 }
@@ -679,6 +736,24 @@ export const buyAttachment = spacetimedb.reducer({ weapon: t.string(), attachmen
 
 /** Use an ammo crate (E); validated by the next tick (reach, cash). */
 export const useCrate = spacetimedb.reducer({ index: t.u32() }, (ctx, { index }) => { queue(ctx, { kind: 'crate', index }); });
+
+/** E beside a vehicle: get in (driver's seat, or a teammate's passenger seat); validated by the next tick (reach, seats). */
+export const enterVehicle = spacetimedb.reducer({ index: t.u8() }, (ctx, { index }) => { queue(ctx, { kind: 'vehicle', enter: true, index }); });
+
+/** E in a vehicle: get out beside it. */
+export const exitVehicle = spacetimedb.reducer({}, ctx => { queue(ctx, { kind: 'vehicle', enter: false, index: 0 }); });
+
+/** The driver's vehicle report: stored for the next tick (latest wins; elapsed time accumulates for the budget). */
+export const vehicleReport = spacetimedb.reducer({
+  vehicle: t.u8(), x: t.f32(), y: t.f32(), z: t.f32(), vx: t.f32(), vy: t.f32(), vz: t.f32(), yaw: t.f32(), pitch: t.f32(), roll: t.f32(),
+}, (ctx, r) => {
+  const player = mySoldier(ctx);
+  const now = micros(ctx);
+  const prev = ctx.db.vehicleInbox.soldierId.find(player.soldierId);
+  const since = prev ? Number(now - prev.lastMicros) / 1_000_000 : 0.05;
+  const next = { ...r, soldierId: player.soldierId, lastMicros: now, elapsed: (prev?.pending ? prev.elapsed : 0) + Math.max(0, since), pending: true };
+  if (prev) ctx.db.vehicleInbox.soldierId.update(next); else ctx.db.vehicleInbox.insert(next);
+});
 
 /** Chat (Enter for everyone, T for the team). Rate-limited; clients filter team lines. */
 export const say = spacetimedb.reducer({ text: t.string(), team: t.bool() }, (ctx, { text, team }) => {

@@ -11,12 +11,15 @@ import {
   CASH, award, botShop, buy, buyAttachment, finishReload, newRoundStats, refillAmmo, resetInventory, statsOf, useCrate, type BuyItem,
 } from './economy';
 import {
-  MOVE_SLACK, TICK_RATE, applyDamage, explode, eyeOf, feetOf, killSoldier, resolvePellets, resolveShot, sideOf, spawnSoldier,
+  MOVE_SLACK, TICK_RATE, applyDamage, crewTeam, explode, eyeOf, feetOf, killSoldier, resolvePellets, resolveShot, seatOf, shieldedIds, sideOf, spawnSoldier,
   throwGrenadeFrom, traceShot, weaponOf, type SimContext, type TraceResult,
 } from './combat';
-import { ATTACKERS, type ClientReport, type MatchConfig, type MatchEvent, type MatchState, type RoundEnd, type ShotClaim, type Soldier, type Team } from './state';
+import { ATTACKERS, targetVehicle, type ClientReport, type MatchConfig, type MatchEvent, type MatchState, type RoundEnd, type ShotClaim, type Soldier, type Team } from './state';
+import { resetVehicles, updateVehicles } from './vehicles';
+import { speedOf, vehicleBoxDistance } from '../vehicles';
 
 export { TICK_RATE } from './combat';
+export { enterVehicle, exitVehicle, reportVehicle, seatOf } from './vehicles';
 export type { SimContext } from './combat';
 
 /** Metres from a bomb site's centre within which it can be armed or disarmed. */
@@ -33,7 +36,7 @@ export function createMatch(mapId: string, config: MatchConfig): MatchState {
     mapId, phase: 'warmup', phaseLeft: config.warmup, time: 0, tick: 0, scores: [0, 0],
     round: 0, roundPhase: 'freeze', roundClock: 0, roundWinner: -1, lossStreak: [0, 0],
     firstKill: false, firstBlood: false, lastKillTeam: -1, bomb: { site: -1, armed: false, progress: 0, by: -1 },
-    soldiers: [], bodies: [], nextId: 1, winner: -1, config,
+    soldiers: [], bodies: [], vehicles: [], nextId: 1, winner: -1, config,
   };
 }
 
@@ -101,6 +104,12 @@ export function reportState(state: MatchState, ctx: SimContext, id: number, r: C
   if (!finite) return false;
   s.yaw = r.yaw; s.pitch = clamp(r.pitch, -1.5, 1.5);
   if (!s.alive) return true;
+  if (seatOf(state, id)) {
+    // In a vehicle the seat decides where you are: only the view, aim and weapon count.
+    s.ads = r.ads; s.using = false;
+    if (r.weapon !== s.weapon) switchWeapon(state, id, r.weapon);
+    return true;
+  }
   // Distance budget against server-measured time: it refills at the top movement speed and is
   // capped, so jitter (reports bunching up after a gap) passes, but sending reports faster never
   // buys extra distance.
@@ -166,6 +175,8 @@ export const FIRE_JITTER = 0.25;
 export function fireShot(state: MatchState, ctx: SimContext, id: number, claim: ShotClaim) {
   const s = state.soldiers.find(x => x.id === id);
   if (!s || s.bot || !s.alive || state.phase !== 'live' || state.roundPhase === 'freeze') return false;
+  // Drivers keep both hands on the controls (passengers can shoot).
+  if (seatOf(state, id)?.seat === 0) return false;
   if (claim.weapon !== s.weapon) switchWeapon(state, id, claim.weapon);
   const w = weaponOf(s);
   const melee = s.weapon === 2;
@@ -184,7 +195,8 @@ export function fireShot(state: MatchState, ctx: SimContext, id: number, claim: 
   let result: TraceResult | undefined;
   let compensated: { target: Soldier; shift: Vec3 } | undefined;
   const target = claim.target >= 0 ? state.soldiers.find(x => x.id === claim.target) : undefined;
-  if (target && target.alive && target.team !== s.team && claim.zone) {
+  // A soldier inside a car or the helicopter cannot be hit directly: the body takes those shots.
+  if (target && target.alive && target.team !== s.team && claim.zone && !shieldedIds(state).has(target.id)) {
     const distance = dist3(origin, claim.point);
     const shape = hitShape(feetOf(target), target.m.crouch, target.yaw);
     const nearest = Math.min(
@@ -198,6 +210,17 @@ export function fireShot(state: MatchState, ctx: SimContext, id: number, claim: 
     if (distance <= w.range + (melee ? 0.6 : 0) && nearest <= tolerance && aligned && ctx.world.lineOfSight(origin, claim.point, s.team)) {
       result = { point: claim.point, soldier: target, zone: claim.zone, distance };
       compensated = { target, shift: lagShift(shape, claim.point) };
+    }
+  }
+  const claimed = state.vehicles[targetVehicle(claim.target)];
+  if (claimed && !claimed.wrecked && claimed.driver !== id && claimed.passenger !== id && crewTeam(state, claimed) !== s.team) {
+    // A claimed hit on a vehicle's body: near the box (moving vehicles get more slack), in range, in sight.
+    const distance = dist3(origin, claim.point);
+    const toPoint = normalize3({ x: claim.point.x - origin.x, y: claim.point.y - origin.y, z: claim.point.z - origin.z });
+    const aligned = toPoint.x * dir.x + toPoint.y * dir.y + toPoint.z * dir.z > Math.cos(melee ? 0.6 : 0.12);
+    const near = vehicleBoxDistance(claim.point, claimed) <= 1 + speedOf(claimed) * 0.3 + Math.abs(claimed.vy) * 0.3;
+    if (distance <= w.range + (melee ? 0.6 : 0) && near && aligned && ctx.world.lineOfSight(origin, claim.point, s.team)) {
+      result = { point: claim.point, vehicle: claimed, distance, surface: 'metal' };
     }
   }
   if (w.pellets > 1) {
@@ -249,7 +272,7 @@ export function useAmmoCrate(state: MatchState, ctx: SimContext, id: number, ind
 
 export function throwGrenade(state: MatchState, ctx: SimContext, id: number, origin: Vec3, dir: Vec3) {
   const s = state.soldiers.find(x => x.id === id);
-  if (!s || !s.alive || state.phase !== 'live' || state.roundPhase === 'freeze') return false;
+  if (!s || !s.alive || state.phase !== 'live' || state.roundPhase === 'freeze' || seatOf(state, id)?.seat === 0) return false;
   const eye = eyeOf(s);
   const o = [origin.x, origin.y, origin.z, dir.x, dir.y, dir.z].every(Number.isFinite) && dist3(origin, eye) < 2.5 ? origin : eye;
   return !!throwGrenadeFrom(state, s, o, normalize3(dir));
@@ -278,6 +301,7 @@ export function startRound(state: MatchState, ctx: SimContext, replay = false) {
   state.firstKill = false; state.firstBlood = false; state.lastKillTeam = -1;
   state.bomb = { site: -1, armed: false, progress: 0, by: -1 };
   state.bodies = [];
+  resetVehicles(state, ctx);
   for (const s of state.soldiers) {
     s.round = newRoundStats();
     if (s.bot) botShop(s, ctx.random);
@@ -400,6 +424,7 @@ export function tickMatch(state: MatchState, ctx: SimContext, dt: number) {
     updateTimers(state, ctx, s, dt);
     if (s.bot && s.alive && !frozen) updateBot(state, ctx, s, dt);
   }
+  updateVehicles(state, ctx, dt);
   stepWorld(state, ctx, dt);
   if (state.phase === 'live' && state.roundPhase === 'live') {
     if (modeOf(state, ctx.map) === 'sabotage') updateBomb(state, ctx, dt);

@@ -9,6 +9,8 @@ import { type Infer as __Infer } from "spacetimedb";
 import BuyReducer from "../buy_reducer";
 import BuyAttachmentReducer from "../buy_attachment_reducer";
 import CreateRoomReducer from "../create_room_reducer";
+import EnterVehicleReducer from "../enter_vehicle_reducer";
+import ExitVehicleReducer from "../exit_vehicle_reducer";
 import FireReducer from "../fire_reducer";
 import GrenadeReducer from "../grenade_reducer";
 import JoinReducer from "../join_reducer";
@@ -21,10 +23,13 @@ import ReportReducer from "../report_reducer";
 import SayReducer from "../say_reducer";
 import SwitchSlotReducer from "../switch_slot_reducer";
 import UseCrateReducer from "../use_crate_reducer";
+import VehicleReportReducer from "../vehicle_report_reducer";
 
 export type BuyParams = __Infer<typeof BuyReducer>;
 export type BuyAttachmentParams = __Infer<typeof BuyAttachmentReducer>;
 export type CreateRoomParams = __Infer<typeof CreateRoomReducer>;
+export type EnterVehicleParams = __Infer<typeof EnterVehicleReducer>;
+export type ExitVehicleParams = __Infer<typeof ExitVehicleReducer>;
 export type FireParams = __Infer<typeof FireReducer>;
 export type GrenadeParams = __Infer<typeof GrenadeReducer>;
 export type JoinParams = __Infer<typeof JoinReducer>;
@@ -37,4 +42,5 @@ export type ReportParams = __Infer<typeof ReportReducer>;
 export type SayParams = __Infer<typeof SayReducer>;
 export type SwitchSlotParams = __Infer<typeof SwitchSlotReducer>;
 export type UseCrateParams = __Infer<typeof UseCrateReducer>;
+export type VehicleReportParams = __Infer<typeof VehicleReportReducer>;
 

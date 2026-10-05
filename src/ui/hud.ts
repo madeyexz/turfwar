@@ -128,6 +128,7 @@ export class Hud {
         <div class="slots" data-k="slots"></div>
       </div>
       <div class="buyhint" data-k="buyhint" hidden></div>
+      <div class="vehicle panel" data-k="vehicle" hidden><div class="vrow"><b data-k="vName"></b><span class="vread"><b data-k="vSpeed">0</b><small>KM/H</small></span><span class="vread" data-k="vAltBox"><b data-k="vAlt">0</b><small>M ALT</small></span></div><div class="track"><i data-k="vHealth"></i></div><small class="vkeys" data-k="vKeys"></small></div>
       <div class="spectate" data-k="spectate" hidden></div>
       <div class="zoomtag" data-k="zoomtag" hidden></div>
       <div class="released panel" data-k="released" hidden><b data-k="releasedTitle"></b><span>Click to resume · <kbd>M</kbd> leave match</span></div>
@@ -171,7 +172,7 @@ export class Hud {
     // Crosshair (BeGone: four bars around a dot): the gap follows the cone (bloom, movement, air) and widens
     // while sprinting; optics replace it while aiming.
     const cross = this.el.cross;
-    cross.hidden = !alive || p.binoculars || this.scoped || p.ads > 0.5;
+    cross.hidden = !alive || this.driving || p.binoculars || this.scoped || p.ads > 0.5;
     if (!cross.hidden) {
       if (cross.dataset.style !== this.crosshairStyle) cross.dataset.style = this.crosshairStyle;
       const spread = p.currentSpread();
@@ -506,6 +507,24 @@ export class Hud {
     this.set('progressBar', `${Math.max(0, Math.min(1, fraction)) * 100}%`, 'width');
   }
 
+  /** At the wheel: no crosshair and no weapon panel (drivers do not shoot). */
+  driving = false;
+
+  /** Vehicle panel while seated: name, speed, altitude (helicopter), body health and the controls; hidden otherwise. */
+  vehicle(info?: { name: string; speed: number; altitude?: number; health: number; max: number; keys: string }) {
+    this.el.vehicle.hidden = !info;
+    this.el.arms.hidden = !!info && this.driving;
+    if (!info) return;
+    this.set('vName', info.name);
+    this.set('vSpeed', String(Math.round(info.speed * 3.6)));
+    this.el.vAltBox.hidden = info.altitude === undefined;
+    if (info.altitude !== undefined) this.set('vAlt', String(Math.max(0, Math.round(info.altitude))));
+    const f = Math.max(0, Math.min(1, info.health / info.max));
+    this.set('vHealth', `${(f * 100).toFixed(1)}%`, 'width');
+    this.el.vHealth.classList.toggle('low', f < 0.3);
+    this.set('vKeys', info.keys, 'html');
+  }
+
   /** Store reminder during buy time (e.g. "B STORE · 14s"), or hidden. */
   buyHint(text: string | undefined) {
     this.el.buyhint.hidden = !text;
@@ -598,6 +617,19 @@ export class Hud {
           if (armed && blink) { ctx.fillStyle = '#ff3a2a'; ctx.beginPath(); ctx.arc(0, 20, 7, 0, Math.PI * 2); ctx.fill(); }
         });
       });
+    }
+    // Vehicles: white when free, team-coloured when crewed (enemy crews only show while near).
+    for (const v of state.vehicles) {
+      if (v.wrecked) continue;
+      const crewId = v.driver >= 0 ? v.driver : v.passenger;
+      const crew = crewId >= 0 ? state.soldiers.find(x => x.id === crewId) : undefined;
+      if (crew && me && crew.team !== me.team && Math.hypot(v.x - myPos.x, v.z - myPos.z) > 40) continue;
+      ctx.save(); ctx.translate(v.x * scale, v.z * scale); ctx.rotate(-v.yaw);
+      ctx.fillStyle = crew ? TEAM_HEX[crew.team] : 'rgba(240,240,232,0.85)';
+      const [w, l] = v.kind === 'car' ? [4, 9] : v.kind === 'scooter' ? [2, 4] : [5, 10];
+      ctx.fillRect(-w * scale / 2, -l * scale / 2, w * scale, l * scale);
+      if (v.kind === 'heli') { ctx.strokeStyle = ctx.fillStyle; ctx.lineWidth = 2; ctx.beginPath(); ctx.arc(0, -0.6 * scale, 5.2 * scale, 0, Math.PI * 2); ctx.stroke(); }
+      ctx.restore();
     }
     for (const s of state.soldiers) {
       if (!s.alive || !me || s.id === me.id) continue;

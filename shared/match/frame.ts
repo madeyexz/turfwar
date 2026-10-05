@@ -1,15 +1,16 @@
 import type { Surface } from '../collision';
 import { WEAPONS, type Slot, type WeaponId } from '../weapons';
 import { BODY_RADIUS, type Body, type BodyKind } from '../world';
+import { VEHICLE_KINDS, type Vehicle } from '../vehicles';
 import type { BombState, MatchEvent, MatchState, RoundPhase } from './state';
 
 /**
  * Compact binary snapshot of everything that changes every tick: soldier poses and vitals,
- * grenades, the round clock and bomb, and this tick's shots.
+ * grenades, vehicles, the round clock and bomb, and this tick's shots.
  * The server writes one frame row per tick, so a hundred soldiers cost one small row update per
  * client instead of hundreds of row updates. Positions are quantized to 2 cm, velocities to 1 cm/s.
  */
-export const FRAME_VERSION = 5;
+export const FRAME_VERSION = 6;
 
 const POS = 50;          // units per metre (2 cm)
 const VEL = 100;         // units per m/s
@@ -41,18 +42,21 @@ export interface FrameClock { tick: number; time: number; phaseLeft: number; rou
 export interface DecodedFrame extends FrameClock {
   poses: FramePose[];
   bodies: Pick<Body, 'id' | 'kind' | 'x' | 'y' | 'z' | 'vx' | 'vy' | 'vz' | 'team'>[];
+  vehicles: FrameVehicle[];
   shots: Extract<MatchEvent, { type: 'shot' }>[];
 }
 
-const HEADER = 1 + 4 + 4 * 2 + 1 + 2 + 1 + 1 + 1 + 2 + 2 + 2 + 2;
-const POSE = 23, BODY = 16, SHOT = 16;
+export type FrameVehicle = Pick<Vehicle, 'id' | 'kind' | 'x' | 'y' | 'z' | 'vx' | 'vy' | 'vz' | 'yaw' | 'pitch' | 'roll' | 'rotor' | 'grounded' | 'health' | 'driver' | 'passenger' | 'wrecked'>;
+
+const HEADER = 1 + 4 + 4 * 2 + 1 + 2 + 1 + 1 + 1 + 2 + 2 + 2 + 2 + 1;
+const POSE = 23, BODY = 16, SHOT = 16, VEHICLE = 27;
 const i16 = (v: number) => Math.max(-32768, Math.min(32767, Math.round(v)));
 const u8 = (v: number) => Math.max(0, Math.min(255, Math.round(v)));
 
 export function encodeFrame(state: MatchState, shots: Extract<MatchEvent, { type: 'shot' }>[]): Uint8Array {
-  const soldiers = state.soldiers, bodies = state.bodies, bomb = state.bomb;
+  const soldiers = state.soldiers, bodies = state.bodies, bomb = state.bomb, vehicles = state.vehicles.slice(0, 255);
   const sentShots = shots.slice(0, 2000);
-  const buf = new ArrayBuffer(HEADER + soldiers.length * POSE + bodies.length * BODY + sentShots.length * SHOT);
+  const buf = new ArrayBuffer(HEADER + soldiers.length * POSE + bodies.length * BODY + vehicles.length * VEHICLE + sentShots.length * SHOT);
   const v = new DataView(buf);
   let o = 0;
   v.setUint8(o, FRAME_VERSION); o += 1;
@@ -67,6 +71,7 @@ export function encodeFrame(state: MatchState, shots: Extract<MatchEvent, { type
   v.setUint16(o, soldiers.length, true); o += 2;
   v.setUint16(o, bodies.length, true); o += 2;
   v.setUint16(o, sentShots.length, true); o += 2;
+  v.setUint8(o, vehicles.length); o += 1;
   for (const s of soldiers) {
     const m = s.m;
     v.setUint16(o, s.id, true);
@@ -92,6 +97,18 @@ export function encodeFrame(state: MatchState, shots: Extract<MatchEvent, { type
     v.setInt16(o + 10, i16(b.vx * VEL), true); v.setInt16(o + 12, i16(b.vy * VEL), true); v.setInt16(o + 14, i16(b.vz * VEL), true);
     o += BODY;
   }
+  for (const c of vehicles) {
+    v.setUint8(o, c.id & 0xff);
+    v.setUint8(o + 1, Math.max(0, VEHICLE_KINDS.indexOf(c.kind)) | (c.wrecked ? 16 : 0) | (c.grounded ? 32 : 0));
+    v.setInt16(o + 2, i16(c.x * POS), true); v.setInt16(o + 4, i16(c.y * POS), true); v.setInt16(o + 6, i16(c.z * POS), true);
+    v.setInt16(o + 8, i16(c.vx * VEL), true); v.setInt16(o + 10, i16(c.vy * VEL), true); v.setInt16(o + 12, i16(c.vz * VEL), true);
+    v.setUint16(o + 14, Math.round(((c.yaw % (Math.PI * 2)) + Math.PI * 2) * YAW) & 0xffff, true);
+    v.setInt16(o + 16, i16(c.pitch * PITCH), true); v.setInt16(o + 18, i16(c.roll * PITCH), true);
+    v.setUint16(o + 20, Math.max(0, Math.min(65535, Math.ceil(c.health))), true);
+    v.setInt16(o + 22, c.driver < 0 ? -1 : c.driver & 0x7fff, true); v.setInt16(o + 24, c.passenger < 0 ? -1 : c.passenger & 0x7fff, true);
+    v.setUint8(o + 26, u8(c.rotor * 255));
+    o += VEHICLE;
+  }
   for (const s of sentShots) {
     v.setUint16(o, s.shooter & 0xffff, true);
     v.setUint8(o + 2, Math.max(0, SHOT_WEAPONS.indexOf(s.weapon)));
@@ -115,6 +132,8 @@ export function decodeFrame(bytes: Uint8Array): DecodedFrame | undefined {
   const round = v.getUint16(o, true); o += 2;
   const bomb: BombState = { site: v.getInt8(o), armed: v.getUint8(o + 1) === 1, progress: v.getUint8(o + 2) / 255, by: v.getInt16(o + 3, true) }; o += 5;
   const soldierCount = v.getUint16(o, true), bodyCount = v.getUint16(o + 2, true), shotCount = v.getUint16(o + 4, true); o += 6;
+  const vehicleCount = v.getUint8(o); o += 1;
+  if (bytes.byteLength < HEADER + soldierCount * POSE + bodyCount * BODY + vehicleCount * VEHICLE + shotCount * SHOT) return undefined;
   const poses: FramePose[] = [];
   for (let i = 0; i < soldierCount; i++, o += POSE) {
     const flags = v.getUint8(o + 19);
@@ -137,6 +156,17 @@ export function decodeFrame(bytes: Uint8Array): DecodedFrame | undefined {
       vx: v.getInt16(o + 10, true) / VEL, vy: v.getInt16(o + 12, true) / VEL, vz: v.getInt16(o + 14, true) / VEL,
     });
   }
+  const vehicles: FrameVehicle[] = [];
+  for (let i = 0; i < vehicleCount; i++, o += VEHICLE) {
+    const kf = v.getUint8(o + 1);
+    vehicles.push({
+      id: v.getUint8(o), kind: VEHICLE_KINDS[kf & 15] ?? 'car', wrecked: !!(kf & 16), grounded: !!(kf & 32),
+      x: v.getInt16(o + 2, true) / POS, y: v.getInt16(o + 4, true) / POS, z: v.getInt16(o + 6, true) / POS,
+      vx: v.getInt16(o + 8, true) / VEL, vy: v.getInt16(o + 10, true) / VEL, vz: v.getInt16(o + 12, true) / VEL,
+      yaw: v.getUint16(o + 14, true) / YAW, pitch: v.getInt16(o + 16, true) / PITCH, roll: v.getInt16(o + 18, true) / PITCH,
+      health: v.getUint16(o + 20, true), driver: v.getInt16(o + 22, true), passenger: v.getInt16(o + 24, true), rotor: v.getUint8(o + 26) / 255,
+    });
+  }
   const shots: DecodedFrame['shots'] = [];
   for (let i = 0; i < shotCount; i++, o += SHOT) {
     const hs = v.getUint8(o + 3);
@@ -147,5 +177,5 @@ export function decodeFrame(bytes: Uint8Array): DecodedFrame | undefined {
       to: { x: v.getInt16(o + 10, true) / POS, y: v.getInt16(o + 12, true) / POS, z: v.getInt16(o + 14, true) / POS },
     });
   }
-  return { tick, time, phaseLeft, round, roundPhase, bomb, poses, bodies, shots };
+  return { tick, time, phaseLeft, round, roundPhase, bomb, poses, bodies, vehicles, shots };
 }
