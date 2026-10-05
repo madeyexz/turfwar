@@ -4,7 +4,7 @@ import { RoundedBoxGeometry } from 'three/examples/jsm/geometries/RoundedBoxGeom
 import type { Assets } from '../assets';
 import { LADDER_DIRS, terrainHeight, type Ladder, type Ramp, type Solid } from '../../shared/collision';
 import { fbm } from '../../shared/maps/builder';
-import type { BlockStyle, MapDef, RampStyle } from '../../shared/maps/types';
+import type { BlockStyle, Decor, MapDef, RampStyle } from '../../shared/maps/types';
 import { rng } from '../../shared/math';
 import { shieldMaterial, surfaceMaterial, terrainMaterial, type Theme } from './materials';
 
@@ -61,7 +61,10 @@ export class LevelView {
       paint: surfaceMaterial(assets, 'metalplate', { metalness: 0.35, normalScale: 0.5 }),
       hedge: surfaceMaterial(assets, 'moss', { color: 0x8fbf6a, normalScale: 1.6 }),
       water: new THREE.MeshStandardMaterial({ color: 0x1e3c48, roughness: 0.06, metalness: 0.55, transparent: true, opacity: 0.84, depthWrite: false }),
+      marking: new THREE.MeshStandardMaterial({ roughness: 0.75, vertexColors: true, polygonOffset: true, polygonOffsetFactor: -2, polygonOffsetUnits: -2 }),
     };
+    if (map.decor.some(d => d.kind === 'block' && d.style === 'facade')) this.materials.facade = facadeMaterial();
+    const signs: SignDecor[] = [];
     this.buildTerrain();
     map.decor.forEach(d => {
       switch (d.kind) {
@@ -78,12 +81,20 @@ export class LevelView {
         case 'tree': this.tree(d.x, d.y, d.z, d.scale, d.variant); break;
         case 'crystal': this.crystal(d.x, d.y, d.z, d.scale, d.rotY); break;
         case 'mast': this.mast(d.x, d.y, d.z, d.height); break;
+        case 'sign': signs.push(d); break;
+        case 'marking': {
+          const g = boxGeo(d.x, d.y, d.z, d.w, 0.004, d.d, 0, 4);
+          tint(g, d.color, d.y, 1, 1);
+          this.add('marking', g);
+          break;
+        }
         default: break;
       }
     });
     for (const l of map.ladders ?? []) this.ladder(l);
     this.flush();
-    this.scatter();
+    if (signs.length) this.group.add(signMesh(signs));
+    if (!theme.urban) this.scatter();
     this.horizon();
   }
 
@@ -110,7 +121,7 @@ export class LevelView {
       const geometry = mergeGeometries(list, false);
       if (!geometry) continue;
       const mesh = new THREE.Mesh(geometry, this.materials[name]);
-      mesh.castShadow = name !== 'glow' && name !== 'glowWarm' && name !== 'glass' && name !== 'water';
+      mesh.castShadow = name !== 'glow' && name !== 'glowWarm' && name !== 'glass' && name !== 'water' && name !== 'marking';
       mesh.receiveShadow = true;
       mesh.name = `level:${name}`;
       this.group.add(mesh);
@@ -174,6 +185,20 @@ export class LevelView {
         return;
       }
       case 'crate': this.crate(cx, s.minY, cz, w, h, d, color); return;
+      case 'facade': {
+        // Buildings standing on the street get a shopfront storey under the window grid.
+        const shop = s.minY < 0.5 && h > 6 ? SHOPFRONT : 0;
+        if (shop) {
+          this.materials.shopfront ??= shopfrontMaterial();
+          const g = windowBox(cx, s.minY, cz, w, shop, d, SHOP_BAY, shop);
+          tint(g, color ?? 0xd8d4cc, s.minY, shop, 0.85);
+          this.add('shopfront', g);
+        }
+        const g = windowBox(cx, s.minY + shop, cz, w, h - shop, d);
+        tint(g, color ?? 0xd8d4cc, s.minY, Math.min(h, 8), 0.8);
+        this.add('facade', g);
+        return;
+      }
       case 'hedge': this.add('hedge', hedgeGeometry(cx, s.minY, cz, w, h, d, index)); return;
       case 'shield': {
         const mat = shieldMaterial(TEAM_COLORS[s.team ?? 0]);
@@ -774,3 +799,210 @@ function bannerTexture(team: 0 | 1) {
 
 /** Polyhedra are already non-indexed; only expand geometries that share vertices. */
 function nonIndexed(g: THREE.BufferGeometry) { return g.index ? g.toNonIndexed() : g; }
+
+// ---- City buildings and signs ------------------------------------------------------------
+
+/** Window grid of the facade sheet: 4 bays × 4 floors per tile. */
+const BAY = 3.1, FLOOR = 3.2, TILE_BAYS = 4, TILE_FLOORS = 4;
+/** Height of a street-level shopfront storey and the width its sheet repeats over. */
+const SHOPFRONT = 4.2, SHOP_BAY = 7.5;
+
+/**
+ * Box whose walls map the window grid (one cell per bay and floor, counted from its base) and
+ * whose roof and underside map a plain corner of the sheet.
+ */
+function windowBox(cx: number, y0: number, cz: number, w: number, h: number, d: number, tileW = BAY * TILE_BAYS, tileH = FLOOR * TILE_FLOORS) {
+  const g = new THREE.BoxGeometry(w, h, d);
+  g.translate(cx, y0 + h / 2, cz);
+  const p = g.getAttribute('position') as THREE.BufferAttribute, n = g.getAttribute('normal') as THREE.BufferAttribute;
+  const uv = g.getAttribute('uv') as THREE.BufferAttribute;
+  for (let i = 0; i < p.count; i++) {
+    if (Math.abs(n.getY(i)) > 0.5) { uv.setXY(i, 0.003, 0.003); continue; }
+    const along = Math.abs(n.getX(i)) > 0.5 ? p.getZ(i) * -Math.sign(n.getX(i)) : p.getX(i) * Math.sign(n.getZ(i));
+    uv.setXY(i, along / tileW, (p.getY(i) - y0) / tileH);
+  }
+  return g;
+}
+
+/**
+ * Procedural facade sheet: plaster wall (tinted per building) with windows, many behind the iron
+ * window cages (鐵窗) and air-conditioner boxes of Taipei walk-ups; an emissive twin lights a third of them.
+ */
+function facadeMaterial() {
+  const size = 512, cell = size / TILE_BAYS, rowH = size / TILE_FLOORS;
+  const wall = document.createElement('canvas'), lit = document.createElement('canvas');
+  wall.width = wall.height = lit.width = lit.height = size;
+  const c = wall.getContext('2d')!, e = lit.getContext('2d')!;
+  const r = rng(7);
+  c.fillStyle = '#ece8e0'; c.fillRect(0, 0, size, size);
+  for (let i = 0; i < 1800; i++) { c.fillStyle = `rgba(${r() < 0.5 ? '0,0,0' : '255,255,255'},${0.03 + r() * 0.04})`; c.fillRect(r() * size, r() * size, 2 + r() * 6, 2 + r() * 6); }
+  e.fillStyle = '#000'; e.fillRect(0, 0, size, size);
+  for (let fy = 0; fy < TILE_FLOORS; fy++) for (let bx = 0; bx < TILE_BAYS; bx++) {
+    const x = bx * cell + cell * 0.22, y = fy * rowH + rowH * 0.2, w = cell * 0.56, h = rowH * 0.52;
+    const glass = c.createLinearGradient(x, y, x + w, y + h);
+    glass.addColorStop(0, '#3a4a5c'); glass.addColorStop(0.55, '#1c2430'); glass.addColorStop(1, '#2c3644');
+    c.fillStyle = '#9a968e'; c.fillRect(x - 4, y - 4, w + 8, h + 10);
+    c.fillStyle = glass; c.fillRect(x, y, w, h);
+    c.fillStyle = 'rgba(0,0,0,0.35)'; c.fillRect(x + w / 2 - 1, y, 2, h);
+    if (r() < 0.36) {
+      e.fillStyle = r() < 0.7 ? '#ffcf8a' : '#cfe6ff';
+      e.globalAlpha = 0.55 + r() * 0.45; e.fillRect(x + 2, y + 2, w - 4, h - 4); e.globalAlpha = 1;
+      c.fillStyle = 'rgba(255,214,150,0.35)'; c.fillRect(x, y, w, h);
+    }
+    if (r() < 0.45) {
+      // Iron window cage: a frame standing proud of the wall with vertical bars.
+      c.strokeStyle = '#4a4e52'; c.lineWidth = 3; c.strokeRect(x - 6, y - 6, w + 12, h + 12);
+      c.lineWidth = 2;
+      for (let k = x; k < x + w; k += 9) { c.beginPath(); c.moveTo(k, y - 6); c.lineTo(k, y + h + 6); c.stroke(); }
+    }
+    if (r() < 0.4) { c.fillStyle = '#d8d8d2'; c.fillRect(x + w - 34, y + h + 4, 30, 16); c.fillStyle = '#8a8a86'; c.fillRect(x + w - 30, y + h + 8, 22, 8); }
+  }
+  const map = new THREE.CanvasTexture(wall), emissiveMap = new THREE.CanvasTexture(lit);
+  for (const t of [map, emissiveMap]) { t.wrapS = t.wrapT = THREE.RepeatWrapping; t.colorSpace = THREE.SRGBColorSpace; t.anisotropy = 4; }
+  return new THREE.MeshStandardMaterial({ map, emissiveMap, emissive: 0xffffff, emissiveIntensity: 0.9, roughness: 0.88, vertexColors: true });
+}
+
+/** Street-level shopfronts: lit glass between piers, a fascia above, some shops behind roller shutters. */
+function shopfrontMaterial() {
+  const W = 512, H = 288;
+  const wall = document.createElement('canvas'), lit = document.createElement('canvas');
+  wall.width = lit.width = W; wall.height = lit.height = H;
+  const c = wall.getContext('2d')!, e = lit.getContext('2d')!;
+  c.fillStyle = '#dcd8d0'; c.fillRect(0, 0, W, H);
+  e.fillStyle = '#000'; e.fillRect(0, 0, W, H);
+  const fascia = H * (1 - 3.2 / SHOPFRONT);
+  c.fillStyle = '#3a3a3e'; c.fillRect(0, 0, W, fascia);
+  const units = [[8, 250, false], [262, 242, true]] as const;
+  for (const [x, w, shutter] of units) {
+    if (shutter) {
+      c.fillStyle = '#9ea2a6'; c.fillRect(x, fascia + 8, w, H - fascia - 8);
+      c.fillStyle = '#7e8286'; for (let y = fascia + 12; y < H; y += 7) c.fillRect(x, y, w, 2);
+      continue;
+    }
+    const g = c.createLinearGradient(0, fascia, 0, H);
+    g.addColorStop(0, '#fff0c8'); g.addColorStop(1, '#c8a878');
+    c.fillStyle = g; c.fillRect(x, fascia + 8, w, H - fascia - 8);
+    c.fillStyle = 'rgba(40,30,20,0.55)';
+    for (let k = 0; k < 5; k++) c.fillRect(x + 14 + k * 46, fascia + 40 + (k % 2) * 20, 30, H - fascia - 70);
+    c.fillStyle = '#2a2a2e'; c.fillRect(x + w / 2 - 2, fascia + 8, 4, H - fascia - 8);
+    e.fillStyle = '#ffe2b0'; e.globalAlpha = 0.8; e.fillRect(x, fascia + 8, w, H - fascia - 8); e.globalAlpha = 1;
+  }
+  const map = new THREE.CanvasTexture(wall), emissiveMap = new THREE.CanvasTexture(lit);
+  for (const t of [map, emissiveMap]) { t.wrapS = t.wrapT = THREE.RepeatWrapping; t.colorSpace = THREE.SRGBColorSpace; t.anisotropy = 4; }
+  return new THREE.MeshStandardMaterial({ map, emissiveMap, emissive: 0xffffff, emissiveIntensity: 0.7, roughness: 0.5, vertexColors: true });
+}
+
+type SignDecor = Extract<Decor, { kind: 'sign' }>;
+const SIGN_FONT = `'PingFang TC','Noto Sans TC','Microsoft JhengHei','Heiti TC',sans-serif`;
+
+/**
+ * Every sign of the map in one draw: each sign is painted once into a shared canvas atlas (text,
+ * colours, bulbs) that also lights it as its emissive map, so the neon reads at dusk. Blades show
+ * the art on both faces; billboards and the gateway get a dark back.
+ */
+function signMesh(signs: SignDecor[]) {
+  const faces: { s: SignDecor; facing: number; out: number; back: boolean }[] = [];
+  for (const s of signs) {
+    if (s.style === 'blade') { faces.push({ s, facing: s.rotY + Math.PI / 2, out: 0, back: false }, { s, facing: s.rotY - Math.PI / 2, out: 0, back: false }); continue; }
+    faces.push({ s, facing: s.rotY, out: 0, back: false });
+    if (s.style === 'billboard' || s.style === 'gate') faces.push({ s, facing: s.rotY + Math.PI, out: 0.04, back: true });
+  }
+  // One cell per sign, packed on shelves of a 2048-wide atlas; a small dark cell for the backs.
+  const W = 2048, cells = new Map<SignDecor, { x: number; y: number; w: number; h: number }>();
+  const dark = { x: 0, y: 0, w: 8, h: 8 };
+  let x = 10, y = 0, shelf = 8;
+  for (const s of signs) {
+    const ppm = Math.min(1000 / Math.max(s.w, s.h), Math.max(64, 90 / Math.min(s.w, s.h)));
+    const w = Math.max(8, Math.round(s.w * ppm)), h = Math.max(8, Math.round(s.h * ppm));
+    if (x + w > W) { x = 0; y += shelf + 2; shelf = 0; }
+    cells.set(s, { x, y, w, h });
+    x += w + 2; shelf = Math.max(shelf, h);
+  }
+  const H = THREE.MathUtils.ceilPowerOfTwo(y + shelf + 2);
+  const canvas = document.createElement('canvas');
+  canvas.width = W; canvas.height = H;
+  const c = canvas.getContext('2d')!;
+  c.fillStyle = '#121212'; c.fillRect(dark.x, dark.y, dark.w, dark.h);
+  for (const s of signs) drawSign(c, s, cells.get(s)!);
+
+  const pos: number[] = [], nor: number[] = [], uv: number[] = [];
+  for (const f of faces) {
+    const s = f.s, cell = f.back ? dark : cells.get(s)!;
+    // Outward normal of the face and its right-hand direction as seen from the front.
+    const nx = Math.sin(f.facing), nz = -Math.cos(f.facing), rx = -Math.cos(f.facing), rz = -Math.sin(f.facing);
+    const cx = s.x + nx * f.out, cz = s.z + nz * f.out, hw = s.w / 2, hh = s.h / 2;
+    const u0 = cell.x / W, u1 = (cell.x + cell.w) / W, v0 = 1 - (cell.y + cell.h) / H, v1 = 1 - cell.y / H;
+    const corner = (sx: number, sy: number, u: number, v: number) => { pos.push(cx + rx * hw * sx, s.y + hh * sy, cz + rz * hw * sx); nor.push(nx, 0, nz); uv.push(u, v); };
+    corner(-1, -1, u0, v0); corner(1, -1, u1, v0); corner(1, 1, u1, v1);
+    corner(-1, -1, u0, v0); corner(1, 1, u1, v1); corner(-1, 1, u0, v1);
+  }
+  const g = new THREE.BufferGeometry();
+  g.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3));
+  g.setAttribute('normal', new THREE.Float32BufferAttribute(nor, 3));
+  g.setAttribute('uv', new THREE.Float32BufferAttribute(uv, 2));
+  const tex = new THREE.CanvasTexture(canvas);
+  tex.colorSpace = THREE.SRGBColorSpace; tex.anisotropy = 4;
+  const mesh = new THREE.Mesh(g, new THREE.MeshStandardMaterial({ map: tex, emissiveMap: tex, emissive: 0xffffff, emissiveIntensity: 0.85, roughness: 0.6 }));
+  mesh.name = 'level:signs';
+  return mesh;
+}
+
+/** Bold text centred at (cx, cy): `size` px, shrunk until it fits maxW. */
+function fitText(c: CanvasRenderingContext2D, text: string, cx: number, cy: number, maxW: number, size: number) {
+  let px = Math.max(6, Math.floor(size));
+  c.font = `900 ${px}px ${SIGN_FONT}`;
+  const w = c.measureText(text).width;
+  if (w > maxW) { px = Math.max(6, Math.floor(px * maxW / w)); c.font = `900 ${px}px ${SIGN_FONT}`; }
+  c.fillText(text, cx, cy);
+}
+
+function drawSign(c: CanvasRenderingContext2D, s: SignDecor, r: { x: number; y: number; w: number; h: number }) {
+  c.save();
+  c.beginPath(); c.rect(r.x, r.y, r.w, r.h); c.clip();
+  c.textAlign = 'center'; c.textBaseline = 'middle';
+  const cx = r.x + r.w / 2;
+  switch (s.style) {
+    case 'blade': {
+      c.fillStyle = s.bg; c.fillRect(r.x, r.y, r.w, r.h);
+      const line = Math.max(2, r.w * 0.06);
+      c.strokeStyle = s.fg; c.lineWidth = line; c.strokeRect(r.x + line, r.y + line, r.w - 2 * line, r.h - 2 * line);
+      // Characters stacked top to bottom, the way Taipei's vertical signs read.
+      const chars = [...s.text], step = (r.h * 0.9) / chars.length, size = Math.min(r.w * 0.72, step * 0.9);
+      c.fillStyle = s.fg; c.shadowColor = s.fg; c.shadowBlur = size * 0.25;
+      chars.forEach((ch, i) => fitText(c, ch, cx, r.y + r.h * 0.05 + step * (i + 0.5), r.w * 0.8, size));
+      break;
+    }
+    case 'screen': {
+      const g = c.createLinearGradient(r.x, r.y, r.x + r.w, r.y + r.h);
+      g.addColorStop(0, '#1a2a6a'); g.addColorStop(0.5, '#c82a8a'); g.addColorStop(1, '#2ac8d8');
+      c.fillStyle = g; c.fillRect(r.x, r.y, r.w, r.h);
+      c.fillStyle = 'rgba(0,0,0,0.25)';
+      for (let yy = r.y; yy < r.y + r.h; yy += 4) c.fillRect(r.x, yy, r.w, 1);
+      break;
+    }
+    case 'marquee': {
+      c.fillStyle = s.bg; c.fillRect(r.x, r.y, r.w, r.h);
+      c.fillStyle = s.fg;
+      const n = Math.max(4, Math.round(r.w / (r.h * 0.5)));
+      for (let i = 0; i < n; i++) for (const yy of [0.3, 0.7]) { c.beginPath(); c.arc(r.x + (i + 0.5) * r.w / n, r.y + r.h * yy, r.h * 0.11, 0, Math.PI * 2); c.fill(); }
+      break;
+    }
+    case 'billboard': case 'gate': {
+      const g = c.createLinearGradient(r.x, r.y, r.x, r.y + r.h);
+      g.addColorStop(0, s.bg); g.addColorStop(1, `#${new THREE.Color(s.bg).multiplyScalar(0.7).getHexString()}`);
+      c.fillStyle = g; c.fillRect(r.x, r.y, r.w, r.h);
+      if (s.style === 'gate') { const line = r.h * 0.06; c.strokeStyle = '#ffd24a'; c.lineWidth = line; c.strokeRect(r.x + line, r.y + line, r.w - 2 * line, r.h - 2 * line); }
+      c.fillStyle = s.fg;
+      fitText(c, s.text, cx, r.y + r.h * (s.sub ? 0.4 : 0.5), r.w * 0.9, r.h * (s.sub ? 0.5 : 0.7));
+      if (s.sub) { c.fillStyle = s.style === 'gate' ? '#ffd24a' : s.fg; fitText(c, s.sub, cx, r.y + r.h * 0.8, r.w * 0.9, r.h * 0.2); }
+      break;
+    }
+    default: {
+      c.fillStyle = s.bg; c.fillRect(r.x, r.y, r.w, r.h);
+      c.fillStyle = s.fg;
+      fitText(c, s.text, cx, r.y + r.h * (s.sub ? 0.38 : 0.5), r.w * 0.92, r.h * (s.sub ? 0.5 : 0.72));
+      if (s.sub) fitText(c, s.sub, cx, r.y + r.h * 0.8, r.w * 0.92, r.h * 0.22);
+    }
+  }
+  c.restore();
+}

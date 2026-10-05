@@ -10,6 +10,8 @@ export interface Theme {
   sunColor: THREE.Color; sunIntensity: number; hemiSky: THREE.Color; hemiGround: THREE.Color; hemiIntensity: number;
   /** Ringed gas giant in the sky; null for the Earth-like BeGone skies. */
   planet: THREE.Color | null; exposure: number;
+  /** A paved city: no scattered pebbles or boulders. */
+  urban?: boolean;
 }
 
 export const THEMES: Record<ThemeId, Theme> = {
@@ -65,6 +67,14 @@ export const THEMES: Record<ThemeId, Theme> = {
     skyTop: new THREE.Color(0x1f3a64), skyHorizon: new THREE.Color(0x8aa6c8), fog: new THREE.Color(0x6a82a2), fogDensity: 0.006,
     sunColor: new THREE.Color(0xc4d2ff), sunIntensity: 2.0, hemiSky: new THREE.Color(0x9cb4dc), hemiGround: new THREE.Color(0x3a4440), hemiIntensity: 1.45,
     planet: null, exposure: 1.05,
+  },
+  // A humid Taipei evening: asphalt streets, a hazy amber sky and green hills around the basin.
+  taipei: {
+    id: 'taipei', ground: 'concrete', rock: 'moss', dirt: 'concrete',
+    groundTint: new THREE.Color(0.42, 0.43, 0.45), rockTint: new THREE.Color(0.55, 0.75, 0.55), dirtTint: new THREE.Color(0.5, 0.5, 0.52),
+    skyTop: new THREE.Color(0x2c3f66), skyHorizon: new THREE.Color(0xe8a27a), fog: new THREE.Color(0xa49890), fogDensity: 0.003,
+    sunColor: new THREE.Color(0xffc49a), sunIntensity: 2.6, hemiSky: new THREE.Color(0xa8b4d4), hemiGround: new THREE.Color(0x5a5048), hemiIntensity: 1.4,
+    planet: null, exposure: 1.0, urban: true,
   },
 };
 
