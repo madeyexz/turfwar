@@ -37,6 +37,7 @@ export type BlockStyle =
   | 'tile'        // polished shop / station floor tiles
   | 'mosaic'      // small white facade tiles of Taipei walk-ups, tinted per block
   | 'light'       // a lit ceiling panel (decorative)
+  | 'painted'     // smooth painted surface (shop fittings, ceilings), tinted per block
   | 'invisible';
 
 /** Stairs and plain ramps are walkways; 'roof' draws a corrugated pitched-roof plane. */
@@ -56,7 +57,9 @@ export type Decor =
   /** A block drawn like a solid's but with no collision: trims, frames and facade details. */
   | { kind: 'shape'; min: [number, number, number]; max: [number, number, number]; style: BlockStyle; color?: number }
   /** Cylinder resting on y, upright or lying along x/z (silos, tanks, pipes); collision comes from boxes placed with it. */
-  | { kind: 'cylinder'; x: number; y: number; z: number; radius: number; height: number; axis: 'x' | 'y' | 'z'; style: BlockStyle; color?: number }
+  | { kind: 'cylinder'; x: number; y: number; z: number; radius: number; height: number; axis: 'x' | 'y' | 'z'; style: BlockStyle; color?: number;
+      /** Upright prisms: number of sides (flat faces square to the axes) and the radius at the top (a frustum). */
+      sides?: number; top?: number }
   /** Sphere centred at y (statues); collision comes from a box placed with it. */
   | { kind: 'ball'; x: number; y: number; z: number; radius: number; style: BlockStyle; color?: number }
   /** Lattice girder along its bottom centreline from (x0, y0, z0) to (x1, y1, z1); collision comes from boxes placed with it. */
@@ -86,7 +89,7 @@ export type Decor =
    * A dressing set the renderer loads on demand (src/render/dressing.ts): street furniture and the
    * skyline past the map, in its own coordinates less (x, z). Purely visual; its colliders are solids.
    */
-  | { kind: 'dressing'; set: string; x: number; z: number; cut?: number[] }
+  | { kind: 'dressing'; set: string; x: number; z: number; cut?: number[]; clear?: number[] }
   /**
    * Instances of a renderer model (parked cars and taxis, …): rows of x, y, z, heading, scale, roll,
    * colour, extra. Decorative; colliders come from boxes placed with them.

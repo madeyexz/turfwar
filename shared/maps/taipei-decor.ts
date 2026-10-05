@@ -1,6 +1,7 @@
 import type { Surface } from '../collision';
 import type { MapBuilder } from './builder';
 import { CAR_BAYS, MRT_EXIT, SCOOTER_ROWS, STREET_SOLIDS } from './taipei-furniture';
+import { minusHoles } from './taipei-underpass';
 import type { BlockStyle, Decor } from './types';
 
 /**
@@ -20,8 +21,9 @@ const blocked = (keep: Keep, x0: number, z0: number, x1: number, z1: number) =>
  * signals, bus stops, YouBike docks, bollards, hydrants, postboxes, planters, scooters, signs) and
  * the source's colliders for it are solids here. Rows of parked scooters block as one low box each.
  */
-export function streetFurniture(b: MapBuilder, s: Shift, keep: Keep, cut: number[] = []) {
-  b.raw({ kind: 'dressing', set: 'taipei', x: s.ox, z: s.oz, cut });
+export function streetFurniture(b: MapBuilder, s: Shift, keep: Keep, cuts: number[] = [], clear: number[] = []) {
+  b.raw({ kind: 'dressing', set: 'taipei', x: s.ox, z: s.oz, cut: cuts, clear });
+  const cut = [...cuts, ...clear];
   // Nothing of the dressing stands in the cut boxes (the map builds there).
   const inCut = (x0: number, z0: number, x1: number, z1: number) => {
     for (let i = 0; i < cut.length; i += 6) if (x1 > cut[i] && x0 < cut[i + 3] && z1 > cut[i + 2] && z0 < cut[i + 5] && cut[i + 1] < 1) return true;
@@ -35,10 +37,14 @@ export function streetFurniture(b: MapBuilder, s: Shift, keep: Keep, cut: number
     const w = Math.max(X1 - X0, 0.16), d = Math.max(Z1 - Z0, 0.16);
     b.box((X0 + X1) / 2, y0, (Z0 + Z1) / 2, w, y1 - y0, d, 'invisible', surface(tag));
   }
+  // A row loses the stretch inside a cut (the renderer drops those scooters too, see dressing.ts).
+  const holes: [number, number, number, number][] = [];
+  for (let i = 0; i < cut.length; i += 6) if (cut[i + 1] < 1) holes.push([cut[i] - 0.4, cut[i + 2] - 0.4, cut[i + 3] + 0.4, cut[i + 5] + 0.4]);
   for (const [x0, z0, x1, z1] of SCOOTER_ROWS) {
-    const X0 = s.X(x0), X1 = s.X(x1), Z0 = s.Z(z0), Z1 = s.Z(z1);
-    if (blocked(keep, X0, Z0, X1, Z1) || inCut(X0, Z0, X1, Z1)) continue;
-    b.box((X0 + X1) / 2, 0.15, (Z0 + Z1) / 2, X1 - X0, 1.0, Z1 - Z0, 'invisible', 'metal');
+    for (const [X0, Z0, X1, Z1] of minusHoles([s.X(x0), s.Z(z0), s.X(x1), s.Z(z1)], holes)) {
+      if (Math.max(X1 - X0, Z1 - Z0) < 0.6 || blocked(keep, X0, Z0, X1, Z1)) continue;
+      b.box((X0 + X1) / 2, 0.15, (Z0 + Z1) / 2, X1 - X0, 1.0, Z1 - Z0, 'invisible', 'metal');
+    }
   }
 }
 

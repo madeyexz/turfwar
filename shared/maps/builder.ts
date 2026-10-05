@@ -377,7 +377,7 @@ function surfaceFor(style: BlockStyle): Surface {
   switch (style) {
     case 'concrete': case 'pillar': case 'sandstone': return 'concrete';
     // Masonry and timber both throw up dust and splinters like concrete.
-    case 'brick': case 'plaster': case 'cobble': case 'slab': case 'wood': case 'crate': case 'paving': case 'asphalt': case 'tile': case 'mosaic': return 'concrete';
+    case 'brick': case 'plaster': case 'cobble': case 'slab': case 'wood': case 'crate': case 'paving': case 'asphalt': case 'tile': case 'mosaic': case 'painted': return 'concrete';
     case 'hedge': return 'dirt';
     case 'facade': return 'concrete';
     case 'rock': return 'rock';

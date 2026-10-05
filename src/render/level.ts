@@ -28,6 +28,7 @@ const LOOKS = {
   asphalt: { material: 'asphalt', uv: 7, color: 0xb0b0b0, ao: 1 },
   tile: { material: 'floortile', uv: 2.4, color: 0xf0ece4, ao: 0.95 },
   mosaic: { material: 'facadetile', uv: 1.6, color: 0xf2efe8, ao: 0.8 },
+  painted: { material: 'painted', uv: 1, color: 0xf0f0ec, ao: 0.9 },
 } as const;
 
 /** Static battlefield visuals built from shared map data (collision stays authoritative). */
@@ -55,6 +56,7 @@ export class LevelView {
       mast: new THREE.MeshStandardMaterial({ color: 0x5b636a, roughness: 0.6, metalness: 0.5, vertexColors: true }),
       glow: new THREE.MeshStandardMaterial({ color: 0x0a1416, emissive: 0x7ff6ff, emissiveIntensity: 2.4 }),
       glowWarm: new THREE.MeshStandardMaterial({ color: 0x160e06, emissive: 0xffb45a, emissiveIntensity: 2.2 }),
+      painted: new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.55, metalness: 0.05 }),
       lightPanel: new THREE.MeshBasicMaterial({ color: new THREE.Color(0xfff4e0).multiplyScalar(1.6), toneMapped: false }),
       glass: new THREE.MeshStandardMaterial({ color: 0x6fa8c8, roughness: 0.05, metalness: 0.9, transparent: true, opacity: 0.35 }),
       panel: trimMaterial(assets, 'T_Trim_02_BaseColor', 0xd4dade),
@@ -89,7 +91,7 @@ export class LevelView {
           this.block({ minX, minY, minZ, maxX, maxY, maxZ, surface: 'concrete' }, d.style, 100000 + shapes++, d.color);
           break;
         }
-        case 'cylinder': this.cylinder(d.x, d.y, d.z, d.radius, d.height, d.axis, d.style, d.color); break;
+        case 'cylinder': this.cylinder(d.x, d.y, d.z, d.radius, d.height, d.axis, d.style, d.color, d.sides, d.top); break;
         case 'water': this.add('water', boxGeo(d.x, d.y - 0.01, d.z, d.w, 0.02, d.d)); break;
         case 'ball': this.ball(d.x, d.y, d.z, d.radius, d.style, d.color); break;
         case 'truss': this.truss(new THREE.Vector3(d.x0, d.y0, d.z0), new THREE.Vector3(d.x1, d.y1, d.z1), d.w, d.h, d.color ?? LOOKS.steel.color); break;
@@ -196,7 +198,7 @@ export class LevelView {
     const r = rng(index * 977 + 13);
     switch (style) {
       case 'brick': case 'plaster': case 'wood': case 'roof': case 'cobble': case 'slab': case 'steel':
-      case 'paving': case 'asphalt': case 'tile': case 'mosaic': {
+      case 'paving': case 'asphalt': case 'tile': case 'mosaic': case 'painted': {
         const look = LOOKS[style];
         const g = boxGeo(cx, cy, cz, w, h, d, 0, look.uv);
         tint(g, color ?? look.color, s.minY, h, look.ao);
@@ -335,9 +337,11 @@ export class LevelView {
     for (const e of edges) { tint(e, frame, y, h, 0.85); this.add('planks', e); }
   }
 
-  private cylinder(x: number, y: number, z: number, radius: number, length: number, axis: 'x' | 'y' | 'z', style: BlockStyle, color?: number) {
+  private cylinder(x: number, y: number, z: number, radius: number, length: number, axis: 'x' | 'y' | 'z', style: BlockStyle, color?: number, sides?: number, top = radius) {
+    if (style === 'invisible') return;
     const look = LOOKS[style as keyof typeof LOOKS] ?? LOOKS.steel;
-    const g = new THREE.CylinderGeometry(radius, radius, length, Math.max(14, Math.round(radius * 14)), 1, false);
+    const g = new THREE.CylinderGeometry(top, radius, length, sides ?? Math.max(14, Math.round(radius * 14)), 1, false, sides ? Math.PI / sides : 0);
+    if (sides) { const flat = g.toNonIndexed(); flat.computeVertexNormals(); g.copy(flat); }
     // Unwrap the side around the circumference and lay the caps flat, at the material's texel density.
     const uv = g.getAttribute('uv') as THREE.BufferAttribute, n = g.getAttribute('normal') as THREE.BufferAttribute;
     for (let i = 0; i < uv.count; i++) {

@@ -59,11 +59,11 @@ const SHOPS: Shop[] = [
     ],
     shaft: [-786.75, -229.75, -777.5, -223.75],
     fit: f => {
-      for (const x of [-774.75, -772.25, -769.75]) f.box(x - 0.25, -222.5, x + 0.25, -216.5, KERB, 1.55, 'steel', SHELF);
+      for (const x of [-774.75, -772.25, -769.75]) f.box(x - 0.25, -222.5, x + 0.25, -216.5, KERB, 1.55, 'painted', SHELF);
       f.box(-776, -229.6, -765, -228.9, KERB, 2.1, 'glass');                         // fridge wall
       claws(f, -764.75, -224, -764.75, -218.4);
       f.box(-768.4, -216.75, -765.6, -215.75, KERB, 1.05, 'wood', 0xf2f2ee);           // till
-      f.box(-782.5, -221, -782, -216, KERB, 1.6, 'steel', 0xd8dadc);                  // magazine rack
+      f.box(-782.5, -221, -782, -216, KERB, 1.6, 'painted', 0xd8dadc);                  // magazine rack
       f.box(-786.5, -218.75, -785.6, -216.25, KERB, 1.05, 'wood', WOOD);              // ATM and copier corner
     },
     climb: f => stairs(f, [-786.75, -229.75, -777.5, -223.75], -226.25, KERB, 13.9),
@@ -74,7 +74,7 @@ const SHOPS: Shop[] = [
     openings: [{ side: 's', a: -830.6, b: -828.2 }, { side: 's', a: -827.8, b: -821, glass: true }, { side: 'e', a: -265, b: -262.6 }],
     shaft: [-821.2, -277.85, -819.55, -276.1],
     fit: f => {
-      for (const z of [-271.25, -266.25]) f.box(-830, z - 0.35, -823, z + 0.35, KERB, 1.8, 'steel', 0xc8b49a);   // display cases
+      for (const z of [-271.25, -266.25]) f.box(-830, z - 0.35, -823, z + 0.35, KERB, 1.8, 'painted', 0xe8dcc8);   // display cases
       f.box(-824.5, -264.25, -822, -263.25, KERB, 1.05, 'wood', 0x5a3a2a);           // till
       f.box(-831.5, -277.6, -823, -276.9, KERB, 2.2, 'wood', 0x7a5a3a);               // back shelves
     },
@@ -86,9 +86,9 @@ const SHOPS: Shop[] = [
     openings: [{ side: 'n', a: -828.8, b: -826.4 }, { side: 'n', a: -826, b: -820.2, glass: true }],
     fit: f => {
       f.box(-828.5, -241.7, -821, -240.8, KERB, 1.1, 'wood', 0x2a5a8a);               // order bar
-      f.box(-828.5, -236.55, -821, -235.95, KERB, 2.0, 'steel', 0xe6e6e2);            // tea machines
-      f.box(-828.5, -231.7, -826, -230.8, KERB, 1.2, 'steel', 0x9aa0a6);              // ice chest
-      f.box(-824.9, -245, -824.6, -242.2, KERB, 1.0, 'steel', 0xb0b4b8);              // queue rail
+      f.box(-828.5, -236.55, -821, -235.95, KERB, 2.0, 'painted', 0xe6e6e2);            // tea machines
+      f.box(-828.5, -231.7, -826, -230.8, KERB, 1.2, 'painted', 0x9aa0a6);              // ice chest
+      f.box(-824.9, -245, -824.6, -242.2, KERB, 1.0, 'painted', 0xb0b4b8);              // queue rail
     },
   },
   // 7-TWELVE at the Hanzhong St / Emei St corner by the gateway (doors on both streets).
@@ -96,7 +96,7 @@ const SHOPS: Shop[] = [
     rect: [-776, -200.7, -763.3, -178.4], top: 13.9, wall: 0xeadcc0,
     openings: [{ side: 'e', a: -186.4, b: -184 }, { side: 'e', a: -183.6, b: -179.4, glass: true }, { side: 'n', a: -770.5, b: -768.1 }],
     fit: f => {
-      for (const x of [-772.25, -769.75]) f.box(x - 0.25, -197, x + 0.25, -190, KERB, 1.55, 'steel', SHELF);
+      for (const x of [-772.25, -769.75]) f.box(x - 0.25, -197, x + 0.25, -190, KERB, 1.55, 'painted', SHELF);
       f.box(-775.6, -199, -774.9, -180, KERB, 2.1, 'glass');                          // fridge wall
       f.box(-767.75, -182.5, -766.75, -180.5, KERB, 1.05, 'wood', 0xf2f2ee);          // till
     },
@@ -106,7 +106,7 @@ const SHOPS: Shop[] = [
     rect: [-750.7, -200.7, -735, -178.4], top: 21.9, wall: 0xc4c8cc,
     openings: [{ side: 'w', a: -197.6, b: -195.2 }, { side: 'w', a: -194.8, b: -191, glass: true }, { side: 'w', a: -187.4, b: -183.8 }, { side: 'n', a: -742, b: -739.6 }],
     fit: f => {
-      for (const x of [-744.75, -742.25]) f.box(x - 0.25, -199, x + 0.25, -192.5, KERB, 1.55, 'steel', SHELF);
+      for (const x of [-744.75, -742.25]) f.box(x - 0.25, -199, x + 0.25, -192.5, KERB, 1.55, 'painted', SHELF);
       f.box(-735.9, -199, -735.3, -192, KERB, 2.1, 'glass');                          // fridge wall
       f.box(-749.5, -194.25, -747.5, -193.25, KERB, 1.05, 'wood', 0xf2f2ee);          // till
       claws(f, -746, -188.75, -737, -188.75);
@@ -121,7 +121,7 @@ function claws(f: Fitter, x0: number, z0: number, x1: number, z1: number) {
   const colors = [0xff7ab8, 0x7ad0ff, 0xffd84a, 0xb88aff];
   for (let i = 0; i < n; i++) {
     const t = n === 1 ? 0.5 : i / (n - 1), x = x0 + (x1 - x0) * t, z = z0 + (z1 - z0) * t;
-    f.box(x - 0.45, z - 0.45, x + 0.45, z + 0.45, KERB, 2.0, 'steel', colors[i % colors.length]);
+    f.box(x - 0.45, z - 0.45, x + 0.45, z + 0.45, KERB, 2.0, 'painted', colors[i % colors.length]);
     f.shape(x - 0.42, z - 0.42, x + 0.42, z + 0.42, 2.0, 2.06, 'light');
   }
 }
@@ -147,10 +147,10 @@ function stairs(f: Fitter, [x0, z0, x1, z1]: [number, number, number, number], m
   lining(f, [x0, z0, x1, z1], SHOP_STOREY, top, 0xe8e2d6);
   // The rooftop stair house: walls on three sides and a roof, open toward the roof's south.
   const h = top + 2.7;
-  f.box(x0, z0 - 0.2, x1, z0, top, h, 'plaster', 0xd8d4cc);
-  f.box(x1, z0 - 0.2, x1 + 0.2, z1 + 0.2, top, h, 'plaster', 0xd8d4cc);
-  f.box(x0 - 0.2, z0 - 0.2, x0, z1 + 0.2, top, h, 'plaster', 0xd8d4cc);
-  f.box(x0 + 2.4, z1, x1, z1 + 0.2, top, h, 'plaster', 0xd8d4cc);
+  f.box(x0, z0 - 0.2, x1, z0, top, h, 'mosaic', 0xd8d4cc);
+  f.box(x1, z0 - 0.2, x1 + 0.2, z1 + 0.2, top, h, 'mosaic', 0xd8d4cc);
+  f.box(x0 - 0.2, z0 - 0.2, x0, z1 + 0.2, top, h, 'mosaic', 0xd8d4cc);
+  f.box(x0 + 2.4, z1, x1, z1 + 0.2, top, h, 'mosaic', 0xd8d4cc);
   f.box(x0 - 0.2, z0 - 0.2, x1 + 0.2, z1 + 0.2, h, h + 0.2, 'slab', 0xb8b4ac);
 }
 
@@ -159,7 +159,7 @@ function ladderShaft(f: Fitter, r: [number, number, number, number], top: number
   const [x0, z0, x1, z1] = r, s = f.s;
   lining(f, r, SHOP_STOREY, top, 0xeadcc0);
   // The ladder's wall: a pier from the floor to the roof on the shaft's west side.
-  f.box(x0 - 0.3, z0, x0, z1, KERB, SHOP_STOREY, 'plaster', 0xeadcc0);
+  f.box(x0 - 0.3, z0, x0, z1, KERB, SHOP_STOREY, 'mosaic', 0xeadcc0);
   f.b.ladder(s.X(x0), s.Z((z0 + z1) / 2), KERB, top, 2);
   // A hatch housing on the roof, open to the west.
   f.box(x0 - 0.15, z0 - 0.15, x1 + 0.15, z0, top, top + 1.2, 'steel', 0x8a9096);
@@ -170,10 +170,10 @@ function ladderShaft(f: Fitter, r: [number, number, number, number], top: number
 /** Visual walls lining a shaft from y0 to y1 (the district's own meshes draw only the outside). */
 function lining(f: Fitter, [x0, z0, x1, z1]: [number, number, number, number], y0: number, y1: number, color: number) {
   const t = 0.05;
-  f.shape(x0, z0, x1, z0 + t, y0, y1, 'plaster', color);
-  f.shape(x0, z1 - t, x1, z1, y0, y1, 'plaster', color);
-  f.shape(x0, z0, x0 + t, z1, y0, y1, 'plaster', color);
-  f.shape(x1 - t, z0, x1, z1, y0, y1, 'plaster', color);
+  f.shape(x0, z0, x1, z0 + t, y0, y1, 'mosaic', color);
+  f.shape(x0, z1 - t, x1, z1, y0, y1, 'mosaic', color);
+  f.shape(x0, z0, x0 + t, z1, y0, y1, 'mosaic', color);
+  f.shape(x1 - t, z0, x1, z1, y0, y1, 'mosaic', color);
 }
 
 /** Rects (source x0, z0, x1, z1, top) of the buildings replaced here, to skip their source boxes. */
@@ -198,11 +198,11 @@ export function interiors(b: MapBuilder, s: Shift): number[] {
     for (const side of ['n', 's', 'e', 'w'] as Side[]) {
       const along = side === 'n' || side === 's', from = along ? x0 : z0, to = along ? x1 : z1;
       const ops = shop.openings.filter(o => o.side === side).sort((p, q) => p.a - q.a);
-      const seg = (a: number, c: number, y0: number, y1: number, style: BlockStyle = 'plaster') => {
+      const seg = (a: number, c: number, y0: number, y1: number, style: BlockStyle = 'mosaic') => {
         if (c - a < 0.05) return;
         const [bx0, bz0, bx1, bz1] = side === 'n' ? [a, z0 + 0.05, c, z0 + 0.05 + T] : side === 's' ? [a, z1 - 0.05 - T, c, z1 - 0.05]
           : side === 'w' ? [x0 + 0.05, a, x0 + 0.05 + T, c] : [x1 - 0.05 - T, a, x1 - 0.05, c];
-        f.box(bx0, bz0, bx1, bz1, y0, y1, style, style === 'plaster' ? shop.wall : undefined);
+        f.box(bx0, bz0, bx1, bz1, y0, y1, style, style === 'mosaic' ? shop.wall : undefined);
       };
       let cursor = from;
       for (const o of ops) {
@@ -215,7 +215,7 @@ export function interiors(b: MapBuilder, s: Shift): number[] {
     }
     // Floor, ceiling and lights.
     f.shape(x0 + 0.3, z0 + 0.3, x1 - 0.3, z1 - 0.3, KERB, KERB + 0.02, 'tile');
-    f.shape(x0 + 0.3, z0 + 0.3, x1 - 0.3, z1 - 0.3, gf - 0.12, gf - 0.02, 'plaster', 0xf4f2ee);
+    f.shape(x0 + 0.3, z0 + 0.3, x1 - 0.3, z1 - 0.3, gf - 0.12, gf - 0.02, 'painted', 0xf4f2ee);
     for (let x = x0 + 2.5; x < x1 - 1.5; x += 4) for (let z = z0 + 2.5; z < z1 - 1.5; z += 4) {
       if (shop.shaft && x > shop.shaft[0] - 1 && x < shop.shaft[2] + 1 && z > shop.shaft[1] - 1 && z < shop.shaft[3] + 1) continue;
       f.shape(x - 0.6, z - 0.3, x + 0.6, z + 0.3, gf - 0.15, gf - 0.12, 'light');
@@ -244,8 +244,8 @@ function mass(f: Fitter, [x0, z0, x1, z1]: [number, number, number, number], hol
 /** A waist-high parapet round a roof you can reach. */
 function parapet(f: Fitter, [x0, z0, x1, z1]: [number, number, number, number], top: number, color: number) {
   const h = top + 1.0, t = 0.25;
-  f.box(x0, z0, x1, z0 + t, top, h, 'plaster', color);
-  f.box(x0, z1 - t, x1, z1, top, h, 'plaster', color);
-  f.box(x0, z0 + t, x0 + t, z1 - t, top, h, 'plaster', color);
-  f.box(x1 - t, z0 + t, x1, z1 - t, top, h, 'plaster', color);
+  f.box(x0, z0, x1, z0 + t, top, h, 'mosaic', color);
+  f.box(x0, z1 - t, x1, z1, top, h, 'mosaic', color);
+  f.box(x0, z0 + t, x0 + t, z1 - t, top, h, 'mosaic', color);
+  f.box(x1 - t, z0 + t, x1, z1 - t, top, h, 'mosaic', color);
 }

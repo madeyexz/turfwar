@@ -49,9 +49,8 @@ export async function addDressing(group: THREE.Group, decor: Decor[]) {
   for (const d of sets) {
     const set = await SETS[d.set]?.();
     if (!set) { console.warn('unknown dressing set', d.set); continue; }
-    const cut = cutTest(d.cut ?? []);
-    if (set.district) group.add(await districtGroup(set.district, d.x, d.z, cut));
-    if (set.street) group.add(streetGroup(cutStreet(set.street, d.x, d.z, cut), d.x, d.z, models));
+    if (set.district) group.add(await districtGroup(set.district, d.x, d.z, cutTest(d.cut ?? [])));
+    if (set.street) group.add(streetGroup(cutStreet(set.street, d.x, d.z, cutTest([...(d.cut ?? []), ...(d.clear ?? [])])), d.x, d.z, models));
     if (set.skyline) group.add(buildSkyline(set.skyline, d.x, d.z));
   }
   const byModel = new Map<string, number[]>();
@@ -81,7 +80,11 @@ function cutStreet(s: StreetData, ox: number, oz: number, cut: Cut): StreetData 
     cyls: keep(s.cyls, 8, r => [(r[0] + r[3]) / 2, Math.min(r[1], r[4]) + 0.1, (r[2] + r[5]) / 2]),
     plates: s.plates.filter(p => !cut(p[0] - ox, p[1], p[2] - oz)),
     marks: keep(s.marks, 9, r => [r[0], r[1] + 0.05, r[2]]),
-    models: Object.fromEntries(Object.entries(s.models).map(([k, v]) => [k, keep(v, STRIDE, p3)])),
+    // A model goes when any part of it (about a metre round its foot) is in a cut.
+    models: Object.fromEntries(Object.entries(s.models).map(([k, v]) => [k, keep(v, STRIDE, r => {
+      for (const [dx, dz] of [[0, 0], [0.9, 0], [-0.9, 0], [0, 0.9], [0, -0.9]]) if (cut(r[0] + dx - ox, r[1] + 0.1, r[2] + dz - oz)) return [r[0] + dx, r[1] + 0.1, r[2] + dz];
+      return [r[0], r[1] + 0.1, r[2]];
+    })])),
   };
 }
 

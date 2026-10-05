@@ -5,6 +5,7 @@ import {
 import { mrtExit, parkedCars, streetFurniture, type Keep, type Shift } from './taipei-decor';
 import { INTERIOR_BUILDINGS, interiors } from './taipei-interiors';
 import { TAIPEI_VEHICLES, parkTaipeiVehicles } from './taipei-vehicles';
+import { minusHoles, underpass, underpassGround } from './taipei-underpass';
 import type { BlockStyle, Decor, MapDef, SignStyle } from './types';
 
 /**
@@ -93,7 +94,8 @@ function paving(b: B) {
       j1++;
     }
     for (let jj = j; jj <= j1; jj++) for (let ii = i; ii <= i1; ii++) done.add(`${ii},${jj}`);
-    boxAt(b, xs[i], zs[j], xs[i1 + 1], zs[j1 + 1], -0.35, KERB, 'paving', 0xd8d6d0);
+    // Less the stair wells down to the Ximen station underpass.
+    for (const [x0, z0, x1, z1] of minusHoles([xs[i], zs[j], xs[i1 + 1], zs[j1 + 1]])) boxAt(b, x0, z0, x1, z1, -0.35, KERB, 'paving', 0xd8d6d0);
   }
 }
 
@@ -202,16 +204,24 @@ function lots(b: B) {
 
 /** The Red House (西門紅樓): octagon, cross wing, gate piers, plaza tables, trees and poles. */
 function redHouse(b: B) {
-  const RED = 0xe0907c;
+  const RED = 0xffffff;
   for (const c of RED_HOUSE) {
     if (c[0] === 'circle') {
       const [, x, z, r, , y1, tag] = c as [string, number, number, number, number, number, string];
       if (tag === 'landmark') {
-        // The octagonal hall to its eaves, then the roof and lantern up to the source's 22 m.
-        b.cylinder(X(x), 0, Z(z), r, 12, 'brick', 'y', RED);
-        b.cylinder(X(x), 12, Z(z), r * 0.8, 2.5, 'roof', 'y', 0x5a4a44);
-        b.cylinder(X(x), 14.5, Z(z), r * 0.4, 4.5, 'brick', 'y', RED);
-        b.cylinder(X(x), 19, Z(z), r * 0.25, y1 - 19, 'roof', 'y', 0x5a4a44);
+        // The octagon as the source builds it: a brick storey with arched windows, a stone band, a
+        // second brick storey, the cornice, a hipped octagonal roof, the lantern storey and its cap.
+        // Collision is the source's: its circle up to the roof.
+        b.cylinder(X(x), 0, Z(z), r * 0.9, y1, 'invisible', 'y');
+        const oct = (radius: number, y0: number, ya: number, style: BlockStyle, color: number, top = radius) =>
+          b.raw({ kind: 'cylinder', x: X(x), y: y0, z: Z(z), radius, height: ya - y0, axis: 'y', style, color, sides: 8, top });
+        const STONE = 0xf0e8dc, TILE = 0x7a8478;
+        oct(9.5, 0, 5.4, 'brick', RED); oct(9.9, 5.2, 6.1, 'plaster', STONE);
+        oct(9.3, 6, 10.6, 'brick', RED); oct(10, 10.5, 11.5, 'plaster', STONE);
+        oct(10.4, 11.5, 13.7, 'slab', TILE, 4.2);
+        oct(4.2, 13.7, 16.4, 'brick', RED); oct(4.6, 16.4, 17.1, 'plaster', STONE);
+        oct(4.8, 17.1, 20.5, 'slab', TILE, 0.2);
+        oct(0.12, 20.5, y1, 'steel', 0x3a3a3c);
       } else if (tag === 'tree') b.tree(X(x), Z(z), (y1 + 0.2) / 3.2, 1);
       else if (tag === 'wall') b.cylinder(X(x), 0, Z(z), r, y1, 'wood', 'y', 0x6b4a2a);
       else b.cylinder(X(x), 0, Z(z), Math.max(r, 0.08), y1, 'steel', 'y', 0x3a3a3c);
@@ -252,7 +262,8 @@ export function taipei(): MapDef {
     sabotage: { sites: ['A', 'B'], attackerSpawn: 1 },
     // Low evening sun from the west, down Wuchang and Emei streets.
     sun: { x: -0.78, y: 0.4, z: 0.2 },
-    ground: () => 0,
+    // Flat streets, but for the pit of the Ximen station underpass (taipei-underpass.ts).
+    ground: underpassGround({ X, Z, ox: OX, oz: OZ }),
   });
   b.buildTerrain(4);
 
@@ -291,10 +302,11 @@ export function taipei(): MapDef {
     ...b.pickups.map(p => [p.x, p.z, 1.6] as [number, number, number]),
     ...TAIPEI_VEHICLES.map(([kind, x, z]) => [X(x), Z(z), vehicleRoom[kind] ?? 3.4] as [number, number, number]),
   ];
-  const cuts = interiors(b, shift);
+  const cuts = [...interiors(b, shift), ...underpass(b, shift, [-160 - 12.4, -160 + 12.4])];
   // Nothing of the street dressing (look or collider) stands where a vehicle parks.
-  for (const [kind, x, z] of TAIPEI_VEHICLES) { const r = vehicleRoom[kind] ?? 3.4; cuts.push(X(x) - r, 0.05, Z(z) - r, X(x) + r, 3, Z(z) + r); }
-  streetFurniture(b, shift, keep, cuts);
+  // Nor round the spawns, crates and vehicle spots.
+  const clear = keep.flatMap(([x, z, r]) => [x - r, 0.05, z - r, x + r, 3, z + r]);
+  streetFurniture(b, shift, keep, cuts, clear);
   parkedCars(b, shift, keep);
   mrtExit(b, shift, KERB);
 
