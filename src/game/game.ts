@@ -184,7 +184,7 @@ export class Game {
     // ---- Hotkeys ----
     if (active) {
       // The store is open anywhere: weapons only sell in base during buy time, attachments always.
-      if (this.input.take('KeyB') && me) { this.buymenu.show(); this.input.clear(); }
+      if (this.input.take('KeyB') && me) { this.buymenu.show(this.player.weapons[this.player.slot === 2 ? 0 : this.player.slot]); this.input.clear(); }
       const chat = this.input.take('Enter') ? false : this.input.take('KeyT') ? true : undefined;
       if (chat !== undefined) { this.input.clear(); this.hud.openChat(chat, text => this.link.say(text, chat)); }
       if (this.input.take('KeyE') && me?.alive) {

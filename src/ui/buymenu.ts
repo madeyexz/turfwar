@@ -126,7 +126,8 @@ export class BuyMenu {
 
   get open() { return !this.root.hidden; }
 
-  show() { this.root.hidden = false; document.exitPointerLock?.(); this.render(true); }
+  /** Open the store; attachments default to the gun in hand (`held`). */
+  show(held?: WeaponId) { if (held && held !== 'knife') this.pick = held; this.root.hidden = false; document.exitPointerLock?.(); this.render(true); }
   close() { if (!this.open) return; this.root.hidden = true; this.onClose?.(); }
 
   /** Refresh cash, buy window and owned/fitted state (re-renders only when something changed). */
