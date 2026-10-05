@@ -112,6 +112,33 @@ function asphalt(b: B) {
   }
 }
 
+/**
+ * The pedestrian streets' paving as the source lays it: warm clay tiles kerb to kerb with a red
+ * stripe down the middle (visual, on the paving's top; crossings with the traffic roads excluded).
+ */
+function pedestrianPaving(b: B) {
+  const traffic = ROADS.filter(r => !r[12]).map(carriageway);
+  for (const r of ROADS) {
+    if (!r[12]) continue;
+    const [, , , axis, at, from, to, , hw] = r;
+    // Runs between the traffic roads it crosses.
+    const cuts = traffic.filter(c => axis === 'x' ? at > c.z0 && at < c.z1 : at > c.x0 && at < c.x1).map(c => axis === 'x' ? [c.x0, c.x1] : [c.z0, c.z1]).sort((p, q) => p[0] - q[0]);
+    let a = from;
+    const runs: [number, number][] = [];
+    for (const [c0, c1] of cuts) { if (c0 > a) runs.push([a, Math.min(c0, to)]); a = Math.max(a, c1); }
+    if (a < to) runs.push([a, to]);
+    for (const [s0, s1] of runs) {
+      if (s1 - s0 < 1) continue;
+      const strip = (o0: number, o1: number, y: number, color: number) => {
+        const [x0, z0, x1, z1] = axis === 'x' ? [s0, at + o0, s1, at + o1] : [at + o0, s0, at + o1, s1];
+        b.shape(X((x0 + x1) / 2), KERB, Z((z0 + z1) / 2), x1 - x0, y, z1 - z0, 'paving', color);
+      };
+      strip(-hw, hw, 0.004, 0xd8b2a0);
+      strip(-0.8, 0.8, 0.007, 0xa85a44);
+    }
+  }
+}
+
 /** Raised medians of the divided roads, broken where cross streets pass through, and the road paint. */
 function streets(b: B) {
   const traffic = ROADS.filter(r => !r[12]);
@@ -270,6 +297,7 @@ export function taipei(): MapDef {
   paving(b);
   asphalt(b);
   streets(b);
+  pedestrianPaving(b);
   expressway(b);
   for (const [x0, z0, x1, z1, top] of HEDGES) boxAt(b, x0, z0, x1, z1, MEDIAN, top, 'hedge');
   ximending(b);

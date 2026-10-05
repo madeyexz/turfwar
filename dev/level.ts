@@ -19,6 +19,7 @@ const r = new Renderer(document.body, QUALITY[(params.get('q') as 'medium') ?? '
 r.setTheme(theme, map.sun);
 const level = new LevelView(assets, map, theme);
 r.scene.add(level.group);
+(window as any).__scene = r.scene;
 const crates = new CratesView(assets, map.pickups);
 const sites = new BombSitesView(map);
 r.scene.add(crates.group, sites.group);

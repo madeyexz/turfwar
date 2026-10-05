@@ -282,13 +282,13 @@ export async function extractDistrict(src: Src, atlasScale = 1) {
   const xi = new content.__Ximen(atlas, statics, false, plan.pois.filter((p: any) => p.x > res.minX && p.x < res.maxX && p.z > res.minZ && p.z < res.maxZ));
   await content.__buildXimen(xi, async () => {});
   g.document = doc;
-  // Visible categories only: proxies (0) and shadow casters (1) are the source's own helpers.
+  // Shadow casters (1) and visible geometry (2+); proxies (0) are the source's occlusion helpers.
   const meshes: Record<string, { pos: Float32Array; nrm: Float32Array; uv: Float32Array; col: Float32Array; fx: Float32Array; idx: Uint32Array }> = {};
   for (const name of ['G', 'D', 'I', 'L']) {
     const b = xi[name];
     b.fillCat();
     const tris: number[] = [];
-    for (let t = 0; t < b.ic / 3; t++) if (b.tcat[t] >= 2) tris.push(b.idx[t * 3], b.idx[t * 3 + 1], b.idx[t * 3 + 2]);
+    for (let t = 0; t < b.ic / 3; t++) if (b.tcat[t] >= 1) tris.push(b.idx[t * 3], b.idx[t * 3 + 1], b.idx[t * 3 + 2]);
     // Compact the vertices the kept triangles use.
     const remap = new Int32Array(b.vc).fill(-1), order: number[] = [];
     for (const v of tris) if (remap[v] < 0) { remap[v] = order.length; order.push(v); }
