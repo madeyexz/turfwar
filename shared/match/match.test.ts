@@ -93,6 +93,26 @@ describe('bot matches', () => {
     expect(events.some(e => e.type === 'bomb' && e.action === 'armed')).toBe(true);
   });
 
+  it('bots climb a ladder when their path takes one', () => {
+    const { ctx, state } = setup({ ...ELIMINATION, teamSize: 0, warmup: 0 }, 3, 'warehouse');
+    const bot = addSoldier(state, ctx, { name: 'B', team: 1, bot: true });
+    const enemy = addSoldier(state, ctx, { name: 'E', team: 0, bot: false });
+    goLive(state, ctx);
+    // The west deck's ladder at z -7.4: from the bay floor in front of it to the deck above it.
+    const nav = loadNav('warehouse');
+    place(bot, -21, -7.4, ctx, 1);
+    const path = findPath(nav, nearestNode(nav, bot.m.x, bot.m.y, bot.m.z), nearestNode(nav, -26.2, 3.2, -7.4));
+    expect(path.some((n, i) => i > 0 && nav.y[n] - nav.y[path[i - 1]] > 1.5)).toBe(true);
+    Object.assign(bot.brain!, { goal: 'roam', goalLeft: 99, repath: 99, path, pathIndex: 0 });
+    let onDeck = false;
+    for (let i = 0; i < 4 * TICK_RATE && !onDeck; i++) {
+      enemy.m.x = 0; enemy.m.y = -30; enemy.m.z = 0;
+      tickMatch(state, ctx, 1 / TICK_RATE);
+      onDeck = bot.m.grounded && Math.abs(bot.m.y - 3.2) < 0.05 && bot.m.x < -24;
+    }
+    expect(onDeck).toBe(true);
+  });
+
   it('24v24 rooms run on the big map', () => {
     const { ctx, state, events } = setup({ ...ELIMINATION, teamSize: 24, warmup: 0 }, 11, 'meridian');
     balanceTeams(state, ctx);
@@ -352,6 +372,28 @@ describe('server-side validation', () => {
     for (let i = 0; i < 80; i++) reportState(state, ctx, a.id, report(a), 0.05);
     expect(a.m.y - y0).toBeLessThan(0.36);
     expect(reportState(state, ctx, a.id, report(a, { y: a.m.y + 4 }), 0.5)).toBe(false);
+  });
+
+  it('accepts climbing a ladder far higher than a jump, and only on the ladder', () => {
+    const env = duel(), a = env.a;
+    const flat = { x0: -100, z0: -100, spacing: 4, n: 51, heights: new Float32Array(51 * 51) };
+    const bounds = { minX: -90, maxX: 90, minZ: -90, maxZ: 90 };
+    const world = new CollisionWorld([{ minX: 2, minY: 0, minZ: -2, maxX: 8, maxY: 6, maxZ: 2, surface: 'metal' }], [], flat, bounds, [{ x: 2, z: 0, y0: 0, y1: 6, width: 0.9, dir: 0 }]);
+    const ctx = { ...env.ctx, world, map: { ...env.ctx.map, bounds } };
+    const m = createMoveState(1.3, 0, 0);
+    a.m = { ...m }; a.groundY = 0;
+    for (let i = 1; i <= 240; i++) {
+      stepMovement(world, m, { forward: 1, strafe: 0, yaw: -Math.PI / 2, jump: false, crouch: false, sprint: false, ads: false }, 1 / 120, a.team);
+      if (i % 6 === 0) reportState(env.state, ctx, a.id, { x: m.x, y: m.y, z: m.z, vx: m.vx, vy: m.vy, vz: m.vz, yaw: 0, pitch: 0, crouch: 0, grounded: m.grounded, sprint: false, ads: false, weapon: 0 }, 0.05);
+    }
+    expect(m.y).toBeCloseTo(6, 2);
+    expect(a.m.y).toBeCloseTo(6, 1);
+    expect(a.corrections).toBe(0);
+    // The same climb a few metres along the wall, away from the ladder, is hovering.
+    a.m = createMoveState(1.3, 0, 8); a.groundY = 0;
+    for (let i = 1; i <= 20; i++) reportState(env.state, ctx, a.id, { x: 1.3, y: i * 0.17, z: 8, vx: 0, vy: 3.4, vz: 0, yaw: 0, pitch: 0, crouch: 0, grounded: false, sprint: false, ads: false, weapon: 0 }, 0.05);
+    expect(a.corrections).toBeGreaterThan(0);
+    expect(a.m.y).toBeLessThan(2.1);
   });
 
   it('accepts a jump that steps up onto a ledge higher than the jump itself', () => {

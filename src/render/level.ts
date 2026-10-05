@@ -2,13 +2,14 @@ import * as THREE from 'three';
 import { mergeGeometries, mergeVertices } from 'three/examples/jsm/utils/BufferGeometryUtils.js';
 import { RoundedBoxGeometry } from 'three/examples/jsm/geometries/RoundedBoxGeometry.js';
 import type { Assets } from '../assets';
-import { terrainHeight, type Ramp, type Solid } from '../../shared/collision';
+import { LADDER_DIRS, terrainHeight, type Ladder, type Ramp, type Solid } from '../../shared/collision';
 import { fbm } from '../../shared/maps/builder';
 import type { BlockStyle, MapDef, RampStyle } from '../../shared/maps/types';
 import { rng } from '../../shared/math';
 import { shieldMaterial, surfaceMaterial, terrainMaterial, type Theme } from './materials';
 
 const TEAM_COLORS = [new THREE.Color(0x3aa0ff), new THREE.Color(0xff4a3a)];
+const LADDER_GREY = 0x9aa0a4;
 
 /** Material bucket, texture scale (m per tile), default tint and base occlusion of the realistic styles. */
 const LOOKS = {
@@ -80,6 +81,7 @@ export class LevelView {
         default: break;
       }
     });
+    for (const l of map.ladders ?? []) this.ladder(l);
     this.flush();
     this.scatter();
     this.horizon();
@@ -328,6 +330,22 @@ export class LevelView {
       }
     }
     for (const g of parts) { tint(g, color, Math.min(a.y, b.y), h, LOOKS.steel.ao); this.add(LOOKS.steel.material, g); }
+  }
+
+  /** Steel ladder: two rails standing a metre past the landing as handholds, a rung every 30 cm. */
+  private ladder(l: Ladder) {
+    const [nx, nz] = LADDER_DIRS[l.dir], sx = -nz, sz = nx, out = -0.07;
+    const at = (side: number, y: number) => new THREE.Vector3(l.x + nx * out + sx * side, y, l.z + nz * out + sz * side);
+    const parts: THREE.BufferGeometry[] = [];
+    for (const side of [-l.width / 2, l.width / 2]) {
+      const p = at(side, l.y0);
+      parts.push(boxGeo(p.x, (l.y0 + l.y1 + 1) / 2, p.z, 0.06, l.y1 + 1 - l.y0, 0.06, 0, 2));
+    }
+    for (let y = l.y0 + 0.3; y < l.y1 + 0.05; y += 0.3) {
+      const c = at(0, y);
+      parts.push(boxGeo(c.x, y, c.z, Math.abs(sx) * l.width + 0.04, 0.035, Math.abs(sz) * l.width + 0.04, 0, 2));
+    }
+    for (const g of parts) { tint(g, LADDER_GREY, l.y0, l.y1 - l.y0 + 1, 0.85); this.add(LOOKS.steel.material, g); }
   }
 
   private ramp(r: Ramp, style: RampStyle) {

@@ -1,4 +1,4 @@
-import { terrainHeight, type Heightfield, type Ramp, type Solid, type Surface } from '../collision';
+import { terrainHeight, type Heightfield, type Ladder, type Ramp, type Solid, type Surface } from '../collision';
 import type { BlockStyle, CapturePointDef, Decor, MapDef, PickupDef, PointId, RampStyle, SpawnDef, ThemeId } from './types';
 
 // Deterministic value noise so the server and every client generate identical terrain.
@@ -48,6 +48,7 @@ export class MapBuilder {
   points: CapturePointDef[] = [];
   spawns: SpawnDef[] = [];
   pickups: PickupDef[] = [];
+  ladders: Ladder[] = [];
   pads: Pad[] = [];
   bumps: Bump[] = [];
   terrain!: Heightfield;
@@ -132,6 +133,14 @@ export class MapBuilder {
     const mdir = (this.s < 0 ? (dir + 2) % 4 : dir) as 0 | 1 | 2 | 3;
     this.ramps.push({ minX: cx - w / 2, maxX: cx + w / 2, minZ: cz - d / 2, maxZ: cz + d / 2, y0, y1, dir: mdir, surface: 'metal' });
     this.decor.push({ kind: 'ramp', ramp: this.ramps.length - 1, style });
+  }
+
+  /**
+   * Ladder up a wall face from y0 to the landing at y1, its rungs centred on (x, z); `dir` points
+   * from the ladder into the wall (0:+X 1:+Z 2:-X 3:-Z), the way a climber faces.
+   */
+  ladder(x: number, z: number, y0: number, y1: number, dir: 0 | 1 | 2 | 3, width = 0.9) {
+    this.ladders.push({ x: this.tx(x), z: this.tz(z), y0, y1, width, dir: (this.s < 0 ? (dir + 2) % 4 : dir) as 0 | 1 | 2 | 3 });
   }
 
   /** Tint the block made by `box` (team crates, painted plaster, rusty steel). Returns the solid. */
@@ -343,6 +352,7 @@ export class MapBuilder {
       ...(o.sabotage ? { sabotage: o.sabotage } : {}),
       ...(o.big ? { big: true } : {}),
       ...(this.pickups.length ? { pickups: this.pickups } : {}),
+      ...(this.ladders.length ? { ladders: this.ladders } : {}),
     };
   }
 }

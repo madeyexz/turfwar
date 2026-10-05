@@ -8,6 +8,8 @@ import { ATTACKERS, type BotBrain, type MatchState, type Soldier } from './state
 
 /** Distance (m) from a bomb site's centre at which a bot stops to arm or disarm. */
 const SITE_STOP = 3;
+/** Path hops this short that rise or drop more than 1.5 m are ladders (see nav). */
+const SPACING_LADDER = 2;
 
 const CALLSIGNS = [
   'Halcyon', 'Vex', 'Marrow', 'Kestrel', 'Onyx', 'Sable', 'Rook', 'Cinder', 'Talon', 'Wren', 'Juno', 'Brask',
@@ -32,7 +34,7 @@ export function createBrain(skill: number): BotBrain {
   return {
     skill, goal: '', goalLeft: 0, goalX: 0, goalZ: 0, path: [], pathIndex: 0, repath: 0, target: -1, reaction: 0, lastSeen: -99,
     seenX: 0, seenY: 0, seenZ: 0, aimYaw: 0, aimPitch: 0, errYaw: 0, errPitch: 0, strafe: 1, strafeLeft: 0,
-    crouchLeft: 0, burst: 0, burstPause: 0, stuck: 0, lastX: 0, lastZ: 0, think: 0, grenadeCooldown: 6, jump: false,
+    crouchLeft: 0, burst: 0, burstPause: 0, stuck: 0, lastX: 0, lastY: 0, lastZ: 0, think: 0, grenadeCooldown: 6, jump: false,
   };
 }
 
@@ -165,13 +167,17 @@ export function updateBot(state: MatchState, ctx: SimContext, bot: Soldier, dt: 
   if (ctx.nav && brain.path.length) {
     const nav = ctx.nav;
     let i = brain.pathIndex;
-    while (i < brain.path.length - 1 && Math.hypot(nav.x[brain.path[i]] - bot.m.x, nav.z[brain.path[i]] - bot.m.z) < 1.3) i++;
+    // A ladder is a steep, short hop between path nodes: stand right at its foot (or head) before
+    // heading for the other end, so the climb starts square in front of the rungs.
+    const ladderNext = (k: number) => k < brain.path.length - 1 && Math.abs(nav.y[brain.path[k + 1]] - nav.y[brain.path[k]]) > 1.5
+      && Math.hypot(nav.x[brain.path[k + 1]] - nav.x[brain.path[k]], nav.z[brain.path[k + 1]] - nav.z[brain.path[k]]) < SPACING_LADDER;
+    while (i < brain.path.length - 1 && Math.hypot(nav.x[brain.path[i]] - bot.m.x, nav.z[brain.path[i]] - bot.m.z) < (ladderNext(i) ? 0.35 : 1.3)) i++;
     brain.pathIndex = i;
     const node = brain.path[i];
     const dx = nav.x[node] - bot.m.x, dz = nav.z[node] - bot.m.z, d = Math.hypot(dx, dz);
     if (d > 0.6 || i < brain.path.length - 1) { moveX = dx / (d || 1); moveZ = dz / (d || 1); }
     else if (ctx.random() < dt * 0.6) { brain.goalLeft = Math.min(brain.goalLeft, 1.5); }
-    if (nav.y[node] - bot.m.y > 0.9 && bot.m.grounded && d < 2) brain.jump = true;
+    if (nav.y[node] - bot.m.y > 0.9 && bot.m.grounded && d < 2 && !ctx.world.ladderAt(bot.m.x, bot.m.y, bot.m.z, MOVE.radius)) brain.jump = true;
   }
 
   // ---- Combat ----------------------------------------------------------------------
@@ -258,8 +264,9 @@ export function updateBot(state: MatchState, ctx: SimContext, bot: Soldier, dt: 
   }
 
   // ---- Stuck detection ------------------------------------------------------------
-  const moved = Math.hypot(bot.m.x - brain.lastX, bot.m.z - brain.lastZ);
-  brain.lastX = bot.m.x; brain.lastZ = bot.m.z;
+  // Climbing a ladder is progress too.
+  const moved = Math.hypot(bot.m.x - brain.lastX, bot.m.z - brain.lastZ, bot.m.y - brain.lastY);
+  brain.lastX = bot.m.x; brain.lastY = bot.m.y; brain.lastZ = bot.m.z;
   const wanted = Math.hypot(moveX, moveZ) > 0.3;
   brain.stuck = wanted && moved < dt * 0.8 ? brain.stuck + dt : Math.max(0, brain.stuck - dt * 2);
   if (brain.stuck > 0.7) { brain.jump = true; brain.stuck = 0; brain.repath = 0; brain.strafe *= -1; }

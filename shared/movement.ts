@@ -1,4 +1,4 @@
-import { CollisionWorld } from './collision';
+import { CollisionWorld, LADDER_DIRS } from './collision';
 import { clamp } from './math';
 
 /** Infantry movement tuned for a fast browser arena shooter. Shared by players and bots. */
@@ -23,6 +23,10 @@ export const MOVE = {
   slideFriction: 2.6,
   slideCooldown: 0.45,
   coyote: 0.12,
+  /** Ladder climbing speed, sideways shuffle on a ladder, and the push when jumping off one. */
+  climb: 3.4,
+  climbSide: 1.5,
+  ladderPush: 4,
 };
 
 export interface MoveState {
@@ -102,7 +106,30 @@ export function stepMovement(world: CollisionWorld, s: MoveState, input: MoveInp
   if (fx < -0.1) maxSpeed *= MOVE.backward;
   maxSpeed *= input.speed ?? 1;
 
-  if (s.grounded && s.slideTime > 0) {
+  // Ladders: moving toward one climbs, away from it climbs down, jumping lets go. Holding on stops
+  // the fall; you can shuffle sideways, and near the top you step forward onto the landing.
+  const ladder = world.ladderAt(s.x, s.y, s.z, MOVE.radius);
+  let climbing = false;
+  if (ladder) {
+    const [nx, nz] = LADDER_DIRS[ladder.dir];
+    const amount = Math.min(1, len), into = (wishX * nx + wishZ * nz) * amount, side = (wishZ * nx - wishX * nz) * amount;
+    const climb = into > 0.3 ? 1 : into < -0.3 ? -1 : 0;
+    if (jumpPressed && !s.grounded) {
+      s.vx = -nx * MOVE.ladderPush; s.vz = -nz * MOVE.ladderPush; s.vy = MOVE.jumpSpeed * 0.5; events.jumped = true;
+    } else if ((!s.grounded || climb > 0) && !(s.vy > 0 && s.vx * nx + s.vz * nz < -1)) {
+      // (Rising away from the rungs is a jump off them: no grabbing back on until the arc turns.)
+      climbing = true;
+      const landing = climb > 0 && s.y > ladder.y1 - 0.6 ? MOVE.walk * 0.6 : 0;
+      s.vy = climb * MOVE.climb;
+      s.vx = -nz * side * MOVE.climbSide + nx * landing;
+      s.vz = nx * side * MOVE.climbSide + nz * landing;
+      s.slideTime = 0;
+    }
+  }
+
+  if (climbing) {
+    // Velocity set above.
+  } else if (s.grounded && s.slideTime > 0) {
     // Sliding: low friction, light steering only.
     const sp = Math.hypot(s.vx, s.vz);
     const drop = Math.max(0, sp - MOVE.slideFriction * dt * (1 + sp * 0.12));
@@ -124,12 +151,12 @@ export function stepMovement(world: CollisionWorld, s: MoveState, input: MoveInp
     if (next > cap) { s.vx *= cap / next; s.vz *= cap / next; }
   }
 
-  s.airTime = s.grounded ? 0 : s.airTime + dt;
-  if (jumpPressed && (s.grounded || s.airTime < MOVE.coyote) && s.crouch < 0.6) {
+  s.airTime = s.grounded || climbing ? 0 : s.airTime + dt;
+  if (jumpPressed && !ladder && (s.grounded || s.airTime < MOVE.coyote) && s.crouch < 0.6) {
     s.vy = MOVE.jumpSpeed; s.grounded = false; s.airTime = MOVE.coyote; events.jumped = true;
     if (s.slideTime > 0) { s.slideTime = 0; s.slideCooldown = MOVE.slideCooldown; }
   }
-  s.vy -= MOVE.gravity * dt;
+  if (!climbing) s.vy -= MOVE.gravity * dt;
 
   // Horizontal sweep in substeps so fast slides cannot tunnel through thin cover.
   const height = bodyHeight(s);
@@ -147,6 +174,12 @@ export function stepMovement(world: CollisionWorld, s: MoveState, input: MoveInp
     if (s.grounded && g > s.y && g <= s.y + 0.6) { events.stepped += g - s.y; s.y = g; }
   }
   if (blocked && dt > 0) { s.vx = (s.x - startX) / dt; s.vz = (s.z - startZ) / dt; }
+  if (climbing && ladder && s.y < ladder.y1 - 0.6) {
+    // Below the landing a climber stays in front of the rungs, never under a deck the ladder leans on.
+    const [nx, nz] = LADDER_DIRS[ladder.dir];
+    const depth = (s.x - ladder.x) * nx + (s.z - ladder.z) * nz + MOVE.radius;
+    if (depth > 0) { s.x -= nx * depth; s.z -= nz * depth; }
+  }
 
   // Vertical: land, snap down small steps and slopes, bump ceilings.
   const wasGrounded = s.grounded;

@@ -1,4 +1,4 @@
-import type { Heightfield, Ramp, Solid } from '../collision';
+import type { Heightfield, Ladder, Ramp, Solid } from '../collision';
 import type { Vec3 } from '../math';
 
 /** Dusk (low sun), twilight (blue hour), steppe (dry midday) and meadow light the BeGone maps under Earth skies. */
@@ -78,6 +78,8 @@ export interface MapDef {
   decor: Decor[];
   /** Sun direction and environment tint used by the renderer. */
   sun: Vec3;
+  /** Climbable ladders (BeGone's maps use them where the stairs would not fit). */
+  ladders?: Ladder[];
   /** Ammo crates (mirrored like everything else on symmetric maps). */
   pickups?: PickupDef[];
   /** Sabotage: bomb sites (named map points) and which base the attacking Militia deploys from. */

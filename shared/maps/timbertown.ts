@@ -174,12 +174,13 @@ export function timbertown(): MapDef {
   deck(-8.2, -7.7, -7.2, 0.4); deck(-5.3, -3.4, -7.2, 0.4); deck(-7.7, -5.3, -7.2, -1.2); // west arm
   b.stairs(-6.5, 1.2, 2.4, 4.8, 0, P, 3);                                            // west stairs from the south
   b.stairs(3.5, -8.2, 2.4, 4.6, 0, P, 1);                                            // east stairs from the north
-  b.stairs(-1.5, -4.9, 2.4, 4.6, 0, P, 3);                                           // up out of the middle (BeGone's ladder)
+  b.stairs(-1.5, -4.9, 2.4, 4.6, 0, P, 3);                                           // up out of the middle
+  b.ladder(0.8, 0.4, 0, P, 1);                                                       // and BeGone's ladder beside them
   const wall = (x0: number, x1: number, z0: number, z1: number) => b.paint(b.box((x0 + x1) / 2, P, (z0 + z1) / 2, x1 - x0, 0.9, z1 - z0, 'slab'), DECK);
   wall(-8.2, 2.3, -10.5, -10.25); wall(4.7, 6.7, -10.5, -10.25);
   wall(-8.2, -7.7, 3.35, 3.6); wall(-5.3, 6.7, 3.35, 3.6);
   wall(-8.2, -7.95, -10.25, 3.35); wall(6.45, 6.7, -10.25, 3.35);
-  wall(-3.4, -2.7, -7.45, -7.2); wall(-0.3, 2, -7.45, -7.2); wall(-3.4, 2, 0.4, 0.65);
+  wall(-3.4, -2.7, -7.45, -7.2); wall(-0.3, 2, -7.45, -7.2); wall(-3.4, 0.2, 0.4, 0.65); wall(1.4, 2, 0.4, 0.65);
   wall(-3.65, -3.4, -7.45, 0.65); wall(2, 2.25, -7.45, 0.65);
   for (const [x, z] of [[-7.95, -10.25], [6.45, -10.25], [-7.95, 3.35], [6.45, 3.35], [-0.75, -10.25], [-0.75, 3.35],
     [-7.95, -3.4], [6.45, -3.4], [-3.65, -7.45], [2, -7.45], [-3.65, 0.65], [2.25, 0.65]]) b.paint(b.box(x, 0, z, 0.45, P - 0.3, 0.45, 'slab'), DECK);
@@ -214,8 +215,10 @@ export function timbertown(): MapDef {
   west(35, 40.1, -4.9, -1); west(35, 40.1, 3.8, 8.4); west(37.95, 40.1, -1, 3.8); west(35, 35.95, -1, 3.8);
   b.ramp(42.65, 1.75, 5.1, 13.3, eave, ridge, 2, 'roof');
   for (const z of [-4.25, 7.75]) for (const [y, w] of [[3, 6.8], [3.4, 4.4], [3.8, 2.2]]) b.box(40.1, y, z, w, 0.4, 0.5, 'wood');
-  // Inside: stairs up the west wall to a loft under the hole, crates, the ammo crate.
+  // Inside: stairs up the west wall to a loft under the hole, a ladder from the loft out onto the
+  // roof (the snipers' perch), crates, the ammo crate.
   b.stairs(36.75, -1.45, 1.6, 4.9, 0, 2.4, 1);
+  b.ladder(37.95, 2.4, 2.4, eave + (37.95 - 35) * slope, 0);
   b.box(36.95, 0, 2.4, 2, 2.4, 2.8, 'wood');
   b.crate(43.6, 0, -3.3, 1.2); b.crate(43.6, 1.2, -3.3, 1.2); b.crate(42.4, 0, -3.3, 1.2);
   b.ammoCrate(43.4, 0, 6.6);

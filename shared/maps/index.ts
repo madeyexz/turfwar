@@ -34,7 +34,7 @@ export function loadMap(id: string): LoadedMap {
     const factory = factories[id];
     if (!factory) throw new Error(`Unknown map ${id}`);
     const def = factory();
-    const world = new CollisionWorld(def.solids, def.ramps, def.terrain, def.bounds);
+    const world = new CollisionWorld(def.solids, def.ramps, def.terrain, def.bounds, def.ladders);
     furnishBases(def, world);
     loaded = { def, world };
     cache.set(id, loaded);
