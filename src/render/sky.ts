@@ -2,7 +2,7 @@ import * as THREE from 'three';
 import type { Theme } from './materials';
 
 /**
- * Alien sky dome: gradient atmosphere, sun glow, a ringed gas giant and a small moon
+ * Sky dome: gradient atmosphere, sun glow and a small moon; alien themes add a ringed gas giant
  * hanging over the battlefield (an original nod to Auraxis skies).
  */
 export class SkyView {
@@ -14,12 +14,12 @@ export class SkyView {
       side: THREE.BackSide, depthWrite: false, fog: false,
       uniforms: {
         top: { value: theme.skyTop }, horizon: { value: theme.skyHorizon }, sunDir: { value: sunDir.clone().normalize() },
-        sunColor: { value: theme.sunColor }, planetColor: { value: theme.planet }, time: { value: 0 },
+        sunColor: { value: theme.sunColor }, planetColor: { value: theme.planet ?? new THREE.Color() }, planetShown: { value: theme.planet ? 1 : 0 }, time: { value: 0 },
         planetDir: { value: new THREE.Vector3(0.55, 0.45, -0.7).normalize() }, moonDir: { value: new THREE.Vector3(-0.3, 0.52, -0.8).normalize() },
       },
       vertexShader: 'varying vec3 vDir; void main(){ vDir = normalize(position); vec4 p = projectionMatrix * modelViewMatrix * vec4(position, 1.0); gl_Position = p.xyww; }',
       fragmentShader: `
-        uniform vec3 top; uniform vec3 horizon; uniform vec3 sunDir; uniform vec3 sunColor; uniform vec3 planetColor; uniform vec3 planetDir; uniform vec3 moonDir; uniform float time;
+        uniform vec3 top; uniform vec3 horizon; uniform vec3 sunDir; uniform vec3 sunColor; uniform vec3 planetColor; uniform float planetShown; uniform vec3 planetDir; uniform vec3 moonDir; uniform float time;
         varying vec3 vDir;
         float hash(vec3 p){ p = fract(p*0.3183099+0.1); p*=17.0; return fract(p.x*p.y*p.z*(p.x+p.y+p.z)); }
         float noise(vec3 x){ vec3 i=floor(x); vec3 f=fract(x); f=f*f*(3.0-2.0*f);
@@ -48,10 +48,10 @@ export class SkyView {
           float cl = noise(d * vec3(4.0, 12.0, 4.0) + vec3(time*0.01, 0.0, 0.0)) * noise(d*9.0);
           col = mix(col, mix(horizon, vec3(1.0), 0.5), smoothstep(0.25, 0.6, cl) * smoothstep(0.02, 0.25, d.y) * 0.35);
           // Gas giant with ring, then the moon.
-          vec4 g = body(d, planetDir, 0.2, planetColor, 18.0);
+          vec4 g = body(d, planetDir, 0.2, planetColor, 18.0) * planetShown;
           float ringPlane = dot(d - planetDir * dot(d, planetDir), normalize(vec3(0.2, 1.0, 0.25)));
           float ringDist = length(d - planetDir);
-          float ring = smoothstep(0.008, 0.0, abs(ringPlane)) * smoothstep(0.26, 0.29, ringDist) * smoothstep(0.46, 0.38, ringDist);
+          float ring = smoothstep(0.008, 0.0, abs(ringPlane)) * smoothstep(0.26, 0.29, ringDist) * smoothstep(0.46, 0.38, ringDist) * planetShown;
           col = mix(col, planetColor * 1.2, ring * 0.45 * (1.0 - g.a));
           col = mix(col, g.rgb + col * 0.15, g.a * 0.92);
           vec4 m = body(d, moonDir, 0.06, vec3(0.85, 0.85, 0.9), 4.0);

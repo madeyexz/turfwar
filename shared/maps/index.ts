@@ -2,18 +2,26 @@ import { CollisionWorld } from '../collision';
 import { buildNav, type NavGraph } from '../match/nav';
 import { cinderBasin } from './cinder';
 import { citadelKeep } from './citadel';
+import { courtyard } from './courtyard';
+import { crane } from './crane';
 import { frostlineReach } from './frostline';
 import { meridianDistrict } from './meridian';
 import { ochreQuarter } from './ochre';
+import { pipeline } from './pipeline';
 import { railyard } from './railyard';
 import { skylineRooftops } from './skyline';
+import { timbertown } from './timbertown';
+import { tower } from './tower';
 import { verdantDivide } from './verdant';
+import { warehouse } from './warehouse';
 import type { MapDef } from './types';
 
-export const MAP_IDS = ['cinder', 'frostline', 'verdant', 'ochre', 'citadel', 'railyard', 'skyline', 'meridian'] as const;
+/** BeGone's six maps first (in their release order), then the original battlefields. */
+export const MAP_IDS = ['crane', 'tower', 'warehouse', 'pipeline', 'courtyard', 'timbertown', 'cinder', 'frostline', 'verdant', 'ochre', 'citadel', 'railyard', 'skyline', 'meridian'] as const;
 export type MapId = (typeof MAP_IDS)[number];
 const factories: Record<string, () => MapDef> = {
   cinder: cinderBasin, frostline: frostlineReach, verdant: verdantDivide, ochre: ochreQuarter, citadel: citadelKeep, railyard, skyline: skylineRooftops, meridian: meridianDistrict,
+  crane, tower, warehouse, pipeline, courtyard, timbertown,
 };
 
 export interface LoadedMap { def: MapDef; world: CollisionWorld; nav?: NavGraph }
@@ -26,7 +34,7 @@ export function loadMap(id: string): LoadedMap {
     const factory = factories[id];
     if (!factory) throw new Error(`Unknown map ${id}`);
     const def = factory();
-    const world = new CollisionWorld(def.solids, def.ramps, def.terrain, def.bounds);
+    const world = new CollisionWorld(def.solids, def.ramps, def.terrain, def.bounds, def.ladders);
     furnishBases(def, world);
     loaded = { def, world };
     cache.set(id, loaded);
@@ -49,6 +57,8 @@ function furnishBases(def: MapDef, world: CollisionWorld) {
     const floor = world.groundHeight(x, z, y + 0.6, 0.35);
     if (Math.abs(floor - y) > 0.45) return undefined;
     if (world.overlapsSolid({ x, y: floor + 0.05, z }, 0.45, 1.7)) return undefined;
+    // Not on or under stairs: ramps are walkable but never solid, so the overlap test misses them.
+    if (world.rampsAt(x, z).some(i => { const r = world.ramps[i]; return x > r.minX - 0.5 && x < r.maxX + 0.5 && z > r.minZ - 0.5 && z < r.maxZ + 0.5; })) return undefined;
     if (taken.some(p => Math.hypot(p.x - x, p.z - z) < gap)) return undefined;
     return floor;
   };

@@ -113,7 +113,9 @@ export function reportState(state: MatchState, ctx: SimContext, id: number, r: C
   // step-up onto a ledge (margin for that floor being a report old), and no fall on these maps
   // lasts 2.5 s, so a longer airborne spell is hovering. Either drops the soldier to the floor.
   const floor = ctx.world.groundHeight(r.x, r.z, r.y + 0.05, MOVE.radius);
-  const airborne = r.y - floor > 0.35;
+  // A soldier on a ladder is held up by it: it counts as a floor (with slack for a report's lag).
+  const climbing = !!ctx.world.ladderAt(r.x, r.y, r.z, MOVE.radius + 0.3);
+  const airborne = !climbing && r.y - floor > 0.35;
   const airTime = airborne ? s.m.airTime + dt : 0;
   const flying = (rise > 0.02 && r.y > s.groundY + JUMP_APEX + STEP_HEIGHT + 0.3) || airTime > 2.5;
   if (flying) {
