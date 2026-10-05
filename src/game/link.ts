@@ -1,6 +1,7 @@
 import type { Vec3 } from '../../shared/math';
 import type { ClientReport, MatchEvent, MatchState, ShotClaim } from '../../shared/match/state';
-import type { LoadoutId } from '../../shared/weapons';
+import type { BuyItem } from '../../shared/match/economy';
+import type { AttachmentId, Slot, WeaponId } from '../../shared/weapons';
 
 /**
  * The game client talks to a match through this interface. OfflineLink runs the shared
@@ -21,9 +22,25 @@ export interface GameLink {
   fire(claim: ShotClaim): void;
   grenade(origin: Vec3, dir: Vec3): void;
   reload(): void;
-  switchWeapon(slot: 0 | 1): void;
-  setLoadout(loadout: LoadoutId): void;
-  law(command: unknown, source: string, text: string): Promise<{ ok: boolean; message: string }>;
+  switchWeapon(slot: Slot): void;
+  /** Store purchase (validated by the host: buy time in base, cash). */
+  buy(item: BuyItem): void;
+  /** Attachment for an owned weapon (validated by the host: fit, cash). */
+  attach(weapon: WeaponId, attachment: AttachmentId): void;
+  /** Use ammo crate `index` (E). */
+  useCrate(index: number): void;
+  /** Chat line to everyone, or to the team only. */
+  say(text: string, team: boolean): void;
   status(): string;
+  /** Online: career stats of the players who have played on this server, best first. */
+  leaderboard?(): CareerStats[];
+  /** Online: our room's private code ('' = Quick Play) and size label. */
+  roomInfo?(): { code: string; size: string } | undefined;
   dispose(): void;
+}
+
+export interface CareerStats {
+  name: string; mine: boolean;
+  kills: number; deaths: number; assists: number; headshots: number;
+  roundsWon: number; roundsPlayed: number; matchesWon: number; matchesPlayed: number;
 }

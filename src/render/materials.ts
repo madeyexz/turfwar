@@ -8,7 +8,8 @@ export interface Theme {
   groundTint: THREE.Color; rockTint: THREE.Color; dirtTint: THREE.Color;
   skyTop: THREE.Color; skyHorizon: THREE.Color; fog: THREE.Color; fogDensity: number;
   sunColor: THREE.Color; sunIntensity: number; hemiSky: THREE.Color; hemiGround: THREE.Color; hemiIntensity: number;
-  planet: THREE.Color; exposure: number;
+  /** Ringed gas giant in the sky; null for the Earth-like BeGone skies. */
+  planet: THREE.Color | null; exposure: number;
 }
 
 export const THEMES: Record<ThemeId, Theme> = {
@@ -32,6 +33,38 @@ export const THEMES: Record<ThemeId, Theme> = {
     skyTop: new THREE.Color(0x2f6f86), skyHorizon: new THREE.Color(0xb9d6c9), fog: new THREE.Color(0x9fc0b4), fogDensity: 0.0055,
     sunColor: new THREE.Color(0xfff0d0), sunIntensity: 3.1, hemiSky: new THREE.Color(0xb8e0d8), hemiGround: new THREE.Color(0x4f5f3d), hemiIntensity: 1.35,
     planet: new THREE.Color(0x9fd6c6), exposure: 0.98,
+  },
+  // Low sun over grass, sandy paths and grey rock (BeGone's Tower and Crane evenings).
+  dusk: {
+    id: 'dusk', ground: 'path', rock: 'lichen', dirt: 'sand',
+    groundTint: new THREE.Color(0.8, 1.0, 0.56), rockTint: new THREE.Color(0.9, 0.86, 0.8), dirtTint: new THREE.Color(1.0, 0.9, 0.74),
+    skyTop: new THREE.Color(0x4a6896), skyHorizon: new THREE.Color(0xf0b07a), fog: new THREE.Color(0xc9a68a), fogDensity: 0.0042,
+    sunColor: new THREE.Color(0xffc690), sunIntensity: 3.1, hemiSky: new THREE.Color(0xb4bed8), hemiGround: new THREE.Color(0x5e5a42), hemiIntensity: 1.25,
+    planet: null, exposure: 1.0,
+  },
+  // Dry midday over gravel, sparse grass and grey boulders (BeGone's Timbertown).
+  steppe: {
+    id: 'steppe', ground: 'dirt', rock: 'lichen', dirt: 'sand',
+    groundTint: new THREE.Color(1.0, 0.93, 0.8), rockTint: new THREE.Color(0.96, 0.95, 0.92), dirtTint: new THREE.Color(1.0, 0.93, 0.82),
+    skyTop: new THREE.Color(0x5b85b4), skyHorizon: new THREE.Color(0xd8d2c2), fog: new THREE.Color(0xcfc7b4), fogDensity: 0.0035,
+    sunColor: new THREE.Color(0xfff0d8), sunIntensity: 3.4, hemiSky: new THREE.Color(0xbcd0e6), hemiGround: new THREE.Color(0x7a6a50), hemiIntensity: 1.3,
+    planet: null, exposure: 1.0,
+  },
+  // Green grass, grey rock outcrops and woods under a clear sky (BeGone's Pipeline).
+  meadow: {
+    id: 'meadow', ground: 'path', rock: 'lichen', dirt: 'dirt',
+    groundTint: new THREE.Color(0.74, 1.0, 0.58), rockTint: new THREE.Color(0.9, 0.92, 0.88), dirtTint: new THREE.Color(0.92, 0.86, 0.76),
+    skyTop: new THREE.Color(0x4f7fb8), skyHorizon: new THREE.Color(0xc9d8e2), fog: new THREE.Color(0xb4c4c8), fogDensity: 0.004,
+    sunColor: new THREE.Color(0xfff4e0), sunIntensity: 3.3, hemiSky: new THREE.Color(0xc0d8ec), hemiGround: new THREE.Color(0x4e5a3a), hemiIntensity: 1.35,
+    planet: null, exposure: 1.0,
+  },
+  // Blue hour over a walled garden: cool, soft light that still reads at range.
+  twilight: {
+    id: 'twilight', ground: 'moss', rock: 'lichen', dirt: 'path',
+    groundTint: new THREE.Color(0.62, 0.8, 0.6), rockTint: new THREE.Color(0.7, 0.76, 0.8), dirtTint: new THREE.Color(0.8, 0.82, 0.8),
+    skyTop: new THREE.Color(0x1f3a64), skyHorizon: new THREE.Color(0x8aa6c8), fog: new THREE.Color(0x6a82a2), fogDensity: 0.006,
+    sunColor: new THREE.Color(0xc4d2ff), sunIntensity: 2.0, hemiSky: new THREE.Color(0x9cb4dc), hemiGround: new THREE.Color(0x3a4440), hemiIntensity: 1.45,
+    planet: null, exposure: 1.05,
   },
 };
 

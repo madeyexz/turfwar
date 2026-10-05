@@ -24,6 +24,7 @@ export const Body = __t.object("Body", {
   team: __t.i8(),
   hp: __t.f32(),
   timer: __t.f32(),
+  room: __t.u8(),
 });
 export type Body = __Infer<typeof Body>;
 
@@ -33,11 +34,65 @@ export const BotBrain = __t.object("BotBrain", {
 });
 export type BotBrain = __Infer<typeof BotBrain>;
 
+export const Clock = __t.object("Clock", {
+  id: __t.u8(),
+  phaseLeft: __t.f64(),
+  time: __t.f64(),
+  tick: __t.u32(),
+  nextId: __t.u32(),
+  lastTickMicros: __t.u64(),
+  roundJson: __t.string(),
+});
+export type Clock = __Infer<typeof Clock>;
+
+export const Command = __t.object("Command", {
+  id: __t.u64(),
+  soldierId: __t.u32(),
+  json: __t.string(),
+});
+export type Command = __Infer<typeof Command>;
+
+export const Counter = __t.object("Counter", {
+  id: __t.u8(),
+  nextId: __t.u32(),
+});
+export type Counter = __Infer<typeof Counter>;
+
+export const Frame = __t.object("Frame", {
+  id: __t.u8(),
+  mapId: __t.string(),
+  data: __t.byteArray(),
+});
+export type Frame = __Infer<typeof Frame>;
+
 export const History = __t.object("History", {
   slot: __t.u32(),
   json: __t.string(),
 });
 export type History = __Infer<typeof History>;
+
+export const Inbox = __t.object("Inbox", {
+  soldierId: __t.u32(),
+  lastMicros: __t.u64(),
+  elapsed: __t.f32(),
+  pending: __t.bool(),
+  x: __t.f32(),
+  y: __t.f32(),
+  z: __t.f32(),
+  vx: __t.f32(),
+  vy: __t.f32(),
+  vz: __t.f32(),
+  yaw: __t.f32(),
+  pitch: __t.f32(),
+  crouch: __t.f32(),
+  grounded: __t.bool(),
+  sprint: __t.bool(),
+  ads: __t.bool(),
+  slide: __t.bool(),
+  weapon: __t.u8(),
+  use: __t.bool(),
+});
+export type Inbox = __Infer<typeof Inbox>;
 
 export const Match = __t.object("Match", {
   id: __t.u8(),
@@ -63,12 +118,14 @@ export const Match = __t.object("Match", {
   historyLength: __t.u32(),
   lastTickMicros: __t.u64(),
   humans: __t.u32(),
+  code: __t.string(),
 });
 export type Match = __Infer<typeof Match>;
 
 export const MatchEvent = __t.object("MatchEvent", {
   seq: __t.u32(),
   json: __t.string(),
+  room: __t.u8(),
 });
 export type MatchEvent = __Infer<typeof MatchEvent>;
 
@@ -76,6 +133,9 @@ export const Player = __t.object("Player", {
   identity: __t.identity(),
   soldierId: __t.u32(),
   lastReportMicros: __t.u64(),
+  chatWindowMicros: __t.u64(),
+  chatCount: __t.u32(),
+  room: __t.u8(),
 });
 export type Player = __Infer<typeof Player>;
 
@@ -87,6 +147,44 @@ export const Point = __t.object("Point", {
   capturing: __t.i8(),
 });
 export type Point = __Infer<typeof Point>;
+
+export const Profile = __t.object("Profile", {
+  identity: __t.identity(),
+  name: __t.string(),
+  kills: __t.u32(),
+  deaths: __t.u32(),
+  assists: __t.u32(),
+  headshots: __t.u32(),
+  roundsWon: __t.u32(),
+  roundsPlayed: __t.u32(),
+  matchesWon: __t.u32(),
+  matchesPlayed: __t.u32(),
+});
+export type Profile = __Infer<typeof Profile>;
+
+export const Roster = __t.object("Roster", {
+  id: __t.u32(),
+  room: __t.u8(),
+  name: __t.string(),
+  team: __t.u8(),
+  bot: __t.bool(),
+  alive: __t.bool(),
+  grenades: __t.u8(),
+  grenadeHe: __t.bool(),
+  kills: __t.u32(),
+  deaths: __t.u32(),
+  assists: __t.u32(),
+  score: __t.u32(),
+  lastAttacker: __t.i32(),
+  corrections: __t.u32(),
+  weapon0: __t.string(),
+  weapon1: __t.string(),
+  reserve0: __t.u16(),
+  reserve1: __t.u16(),
+  money: __t.u32(),
+  gearJson: __t.string(),
+});
+export type Roster = __Infer<typeof Roster>;
 
 export const Soldier = __t.object("Soldier", {
   id: __t.u32(),
@@ -135,12 +233,23 @@ export const Soldier = __t.object("Soldier", {
   idle: __t.f32(),
   moveSlack: __t.f32(),
   groundY: __t.f32(),
+  weapon0: __t.string(),
+  weapon1: __t.string(),
+  reserve0: __t.u16(),
+  reserve1: __t.u16(),
+  money: __t.u32(),
+  bought0: __t.string(),
+  bought1: __t.string(),
+  sinceSpawn: __t.f32(),
+  gearJson: __t.string(),
+  room: __t.u8(),
 });
 export type Soldier = __Infer<typeof Soldier>;
 
 export const TickSchedule = __t.object("TickSchedule", {
   scheduledId: __t.u64(),
   scheduledAt: __t.scheduleAt(),
+  room: __t.u8(),
 });
 export type TickSchedule = __Infer<typeof TickSchedule>;
 

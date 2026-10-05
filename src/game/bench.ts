@@ -41,7 +41,7 @@ const wrap = (a: number) => Math.atan2(Math.sin(a), Math.cos(a));
 const round = (v: number, d = 1) => Math.round(v * 10 ** d) / 10 ** d;
 
 /**
- * ?bench: a scripted solo skirmish that runs the objective route, fights whatever it sees and
+ * ?bench: a scripted solo Elimination match that patrols the map's landmarks, fights whatever it sees and
  * records real frame intervals. requestAnimationFrame is capped at the display's refresh rate,
  * so a 120 Hz screen can report up to ~120 fps; the 60 fps verdict only needs 60.
  */
@@ -86,15 +86,15 @@ export class Bench {
     if (!me) return;
     // Topped up well past the maximum every frame (solo only; the HUD caps the display) so no
     // single tick of damage can kill the benchmark soldier and stall the run on a death screen.
-    me.health = HEALTH.max * 4; me.shield = HEALTH.shield;
+    me.health = HEALTH.max * 4;
     if (!p.alive || st.phase === 'ended') return;
     const { def, world } = loadMap(g.mapId);
     if (!this.route.length) {
-      // Nearest objective first, then the reactor, the far objective and back to the reactor.
+      // Nearest landmark (bomb sites are among them) first, then the middle one, the far one and back.
       const byDistance = [...def.points].sort((a, b) => Math.hypot(a.x - p.m.x, a.z - p.m.z) - Math.hypot(b.x - p.m.x, b.z - p.m.z));
-      const reactor = def.points.find(pt => pt.id === 'B') ?? byDistance[1];
-      const ends = byDistance.filter(pt => pt !== reactor);
-      this.route = [ends[0], reactor, ends[ends.length - 1], reactor].map(pt => ({ x: pt.x, z: pt.z }));
+      const middle = [...def.points].sort((a, b) => Math.hypot(a.x, a.z) - Math.hypot(b.x, b.z))[0];
+      const ends = byDistance.filter(pt => pt !== middle);
+      this.route = [ends[0], middle, ends[ends.length - 1], middle].map(pt => ({ x: pt.x, z: pt.z }));
     }
 
     const eye = p.eye();

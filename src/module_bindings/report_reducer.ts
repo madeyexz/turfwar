@@ -25,4 +25,5 @@ export default {
   ads: __t.bool(),
   slide: __t.bool(),
   weapon: __t.u8(),
+  use: __t.bool(),
 };

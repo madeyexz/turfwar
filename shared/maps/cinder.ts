@@ -1,23 +1,22 @@
-import { defaultLaws } from '../laws';
-import { cloneData } from '../math';
 import { MapBuilder } from './builder';
 import type { MapDef } from './types';
 
 /**
  * Cinder Basin: a desert tech outpost. Three lanes (north ridge, central plaza, south yard)
- * connect two warpgate spawns. A and C are fortified bunkers; B is the open reactor plaza
- * where the anomaly bends the rules.
+ * connect two warpgate spawns. A and C are fortified bunkers; B is the open central plaza
+ * around a stone pillar.
  */
 export function cinderBasin(): MapDef {
   const b = new MapBuilder({
     id: 'cinder', name: 'Cinder Basin', region: 'INDAR-CLASS DESERT / TECH OUTPOST',
-    description: 'Three lanes, two bunkers, one reactor. Long sightlines over the ridge.',
+    description: 'Three lanes, two bunkers, one open plaza. Long sightlines over the ridge.',
     theme: 'desert', halfX: 86, halfZ: 58, seed: 7, roll: 1.2, ridge: 16,
-    laws: cloneData(defaultLaws), sun: { x: -0.55, y: 0.62, z: 0.36 },
+    sabotage: { sites: ['B'], attackerSpawn: 1 },
+    sun: { x: -0.55, y: 0.62, z: 0.36 },
   });
 
   // ---- Terrain shaping (pads must exist before the heightfield is sampled) ----
-  b.pad(0, 0, 26, 26, -0.9, 6);                // reactor basin
+  b.pad(0, 0, 26, 26, -0.9, 6);                // central basin
   b.mirrored(() => {
     b.pad(-72, 0, 20, 26, 0.6, 6);             // warpgate spawn
     b.pad(-40, -14, 20, 16, 0.2, 5);           // bunker A
@@ -29,16 +28,15 @@ export function cinderBasin(): MapDef {
   });
   b.buildTerrain(2);
 
-  // ---- Reactor plaza (B) ----
+  // ---- Central plaza (B) ----
   const by = b.ground(0, 0);
   b.box(0, by, 0, 18, 1.0, 18, 'concrete');                 // raised deck
   b.ramp(0, -10.5, 6, 3, by, by + 1.0, 1, 'stairs');        // north stairs rise toward +Z
   b.ramp(0, 10.5, 6, 3, by, by + 1.0, 3, 'stairs');
   b.ramp(-10.5, 0, 3, 6, by, by + 1.0, 0, 'stairs');
   b.ramp(10.5, 0, 3, 6, by, by + 1.0, 2, 'stairs');
-  b.box(0, by + 1, 0, 2.6, 2.4, 2.6, 'pillar');             // reactor pylon base
-  b.raw({ kind: 'reactor', x: 0, y: by + 1, z: 0 });
-  b.point('B', 'Reactor', 0, by + 1, 0, 8.5);
+  b.box(0, by + 1, 0, 2.6, 2.4, 2.6, 'pillar');             // central pillar
+  b.point('B', 'Central Plaza', 0, by + 1, 0, 8.5);
   b.mirrored(() => {
     // Low walls on the deck corners give attackers something to fight from.
     b.box(-6.2, by + 1, -4.2, 0.6, 1.15, 3.6, 'wallDark');
@@ -112,6 +110,8 @@ export function cinderBasin(): MapDef {
     b.box(-48, b.ground(-48, 4), 4, 4.6, 1.25, 0.8, 'concrete');
     b.box(-55, b.ground(-55, -10), -10, 0.8, 1.3, 4.4, 'concrete');
     b.box(-50, b.ground(-50, 18), 18, 3.2, 2.2, 3.2, 'rock');
+
+    // ---- Ammo crates ----
   });
 
   // Outer boundary blockers sit just beyond the playable bounds.

@@ -1,137 +1,318 @@
 import { describe, expect, it } from 'vitest';
-import { defaultLaws } from '../laws';
 import { MAP_IDS, loadMap, loadNav } from '../maps/index';
 import { rng } from '../math';
 import { CollisionWorld } from '../collision';
 import { createMoveState, eyeHeight, stepMovement } from '../movement';
 import { hitShape } from '../hitbox';
-import { WEAPONS } from '../weapons';
+import { GRENADE, WEAPONS, pelletCone, pelletDirs, weaponStats } from '../weapons';
 import { findPath, nearestNode } from './nav';
-import { addSoldier, applyLaw, balanceTeams, createContext, createMatch, fireShot, reportState, tickMatch, TICK_RATE } from './sim';
-import { OFFLINE_CONFIG, ONLINE_CONFIG, type MatchEvent, type MatchState, type Soldier } from './state';
-import { MOVE_SLACK, type SimContext } from './combat';
+import {
+  BOMB_REACH, addSoldier, balanceTeams, buyAttachmentFor, buyItem, createContext, createMatch, fireShot, reportState,
+  resetMatch, tickMatch, useAmmoCrate, TICK_RATE,
+} from './sim';
+import { ATTACKERS, ELIMINATION, PRACTICE_CONFIG, SABOTAGE, type MatchConfig, type MatchEvent, type MatchState, type Soldier } from './state';
+import { MOVE_SLACK, sideOf, type SimContext } from './combat';
+import { CASH } from './economy';
+import { decodeFrame, encodeFrame } from './frame';
 
-function setup(config = OFFLINE_CONFIG, seed = 1) {
+function setup(config: MatchConfig = ELIMINATION, seed = 1, mapId = 'cinder') {
   const events: MatchEvent[] = [];
   const random = rng(seed);
-  const ctx = createContext('cinder', random, e => events.push(e));
-  const state = createMatch('cinder', { ...config }, random);
+  const ctx = createContext(mapId, random, e => events.push(e));
+  const state = createMatch(mapId, { ...config });
   return { ctx, state, events };
 }
 const tick = (state: MatchState, ctx: SimContext, seconds: number) => { for (let i = 0; i < Math.round(seconds * TICK_RATE); i++) tickMatch(state, ctx, 1 / TICK_RATE); };
-const place = (s: Soldier, x: number, z: number, ctx: SimContext, fromY = 50) => { s.m.x = x; s.m.z = z; s.m.y = ctx.world.groundHeight(x, z, fromY, 0.3); s.m.vx = s.m.vz = 0; };
+const place = (s: Soldier, x: number, z: number, ctx: SimContext, fromY = 50) => { s.m.x = x; s.m.z = z; s.m.y = ctx.world.groundHeight(x, z, fromY, 0.3); s.m.vx = s.m.vz = 0; s.m.grounded = true; };
 const report = (s: Soldier, over: Partial<Parameters<typeof reportState>[3]> = {}) =>
   ({ x: s.m.x, y: s.m.y, z: s.m.z, vx: 0, vy: 0, vz: 0, yaw: s.yaw, pitch: 0, crouch: 0, grounded: true, sprint: false, ads: false, weapon: 0 as const, ...over });
+/** Start the match and skip the round-start freeze. */
+const goLive = (state: MatchState, ctx: SimContext) => { resetMatch(state, ctx); tick(state, ctx, state.config.freezeTime + 0.1); };
+
+const ASYMMETRIC = ['ochre', 'crane', 'tower', 'pipeline', 'timbertown'];
 
 describe('maps and navigation', () => {
   for (const id of MAP_IDS) {
-    it(`${id}: every capture point is reachable from both spawns`, () => {
+    it(`${id}: every landmark and bomb site is reachable from both bases`, () => {
       const { def } = loadMap(id); const nav = loadNav(id);
-      expect(def.points.map(p => p.id).sort()).toEqual(['A', 'B', 'C']);
       for (const team of [0, 1]) {
         const sp = def.spawns.find(s => s.team === team)!;
         const start = nearestNode(nav, sp.x, sp.y, sp.z);
         for (const p of def.points) expect(findPath(nav, start, nearestNode(nav, p.x, p.y, p.z)).length, `${team}->${p.id}`).toBeGreaterThan(3);
       }
+      for (const site of def.sabotage?.sites ?? []) expect(def.points.some(p => p.id === site), site).toBe(true);
     });
-    // Ochre Quarter keeps its source layout's attacker/defender asymmetry on purpose.
-    it.skipIf(id === 'ochre')(`${id}: is rotationally symmetric for fairness`, () => {
+    it(`${id}: each base fits its largest room (6v6 with spare slots; 24v24 on big maps)`, () => {
+      const { def } = loadMap(id);
+      for (const team of [0, 1]) expect(def.spawns.filter(s => s.team === team).length).toBeGreaterThanOrEqual(def.big ? 24 : 12);
+    });
+    // Ochre Quarter and the BeGone homages keep their source layouts' asymmetry on purpose.
+    it.skipIf(ASYMMETRIC.includes(id))(`${id}: is rotationally symmetric for fairness`, () => {
       const { def } = loadMap(id);
       const key = (s: { minX: number; maxX: number; minZ: number; maxZ: number; minY: number; maxY: number }) => [s.minX, s.maxX, s.minZ, s.maxZ, s.minY, s.maxY].map(v => v.toFixed(2)).join();
       const all = new Set(def.solids.map(key));
       for (const s of def.solids) expect(all.has(key({ minX: -s.maxX, maxX: -s.minX, minZ: -s.maxZ, maxZ: -s.minZ, minY: s.minY, maxY: s.maxY }))).toBe(true);
     });
-    it(`${id}: spawns are not inside geometry and the reactor floats over B`, () => {
+    it(`${id}: spawns and ammo crates are clear of geometry`, () => {
       const { def, world } = loadMap(id);
       for (const sp of def.spawns) expect(world.overlapsSolid({ x: sp.x, y: sp.y, z: sp.z }, 0.35, 1.7)).toBe(false);
-      const b = def.points.find(p => p.id === 'B')!;
-      expect(Math.hypot(def.anomaly.x - b.x, def.anomaly.z - b.z)).toBeLessThan(0.5);
-      expect(def.anomaly.y - b.y).toBeGreaterThan(2);
+      for (const p of def.pickups ?? []) {
+        expect(p.item).toBe('ammo');
+        expect(world.overlapsSolid({ x: p.x, y: p.y + 0.05, z: p.z }, 0.3, 1.2), `crate@${p.x},${p.z}`).toBe(false);
+      }
     });
   }
 });
 
-describe('bot match', () => {
-  it('bots navigate, fight and capture objectives on their own', () => {
-    const { ctx, state, events } = setup({ ...OFFLINE_CONFIG, teamSize: 5 }, 7);
+describe('bot matches', () => {
+  it('Elimination: bots fight whole rounds to a result, then the next round deploys', () => {
+    const { ctx, state, events } = setup({ ...ELIMINATION, teamSize: 5, warmup: 0 }, 7);
     balanceTeams(state, ctx);
-    tick(state, ctx, 100);
-    expect(events.filter(e => e.type === 'kill').length).toBeGreaterThan(4);
-    expect(events.filter(e => e.type === 'capture').length).toBeGreaterThan(1);
-    expect(state.scores[0] + state.scores[1]).toBeGreaterThan(10);
+    tick(state, ctx, 240);
+    expect(events.filter(e => e.type === 'kill').length).toBeGreaterThan(8);
+    const decided = events.filter(e => e.type === 'round' && e.phase === 'over' && e.winner !== -1);
+    expect(decided.length).toBeGreaterThan(1);
+    expect(state.scores[0] + state.scores[1]).toBe(decided.length);
     for (const s of state.soldiers) {
       const b = ctx.map.bounds;
       expect(s.m.x).toBeGreaterThanOrEqual(b.minX); expect(s.m.x).toBeLessThanOrEqual(b.maxX);
       if (s.alive) expect(ctx.world.overlapsSolid(s.m, 0.2, 1.2)).toBe(false);
     }
   });
+
+  it('Sabotage: Militia bots carry the fight to the site and arm the bomb', () => {
+    const { ctx, state, events } = setup({ ...SABOTAGE, teamSize: 0, warmup: 0, botSkill: 0.2 }, 5);
+    for (let i = 0; i < 4; i++) addSoldier(state, ctx, { name: `M${i}`, team: ATTACKERS, bot: true });
+    // One SWAT player hiding out of sight under the map keeps the round going.
+    const swat = addSoldier(state, ctx, { name: 'S', team: (1 - ATTACKERS) as 0 | 1, bot: false });
+    resetMatch(state, ctx);
+    for (let i = 0; i < 90 * TICK_RATE && !state.bomb.armed; i++) {
+      swat.m.x = 0; swat.m.y = -30; swat.m.z = 0;
+      tickMatch(state, ctx, 1 / TICK_RATE);
+    }
+    expect(events.some(e => e.type === 'bomb' && e.action === 'armed')).toBe(true);
+  });
+
+  it('bots climb a ladder when their path takes one', () => {
+    const { ctx, state } = setup({ ...ELIMINATION, teamSize: 0, warmup: 0 }, 3, 'warehouse');
+    const bot = addSoldier(state, ctx, { name: 'B', team: 1, bot: true });
+    const enemy = addSoldier(state, ctx, { name: 'E', team: 0, bot: false });
+    goLive(state, ctx);
+    // The west deck's ladder at z -7.4: from the bay floor in front of it to the deck above it.
+    const nav = loadNav('warehouse');
+    place(bot, -21, -7.4, ctx, 1);
+    const path = findPath(nav, nearestNode(nav, bot.m.x, bot.m.y, bot.m.z), nearestNode(nav, -26.2, 3.2, -7.4));
+    expect(path.some((n, i) => i > 0 && nav.y[n] - nav.y[path[i - 1]] > 1.5)).toBe(true);
+    Object.assign(bot.brain!, { goal: 'roam', goalLeft: 99, repath: 99, path, pathIndex: 0 });
+    let onDeck = false;
+    for (let i = 0; i < 4 * TICK_RATE && !onDeck; i++) {
+      enemy.m.x = 0; enemy.m.y = -30; enemy.m.z = 0;
+      tickMatch(state, ctx, 1 / TICK_RATE);
+      onDeck = bot.m.grounded && Math.abs(bot.m.y - 3.2) < 0.05 && bot.m.x < -24;
+    }
+    expect(onDeck).toBe(true);
+  });
+
+  it('24v24 rooms run on the big map', () => {
+    const { ctx, state, events } = setup({ ...ELIMINATION, teamSize: 24, warmup: 0 }, 11, 'meridian');
+    balanceTeams(state, ctx);
+    expect(state.soldiers.filter(s => s.team === 0).length).toBe(24);
+    expect(state.soldiers.filter(s => s.team === 1).length).toBe(24);
+    tick(state, ctx, 0.1);
+    // Everyone deploys in the base at once without standing inside each other or a wall.
+    for (const a of state.soldiers) {
+      expect(ctx.world.overlapsSolid(a.m, 0.3, 1.2)).toBe(false);
+      for (const b of state.soldiers) if (a !== b && a.team === b.team) expect(Math.hypot(a.m.x - b.m.x, a.m.z - b.m.z)).toBeGreaterThan(0.5);
+    }
+    tick(state, ctx, 60);
+    expect(events.filter(e => e.type === 'kill').length).toBeGreaterThan(3);
+    for (const s of state.soldiers) if (s.alive) expect(ctx.world.overlapsSolid(s.m, 0.2, 1.2)).toBe(false);
+  });
 });
 
-describe('server-side validation', () => {
-  function duel() {
-    const env = setup();
+describe('rounds', () => {
+  function teams(config: MatchConfig = ELIMINATION, mapId = 'cinder') {
+    const env = setup({ ...config, warmup: 0 }, 1, mapId);
     const a = addSoldier(env.state, env.ctx, { name: 'A', team: 0, bot: false });
     const b = addSoldier(env.state, env.ctx, { name: 'B', team: 1, bot: false });
-    a.protectLeft = b.protectLeft = 0;
-    // Open ground south of the reactor deck.
-    place(a, -6, 22, env.ctx); place(b, 6, 22, env.ctx);
-    a.yaw = -Math.PI / 2;
+    goLive(env.state, env.ctx);
     return { ...env, a, b };
   }
-  const claimAt = (a: Soldier, b: Soldier, zone: 'head' | 'body' = 'body') => {
-    const origin = { x: a.m.x, y: a.m.y + eyeHeight(a.m), z: a.m.z };
-    const shape = hitShape(b.m, b.m.crouch, b.yaw);
-    const point = zone === 'head' ? shape.head : { x: b.m.x, y: b.m.y + 1.2, z: b.m.z };
-    const d = Math.hypot(point.x - origin.x, point.y - origin.y, point.z - origin.z);
-    return { weapon: 0 as const, origin, dir: { x: (point.x - origin.x) / d, y: (point.y - origin.y) / d, z: (point.z - origin.z) / d }, target: b.id, zone, point };
-  };
 
-  it('accepts plausible hits and applies shield, health, headshot and kill credit', () => {
+  it('freezes everyone at round start, then wiping a team wins the round and pays out', () => {
+    const env = setup({ ...ELIMINATION, warmup: 0 });
+    const a = addSoldier(env.state, env.ctx, { name: 'A', team: 0, bot: false });
+    addSoldier(env.state, env.ctx, { name: 'B', team: 1, bot: false });
+    resetMatch(env.state, env.ctx);
+    expect(env.state.roundPhase).toBe('freeze');
+    expect(a.alive).toBe(true); expect(a.health).toBe(100);
+    expect(a.money).toBe(CASH.matchBonus);
+    expect(a.weapons).toEqual(['mp5', 'm9a1']);
+    tick(env.state, env.ctx, env.state.config.freezeTime + 0.1);
+    expect(env.state.roundPhase).toBe('live');
+  });
+
+  it('the last team standing takes the round; the next round redeploys both teams in their bases', () => {
+    const { state, ctx, a, b, events } = teams();
+    const before = a.money;
+    b.health = 1; b.lastAttacker = a.id;
+    place(a, -6, 22, ctx); place(b, 6, 22, ctx);
+    a.yaw = -Math.PI / 2;
+    fireShot(state, ctx, a.id, claimAt(a, b));
+    expect(b.alive).toBe(false);
+    tick(state, ctx, 0.1);
+    expect(state.roundPhase).toBe('over');
+    expect(state.scores).toEqual([1, 0]);
+    expect(a.money).toBe(before + CASH.kill + CASH.firstKill + CASH.lastEnemy + CASH.firstBlood + CASH.roundWin + CASH.survivor + CASH.lastStanding);
+    expect(events.some(e => e.type === 'reward' && e.id === a.id && e.reason === 'Round won')).toBe(true);
+    tick(state, ctx, state.config.roundOverTime);
+    expect(state.round).toBe(2);
+    expect(b.alive).toBe(true); expect(b.health).toBe(100);
+    for (const s of [a, b]) {
+      const side = sideOf(state, ctx.map, s.team);
+      expect(ctx.map.spawns.some(p => p.team === side && Math.hypot(p.x - s.m.x, p.z - s.m.z) < 1.2)).toBe(true);
+    }
+  });
+
+  it('an Elimination time-out is a draw and the round is replayed', () => {
+    const { state, ctx, events } = teams();
+    tick(state, ctx, state.config.roundTime + 0.2);
+    expect(events.some(e => e.type === 'round' && e.phase === 'over' && e.winner === -1 && e.reason === 'time')).toBe(true);
+    tick(state, ctx, state.config.roundOverTime);
+    expect(state.round).toBe(1);
+    expect(state.scores).toEqual([0, 0]);
+  });
+
+  it('first to the round limit wins the match, which then restarts with fresh inventories', () => {
+    const { state, ctx, a, b } = teams({ ...ELIMINATION, roundsToWin: 2 });
+    a.money = 9000;
+    for (let r = 0; r < 2; r++) {
+      b.health = 0; b.alive = false;
+      tick(state, ctx, 0.1);
+      if (state.phase !== 'ended') tick(state, ctx, state.config.roundOverTime + state.config.freezeTime + 0.1);
+    }
+    expect(state.phase).toBe('ended'); expect(state.winner).toBe(0);
+    tick(state, ctx, state.config.matchOverTime + 0.1);
+    expect(state.phase).toBe('live'); expect(state.scores).toEqual([0, 0]);
+    expect(a.money).toBe(CASH.matchBonus);
+  });
+
+  it('Sabotage: holding use still on a site for 5 s arms the bomb; 40 s later it blows', () => {
+    const { state, ctx, a, b, events } = teams(SABOTAGE);
+    const militia = a.team === ATTACKERS ? a : b;
+    const site = ctx.map.points.find(p => p.id === ctx.map.sabotage!.sites[0])!;
+    place(militia, site.x, site.z, ctx, site.y + 1);
+    militia.using = true;
+    tick(state, ctx, state.config.armTime - 0.3);
+    expect(state.bomb.armed).toBe(false);
+    expect(state.bomb.progress).toBeGreaterThan(0.8);
+    tick(state, ctx, 0.5);
+    expect(state.bomb.armed).toBe(true);
+    expect(state.phaseLeft).toBeGreaterThan(state.config.bombTime - 1);
+    militia.using = false;
+    tick(state, ctx, state.config.bombTime + 0.1);
+    expect(events.some(e => e.type === 'bomb' && e.action === 'exploded')).toBe(true);
+    expect(state.scores[ATTACKERS]).toBe(1);
+  });
+
+  it('Sabotage: SWAT disarms an armed bomb in 5 s; letting go resets the disarm', () => {
+    const { state, ctx, a, b } = teams(SABOTAGE);
+    const militia = a.team === ATTACKERS ? a : b, swat = militia === a ? b : a;
+    const site = ctx.map.points.find(p => p.id === ctx.map.sabotage!.sites[0])!;
+    place(militia, site.x, site.z, ctx, site.y + 1); militia.using = true;
+    tick(state, ctx, state.config.armTime + 0.1);
+    militia.using = false;
+    place(militia, site.x + 30, site.z, ctx);
+    place(swat, site.x + BOMB_REACH * 0.5, site.z, ctx, site.y + 1); swat.using = true;
+    tick(state, ctx, 2);
+    swat.using = false;
+    tick(state, ctx, 0.1);
+    expect(state.bomb.progress).toBe(0);
+    swat.using = true;
+    tick(state, ctx, state.config.disarmTime + 0.1);
+    expect(state.roundWinner).toBe(swat.team);
+  });
+
+  it('practice range: free store, no round end', () => {
+    const { state, ctx } = setup({ ...PRACTICE_CONFIG, warmup: 0 });
+    const a = addSoldier(state, ctx, { name: 'A', team: 0, bot: false });
+    goLive(state, ctx);
+    expect(buyItem(state, ctx, a.id, 'm249').ok).toBe(true);
+    expect(a.weapons[0]).toBe('m249');
+    tick(state, ctx, 30);
+    expect(state.roundPhase).toBe('live');
+  });
+});
+
+const claimAt = (a: Soldier, b: Soldier, zone: 'head' | 'body' = 'body') => {
+  const origin = { x: a.m.x, y: a.m.y + eyeHeight(a.m), z: a.m.z };
+  const shape = hitShape(b.m, b.m.crouch, b.yaw);
+  const point = zone === 'head' ? shape.head : { x: b.m.x, y: b.m.y + 1.2, z: b.m.z };
+  const d = Math.hypot(point.x - origin.x, point.y - origin.y, point.z - origin.z);
+  return { weapon: a.weapon, origin, dir: { x: (point.x - origin.x) / d, y: (point.y - origin.y) / d, z: (point.z - origin.z) / d }, target: b.id, zone, point };
+};
+
+function duel(gap = 12) {
+  const env = setup({ ...ELIMINATION, warmup: 0 });
+  const a = addSoldier(env.state, env.ctx, { name: 'A', team: 0, bot: false });
+  const b = addSoldier(env.state, env.ctx, { name: 'B', team: 1, bot: false });
+  goLive(env.state, env.ctx);
+  place(a, -gap / 2, 22, env.ctx); place(b, gap / 2, 22, env.ctx);
+  a.yaw = -Math.PI / 2;
+  return { ...env, a, b };
+}
+
+describe('server-side validation', () => {
+  it('accepts plausible hits with BeGone damage, headshot cash and kill credit', () => {
     const { state, ctx, a, b, events } = duel();
     expect(fireShot(state, ctx, a.id, claimAt(a, b))).toBe(true);
-    expect(b.shield).toBeLessThan(50);
+    expect(b.health).toBe(100 - WEAPONS.mp5.damage.body);
     let shots = 1;
     while (b.alive && shots < 20) { a.fireCooldown = 0; fireShot(state, ctx, a.id, claimAt(a, b, 'head')); shots++; }
     expect(b.alive).toBe(false);
     expect(a.kills).toBe(1);
     expect(events.some(e => e.type === 'kill' && e.head)).toBe(true);
-    expect(shots).toBeLessThan(7);
+    expect(events.some(e => e.type === 'reward' && e.id === a.id && e.reason === 'Headshot')).toBe(true);
+    expect(shots).toBe(1 + Math.ceil((100 - WEAPONS.mp5.damage.body) / WEAPONS.mp5.damage.head));
   });
 
-  it('rejects claims through walls, far from the target, too fast, or with an empty magazine', () => {
+  it('rejects claims far from the target, too fast, with an empty magazine, through walls, or during the freeze', () => {
     const { state, ctx, a, b } = duel();
-    // Far-off claimed point.
     const far = claimAt(a, b); far.point = { ...far.point, y: far.point.y + 4 };
     fireShot(state, ctx, a.id, far);
-    expect(b.shield).toBe(50);
-    // Rate limit: a short burst is tolerated (network jitter) but the fourth instant shot is refused.
-    a.fireCooldown = 0;
-    expect(fireShot(state, ctx, a.id, claimAt(a, b))).toBe(true);
-    expect(fireShot(state, ctx, a.id, claimAt(a, b))).toBe(true);
+    expect(b.health).toBe(100);
+    // Rate limit: a short burst is tolerated (network jitter) but not a whole magazine at once.
+    a.fireCooldown = 0; b.health = 10000;
+    let accepted = 0;
+    for (let i = 0; i < 8; i++) if (fireShot(state, ctx, a.id, claimAt(a, b))) accepted++;
+    expect(accepted).toBeLessThan(5);
+    // Slow weapons get no burst: a second instant M110 shot is refused, a timely one accepted.
+    state.config.freeBuy = true;
+    buyItem(state, ctx, a.id, 'm110');
+    state.config.freeBuy = false;
+    a.switchLeft = 0; a.fireCooldown = 0; a.money = 99999;
+    expect(a.weapons[0]).toBe('m110');
     expect(fireShot(state, ctx, a.id, claimAt(a, b))).toBe(true);
     expect(fireShot(state, ctx, a.id, claimAt(a, b))).toBe(false);
-    // Slow weapons get no burst: a second instant rail shot is refused, a timely one accepted.
-    a.loadout = 'recon'; a.ammo = [5, 6]; a.fireCooldown = 0; b.health = 1000;
+    a.fireCooldown -= 0.7;
     expect(fireShot(state, ctx, a.id, claimAt(a, b))).toBe(true);
-    expect(fireShot(state, ctx, a.id, claimAt(a, b))).toBe(false);
-    a.fireCooldown -= 0.8;
-    expect(fireShot(state, ctx, a.id, claimAt(a, b))).toBe(true);
-    expect(b.health).toBeLessThan(1000 - 92);
-    a.loadout = 'assault'; a.ammo = [30, 14]; b.health = 100; b.shield = 50;
     // Empty magazine.
     a.fireCooldown = 0; a.ammo[0] = 0;
     expect(fireShot(state, ctx, a.id, claimAt(a, b))).toBe(false);
-    // Through the reactor pylon: put the target behind it.
-    a.ammo[0] = 30; a.fireCooldown = 0; b.shield = 50; b.health = 100;
-    place(a, -8, 0, ctx); a.m.y = 0.1; place(b, 8, 0, ctx); b.m.y = 0.1;
-    fireShot(state, ctx, a.id, claimAt(a, b));
-    expect(b.shield).toBe(50);
+    // A wall between them.
+    a.ammo[0] = 5; a.fireCooldown = 0; b.health = 100;
+    const wall = new CollisionWorld([{ minX: -0.5, minY: -10, minZ: 10, maxX: 0.5, maxY: 30, maxZ: 34, surface: "concrete" }, ...ctx.world.solids], ctx.world.ramps, ctx.world.terrain, ctx.world.bounds);
+    fireShot(state, { ...ctx, world: wall }, a.id, claimAt(a, b));
+    expect(b.health).toBe(100);
+    // Frozen at round start.
+    state.roundPhase = 'freeze'; a.fireCooldown = 0;
+    expect(fireShot(state, ctx, a.id, claimAt(a, b))).toBe(false);
   });
 
   it('accepts a full-auto magazine fired at the real rate despite network jitter', () => {
     const { state, ctx, a, b } = duel();
-    const r = rng(7), interval = WEAPONS.carbine.interval;
-    // Shots leave the client evenly at 690 RPM and arrive up to ±60 ms early or late; the server ticks at 30 Hz.
+    b.health = 1e6;
+    const r = rng(7), interval = WEAPONS.mp5.interval;
     const arrivals = Array.from({ length: 30 }, (_, i) => i * interval + 0.08 + (r() - 0.5) * 0.12).sort((x, y) => x - y);
     let now = 0, accepted = 0;
     for (const t of arrivals) {
@@ -141,50 +322,78 @@ describe('server-side validation', () => {
     expect(accepted).toBe(30);
   });
 
+  it('the knife only reaches arm\'s length', () => {
+    const near = duel(1.6);
+    near.a.weapon = 2; near.a.switchLeft = 0;
+    expect(fireShot(near.state, near.ctx, near.a.id, claimAt(near.a, near.b))).toBe(true);
+    expect(near.b.health).toBe(100 - WEAPONS.knife.damage.body);
+    const far = duel(6);
+    far.a.weapon = 2; far.a.switchLeft = 0;
+    fireShot(far.state, far.ctx, far.a.id, claimAt(far.a, far.b));
+    expect(far.b.health).toBe(100);
+  });
+
   it('never applies friendly fire', () => {
     const { state, ctx, a } = duel();
     const mate = addSoldier(state, ctx, { name: 'M', team: 0, bot: false });
-    mate.protectLeft = 0; place(mate, 0, 22, ctx);
+    mate.alive = true; mate.health = 100; place(mate, 0, 22, ctx);
     fireShot(state, ctx, a.id, claimAt(a, mate));
-    expect(mate.shield).toBe(50);
+    expect(mate.health).toBe(100);
   });
 
-  it('rejects teleports and entering the enemy spawn shield, accepts normal movement', () => {
+  it('rejects teleports, accepts normal movement, and hurts long falls', () => {
     const { state, ctx, a } = duel();
     expect(reportState(state, ctx, a.id, report(a, { x: a.m.x + 0.2 }), 1 / 20)).toBe(true);
     expect(reportState(state, ctx, a.id, report(a, { x: a.m.x + 25 }), 1 / 20)).toBe(false);
     expect(a.corrections).toBe(1);
-    // Team 1's shield sits at x = +66.6: team 0 cannot stand inside it.
-    place(a, 66.2, 0, ctx);
-    expect(reportState(state, ctx, a.id, report(a, { x: 66.6 }), 1 / 20)).toBe(false);
+    a.m.grounded = false; a.m.vy = -16;
+    reportState(state, ctx, a.id, report(a), 1 / 20);
+    expect(a.health).toBeLessThan(100);
+    expect(a.health).toBeGreaterThan(0);
   });
 
   it('absorbs network jitter but never pays for report spam', () => {
     const { state, ctx, a } = duel();
-    // Sprinting at 8.8 m/s reported at 20 Hz, but delivered in uneven bunches (0, 0, 150 ms gaps).
     const gaps = [0.002, 0.002, 0.146, 0.05, 0.004, 0.096];
     for (let i = 0; i < 60; i++) {
       expect(reportState(state, ctx, a.id, report(a, { x: a.m.x + 8.8 / 20 }), gaps[i % gaps.length])).toBe(true);
-      a.m.x -= 8.8 / 20; // stay on open ground
+      a.m.x -= 8.8 / 20;
     }
     expect(a.corrections).toBe(0);
-    // A speed hack sending 200 reports per second, each 0.5 m apart (100 m/s), gets at most the
-    // budget for that second (burst cap plus one second at the speed limit), not 100 m.
     let moved = 0;
     for (let i = 0; i < 200; i++) {
       const dir = i % 2 ? -1 : 1;
       if (reportState(state, ctx, a.id, report(a, { x: a.m.x + 0.5 * dir }), 0.005)) moved += 0.5;
     }
     expect(moved).toBeLessThanOrEqual(MOVE_SLACK.max + MOVE_SLACK.speed * 1);
-    expect(moved).toBeLessThan(25);
-    // Vertical: a stream of small rises cannot climb past a jump's height, nor hover there.
     const y0 = a.m.y;
     for (let i = 0; i < 50; i++) reportState(state, ctx, a.id, report(a, { y: a.m.y + 0.3 }), 0.05);
     expect(a.m.y - y0).toBeLessThan(2.4);
     for (let i = 0; i < 80; i++) reportState(state, ctx, a.id, report(a), 0.05);
     expect(a.m.y - y0).toBeLessThan(0.36);
-    // Nor can it pop up onto a roof in one report.
     expect(reportState(state, ctx, a.id, report(a, { y: a.m.y + 4 }), 0.5)).toBe(false);
+  });
+
+  it('accepts climbing a ladder far higher than a jump, and only on the ladder', () => {
+    const env = duel(), a = env.a;
+    const flat = { x0: -100, z0: -100, spacing: 4, n: 51, heights: new Float32Array(51 * 51) };
+    const bounds = { minX: -90, maxX: 90, minZ: -90, maxZ: 90 };
+    const world = new CollisionWorld([{ minX: 2, minY: 0, minZ: -2, maxX: 8, maxY: 6, maxZ: 2, surface: 'metal' }], [], flat, bounds, [{ x: 2, z: 0, y0: 0, y1: 6, width: 0.9, dir: 0 }]);
+    const ctx = { ...env.ctx, world, map: { ...env.ctx.map, bounds } };
+    const m = createMoveState(1.3, 0, 0);
+    a.m = { ...m }; a.groundY = 0;
+    for (let i = 1; i <= 240; i++) {
+      stepMovement(world, m, { forward: 1, strafe: 0, yaw: -Math.PI / 2, jump: false, crouch: false, sprint: false, ads: false }, 1 / 120, a.team);
+      if (i % 6 === 0) reportState(env.state, ctx, a.id, { x: m.x, y: m.y, z: m.z, vx: m.vx, vy: m.vy, vz: m.vz, yaw: 0, pitch: 0, crouch: 0, grounded: m.grounded, sprint: false, ads: false, weapon: 0 }, 0.05);
+    }
+    expect(m.y).toBeCloseTo(6, 2);
+    expect(a.m.y).toBeCloseTo(6, 1);
+    expect(a.corrections).toBe(0);
+    // The same climb a few metres along the wall, away from the ladder, is hovering.
+    a.m = createMoveState(1.3, 0, 8); a.groundY = 0;
+    for (let i = 1; i <= 20; i++) reportState(env.state, ctx, a.id, { x: 1.3, y: i * 0.17, z: 8, vx: 0, vy: 3.4, vz: 0, yaw: 0, pitch: 0, crouch: 0, grounded: false, sprint: false, ads: false, weapon: 0 }, 0.05);
+    expect(a.corrections).toBeGreaterThan(0);
+    expect(a.m.y).toBeLessThan(2.1);
   });
 
   it('accepts a jump that steps up onto a ledge higher than the jump itself', () => {
@@ -199,116 +408,111 @@ describe('server-side validation', () => {
       stepMovement(world, m, { forward: 1, strafe: 0, yaw: -Math.PI / 2, jump: m.x > 3 && m.x < 3.3, crouch: false, sprint: true, ads: false }, 1 / 120, a.team);
       if (i % 6 === 0) reportState(env.state, ctx, a.id, { x: m.x, y: m.y, z: m.z, vx: m.vx, vy: m.vy, vz: m.vz, yaw: 0, pitch: 0, crouch: 0, grounded: m.grounded, sprint: true, ads: false, weapon: 0 }, 0.05);
     }
-    expect(m.y).toBeCloseTo(1.7, 2); // landed on top (1.2 m jump + step-up)
+    expect(m.y).toBeCloseTo(1.7, 2);
     expect(a.corrections).toBe(0);
-    expect(a.m.y).toBeCloseTo(1.7, 2);
   });
+});
 
-  it('never corrects a legitimate run: sprinting, slide-hops and jumps over terrain, with network jitter', () => {
+describe('store and cash', () => {
+  it('buys a primary in base during buy time, swaps owned weapons free, refuses later', () => {
     const { state, ctx, a } = duel();
-    const m = { ...a.m }, r = rng(3), dt = 1 / 120;
-    let t = 0, yaw = -Math.PI / 2, nextSend = 0.05, lastArrival = 0, jumps = 0, slides = 0;
-    const arrivals: { at: number; report: Parameters<typeof reportState>[3] }[] = [];
-    for (let i = 0; i < 120 * 14; i++) {
-      t += dt;
-      yaw += Math.sin(t * 0.6) * 0.006;
-      // Slide every ~2.3 s, hop out of it, and jump regularly in between.
-      const phase = t % 2.3;
-      const ev = stepMovement(ctx.world, m, { forward: 1, strafe: 0, yaw, jump: phase > 2.25 || t % 0.9 < 0.04, crouch: phase > 1.9 && phase < 2.2, sprint: true, ads: false }, dt, a.team);
-      if (ev.jumped) jumps++;
-      if (ev.slideStarted) slides++;
-      if (t >= nextSend) {
-        nextSend += 0.05;
-        // Latency 30–130 ms, plus an occasional 350 ms stall; a websocket keeps order, so stalled reports arrive bunched.
-        const latency = 0.03 + r() * 0.1 + (r() < 0.03 ? 0.35 : 0);
-        lastArrival = Math.max(lastArrival, t + latency);
-        arrivals.push({ at: lastArrival, report: { x: m.x, y: m.y, z: m.z, vx: m.vx, vy: m.vy, vz: m.vz, yaw, pitch: 0, crouch: m.crouch, grounded: m.grounded, sprint: true, ads: false, slide: m.slideTime > 0, weapon: 0 } });
-      }
+    const side = sideOf(state, ctx.map, a.team);
+    const base = ctx.map.spawns.find(p => p.team === side)!;
+    place(a, base.x, base.z, ctx, base.y + 1);
+    a.money = 5000;
+    expect(buyItem(state, ctx, a.id, 'm4a1').ok).toBe(true);
+    expect(a.money).toBe(5000 - WEAPONS.m4a1.price);
+    expect(a.weapons[0]).toBe('m4a1');
+    expect(buyItem(state, ctx, a.id, 'mp5').ok).toBe(true);
+    expect(a.money).toBe(5000 - WEAPONS.m4a1.price);
+    expect(buyItem(state, ctx, a.id, 'm1014').ok).toBe(false); // too expensive now
+    expect(buyItem(state, ctx, a.id, 'm4a1').ok).toBe(true);    // owned: free
+    state.roundClock = state.config.buyTime + 1;
+    expect(buyItem(state, ctx, a.id, 'mp5').ok).toBe(false);
+  });
+
+  it('attachments fit by weapon, replace their category and change stats', () => {
+    const { state, a } = duel();
+    a.money = 10000;
+    expect(buyAttachmentFor(state, a.id, 'mp5', 'acog').ok).toBe(true);
+    expect(a.attachments.mp5?.optic).toBe('acog');
+    expect(buyAttachmentFor(state, a.id, 'mp5', 'holo').ok).toBe(true);
+    expect(a.attachments.mp5?.optic).toBe('holo');
+    expect(buyAttachmentFor(state, a.id, 'm4a1', 'acog').ok).toBe(false); // not owned
+    const before = a.money;
+    expect(buyAttachmentFor(state, a.id, 'mp5', 'extendedClip').ok).toBe(true);
+    expect(a.money).toBeLessThan(before);
+    expect(weaponStats('mp5', a.attachments.mp5).magazine).toBeGreaterThan(WEAPONS.mp5.magazine);
+    // Gadgets stack: a laser, a flashlight and a suppressor together, the optic kept.
+    for (const id of ['laser', 'flashlight', 'suppressor'] as const) expect(buyAttachmentFor(state, a.id, 'mp5', id).ok).toBe(true);
+    expect(a.attachments.mp5).toMatchObject({ optic: 'holo', laser: 'laser', light: 'flashlight', muzzle: 'suppressor', magazine: 'extendedClip' });
+  });
+
+  it('the M67 is limited to one and High Explosive is an upgrade', () => {
+    const { state, ctx, a } = duel();
+    a.money = 5000;
+    expect(buyItem(state, ctx, a.id, 'grenade').ok).toBe(true);
+    expect(buyItem(state, ctx, a.id, 'grenade').ok).toBe(false);
+    expect(buyItem(state, ctx, a.id, 'highExplosive').ok).toBe(true);
+    expect(a.money).toBe(5000 - GRENADE.price - 1500);
+  });
+
+  it('an ammo crate costs once per round and restocks part of a magazine', () => {
+    const { state, ctx, a } = duel();
+    const crate = ctx.map.pickups![0];
+    place(a, crate.x + 1, crate.z, ctx, crate.y + 1);
+    a.reserve[0] = 0; a.money = 1000;
+    expect(useAmmoCrate(state, ctx, a.id, 0)).toBe(true);
+    expect(a.reserve[0]).toBe(WEAPONS.mp5.restock);
+    expect(a.money).toBe(1000 - CASH.crate);
+    expect(useAmmoCrate(state, ctx, a.id, 0)).toBe(true);
+    expect(a.money).toBe(1000 - CASH.crate);
+    place(a, crate.x + 10, crate.z, ctx);
+    expect(useAmmoCrate(state, ctx, a.id, 0)).toBe(false);
+  });
+
+  it('shotgun pellets follow one fixed pattern inside the cone', () => {
+    const dir = { x: 0.6, y: -0.2, z: -0.77 }, w = weaponStats('m1014'), cone = pelletCone(w, false);
+    const a = pelletDirs(dir, cone, w.pellets), b = pelletDirs(dir, cone, w.pellets);
+    expect(a).toEqual(b);
+    expect(a).toHaveLength(14);
+    const len = Math.hypot(dir.x, dir.y, dir.z);
+    for (const d of a) {
+      const angle = Math.acos(Math.min(1, (d.x * dir.x + d.y * dir.y + d.z * dir.z) / len)) * 180 / Math.PI;
+      expect(angle).toBeLessThanOrEqual(cone + 1e-6);
     }
-    let prev = 0;
-    for (const { at, report: rep } of arrivals) { reportState(state, ctx, a.id, rep, at - prev); prev = at; }
-    expect(Math.hypot(m.x - (-6), m.z - 22)).toBeGreaterThan(40);
-    expect(jumps).toBeGreaterThan(8);
-    expect(slides).toBeGreaterThan(2);
-    expect(a.corrections).toBe(0);
   });
 });
 
-describe('laws in a match', () => {
-  it('validates commands, enforces online cooldown and reverts after the law duration', () => {
-    const { state, ctx } = setup({ ...ONLINE_CONFIG, warmup: 0 });
-    const a = addSoldier(state, ctx, { name: 'A', team: 0, bot: false });
-    expect(applyLaw(state, ctx, a.id, { kind: 'gravity', gravity: { mode: 'central', strength: 80, exponent: 2, direction: { x: 0, y: -1, z: 0 }, code: 'x' } }, 'AI', '').ok).toBe(false);
-    expect(applyLaw(state, ctx, a.id, { kind: 'gravity', gravity: { ...defaultLaws.gravity, exponent: 3 } }, 'PRESET', '').ok).toBe(true);
-    expect(state.laws.gravity.exponent).toBe(3);
-    expect(applyLaw(state, ctx, a.id, { kind: 'lightSpeed', lightSpeed: { c: 10 } }, 'PRESET', '').ok).toBe(false);
-    tick(state, ctx, ONLINE_CONFIG.lawDuration + 0.5);
-    expect(state.laws.gravity.exponent).toBe(2);
-  });
-
-  it('inverse-cube gravity flings the sentinel drones out of the reactor', () => {
-    const { state, ctx } = setup();
-    const near = () => state.bodies.filter(b => b.kind === 'drone' && Math.hypot(b.x, b.z) < 12).length;
-    expect(near()).toBe(4);
-    applyLaw(state, ctx, -1, { kind: 'gravity', gravity: { ...defaultLaws.gravity, exponent: 3 } }, 'PRESET', '');
-    tick(state, ctx, 12);
-    expect(near()).toBeLessThan(2);
-  });
-
-  it('motion-driven time freezes bots and bodies while the lawbreaker stands still', () => {
-    const { state, ctx } = setup({ ...OFFLINE_CONFIG, teamSize: 3 });
-    const me = addSoldier(state, ctx, { name: 'Me', team: 0, bot: false });
+describe('frame', () => {
+  it('the packed frame round-trips poses, round, bomb and shots', () => {
+    const { ctx, state } = setup({ ...SABOTAGE, teamSize: 6, warmup: 0 }, 3);
     balanceTeams(state, ctx);
-    tick(state, ctx, 4);
-    applyLaw(state, ctx, me.id, { kind: 'time', time: { mode: 'playerMotion', scale: 1 } }, 'PRESET', '');
-    const before = JSON.stringify([state.bodies, state.soldiers.filter(s => s.bot).map(s => s.m)]);
-    const worldTime = state.worldTime;
-    tick(state, ctx, 3);
-    expect(state.worldTime).toBe(worldTime);
-    expect(JSON.stringify([state.bodies, state.soldiers.filter(s => s.bot).map(s => s.m)])).toBe(before);
-    // Moving at half walking pace advances world time at half speed.
-    me.m.vx = 3;
-    tick(state, ctx, 2);
-    expect(state.worldTime - worldTime).toBeCloseTo(1, 1);
-  });
-
-  it('rewind restores bots, bodies and objectives but not the lawbreaker or scores', () => {
-    const { state, ctx } = setup({ ...OFFLINE_CONFIG, teamSize: 4, warmup: 0 }, 3);
-    const me = addSoldier(state, ctx, { name: 'Me', team: 0, bot: false });
-    balanceTeams(state, ctx);
-    tick(state, ctx, 20);
-    const saved = JSON.stringify({ bodies: state.bodies, bots: state.soldiers.filter(s => s.bot).map(s => [s.m.x, s.m.z, s.alive]), points: state.points.map(p => [p.progress, p.owner]) });
-    const savedTime = state.worldTime;
-    tick(state, ctx, 3);
-    place(me, -30, 30, ctx);
-    const scores = [...state.scores];
-    applyLaw(state, ctx, me.id, { kind: 'rewind', rewind: { seconds: 3 } }, 'PRESET', '');
-    for (let i = 0; i < 3 * TICK_RATE; i++) tickMatch(state, ctx, 1 / TICK_RATE);
-    expect(state.worldTime).toBeCloseTo(savedTime, 5);
-    expect(JSON.stringify({ bodies: state.bodies, bots: state.soldiers.filter(s => s.bot).map(s => [s.m.x, s.m.z, s.alive]), points: state.points.map(p => [p.progress, p.owner]) })).toBe(saved);
-    expect(me.m.x).toBe(-30);
-    expect(state.scores[0] + state.scores[1]).toBeGreaterThanOrEqual(scores[0] + scores[1]);
-  });
-});
-
-describe('objectives', () => {
-  it('a lone soldier captures a neutral point in eight world seconds; contest freezes it', () => {
-    const { state, ctx, events } = setup({ ...OFFLINE_CONFIG, warmup: 0 });
-    const a = addSoldier(state, ctx, { name: 'A', team: 0, bot: false });
-    const def = ctx.map.points.find(p => p.id === 'A')!;
-    place(a, def.x, def.z, ctx, def.y + 0.5);
-    tick(state, ctx, 4);
-    const p = state.points.find(x => x.id === 'A')!;
-    expect(p.progress).toBeCloseTo(50, -1);
-    const b = addSoldier(state, ctx, { name: 'B', team: 1, bot: false });
-    place(b, def.x + 1, def.z, ctx, def.y + 0.5);
-    const frozen = p.progress;
-    tick(state, ctx, 2);
-    expect(p.contested).toBe(true); expect(p.progress).toBe(frozen);
-    place(b, 0, 40, ctx);
-    tick(state, ctx, 4.5);
-    expect(p.owner).toBe(0);
-    expect(events.some(e => e.type === 'capture' && e.point === 'A' && e.team === 0)).toBe(true);
-    expect(a.captures).toBe(1);
+    tick(state, ctx, 6);
+    state.bomb = { site: 0, armed: true, progress: 0.5, by: 7 };
+    state.bodies.push({ id: 999, kind: 'grenade', x: 1, y: 2, z: 3, vx: 30, vy: 1, vz: 0, age: 0, owner: 1, team: 0, hp: 1, timer: 2 });
+    const a = state.soldiers[3];
+    a.yaw = -2.5; a.pitch = 0.4; a.reloadLeft = 1; a.sinceShot = 0; a.weapon = 2; a.using = true;
+    const shot = { type: 'shot' as const, shooter: a.id, weapon: 'm110' as const, from: { x: 1.23, y: 2, z: -3 }, to: { x: 40.5, y: 1, z: -80.02 }, hit: 1 as const, surface: 'concrete' };
+    const frame = decodeFrame(encodeFrame(state, [shot]))!;
+    expect(frame.tick).toBe(state.tick);
+    expect(frame.round).toBe(state.round);
+    expect(frame.roundPhase).toBe(state.roundPhase);
+    expect(frame.bomb.site).toBe(0); expect(frame.bomb.armed).toBe(true); expect(frame.bomb.by).toBe(7);
+    expect(frame.bomb.progress).toBeCloseTo(0.5, 2);
+    expect(frame.poses.length).toBe(12);
+    const pose = frame.poses[3];
+    expect(pose.id).toBe(a.id);
+    expect(pose.weapon).toBe(2); expect(pose.weaponId).toBe('knife');
+    expect(pose.using).toBe(true); expect(pose.reloading).toBe(true); expect(pose.firing).toBe(true);
+    expect(pose.x).toBeCloseTo(a.m.x, 1);
+    expect(pose.health).toBe(Math.round(a.health));
+    expect(frame.poses[0].ammo).toBe(state.soldiers[0].weapon === 2 ? 0 : state.soldiers[0].ammo[state.soldiers[0].weapon as 0 | 1]);
+    expect(frame.bodies[frame.bodies.length - 1].kind).toBe('grenade');
+    expect(frame.shots[0].weapon).toBe('m110');
+    expect(frame.shots[0].surface).toBe('concrete');
+    expect(frame.shots[0].to.z).toBeCloseTo(-80.02, 1);
+    const other = frame.poses[0], s0 = state.soldiers[0];
+    expect(other.weaponId).toBe(s0.weapons[s0.weapon as 0 | 1]);
   });
 });

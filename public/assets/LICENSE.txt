@@ -3,3 +3,16 @@ All models, textures and animations in this folder were converted from CC0 1.0 p
 Universal Animation Library and Universal Animation Library 2 (free Standard editions).
 CC0 1.0 Universal Public Domain Dedication: https://creativecommons.org/publicdomain/zero/1.0/
 Converted with tools/import-assets.ts (textures resized to WebP; animations meshopt-compressed).
+
+guns.glb: guns and accessories from Quaternius' "Ultimate Gun Pack" (July 2019), CC0 1.0 Universal
+(https://opengameart.org/content/low-poly-guns-pack, https://quaternius.itch.io/50-lowpoly-guns):
+SubmachineGun_3 (MP5), SubmachineGun_2 (MP7), AssaultRifle2_1 (M4A1), AssaultRifle2_2 (M110),
+AssaultRifle2_3 (M249), Shotgun_1 (M1014), Pistol_3 (M9A1), Accessories/Bayonet_2 (knife),
+Accessories/Silencer_2 (suppressor) and Accessories/Grip (vertical grip). Converted from OBJ with
+tools/import-guns.ts (flipped to barrel -X, rescaled, meshopt-compressed). Optics, bipods, the M249's
+stock and ammo box, lasers, flashlights and other attachments are modelled in code (src/render).
+
+sfx/: gunshots from "The Free Firearm Sound Library" (Ben Jaszczak, Brian Nelson, Kevin Heras and
+Matthew Nanney) and reload/handling foley by SpringySpringo, BMacZero (Brian MacIntosh), zer0_sol and
+LFA, all CC0 1.0 Universal on OpenGameArt. Built by tools/fetch-sounds.ts; sources and per-file
+mapping in sfx/LICENSE.txt.

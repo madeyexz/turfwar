@@ -34,4 +34,5 @@ export default __t.row({
   historyLength: __t.u32().name("history_length"),
   lastTickMicros: __t.u64().name("last_tick_micros"),
   humans: __t.u32(),
+  code: __t.string(),
 });

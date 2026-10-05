@@ -1,5 +1,3 @@
-import { defaultLaws } from '../laws';
-import { cloneData } from '../math';
 import { MapBuilder } from './builder';
 import type { MapDef } from './types';
 
@@ -77,15 +75,15 @@ export function ochreQuarter(): MapDef {
     id: 'ochre', name: 'Ochre Quarter', region: 'INDAR-CLASS DESERT / OLD TOWN',
     description: 'Asymmetric two-site old town: Long, Mid, Catwalk and Tunnels.',
     theme: 'desert', halfX: HALF_X, halfZ: HALF_Z, seed: 2, roll: 0, ridge: 0,
-    laws: cloneData(defaultLaws), sun: { x: 0.45, y: 0.7, z: 0.4 },
+    sabotage: { sites: ['A', 'C'], attackerSpawn: 0 },
+    sun: { x: 0.45, y: 0.7, z: 0.4 },
     ground: (x, z) => floorAt(x, z) ?? 0,
   });
   b.buildTerrain(2);
   blockOut(b);
 
-  // ---- B: mid, with the reactor floating over the mid crate ----
+  // ---- B: mid, around the mid crate ----
   b.box(0, 0, 4, 2.6, 2.4, 2.6, 'pillar');
-  b.raw({ kind: 'reactor', x: 0, y: 0, z: 4 });
   b.point('B', 'Mid', 0, 0, 4, 8.5);
   b.box(-1, 3.2, -26, 6, 4.8, 2, 'sandstone');                    // mid doors lintel
   b.box(-3.4, 0, -22, 0.25, 2.6, 3.2, 'wallDark');                // open door leaves
@@ -162,6 +160,8 @@ export function ochreQuarter(): MapDef {
   b.raw({ kind: 'spawnPad', team: 1, x: 17, y: 0, z: -51.2, rotY: Math.PI });
   b.solidProp('Prop_Crate', 10, 0, -44, 0.2, 1.2, 1.0, 1.2);
   b.light(17, 6, -55.6, 0x58b6ff, 8, 20);
+
+  // ---- Ammo crates ----
 
   return b.build();
 }

@@ -4,7 +4,7 @@ import { Audio, reverbImpulse } from './audio';
  * Menu theme: a 60-second A-minor loop sequenced entirely from the game's own sound effects.
  * Each effect is recorded once offline, then used as a sampler instrument (pitched by playback
  * rate): kicks are body hits, snares are gunshots, hats are dry fire, bass and lead are
- * hitmarkers, arpeggios are objective ticks, and the rewind sweep carries the end back to bar 1.
+ * hitmarkers, arpeggios are round-clock ticks, and a falling sweep carries the end back to bar 1.
  */
 const BPM = 128;
 const BEAT = 60 / BPM;
@@ -21,10 +21,10 @@ const AHEAD = { x: 0, y: 0, z: -3 };
 const KIT = {
   kick: { seconds: 0.4, play: (s: Audio) => s.damage(false) },
   boom: { seconds: 2, play: (s: Audio) => s.explosion(LISTENER, AHEAD) },
-  snare: { seconds: 0.6, play: (s: Audio) => s.gunshot('carbine') },
-  rim: { seconds: 0.4, play: (s: Audio) => s.gunshot('sidearm') },
-  crash: { seconds: 1.2, play: (s: Audio) => s.gunshot('lancer') },
-  magnum: { seconds: 0.8, play: (s: Audio) => s.gunshot('magnum') },
+  snare: { seconds: 0.6, play: (s: Audio) => s.gunshot('m4a1') },
+  rim: { seconds: 0.4, play: (s: Audio) => s.gunshot('m9a1') },
+  crash: { seconds: 1.2, play: (s: Audio) => s.gunshot('m110') },
+  shotgun: { seconds: 0.8, play: (s: Audio) => s.gunshot('m1014') },
   hat: { seconds: 0.1, play: (s: Audio) => s.dryFire() },
   step: { seconds: 0.2, play: (s: Audio) => s.footstep(undefined, undefined, true) },
   magOut: { seconds: 0.15, play: (s: Audio) => s.reload('out') },
@@ -34,17 +34,17 @@ const KIT = {
   jump: { seconds: 0.2, play: (s: Audio) => s.jump() },
   land: { seconds: 0.3, play: (s: Audio) => s.land(10) },
   bolt: { seconds: 0.4, play: (s: Audio) => s.boltShot(LISTENER, AHEAD), pitch: 220 },
-  shield: { seconds: 0.3, play: (s: Audio) => s.damage(true) },
-  shatter: { seconds: 0.5, play: (s: Audio) => s.shieldBreak() },
+  beep: { seconds: 0.2, play: (s: Audio) => s.bombBeep() },
+  register: { seconds: 0.5, play: (s: Audio) => s.cash() },
   pluck: { seconds: 0.15, play: (s: Audio) => s.hitmarker(false, false), pitch: 1450 },
   ping: { seconds: 0.25, play: (s: Audio) => s.hitmarker(true, false), pitch: 2100 },
   kill: { seconds: 0.5, play: (s: Audio) => s.hitmarker(false, true), pitch: 880 },
-  capture: { seconds: 0.7, play: (s: Audio) => s.capture(true), pitch: 523.25 },
-  lost: { seconds: 0.6, play: (s: Audio) => s.capture(false), pitch: 392 },
+  won: { seconds: 0.7, play: (s: Audio) => s.roundEnd(true), pitch: 523.25 },
+  lost: { seconds: 0.6, play: (s: Audio) => s.roundEnd(false), pitch: 392 },
   tick: { seconds: 0.1, play: (s: Audio) => s.tick(), pitch: 1200 },
   ui: { seconds: 0.1, play: (s: Audio) => s.ui() },
-  law: { seconds: 1, play: (s: Audio) => s.law() },
-  rewind: { seconds: 1.4, play: (s: Audio) => s.rewind() },
+  chime: { seconds: 1, play: (s: Audio) => s.chime() },
+  sweep: { seconds: 1.4, play: (s: Audio) => s.sweep() },
 } satisfies Record<string, { seconds: number; play: (s: Audio) => void; pitch?: number }>;
 type Voice = keyof typeof KIT;
 
@@ -93,7 +93,7 @@ function score() {
     const intro = bar < 4, groove = bar >= 4 && bar < 12, build = bar >= 12 && bar < 16;
     const theme = bar >= 16 && bar < 28, outro = bar >= 28;
 
-    // Objective-timer arpeggio: chord tones climbing in sixteenths.
+    // Round-clock arpeggio: chord tones climbing in sixteenths.
     const tickGain = intro ? 0.35 + bar * 0.06 : build ? 0.3 : outro ? 0.32 - (bar - 28) * 0.06 : 0.22;
     const arp = [triad[0], triad[1], triad[2], triad[1] + 12, triad[2], triad[1], triad[0] + 12, triad[2]];
     for (let i = 0; i < 16; i++) add('tick', at(bar, i / 4), tickGain * (i % 4 === 0 ? 1 : 0.7), { hz: hz(arp[i % 8] + 12), pan: i % 2 ? 0.35 : -0.35, wet: 0.35 });
@@ -119,7 +119,7 @@ function score() {
     }
     if (build) {
       add('kick', at(bar, 0), 1.3); add('kick', at(bar, 2.5), 1);
-      add('shield', at(bar, 2), 0.5, { wet: 0.6 });
+      add('beep', at(bar, 2), 0.5, { wet: 0.6 });
       for (const beat of [1.5, 3]) add('bolt', at(bar, beat), 0.35, { hz: hz(root + 12), wet: 0.5, pan: beat === 3 ? 0.5 : -0.5 });
       add('jump', at(bar, 1), 0.6); add('jump', at(bar, 3.5), 0.4);
     }
@@ -128,8 +128,8 @@ function score() {
       for (let beat = 0.5; beat < 4; beat++) add('hat', at(bar, beat), 0.4, { pan: 0.25 });
     }
 
-    // Capture fanfare in the build; the lost-objective fall in the outro.
-    if (build) add('capture', at(bar, 0), 0.7, { hz: hz(root + 24), wet: 0.6 });
+    // Round-won fanfare in the build; the round-lost fall in the outro.
+    if (build) add('won', at(bar, 0), 0.7, { hz: hz(root + 24), wet: 0.6 });
     if (outro && bar % 2 === 0) add('lost', at(bar, 0), 0.8, { hz: hz(bar === 28 ? 67 : 71), wet: 0.7 });
   }
 
@@ -150,17 +150,17 @@ function score() {
 
   // Risers into each section and impacts on the downbeat.
   for (const bar of [4, 16, 24]) {
-    add('law', at(bar - 1, 2.5), 0.9, { wet: 0.7 });
+    add('chime', at(bar - 1, 2.5), 0.9, { wet: 0.7 });
     add('slide', at(bar - 1, 2.2), 0.5, { wet: 0.5 });
     add('boom', at(bar), 0.8, { wet: 0.5 });
     add('crash', at(bar), 0.5, { wet: 0.6 });
   }
-  add('magnum', at(12), 0.6, { wet: 0.6 }); add('land', at(12), 0.9);
-  add('magnum', at(28), 0.5, { wet: 0.7 });
-  for (const bar of [12, 20, 28]) add('shatter', at(bar, 0.5), 0.6, { wet: 0.7, pan: 0.2 });
+  add('shotgun', at(12), 0.6, { wet: 0.6 }); add('land', at(12), 0.9);
+  add('shotgun', at(28), 0.5, { wet: 0.7 });
+  for (const bar of [12, 20, 28]) add('register', at(bar, 0.5), 0.6, { wet: 0.7, pan: 0.2 });
 
-  // The rewind sweep that drags the last bar back to the first.
-  add('rewind', at(31, 1.3), 1.1, { wet: 0.8 });
+  // The sweep that drags the last bar back to the first.
+  add('sweep', at(31, 1.3), 1.1, { wet: 0.8 });
   add('slide', at(31, 2.6), 0.4, { wet: 0.6 });
   return notes;
 }

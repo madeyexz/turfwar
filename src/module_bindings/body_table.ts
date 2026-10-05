@@ -24,4 +24,5 @@ export default __t.row({
   team: __t.i8(),
   hp: __t.f32(),
   timer: __t.f32(),
+  room: __t.u8(),
 });

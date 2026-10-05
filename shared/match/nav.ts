@@ -1,4 +1,4 @@
-import { CollisionWorld, STEP_HEIGHT, rampHeight, terrainHeight } from '../collision';
+import { CollisionWorld, LADDER_DIRS, LADDER_REACH, STEP_HEIGHT, rampHeight, terrainHeight } from '../collision';
 import { MOVE } from '../movement';
 import type { MapDef } from '../maps/types';
 
@@ -58,6 +58,7 @@ export function buildNav(map: MapDef, world: CollisionWorld): NavGraph {
   }
 
   let adjacency: { to: number; cost: number }[][] = xs.map(() => []);
+  const nx_ = nx;
   const dirs = [[1, 0], [0, 1], [1, 1], [1, -1]];
   for (let iz = 0; iz < nz; iz++) for (let ix = 0; ix < nx; ix++) {
     const here = columns.get(iz * nx + ix);
@@ -76,6 +77,32 @@ export function buildNav(map: MapDef, world: CollisionWorld): NavGraph {
       }
     }
   }
+  // Ladders: a node in front of the rungs at the foot and one on the landing past the top, joined to
+  // each other (a slow climb) and to the grid nodes around them that a soldier can walk to.
+  for (const l of world.ladders) {
+    const [nx, nz] = LADDER_DIRS[l.dir];
+    const ends = [
+      { x: l.x - nx * (MOVE.radius + LADDER_REACH * 0.5), z: l.z - nz * (MOVE.radius + LADDER_REACH * 0.5), y: l.y0 },
+      { x: l.x + nx * 0.7, z: l.z + nz * 0.7, y: l.y1 },
+    ].map(e => ({ ...e, y: world.groundHeight(e.x, e.z, e.y + 0.3, MOVE.radius * 0.5) }));
+    if (Math.abs(ends[0].y - l.y0) > 0.4 || Math.abs(ends[1].y - l.y1) > 0.4) continue;
+    const ids = ends.map(e => {
+      const id = xs.length;
+      xs.push(e.x); ys.push(e.y); zs.push(e.z); adjacency.push([]);
+      const key = Math.round((e.z - z0) / SPACING) * nx_ + Math.round((e.x - x0) / SPACING);
+      columns.set(key, [...(columns.get(key) ?? []), id]);
+      for (let other = 0; other < id; other++) {
+        if (Math.abs(ys[other] - e.y) > 0.6 || Math.hypot(xs[other] - e.x, zs[other] - e.z) > SPACING * 1.5) continue;
+        const cost = Math.hypot(xs[other] - e.x, ys[other] - e.y, zs[other] - e.z);
+        if (walkable(world, e.x, e.y, e.z, xs[other], ys[other], zs[other])) adjacency[id].push({ to: other, cost });
+        if (walkable(world, xs[other], ys[other], zs[other], e.x, e.y, e.z)) adjacency[other].push({ to: id, cost });
+      }
+      return id;
+    });
+    const climb = (l.y1 - l.y0) * 1.6;
+    adjacency[ids[0]].push({ to: ids[1], cost: climb }); adjacency[ids[1]].push({ to: ids[0], cost: climb });
+  }
+
   // Keep only nodes reachable from (and returning to) the spawns; drops onto isolated roofs vanish.
   const keep = reachable(adjacency, map.spawns.map(sp => closestIndex(xs, ys, zs, sp.x, sp.y, sp.z)));
   const remap = new Int32Array(xs.length).fill(-1);
@@ -150,7 +177,7 @@ export function nearestNode(nav: NavGraph, x: number, y: number, z: number) {
 }
 
 /** A* search returning node ids from start to goal (inclusive), or [] when unreachable. */
-export function findPath(nav: NavGraph, start: number, goal: number, maxExpand = 6000): number[] {
+export function findPath(nav: NavGraph, start: number, goal: number, maxExpand = Math.max(6000, nav.x.length)): number[] {
   if (start < 0 || goal < 0) return [];
   if (start === goal) return [start];
   const n = nav.x.length;

@@ -1,0 +1,60 @@
+All recordings in this folder are CC0 1.0 Universal (no rights reserved):
+https://creativecommons.org/publicdomain/zero/1.0/
+
+Gunshots (shot-*, far-*): "The Free Firearm Sound Library" by Ben Jaszczak, Brian Nelson,
+Kevin Heras and Matthew Nanney — https://opengameart.org/content/the-free-firearm-sound-library
+
+Handling foley (foley-*), credit not required but given:
+- SpringySpringo, "Gun Reload Sounds" (https://opengameart.org/content/gun-reload-sounds)
+- BMacZero (Brian MacIntosh), "Gun Reload Sound Effects" (https://opengameart.org/content/gun-reload-sound-effects)
+- zer0_sol, "Handgun Reload Sound Effect" (https://opengameart.org/content/handgun-reload-sound-effect)
+- LFA, "Equipment Clicks III" (https://opengameart.org/content/equipment-clicks-iii)
+- zer0_sol, "Shotgun Reload Sound Effects" (https://opengameart.org/content/shotgun-reload-sound-effects)
+
+Cut into single takes, trimmed, faded, limited, peak-normalized and encoded to mono MP3 by
+tools/fetch-sounds.ts.
+
+shot-m9a1-1.mp3 ← Walther PPQ/X_39P.wav @ 1.4 s
+shot-m9a1-2.mp3 ← Walther PPQ/X_39P.wav @ 6.44 s
+shot-m9a1-3.mp3 ← Walther PPQ/X_39P.wav @ 10.655 s
+shot-mp7-1.mp3 ← PPSh/P_30P.wav @ 0.962 s
+shot-mp7-2.mp3 ← PPSh/P_30P.wav @ 4.38 s
+shot-mp7-3.mp3 ← PPSh/P_30P.wav @ 8.236 s
+shot-mp7-4.mp3 ← PPSh/P_30P.wav @ 11.414 s
+shot-mp5-1.mp3 ← Carl Gustav M45/G_31P.wav @ 0.304 s
+shot-mp5-2.mp3 ← Carl Gustav M45/G_31P.wav @ 3.494 s
+shot-mp5-3.mp3 ← Carl Gustav M45/G_31P.wav @ 6.72 s
+shot-m4a1-1.mp3 ← AR-15/D_32P.wav @ 0.696 s
+shot-m4a1-2.mp3 ← AR-15/D_32P.wav @ 5.64 s
+shot-m249-1.mp3 ← AK-47/C_28P.wav @ 0.604 s
+shot-m249-2.mp3 ← AK-47/C_28P.wav @ 3.25 s
+shot-m249-3.mp3 ← AK-47/C_28P.wav @ 6.014 s
+shot-m249-4.mp3 ← AK-47/C_28P.wav @ 9.15 s
+shot-m1014-1.mp3 ← Nova/O_21P.wav @ 0.424 s
+shot-m1014-2.mp3 ← Nova/O_21P.wav @ 3.458 s
+shot-m1014-3.mp3 ← Model 12/K_22P.wav @ 0.836 s
+shot-m1014-4.mp3 ← Model 12/K_22P.wav @ 7.438 s
+shot-m110-1.mp3 ← Tikka/W_29P.wav @ 0.57 s
+shot-m110-2.mp3 ← Tikka/W_29P.wav @ 5.658 s
+shot-m110-3.mp3 ← 1917/B_24P.wav @ 1.302 s
+shot-m110-4.mp3 ← 1917/B_24P.wav @ 6.724 s
+far-pistol.mp3 ← Walther PPQ/X_31P.wav @ 5.236 s
+far-smg.mp3 ← Carl Gustav M45/G_20P.wav @ 2.252 s
+far-rifle.mp3 ← AR-15/D_24P.wav @ 0.542 s
+far-lmg.mp3 ← AK-47/C_31P.wav @ 4.412 s
+far-shotgun.mp3 ← Nova/O_17P.wav @ 3.702 s
+far-sniper.mp3 ← Tikka/W_24P.wav @ 0.748 s
+foley-mag-out.mp3 ← assaultriflereload1_0.wav @ 0.13 s
+foley-mag-in.mp3 ← assaultriflereload1_0.wav @ 1.02 s
+foley-smg-out.mp3 ← gunreload1.wav @ 0.06 s
+foley-smg-in.mp3 ← gunreload1.wav @ 1.25 s
+foley-pistol-out.mp3 ← reload.wav @ 0.08 s
+foley-pistol-in.mp3 ← reload.wav @ 0.58 s
+foley-slide.mp3 ← reload.wav @ 1.01 s
+foley-bolt.mp3 ← equipment_clicks3.wav @ 6.36 s
+foley-charge.mp3 ← equipment_clicks3.wav @ 13.1 s
+foley-clack.mp3 ← equipment_clicks3.wav @ 21.27 s
+foley-click.mp3 ← clipload1.wav @ 0.02 s
+foley-latch.mp3 ← clipload2.wav @ 0.03 s
+foley-shell.mp3 ← ShotgunSounds/Subsequent Shells.mp3 @ 0.64 s
+foley-rack.mp3 ← ShotgunSounds/Rack.mp3 @ 0.6 s

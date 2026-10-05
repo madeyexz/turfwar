@@ -24,6 +24,22 @@ export interface Ramp {
   surface: Surface;
 }
 
+/**
+ * Climbable ladder fixed to a wall face. A soldier touching it climbs instead of falling; it is
+ * not solid (the wall behind it is).
+ */
+export interface Ladder {
+  /** Foot of the ladder's centre line on the wall face, its top (the landing height) and width. */
+  x: number; z: number; y0: number; y1: number; width: number;
+  /** Direction from the ladder into the wall, the way a climber faces: 0 +X, 1 +Z, 2 -X, 3 -Z. */
+  dir: 0 | 1 | 2 | 3;
+}
+
+/** Unit vectors into the wall for each ladder direction. */
+export const LADDER_DIRS = [[1, 0], [0, 1], [-1, 0], [0, -1]] as const;
+/** How far in front of the rungs a soldier's centre can be and still hold on. */
+export const LADDER_REACH = 0.35;
+
 export interface Heightfield {
   /** World-space minimum corner and cell spacing. */
   x0: number; z0: number; spacing: number;
@@ -71,7 +87,7 @@ export class CollisionWorld {
   private stampId = 1;
 
   constructor(readonly solids: Solid[], readonly ramps: Ramp[], readonly terrain: Heightfield,
-    readonly bounds: { minX: number; maxX: number; minZ: number; maxZ: number }) {
+    readonly bounds: { minX: number; maxX: number; minZ: number; maxZ: number }, readonly ladders: Ladder[] = []) {
     this.stamp = new Uint32Array(Math.max(1, solids.length));
     solids.forEach((s, i) => this.insert(s.minX, s.minZ, s.maxX, s.maxZ, c => c.solids.push(i)));
     ramps.forEach((r, i) => this.insert(r.minX, r.minZ, r.maxX, r.maxZ, c => c.ramps.push(i)));
@@ -130,6 +146,16 @@ export class CollisionWorld {
       if (h <= limit + 0.15 && h > best) best = h;
     }
     return best;
+  }
+
+  /** The ladder a cylinder with its feet at (x, y, z) is holding: in reach of the rungs, within their width, below the top. */
+  ladderAt(x: number, y: number, z: number, radius: number) {
+    for (const l of this.ladders) {
+      const [nx, nz] = LADDER_DIRS[l.dir];
+      const depth = (x - l.x) * nx + (z - l.z) * nz, side = (z - l.z) * nx - (x - l.x) * nz;
+      if (Math.abs(side) <= l.width / 2 && depth >= -(radius + LADDER_REACH) && depth <= 0.3 && y >= l.y0 - 0.1 && y <= l.y1 - 0.05) return l;
+    }
+    return undefined;
   }
 
   /** Lowest ceiling above the head of a cylinder, or Infinity. */

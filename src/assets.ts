@@ -1,19 +1,20 @@
 import * as THREE from 'three';
 import { GLTFLoader, type GLTF } from 'three/examples/jsm/loaders/GLTFLoader.js';
 import { MeshoptDecoder } from 'three/examples/jsm/libs/meshopt_decoder.module.js';
+import { applyOptics } from './render/optics';
+import { addProceduralGuns } from './render/procguns';
 
 /** Runtime asset registry. All models are CC0 (see public/assets/LICENSE.txt). */
 export interface Assets {
   weapons: Map<string, THREE.Object3D>;
   props: Map<string, THREE.Object3D>;
-  drone: GLTF;
   soldier: GLTF;
   clips: Map<string, THREE.AnimationClip>;
   textures: Map<string, THREE.Texture>;
 }
 
 const BASE = import.meta.env.BASE_URL + 'assets/';
-const TEXTURE_SETS = ['sand', 'cliff', 'dirt', 'snow', 'icerock', 'moss', 'lichen', 'path', 'concrete', 'metalplate', 'container'];
+const TEXTURE_SETS = ['sand', 'cliff', 'dirt', 'snow', 'icerock', 'moss', 'lichen', 'path', 'concrete', 'metalplate', 'container', 'brick', 'planks', 'corrugated', 'plaster', 'cobble'];
 
 export async function loadAssets(onProgress: (fraction: number) => void): Promise<Assets> {
   const manager = new THREE.LoadingManager();
@@ -29,8 +30,8 @@ export async function loadAssets(onProgress: (fraction: number) => void): Promis
     if (kind === 'diff') tex.colorSpace = THREE.SRGBColorSpace;
     textures.set(`${set}_${kind}`, tex);
   }));
-  const [weapons, props, drone, soldier, anims] = await Promise.all([
-    gltf('weapons.glb'), gltf('props.glb'), gltf('drone.glb'), gltf('soldier.glb'), gltf('anims.glb'), ...texturePromises,
+  const [weapons, props, soldier, anims, imported] = await Promise.all([
+    gltf('weapons.glb'), gltf('props.glb'), gltf('soldier.glb'), gltf('anims.glb'), gltf('guns.glb'), ...texturePromises,
   ]) as GLTF[];
   const named = (g: GLTF) => {
     const map = new Map<string, THREE.Object3D>();
@@ -40,8 +41,12 @@ export async function loadAssets(onProgress: (fraction: number) => void): Promis
     }
     return map;
   };
+  const guns = named(weapons);
+  for (const [name, gun] of named(imported)) guns.set(name, gun);
+  addProceduralGuns(guns);
+  applyOptics(guns);
   return {
-    weapons: named(weapons), props: named(props), drone, soldier,
+    weapons: guns, props: named(props), soldier,
     clips: new Map(anims.animations.map(c => [c.name, c])),
     textures,
   };

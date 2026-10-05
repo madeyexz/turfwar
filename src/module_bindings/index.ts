@@ -34,24 +34,33 @@ import {
 } from "spacetimedb";
 
 // Import all reducer arg schemas
-import ChooseLoadoutReducer from "./choose_loadout_reducer";
+import BuyReducer from "./buy_reducer";
+import BuyAttachmentReducer from "./buy_attachment_reducer";
+import CreateRoomReducer from "./create_room_reducer";
 import FireReducer from "./fire_reducer";
 import GrenadeReducer from "./grenade_reducer";
 import JoinReducer from "./join_reducer";
+import JoinPublicReducer from "./join_public_reducer";
+import JoinRoomReducer from "./join_room_reducer";
 import LeaveReducer from "./leave_reducer";
+import QuickJoinReducer from "./quick_join_reducer";
 import ReloadWeaponReducer from "./reload_weapon_reducer";
 import ReportReducer from "./report_reducer";
-import RewriteLawReducer from "./rewrite_law_reducer";
+import SayReducer from "./say_reducer";
 import SwitchSlotReducer from "./switch_slot_reducer";
+import UseCrateReducer from "./use_crate_reducer";
 
 // Import all procedure arg schemas
 
 // Import all table schema definitions
 import BodyRow from "./body_table";
+import FrameRow from "./frame_table";
 import MatchRow from "./match_table";
 import MatchEventRow from "./match_event_table";
 import PlayerRow from "./player_table";
 import PointRow from "./point_table";
+import ProfileRow from "./profile_table";
+import RosterRow from "./roster_table";
 import SoldierRow from "./soldier_table";
 
 /** Type-only namespace exports for generated type groups. */
@@ -69,6 +78,17 @@ const tablesSchema = __schema({
       { name: 'body_id_key', constraint: 'unique', columns: ['id'] },
     ],
   }, BodyRow),
+  frame: __table({
+    name: 'frame',
+    indexes: [
+      { accessor: 'id', name: 'frame_id_idx_btree', algorithm: 'btree', columns: [
+        'id',
+      ] },
+    ],
+    constraints: [
+      { name: 'frame_id_key', constraint: 'unique', columns: ['id'] },
+    ],
+  }, FrameRow),
   match: __table({
     name: 'match',
     indexes: [
@@ -110,6 +130,31 @@ const tablesSchema = __schema({
       { name: 'point_id_key', constraint: 'unique', columns: ['id'] },
     ],
   }, PointRow),
+  profile: __table({
+    name: 'profile',
+    indexes: [
+      { accessor: 'identity', name: 'profile_identity_idx_btree', algorithm: 'btree', columns: [
+        'identity',
+      ] },
+    ],
+    constraints: [
+      { name: 'profile_identity_key', constraint: 'unique', columns: ['identity'] },
+    ],
+  }, ProfileRow),
+  roster: __table({
+    name: 'roster',
+    indexes: [
+      { accessor: 'id', name: 'roster_id_idx_btree', algorithm: 'btree', columns: [
+        'id',
+      ] },
+      { accessor: 'room', name: 'roster_room_idx_btree', algorithm: 'btree', columns: [
+        'room',
+      ] },
+    ],
+    constraints: [
+      { name: 'roster_id_key', constraint: 'unique', columns: ['id'] },
+    ],
+  }, RosterRow),
   soldier: __table({
     name: 'soldier',
     indexes: [
@@ -125,15 +170,21 @@ const tablesSchema = __schema({
 
 /** The schema information for all reducers in this module. This is defined the same way as the reducers would have been defined in the server, except the body of the reducer is omitted in code generation. */
 const reducersSchema = __reducers(
-  __reducerSchema("choose_loadout", ChooseLoadoutReducer),
+  __reducerSchema("buy", BuyReducer),
+  __reducerSchema("buy_attachment", BuyAttachmentReducer),
+  __reducerSchema("create_room", CreateRoomReducer),
   __reducerSchema("fire", FireReducer),
   __reducerSchema("grenade", GrenadeReducer),
   __reducerSchema("join", JoinReducer),
+  __reducerSchema("join_public", JoinPublicReducer),
+  __reducerSchema("join_room", JoinRoomReducer),
   __reducerSchema("leave", LeaveReducer),
+  __reducerSchema("quick_join", QuickJoinReducer),
   __reducerSchema("reload_weapon", ReloadWeaponReducer),
   __reducerSchema("report", ReportReducer),
-  __reducerSchema("rewrite_law", RewriteLawReducer),
+  __reducerSchema("say", SayReducer),
   __reducerSchema("switch_slot", SwitchSlotReducer),
+  __reducerSchema("use_crate", UseCrateReducer),
 );
 
 /** The schema information for all procedures in this module. This is defined the same way as the procedures would have been defined in the server. */

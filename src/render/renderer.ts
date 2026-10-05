@@ -2,10 +2,9 @@ import * as THREE from 'three';
 import { EffectComposer } from 'three/examples/jsm/postprocessing/EffectComposer.js';
 import { RenderPass } from 'three/examples/jsm/postprocessing/RenderPass.js';
 import { UnrealBloomPass } from 'three/examples/jsm/postprocessing/UnrealBloomPass.js';
-import { ShaderPass } from 'three/examples/jsm/postprocessing/ShaderPass.js';
 import { OutputPass } from 'three/examples/jsm/postprocessing/OutputPass.js';
-import { SlowLightShader, betaVector } from '../slow-light';
 import type { Theme } from './materials';
+import { ScopePass } from './sights';
 import { SkyView } from './sky';
 
 export interface Quality { pixelRatio: number; shadows: number; bloom: boolean }
@@ -30,8 +29,9 @@ export class Renderer {
   sky?: SkyView;
   private composer: EffectComposer;
   private bloom: UnrealBloomPass;
-  private slowLight: ShaderPass;
   private sunOffset = new THREE.Vector3(-50, 70, 40);
+  /** Picture-in-picture scope view, rendered only while the view model asks for it (a magnified optic raised). */
+  private scope = new ScopePass();
   quality: Quality;
 
   constructor(container: HTMLElement, quality: Quality) {
@@ -60,8 +60,6 @@ export class Renderer {
     this.composer.addPass(overlay);
     this.bloom = new UnrealBloomPass(new THREE.Vector2(256, 256), 0.38, 0.45, 0.92);
     this.composer.addPass(this.bloom);
-    this.slowLight = new ShaderPass(SlowLightShader);
-    this.composer.addPass(this.slowLight);
     this.composer.addPass(new OutputPass());
     this.applyQuality(quality);
     window.addEventListener('resize', () => this.resize());
@@ -115,8 +113,7 @@ export class Renderer {
     this.camera.updateProjectionMatrix(); this.viewCamera.updateProjectionMatrix();
   }
 
-  /** velocity: the lawbreaker's world velocity; c: current speed of light. */
-  render(time: number, velocity: THREE.Vector3, c: number) {
+  render(time: number) {
     this.renderer.info.reset();
     // Keep the shadow frustum centered on the player, snapped to texels to avoid shimmering.
     const target = this.camera.position;
@@ -125,10 +122,7 @@ export class Renderer {
     this.sun.target.position.set(sx, 0, sz);
     this.sun.position.set(sx + this.sunOffset.x, this.sunOffset.y, sz + this.sunOffset.z);
     this.sky?.update(time, this.camera);
-    const beta = betaVector(velocity, this.camera.quaternion, c);
-    const u = this.slowLight.uniforms;
-    this.slowLight.enabled = beta.length() >= 0.025;
-    u.beta.value.copy(beta); u.aspect.value = this.camera.aspect; u.tanHalfFov.value = Math.tan(THREE.MathUtils.degToRad(this.camera.fov) / 2);
+    this.scope.render(this.renderer, this.scene, this.camera, this.viewCamera);
     this.composer.render();
   }
 }
