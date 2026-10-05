@@ -2,6 +2,7 @@ import { MapBuilder } from './builder';
 import {
   AREA, BILLBOARDS, BRANDS, EXPRESSWAY, HEDGES, LOTS, POIS, RED_HOUSE, ROADS, START, XIMEN_SHELLS, XIMEN_SHOPS, XIMEN_SIGNS, XIMEN_SOLIDS,
 } from './taipei-data';
+import { mrtExit, parkedCars, streetFurniture, type Keep, type Shift } from './taipei-decor';
 import type { BlockStyle, Decor, MapDef, SignStyle } from './types';
 
 /**
@@ -90,7 +91,20 @@ function paving(b: B) {
       j1++;
     }
     for (let jj = j; jj <= j1; jj++) for (let ii = i; ii <= i1; ii++) done.add(`${ii},${jj}`);
-    boxAt(b, xs[i], zs[j], xs[i1 + 1], zs[j1 + 1], -0.35, KERB, 'slab', 0xb8b4ac);
+    boxAt(b, xs[i], zs[j], xs[i1 + 1], zs[j1 + 1], -0.35, KERB, 'paving', 0xd8d6d0);
+  }
+}
+
+/** Asphalt over every traffic carriageway (visual: the ground under it is the road). */
+function asphalt(b: B) {
+  for (const r of ROADS) {
+    if (r[12]) continue;
+    const c = carriageway(r);
+    const x0 = Math.max(c.x0, AREA.x0 - BACKDROP), x1 = Math.min(c.x1, AREA.x1 + BACKDROP), z0 = Math.max(c.z0, AREA.z0 - BACKDROP), z1 = Math.min(c.z1, AREA.z1 + BACKDROP);
+    if (x1 <= x0 || z1 <= z0) continue;
+    // Cross roads lie a few millimetres apart so their overlaps never flicker.
+    const top = r[3] === 'x' ? 0.004 : 0.008;
+    b.shape(X((x0 + x1) / 2), top - 0.02, Z((z0 + z1) / 2), x1 - x0, 0.02, z1 - z0, 'asphalt');
   }
 }
 
@@ -271,6 +285,7 @@ export function taipei(): MapDef {
   b.buildTerrain(4);
 
   paving(b);
+  asphalt(b);
   streets(b);
   expressway(b);
   for (const [x0, z0, x1, z1, top] of HEDGES) boxAt(b, x0, z0, x1, z1, MEDIAN, top, 'hedge');
@@ -292,6 +307,13 @@ export function taipei(): MapDef {
   b.point('D', 'Ximen Gateway 西門町牌樓', X(-757), KERB, Z(-184), 6);
   b.point('E', 'Emei St Stage 峨眉街', X(-757), KERB, Z(-207), 6);
   for (const [x, z] of [[-826, -253], [-757, -238], [-813, -207], [-770, -110], [-860.5, -206], [-715.5, -230]]) b.ammoCrate(X(x), floorAt(x, z), Z(z));
+
+  // ---- Dressing (taipei-decor.ts), kept clear of the spawns and crates ----------------------
+  const shift: Shift = { X, Z, ox: OX, oz: OZ };
+  const keep: Keep = [...b.spawns.map(p => [p.x, p.z, 1.4] as [number, number, number]), ...b.pickups.map(p => [p.x, p.z, 1.6] as [number, number, number])];
+  streetFurniture(b, shift, keep);
+  parkedCars(b, shift, keep);
+  mrtExit(b, shift, KERB);
 
   return b.build();
 }

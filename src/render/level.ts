@@ -6,6 +6,7 @@ import { LADDER_DIRS, terrainHeight, type Ladder, type Ramp, type Solid } from '
 import { fbm } from '../../shared/maps/builder';
 import type { BlockStyle, Decor, MapDef, RampStyle } from '../../shared/maps/types';
 import { rng } from '../../shared/math';
+import { addDressing } from './dressing';
 import { shieldMaterial, surfaceMaterial, terrainMaterial, type Theme } from './materials';
 
 const TEAM_COLORS = [new THREE.Color(0x3aa0ff), new THREE.Color(0xff4a3a)];
@@ -22,6 +23,11 @@ const LOOKS = {
   steel: { material: 'paint', uv: 2, color: 0x8c5236, ao: 0.78 },
   concrete: { material: 'steel', uv: 3, color: 0xd6d6d0, ao: 0.74 },
   rock: { material: 'rock', uv: 2.5, color: 0xffffff, ao: 0.8 },
+  // Taipei streets: square sidewalk tiles, asphalt, marble shop floors and white mosaic facade tiles.
+  paving: { material: 'sidewalk', uv: 2.2, color: 0xe4e2dc, ao: 0.95 },
+  asphalt: { material: 'asphalt', uv: 7, color: 0xb0b0b0, ao: 1 },
+  tile: { material: 'floortile', uv: 2.4, color: 0xf0ece4, ao: 0.95 },
+  mosaic: { material: 'facadetile', uv: 1.6, color: 0xf2efe8, ao: 0.8 },
 } as const;
 
 /** Static battlefield visuals built from shared map data (collision stays authoritative). */
@@ -60,15 +66,28 @@ export class LevelView {
       cobble: surfaceMaterial(assets, 'cobble'),
       paint: surfaceMaterial(assets, 'metalplate', { metalness: 0.35, normalScale: 0.5 }),
       hedge: surfaceMaterial(assets, 'moss', { color: 0x8fbf6a, normalScale: 1.6 }),
+      sidewalk: surfaceMaterial(assets, 'sidewalk', { normalScale: 0.7, color: 0x000000 }),
+      asphalt: surfaceMaterial(assets, 'asphalt', { normalScale: 0.8, color: 0x000000 }),
+      floortile: surfaceMaterial(assets, 'floortile', { normalScale: 0.4, roughness: 0.35 }),
+      facadetile: surfaceMaterial(assets, 'facadetile', { normalScale: 0.6 }),
       water: new THREE.MeshStandardMaterial({ color: 0x1e3c48, roughness: 0.06, metalness: 0.55, transparent: true, opacity: 0.84, depthWrite: false }),
       marking: new THREE.MeshStandardMaterial({ roughness: 0.75, vertexColors: true, polygonOffset: true, polygonOffsetFactor: -2, polygonOffsetUnits: -2 }),
     };
-    if (map.decor.some(d => d.kind === 'block' && d.style === 'facade')) this.materials.facade = facadeMaterial();
+    // The tile and asphalt photos are dark; lift them to street brightness.
+    (this.materials.sidewalk as THREE.MeshStandardMaterial).color.setScalar(2.1);
+    (this.materials.asphalt as THREE.MeshStandardMaterial).color.setScalar(1.5);
+    if (map.decor.some(d => (d.kind === 'block' || d.kind === 'shape') && d.style === 'facade')) this.materials.facade = facadeMaterial();
     const signs: SignDecor[] = [];
+    let shapes = 0;
     this.buildTerrain();
     map.decor.forEach(d => {
       switch (d.kind) {
         case 'block': this.block(map.solids[d.solid], d.style, d.solid, d.color); break;
+        case 'shape': {
+          const [minX, minY, minZ] = d.min, [maxX, maxY, maxZ] = d.max;
+          this.block({ minX, minY, minZ, maxX, maxY, maxZ, surface: 'concrete' }, d.style, 100000 + shapes++, d.color);
+          break;
+        }
         case 'cylinder': this.cylinder(d.x, d.y, d.z, d.radius, d.height, d.axis, d.style, d.color); break;
         case 'water': this.add('water', boxGeo(d.x, d.y - 0.01, d.z, d.w, 0.02, d.d)); break;
         case 'ball': this.ball(d.x, d.y, d.z, d.radius, d.style, d.color); break;
@@ -95,8 +114,13 @@ export class LevelView {
     this.flush();
     if (signs.length) this.group.add(signMesh(signs));
     if (!theme.urban) this.scatter();
-    this.horizon();
+    // Maps with a dressing set bring their own skyline in place of the generic mountain ring.
+    const dressed = map.decor.some(d => d.kind === 'dressing');
+    if (!dressed) this.horizon();
+    /** Resolves once the map's dressing sets and model instances are built (they load on demand). */
+    this.ready = addDressing(this.group, map.decor).catch(e => console.warn('dressing failed', e));
   }
+  readonly ready: Promise<void>;
 
   update(time: number) {
     for (const s of this.shields) s.uniforms.time.value = time;
@@ -170,7 +194,8 @@ export class LevelView {
     const cx = (s.minX + s.maxX) / 2, cy = (s.minY + s.maxY) / 2, cz = (s.minZ + s.maxZ) / 2;
     const r = rng(index * 977 + 13);
     switch (style) {
-      case 'brick': case 'plaster': case 'wood': case 'roof': case 'cobble': case 'slab': case 'steel': {
+      case 'brick': case 'plaster': case 'wood': case 'roof': case 'cobble': case 'slab': case 'steel':
+      case 'paving': case 'asphalt': case 'tile': case 'mosaic': {
         const look = LOOKS[style];
         const g = boxGeo(cx, cy, cz, w, h, d, 0, look.uv);
         tint(g, color ?? look.color, s.minY, h, look.ao);
