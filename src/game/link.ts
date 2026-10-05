@@ -34,6 +34,8 @@ export interface GameLink {
   status(): string;
   /** Online: career stats of the players who have played on this server, best first. */
   leaderboard?(): CareerStats[];
+  /** Online: our room's private code ('' = Quick Play) and size label. */
+  roomInfo?(): { code: string; size: string } | undefined;
   dispose(): void;
 }
 

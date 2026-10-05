@@ -463,6 +463,7 @@ describe('frame', () => {
     expect(pose.using).toBe(true); expect(pose.reloading).toBe(true); expect(pose.firing).toBe(true);
     expect(pose.x).toBeCloseTo(a.m.x, 1);
     expect(pose.health).toBe(Math.round(a.health));
+    expect(frame.poses[0].ammo).toBe(state.soldiers[0].weapon === 2 ? 0 : state.soldiers[0].ammo[state.soldiers[0].weapon as 0 | 1]);
     expect(frame.bodies[frame.bodies.length - 1].kind).toBe('grenade');
     expect(frame.shots[0].weapon).toBe('m110');
     expect(frame.shots[0].surface).toBe('concrete');

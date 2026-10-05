@@ -140,6 +140,8 @@ export class Game {
     this.buymenu.onClose = () => { this.input.clear(); void this.input.lock(); };
     this.input.canRelock = () => !this.buymenu.open && !this.hud.chatting && this.link.state()?.phase !== 'ended';
     if (me) this.player.spawnFrom(me);
+    const room = link.roomInfo?.();
+    if (room?.code) this.hud.toast(`Private room ${room.code} · ${room.size} — friends join with this code`, 12000);
     if (import.meta.env.DEV) Object.assign(window, { __game: this });
   }
 
@@ -341,7 +343,8 @@ export class Game {
     this.hudTimer -= dt; this.mapTimer -= dt;
     if (this.hudTimer <= 0) {
       this.hudTimer = 0.1;
-      this.hud.tick(this.player, state, me);
+      // Dead: the HUD shows the watched soldier's gun and magazine.
+      this.hud.tick(!this.player.alive && this.watched.alive ? this.watched : this.player, state, me);
       const free = !!state.config.freeBuy;
       const buyLeft = free ? -1 : Math.max(0, state.config.buyTime - state.roundClock);
       this.buymenu.update(me, buyWindow, buyLeft, free);
@@ -398,6 +401,7 @@ export class Game {
       const w = this.watched;
       if (w.team !== target.team || this.watchedId !== target.id) { w.team = target.team; this.watchedId = target.id; w.ads = 0; this.shownWeapon = ''; }
       w.alive = true; w.slot = target.weapon; w.weapons = target.weapons; w.attachments = target.attachments;
+      w.ammo = [...target.ammo]; w.reserve = [...target.reserve]; w.grenades = target.grenades;
       w.m = target.m; w.sprinting = target.sprint; w.using = target.using; w.binoculars = false; w.throwLeft = 0;
       w.reloadTotal = w.weapon.reload; w.reloadLeft = target.reloadLeft;
       w.ads = Math.max(0, Math.min(1, w.ads + (target.ads ? 1 : -1) * dt / w.weapon.adsTime));

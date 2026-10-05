@@ -1,7 +1,7 @@
 # Lawbreaker // Frontline
 
 Browser-first round-based team FPS modelled on BeGone (nplay): Elimination and Sabotage,
-cash and a store, attachments, Duel to Mega (12v12) servers. Read `README.md`
+cash and a store, attachments, 1v1 / 6v6 / 24v24 rooms. Read `README.md`
 for gameplay, architecture, asset attribution, known limits, and the demo script.
 Improve playable gunplay, map flow, animation, and multiplayer—not only the HUD.
 
@@ -38,8 +38,10 @@ Improve playable gunplay, map flow, animation, and multiplayer—not only the HU
 The rules follow BeGone (nplay): round-based Elimination and Sabotage (SWAT defends, Militia
 arms the bomb), first to 10 rounds, 4 s freeze and 20 s buy time, BeGone's cash awards, its
 weapons (knife, MP5, M4A1, M1014, M110, M249, M9A1, MP7, M67) and attachments with their exact
-stats. Solo (bots fill a chosen server size, Duel to Mega 12v12), Online (one match per database;
-map and mode rotate each match) and a Practice range. Maps have ammo crates; bases are padded to
+stats. Room sizes are 1v1, 6v6 and 24v24 (24v24 only on big maps: Meridian). Solo (bots fill
+the room), Online (one database holds many rooms: Quick Play fills public rooms of a size and
+rotates map and mode; private rooms take a 4-letter code; a room ticks only while humans are in it)
+and a Practice range. Maps have ammo crates; bases are padded to
 12 spawn slots. `shared/weapons.ts` and `shared/match/economy.ts` cite the BeGone numbers.
 
 Online damage, scores, cash, purchases, crates, rounds, the bomb, bots and chat are server-controlled. Human
@@ -90,7 +92,7 @@ spacetime generate --lang typescript --out-dir src/module_bindings --module-path
   validation/cooldowns. A successful build alone does not verify Online play.
 - Target 60 fps on M-series Macs, but do not claim it from software-rendered orb tests.
   Use the deploy screen's 30-second performance check (`/?bench`).
-- Known limits include one match per database, no full lag compensation, and observed
+- Known limits include all rooms sharing one database's reducer thread, no full lag compensation, and observed
   latency spikes/movement corrections. Do not present this as load-tested production.
 
 ## Git, environments, and release safety

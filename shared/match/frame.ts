@@ -9,7 +9,7 @@ import type { BombState, MatchEvent, MatchState, RoundPhase } from './state';
  * The server writes one frame row per tick, so a hundred soldiers cost one small row update per
  * client instead of hundreds of row updates. Positions are quantized to 2 cm, velocities to 1 cm/s.
  */
-export const FRAME_VERSION = 4;
+export const FRAME_VERSION = 5;
 
 const POS = 50;          // units per metre (2 cm)
 const VEL = 100;         // units per m/s
@@ -31,6 +31,8 @@ export interface FramePose {
   using: boolean;
   /** Slot in hand and the weapon in it. */
   weapon: Slot; weaponId: WeaponId;
+  /** Rounds in the magazine of the weapon in hand (spectators see it). */
+  ammo: number;
   health: number;
 }
 
@@ -43,7 +45,7 @@ export interface DecodedFrame extends FrameClock {
 }
 
 const HEADER = 1 + 4 + 4 * 2 + 1 + 2 + 1 + 1 + 1 + 2 + 2 + 2 + 2;
-const POSE = 22, BODY = 16, SHOT = 16;
+const POSE = 23, BODY = 16, SHOT = 16;
 const i16 = (v: number) => Math.max(-32768, Math.min(32767, Math.round(v)));
 const u8 = (v: number) => Math.max(0, Math.min(255, Math.round(v)));
 
@@ -79,6 +81,7 @@ export function encodeFrame(state: MatchState, shots: Extract<MatchEvent, { type
     v.setUint8(o + 20, u8(s.health));
     const held = s.weapon === 2 ? 'knife' : s.weapons[s.weapon];
     v.setUint8(o + 21, (Math.max(0, SHOT_WEAPONS.indexOf(held)) & 15) | (s.weapon << 4));
+    v.setUint8(o + 22, s.weapon === 2 ? 0 : u8(s.ammo[s.weapon]));
     o += POSE;
   }
   for (const b of bodies) {
@@ -123,7 +126,7 @@ export function decodeFrame(bytes: Uint8Array): DecodedFrame | undefined {
       alive: !!(flags & 1), grounded: !!(flags & 2), sprint: !!(flags & 4), ads: !!(flags & 8), slide: !!(flags & 16),
       using: !!(flags & 32), reloading: !!(flags & 64), firing: !!(flags & 128),
       weapon: ((v.getUint8(o + 21) >> 4) & 3) as Slot, weaponId: SHOT_WEAPONS[v.getUint8(o + 21) & 15] ?? 'mp5',
-      health: v.getUint8(o + 20),
+      health: v.getUint8(o + 20), ammo: v.getUint8(o + 22),
     });
   }
   const bodies: DecodedFrame['bodies'] = [];

@@ -13,12 +13,12 @@ runner (`bun` / `bunx`, never npm/npx).
 
 | Area | Implemented |
 | --- | --- |
-| Lobby | A BeGone-style server browser. **Solo**: pick the game mode, the map (a server row per map; Sabotage lists only maps with bomb sites), the server size, bot difficulty (Recruit / Veteran / Elite) and a team (SWAT, Militia or auto). **Online**: the configured SpacetimeDB server, whose map and mode are set by the server; join on either team. **Practice range**: any map, no bots, no round limit, the whole store free. Options: graphics preset, crosshair style, mouse sensitivity, field of view, effects and music volume, and the controls list. |
+| Lobby | A BeGone-style server browser. **Solo**: pick the game mode, the map (a server row per map; Sabotage lists only maps with bomb sites), the server size, bot difficulty (Recruit / Veteran / Elite) and a team (SWAT, Militia or auto). **Online**: *Quick Play* (the fullest public room of the chosen size, or a new one; map and mode rotate), *Private room* (pick size, mode, map and whether bots fill slots; you get a 4-letter code) or *Join by code* (also `?room=CODE`). **Practice range**: any map, no bots, no round limit, the whole store free. Options: graphics preset, crosshair style, mouse sensitivity, field of view, effects and music volume, and the controls list. |
 | Teams | **SWAT** (team 0, navy tactical kit) and **Militia** (team 1, desert and olive irregulars). In Sabotage Militia attacks and SWAT defends. No friendly fire. |
 | Rounds | 4 s freeze at round start (buy, no moving), the round, a 5 s round-over pause; first team to **10 round wins** takes the match, then 10 s on the result screen and a new match. Nobody respawns inside a round; everyone respawns at the next round start. Dead players spectate their killer immediately (RMB cycles players); their chat is hidden from the living. |
 | Elimination `[E]` | 120 s rounds. Kill the whole other team. If time runs out with both teams alive the round is a draw: it replays and nobody scores. When the last two players trade kills the team that killed last wins. |
 | Sabotage `[S]` | 90 s rounds (120 s on single-site maps). Militia holds **E** for 5 s at site A or B to arm the bomb (no moving, shooting or aiming while arming; crouching is allowed). Arming sets the clock to 40 s and the other site goes inert; from then SWAT can only win by disarming (E for 5 s) — killing every Militia no longer ends the round — and the bomb going off wins it for Militia. Before arming: all SWAT dead → Militia win; all Militia dead or time out → SWAT win. No draws. |
-| Server sizes | Duel 1v1 · Team Duel 2v2 · Mini 4v4 · Medium 6v6 · Large 8v8 · Mega 12v12. Bots fill every slot without a human. The Online server is Medium (6v6). |
+| Room sizes | Duel 1v1 · Squad 6v6 · War 24v24 (big maps only: Meridian, bases padded to 24 slots). Bots fill every slot without a human (private rooms can turn them off). |
 | Player | 100 health, no armor or regeneration within a round, fall damage, head/body/limb damage per weapon. Below 25 health the screen desaturates and a heartbeat plays that nearby players hear too. Stamina 100: sprinting drains 18/s (5 to start), a jump costs 20, it regenerates 18/s (24 crouched); at 30 or less you cannot sprint. Each weapon sets your move speed. |
 | Economy | See the table below. **B** opens the store inside your own base during the first 20 s of a round (freeze time included); dead players can buy for their next spawn. Weapons you own swap free during that window. Attachments can be bought anywhere, at any time. Weapons and attachments last the whole match and reset with a new one. Ammo crates on every map refill about half a magazine of the held weapon's reserve per use (E): the first use in a round costs $300, later ones are free. |
 | Gunplay | Hitscan with BeGone's per-weapon numbers: fire rate, magazine and reserve, reload and equip times, hip/zoomed accuracy and recoil, zoom and move speed. RMB is "Accuracy": hold to zoom through the fitted optic (iron sights 3.5×). The knife hits for 33 anywhere at about 2 m. The M1014 fires 14 pellets. The M67 has a 2.1 s fuse and 22 m radius. **Z** raises binoculars (10× zoom, no weapon). |
@@ -102,9 +102,16 @@ with spawn barriers only their own team can pass.
 
 `spacetimedb/src/index.ts` runs the **same** `shared/match` simulation as solo play, server-side:
 
-- One match per database. When a match ends the module moves to the next map in the rotation and
-  alternates Elimination and Sabotage (Sabotage only where the map has bomb sites). Bots fill every
-  slot not taken by a human.
+- Rooms: one database holds many rooms. The `match`, `clock` and `frame` rows are keyed by room id,
+  and soldiers, bodies, players, the roster and events carry a `room` column; soldier and body ids
+  come from a global `counter`. `quick_join(size)` puts the caller in the fullest public room of that
+  size (1, 6 or 24 per team) or opens one; `create_room` opens a private room with a 4-letter code and
+  the host's mode, map, size and bots; `join_room(code)` joins it (`join` is Quick Play 6v6 for older
+  clients). Each room has its own `tick_schedule` row while humans are in it and closes (rows and
+  schedule deleted) when the last one leaves, so idle rooms cost nothing. Public rooms move to the next
+  map their size plays and alternate Elimination and Sabotage after each match; private rooms replay
+  the host's choice. Clients subscribe to `match`, `player` and `profile`, then only their room's
+  `roster`, `frame` and `match_event` rows.
 - Player reducers only **queue** input: `report` overwrites the soldier's row in a private `inbox`
   (elapsed time accumulates for the movement budget) and `fire`, `grenade`, `reload_weapon`,
   `switch_slot`, `buy`, `buy_attachment` and `use_crate` append to a private `command` queue;
@@ -141,7 +148,8 @@ with spawn barriers only their own team can pass.
   client, report round trips of 6 / 9 / 12 ms (p50/p95/p99) and zero corrections. These are
   single-machine numbers, not a production load test.
 - Trust model and limits: movement is client-reported (validated, not simulated), hit detection is
-  shooter-favoured within tolerances (no full lag compensation), and one match per database.
+  shooter-favoured within tolerances (no full lag compensation), and every room shares one database
+  (reducers run one at a time), so very many busy rooms will need more databases.
 
 ## Run, test and develop
 
@@ -167,7 +175,7 @@ game and the match server. After changing the module, regenerate client bindings
 In Amp orbs, `.amp/services.yaml` declares both services (`amp orb services ensure`).
 
 Lobby URL flags: `?mode=offline|online|lab`, `&game=elimination|sabotage`,
-`&size=duel|teamduel|mini|medium|large|mega`, `&map=<id>`, `&team=0|1|auto`, `&skill=0.25…0.75`,
+`&size=duel|squad|war`, `&room=CODE` (Online: join a private room), `&map=<id>`, `&team=0|1|auto`, `&skill=0.25…0.75`,
 `&name=…`, `&autostart=1`. Choices are remembered per browser under `lawbreaker.*` in localStorage
 (`lawbreaker.crosshair` holds the crosshair style the HUD draws).
 
@@ -255,12 +263,12 @@ at most three dynamic point lights (pooled muzzle/explosion flashes), pooled eff
 use a crowd level of detail: off-screen soldiers are hidden and not animated; on screen, full
 animation and shadows within 30 m, half-rate animation to 70 m, quarter rate beyond. Remote gunfire
 beyond 110 m is not drawn and gunshot audio is limited to 85 m and six voices per frame. The largest
-BeGone server (Mega, 24 soldiers) is far lighter than the 100-soldier matches this engine was
+room (24v24, 48 soldiers) is lighter than the 100-soldier matches this engine was
 measured with (Solo 50v50 on Meridian: 59.9 fps average on an M3 Pro, Chrome, medium).
 
 **Measure it yourself:** click *Run the 30-second performance check* in the lobby options (or open
-`/?bench`, optionally `&map=frostline&quality=high&size=mega`). A scripted soldier patrols the map and
-fights through a solo Elimination match (Large 8v8 unless `size` says otherwise) for 30 s after a
+`/?bench`, optionally `&map=meridian&quality=high&size=war`). A scripted soldier patrols the map and
+fights through a solo Elimination match (6v6 unless `size` says otherwise) for 30 s after a
 warm-up, then a panel reports average fps, 1% low, frame-time median/p95/p99, frames slower than
 60 Hz, main-thread time per frame, hitches over 100 ms, shader compiles during the run, draw calls,
 triangles, resolution and the GPU string, with a verdict (met = average ≥ 58 fps and p95 ≤ 18.2 ms)
@@ -269,8 +277,8 @@ screens can exceed 60. The lobby also has Low / Medium / High graphics presets (
 
 ## Known limitations and what remains
 
-- One match per database: the Online lobby shows the one configured server, whose map and mode the
-  module rotates; there is no multi-server browser, custom servers, clans, vote kick or matchmaking.
+- Online has Quick Play and private rooms but no public room list, clans, vote kick or skill-based
+  matchmaking. All rooms share one database; capacity per database has been measured only locally.
 - No full lag compensation or server-side rewind for hit validation; very high latency can make
   moving targets harder to hit or let claims fail validation. Latency spikes and movement
   corrections have been observed.
@@ -287,7 +295,7 @@ screens can exceed 60. The lobby also has Low / Medium / High graphics presets (
 
 ## 60-second demo script — one continuous shot
 
-1. **0–6 s** — Lobby: choose *Solo*, **[S] Sabotage**, server size *Mini 4v4*, the *Ochre Quarter*
+1. **0–6 s** — Lobby: choose *Solo*, **[S] Sabotage**, room size *6v6*, the *Ochre Quarter*
    row in the server browser, team *Militia*. Click **Start match**.
 2. **6–16 s** — Freeze time: press **B** in your base. You start with $1,000 and the MP5 and M9A1;
    open *Attachments* and fit a **Reflex sight** to the MP5 ($800). Close the store.
