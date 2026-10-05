@@ -141,6 +141,16 @@ export class LocalPlayer {
     if (this.sinceThrow > 1.5 && this.throwLeft <= 0) this.grenades = s.grenades;
   }
 
+  /** In a vehicle: the seat carries us (set each frame with `seat`); no walking. */
+  riding = false;
+
+  /** Sit at a vehicle seat (feet position) with the vehicle's velocity. */
+  seat(p: Vec3, crouch: number, v: { vx: number; vy: number; vz: number }) {
+    this.m = { ...this.m, x: p.x, y: p.y, z: p.z, vx: v.vx, vy: v.vy, vz: v.vz, crouch, grounded: true, slideTime: 0, airTime: 0 };
+    this.prev = { x: p.x, y: p.y, z: p.z, crouch };
+    this.accumulator = 0; this.sprinting = false; this.landDip = 0; this.stepOffset = 0;
+  }
+
   /** Snap to the server's position after a rejected movement report. */
   correct(s: Soldier) { this.m = { ...this.m, x: s.m.x, y: s.m.y, z: s.m.z, vx: 0, vy: 0, vz: 0 }; this.prev = { x: s.m.x, y: s.m.y, z: s.m.z, crouch: this.m.crouch }; }
 
@@ -203,7 +213,7 @@ export class LocalPlayer {
     // Round-start freeze (and holding E on the bomb): look and aim, but stay put.
     if (this.frozen || this.using) { moveInput.forward = moveInput.strafe = 0; moveInput.jump = moveInput.sprint = false; }
     const wasSprinting = this.sprinting;
-    if (this.alive) {
+    if (this.alive && !this.riding) {
       this.accumulator += Math.min(dt, 0.1);
       while (this.accumulator >= STEP) {
         this.prev = { x: this.m.x, y: this.m.y, z: this.m.z, crouch: this.m.crouch };
@@ -213,7 +223,7 @@ export class LocalPlayer {
         this.accumulator -= STEP;
       }
     }
-    this.sprinting = this.alive && isSprinting(this.m, moveInput) && this.m.grounded;
+    this.sprinting = this.alive && !this.riding && isSprinting(this.m, moveInput) && this.m.grounded;
     if (result.move.jumped) this.stamina = Math.max(0, this.stamina - STAMINA.jump);
     if (this.sprinting && !wasSprinting) this.stamina = Math.max(0, this.stamina - STAMINA.sprintStart);
     this.stamina = clamp(this.stamina + (this.sprinting ? -STAMINA.sprint : this.m.crouch > 0.5 ? STAMINA.regenCrouched : STAMINA.regen) * dt, 0, STAMINA.max);
