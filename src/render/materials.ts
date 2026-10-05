@@ -42,6 +42,14 @@ export const THEMES: Record<ThemeId, Theme> = {
     sunColor: new THREE.Color(0xffc690), sunIntensity: 3.1, hemiSky: new THREE.Color(0xb4bed8), hemiGround: new THREE.Color(0x5e5a42), hemiIntensity: 1.25,
     planet: null, exposure: 1.0,
   },
+  // Dry midday over gravel, sparse grass and grey boulders (BeGone's Timbertown).
+  steppe: {
+    id: 'steppe', ground: 'dirt', rock: 'lichen', dirt: 'sand',
+    groundTint: new THREE.Color(1.0, 0.93, 0.8), rockTint: new THREE.Color(0.96, 0.95, 0.92), dirtTint: new THREE.Color(1.0, 0.93, 0.82),
+    skyTop: new THREE.Color(0x5b85b4), skyHorizon: new THREE.Color(0xd8d2c2), fog: new THREE.Color(0xcfc7b4), fogDensity: 0.0035,
+    sunColor: new THREE.Color(0xfff0d8), sunIntensity: 3.4, hemiSky: new THREE.Color(0xbcd0e6), hemiGround: new THREE.Color(0x7a6a50), hemiIntensity: 1.3,
+    planet: null, exposure: 1.0,
+  },
   // Blue hour over a walled garden: cool, soft light that still reads at range.
   twilight: {
     id: 'twilight', ground: 'moss', rock: 'lichen', dirt: 'path',

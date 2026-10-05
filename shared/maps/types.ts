@@ -1,8 +1,8 @@
 import type { Heightfield, Ramp, Solid } from '../collision';
 import type { Vec3 } from '../math';
 
-/** Dusk (low orange sun) and twilight (blue hour) light the BeGone maps. */
-export type ThemeId = 'desert' | 'snow' | 'forest' | 'dusk' | 'twilight';
+/** Dusk (low sun), twilight (blue hour) and steppe (dry midday) light the BeGone maps under Earth skies. */
+export type ThemeId = 'desert' | 'snow' | 'forest' | 'dusk' | 'twilight' | 'steppe';
 
 /** Visual treatment of a solid. Collision is identical regardless of style. */
 export type BlockStyle =
