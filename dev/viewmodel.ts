@@ -28,6 +28,14 @@ if (p.sprinting) { p.m.vx = 8; }
 const reload = Number(params.get('reload') ?? 0);
 if (reload) { p.reloadTotal = 2; p.reloadLeft = 2 * (1 - reload); }
 const vm = new ViewModel(assets, Number(params.get('team') ?? 0));
+// Sight line through the mounted optic (model space), for checking ADS alignment.
+if (only) info.textContent = `sight line ${assets.weapons.get(WEAPONS[only].model)!.userData.sightLine?.toFixed(3) ?? 'rig'}`;
+// ?center marks the screen centre, where the optic window must sit when aiming.
+if (params.has('center')) {
+  const dot = document.createElement('div');
+  dot.style.cssText = 'position:fixed;left:50%;top:50%;width:6px;height:6px;margin:-3px;border-radius:50%;background:#0f0;box-shadow:0 0 0 1px #000;z-index:9';
+  document.body.appendChild(dot);
+}
 r.viewCamera.add(vm.root);
 (window as any).__vm = vm;
 r.viewCamera.fov = 58 - p.ads * 10; r.viewCamera.updateProjectionMatrix();

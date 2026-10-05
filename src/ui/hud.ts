@@ -4,6 +4,7 @@ import type { MatchState, Soldier, Team } from '../../shared/match/state';
 import { TEAM_SHORT } from '../../shared/match/state';
 import { HEALTH, LOADOUTS, WEAPONS, type LoadoutId } from '../../shared/weapons';
 import type { LocalPlayer } from '../game/player';
+import { reticleFor } from '../render/optics';
 
 const TEAM_CSS = ['var(--aegis)', 'var(--crimson)'];
 const TEAM_HEX = ['#4aa8ff', '#ff5544'];
@@ -43,7 +44,7 @@ export class Hud {
       <div class="capture panel" data-k="capture" hidden><span data-k="captureText"></span><div class="track"><i data-k="captureBar"></i></div></div>
       <div class="markers" data-k="markers"></div>
       <div class="crosshair" data-k="cross"><i class="t"></i><i class="b"></i><i class="l"></i><i class="r"></i><i class="dot"></i></div>
-      <div class="reddot" data-k="reddot" hidden></div>
+      <div class="reticle" data-k="reticle" hidden><i></i></div>
       <div class="hitmarker" data-k="hit"><i></i><i></i><i></i><i></i></div>
       <div class="damage-ring" data-k="dmg"></div>
       <div class="vitals panel">
@@ -107,8 +108,10 @@ export class Hud {
     (cross.children[2] as HTMLElement).style.transform = `translateX(${-px - 9}px)`;
     (cross.children[3] as HTMLElement).style.transform = `translateX(${px}px)`;
     cross.classList.toggle('ads', p.ads > 0.6);
-    // Only the carbine and graviton models carry a reflex sight; the rest use iron sights or a scope.
-    this.el.reddot.hidden = !(p.ads > 0.85 && (p.weapon.id === 'carbine' || p.weapon.id === 'graviton'));
+    // The optic's reticle while aiming (snipers use the full-screen scope instead).
+    const reticle = reticleFor(p.weapon.id);
+    this.el.reticle.hidden = !(p.ads > 0.85 && reticle !== 'none');
+    if (this.el.reticle.dataset.kind !== reticle) this.el.reticle.dataset.kind = reticle;
     cross.classList.toggle('hidden', p.sprinting || p.reloading);
     this.hitTimer -= dt;
     if (this.hitTimer <= 0) this.el.hit.classList.remove('on', 'head', 'kill');

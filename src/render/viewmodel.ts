@@ -61,6 +61,8 @@ export class ViewModel {
   private rig = new THREE.Group();
   private gun = new THREE.Group();
   private models = new Map<WeaponId, THREE.Object3D>();
+  /** Sight line height per weapon: through its mounted optic (optics.ts) or the rig's iron/built-in sight. */
+  private sightLines = new Map<WeaponId, number>();
   private mags = new Map<string, THREE.Object3D>();
   private current: WeaponId = 'carbine';
   private arms: { root: THREE.Object3D; bones: Bones; bindPose: Map<string, THREE.Quaternion> };
@@ -87,6 +89,8 @@ export class ViewModel {
       model.visible = false;
       this.gun.add(model);
       this.models.set(id, model);
+      // rig.sight is measured from the grip point (the gun group is offset by -grip below).
+      this.sightLines.set(id, model.userData.sightLine !== undefined ? model.userData.sightLine - rig.grip.y : rig.sight);
     }
     for (const name of ['Gun_SMG_Ammo', 'Gun_Sniper_Ammo']) {
       const mag = assets.weapons.get(name)!.clone();
@@ -162,7 +166,7 @@ export class ViewModel {
     const breathe = Math.sin(this.time * 1.6) * 0.0022 * (1 - ads * 0.7);
 
     // ---- Base pose: hip -> ADS -> sprint ----
-    const adsPos = new THREE.Vector3(0, -rig.sight, rig.adsZ);
+    const adsPos = new THREE.Vector3(0, -this.sightLines.get(this.current)!, rig.adsZ);
     const pos = new THREE.Vector3().lerpVectors(rig.hip, adsPos, ads);
     let rx = 0.04 * (1 - ads), ry = 0.085 * (1 - ads), rz = 0.03 * (1 - ads);
     pos.x -= sprint * 0.02; pos.y -= sprint * 0.03; pos.z += sprint * 0.06;

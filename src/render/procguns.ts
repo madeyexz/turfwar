@@ -32,7 +32,7 @@ const tube = (r: number, len: number, sides = 10) => new THREE.CylinderGeometry(
 /** Ring facing down the barrel. */
 const ring = (r: number, t: number) => new THREE.TorusGeometry(r, t, 6, 18).rotateY(Math.PI / 2);
 
-/** S-8 Breacher: pump scattergun with a ghost-ring sight and a glowing front bead. */
+/** S-8 Breacher: pump scattergun with a glowing front bead (its holographic sight is mounted in optics.ts). */
 function scattergun() {
   const g = new THREE.Group();
   g.name = 'Gun_Scatter';
@@ -44,8 +44,6 @@ function scattergun() {
   part(g, box(0.2, 0.068, 0.082), accent, -0.4, 0.046);
   part(g, box(0.06, 0.07, 0.07), METAL, -0.71, 0.095);
   part(g, box(0.012, 0.026, 0.012), mat(0xffb35a, 0.4, 0, 0xff8a2a), -0.7, 0.14);
-  part(g, ring(0.022, 0.0055), METAL, 0.12, 0.152);
-  part(g, box(0.02, 0.03, 0.016), METAL, 0.12, 0.122);
   part(g, box(0.055, 0.13, 0.045), POLYMER, 0.09, -0.04, 0, 0.3);
   part(g, box(0.24, 0.085, 0.05), POLYMER, 0.32, 0.03, 0, -0.08);
   part(g, box(0.025, 0.11, 0.056), METAL, 0.445, 0.02);
