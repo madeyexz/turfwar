@@ -19,6 +19,7 @@ const r = new Renderer(document.body, QUALITY[(params.get('q') as 'medium') ?? '
 r.setTheme(theme, map.sun);
 const level = new LevelView(assets, map, theme);
 r.scene.add(level.group);
+(window as any).__scene = r.scene;
 const crates = new CratesView(assets, map.pickups);
 const sites = new BombSitesView(map);
 r.scene.add(crates.group, sites.group);
@@ -37,13 +38,14 @@ const near = params.has('crate') ? 0.5 : 1;
 if (focus) { r.camera.position.set(focus.x + 2.2 * near, focus.y + 1.8 * near, focus.z + 2.6 * near); r.camera.lookAt(focus.x, focus.y + 0.3, focus.z); }
 if (params.get('fov')) { r.camera.fov = Number(params.get('fov')); r.camera.updateProjectionMatrix(); }
 if (params.get('cut')) r.renderer.clippingPlanes = [new THREE.Plane(new THREE.Vector3(0, -1, 0), Number(params.get('cut')))];
-let frames = 0; const start = performance.now();
+let frames = 0, dressed = false; const start = performance.now();
+void level.ready.then(() => { dressed = true; });
 r.renderer.setAnimationLoop(() => {
   const t = (performance.now() - start) / 1000;
   level.update(t);
   crates.update(t);
   sites.update(t, bomb, true);
   r.render(t);
-  if (++frames === 3) (window as any).__ready = 1;
+  if (++frames >= 3 && dressed) (window as any).__ready = 1;
   if (frames % 30 === 0) info.textContent = `${(frames / t).toFixed(1)} fps  calls ${r.renderer.info.render.calls} tris ${r.renderer.info.render.triangles}`;
 });

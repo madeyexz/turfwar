@@ -14,7 +14,7 @@ export interface Assets {
 }
 
 const BASE = import.meta.env.BASE_URL + 'assets/';
-const TEXTURE_SETS = ['sand', 'cliff', 'dirt', 'snow', 'icerock', 'moss', 'lichen', 'path', 'concrete', 'metalplate', 'container', 'brick', 'planks', 'corrugated', 'plaster', 'cobble'];
+const TEXTURE_SETS = ['sand', 'cliff', 'dirt', 'snow', 'icerock', 'moss', 'lichen', 'path', 'concrete', 'metalplate', 'container', 'brick', 'planks', 'corrugated', 'plaster', 'cobble', 'asphalt', 'sidewalk', 'floortile', 'facadetile'];
 
 export async function loadAssets(onProgress: (fraction: number) => void): Promise<Assets> {
   const manager = new THREE.LoadingManager();

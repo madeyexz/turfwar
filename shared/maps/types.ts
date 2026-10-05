@@ -34,6 +34,12 @@ export type BlockStyle =
   | 'facade'      // city building: rendered wall with a grid of windows (some lit), tinted per block
   | 'curtain'     // glass curtain wall: tinted panels between mullions, office floors lit at night
   | 'neon'        // self-lit strip, screen or lamp (its colour is the light's; bloom picks it up)
+  | 'paving'      // square sidewalk tiles
+  | 'asphalt'     // road surface
+  | 'tile'        // polished shop / station floor tiles
+  | 'mosaic'      // small white facade tiles of Taipei walk-ups, tinted per block
+  | 'light'       // a lit ceiling panel (decorative)
+  | 'painted'     // smooth painted surface (shop fittings, ceilings), tinted per block
   | 'invisible';
 
 /** Stairs and plain ramps are walkways; 'roof' draws a corrugated pitched-roof plane. */
@@ -50,11 +56,12 @@ export interface SpawnDef { team: 0 | 1; x: number; y: number; z: number; yaw: n
 
 export type Decor =
   | { kind: 'block'; solid: number; style: BlockStyle; color?: number }
-  /**
-   * Cylinder resting on y, upright or lying along x/z (silos, tanks, pipes); collision comes from boxes placed with it.
-   * An upright one may taper to `top` (its top radius).
-   */
-  | { kind: 'cylinder'; x: number; y: number; z: number; radius: number; height: number; axis: 'x' | 'y' | 'z'; style: BlockStyle; color?: number; top?: number }
+  /** A block drawn like a solid's but with no collision: trims, frames and facade details. */
+  | { kind: 'shape'; min: [number, number, number]; max: [number, number, number]; style: BlockStyle; color?: number }
+  /** Cylinder resting on y, upright or lying along x/z (silos, tanks, pipes); collision comes from boxes placed with it. */
+  | { kind: 'cylinder'; x: number; y: number; z: number; radius: number; height: number; axis: 'x' | 'y' | 'z'; style: BlockStyle; color?: number;
+      /** Upright prisms: number of sides (flat faces square to the axes) and the radius at the top (a frustum). */
+      sides?: number; top?: number }
   /** Decorative box (no collision) centred on x/z with its base at y: mullions, fins, trims and anything out of reach. */
   | { kind: 'detail'; x: number; y: number; z: number; w: number; h: number; d: number; style: BlockStyle; color?: number }
   /**
@@ -88,7 +95,17 @@ export type Decor =
    */
   | { kind: 'sign'; style: SignStyle; x: number; y: number; z: number; rotY: number; w: number; h: number; text: string; sub?: string; bg: string; fg: string }
   /** Road paint (lane lines, crossings): a flat w × d quad at height y (decorative). */
-  | { kind: 'marking'; x: number; y: number; z: number; w: number; d: number; color: number };
+  | { kind: 'marking'; x: number; y: number; z: number; w: number; d: number; color: number }
+  /**
+   * A dressing set the renderer loads on demand (src/render/dressing.ts): street furniture and the
+   * skyline past the map, in its own coordinates less (x, z). Purely visual; its colliders are solids.
+   */
+  | { kind: 'dressing'; set: string; x: number; z: number; cut?: number[]; clear?: number[] }
+  /**
+   * Instances of a renderer model (parked cars and taxis, …): rows of x, y, z, heading, scale, roll,
+   * colour, extra. Decorative; colliders come from boxes placed with them.
+   */
+  | { kind: 'instances'; model: string; data: number[] };
 
 export type SignStyle = 'board' | 'blade' | 'billboard' | 'gate' | 'screen' | 'marquee';
 

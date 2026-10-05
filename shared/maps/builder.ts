@@ -129,6 +129,12 @@ export class MapBuilder {
     return this.solids.length - 1;
   }
 
+  /** Visual-only block centred at (x, z), bottom at y: details that collision boxes elsewhere stand in for. */
+  shape(x: number, y: number, z: number, w: number, h: number, d: number, style: BlockStyle, color?: number) {
+    const cx = this.tx(x), cz = this.tz(z);
+    this.decor.push({ kind: 'shape', min: [cx - w / 2, y, cz - d / 2], max: [cx + w / 2, y + h, cz + d / 2], style, ...(color === undefined ? {} : { color }) });
+  }
+
   /** Ramp rising toward local direction dir (0:+X 1:+Z 2:-X 3:-Z). */
   ramp(x: number, z: number, w: number, d: number, y0: number, y1: number, dir: 0 | 1 | 2 | 3, style: RampStyle = 'ramp') {
     const cx = this.tx(x), cz = this.tz(z);
@@ -386,7 +392,7 @@ function surfaceFor(style: BlockStyle): Surface {
   switch (style) {
     case 'concrete': case 'pillar': case 'sandstone': return 'concrete';
     // Masonry and timber both throw up dust and splinters like concrete.
-    case 'brick': case 'plaster': case 'cobble': case 'slab': case 'wood': case 'crate': return 'concrete';
+    case 'brick': case 'plaster': case 'cobble': case 'slab': case 'wood': case 'crate': case 'paving': case 'asphalt': case 'tile': case 'mosaic': case 'painted': return 'concrete';
     case 'hedge': return 'dirt';
     case 'facade': return 'concrete';
     case 'rock': return 'rock';
