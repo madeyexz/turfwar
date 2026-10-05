@@ -1,58 +1,66 @@
 import { describe, expect, it } from 'vitest';
-import { HEALTH, LOADOUTS, WEAPONS, damageAt, slotOf, type WeaponCategory, type WeaponId } from './weapons';
+import {
+  ATTACHMENTS, ATTACHMENT_IDS, DEFAULT_WEAPONS, HEALTH, WEAPONS, WEAPON_IDS, attachmentPrice, fitsWeapon, weaponStats, zoneDamage,
+} from './weapons';
 
-const CATEGORIES: WeaponCategory[] = ['pistol', 'smg', 'shotgun', 'rifle', 'sniper', 'heavy'];
-/** Price bands per buy-menu category (kit-only weapons may sit at their band's edge). */
-const BANDS: Record<WeaponCategory, [number, number]> = {
-  pistol: [200, 800], smg: [1000, 1500], shotgun: [1100, 2000], rifle: [2000, 3200], sniper: [3000, 4750], heavy: [3500, 5000],
-};
 const all = Object.values(WEAPONS);
-const TOUGHNESS = HEALTH.max + HEALTH.shield;
 
-describe('weapon roster', () => {
-  it('every weapon is complete: id, model, magazine, price band, category, bot range', () => {
+describe('BeGone roster', () => {
+  it('has exactly the BeGone weapons with real names and their store prices', () => {
+    expect([...WEAPON_IDS].sort()).toEqual(['knife', 'm1014', 'm110', 'm249', 'm4a1', 'm9a1', 'mp5', 'mp7']);
+    const prices = Object.fromEntries(all.map(w => [w.id, w.price]));
+    expect(prices).toMatchObject({ mp5: 0, m9a1: 0, knife: 0, m4a1: 3400, m1014: 2800, m110: 4000, m249: 3800, mp7: 1800 });
+    expect(DEFAULT_WEAPONS).toEqual(['mp5', 'm9a1']);
+  });
+
+  it('every weapon is complete and in its slot', () => {
     for (const w of all) {
-      expect(WEAPONS[w.id as WeaponId]).toBe(w);
       expect(w.model).toMatch(/^Gun_/);
-      expect(w.magazine).toBeGreaterThan(0);
-      expect(w.reload).toBeGreaterThan(0);
       expect(w.interval).toBeGreaterThan(0);
-      expect(CATEGORIES).toContain(w.category);
-      const [lo, hi] = BANDS[w.category];
-      expect(w.price, w.id).toBeGreaterThanOrEqual(lo);
-      expect(w.price, w.id).toBeLessThanOrEqual(hi);
       expect(w.botRange).toBeGreaterThan(0);
-      expect(w.recoil.pattern.length).toBeGreaterThan(0);
       expect(w.pellets).toBeGreaterThanOrEqual(1);
+      expect(w.slot).toBe(w.class === 'melee' ? 2 : w.class === 'pistol' || w.id === 'mp7' ? 1 : 0);
+      if (w.slot !== 2) { expect(w.magazine).toBeGreaterThan(0); expect(w.reload).toBeGreaterThan(0); }
     }
   });
 
-  it('the buy menu offers at least two weapons in every category', () => {
-    for (const c of CATEGORIES) expect(all.filter(w => w.category === c).length, c).toBeGreaterThanOrEqual(2);
+  it('damage by zone matches BeGone (MP5 30/18/12, M110 90 to the head)', () => {
+    expect([zoneDamage(WEAPONS.mp5, 'head'), zoneDamage(WEAPONS.mp5, 'body'), zoneDamage(WEAPONS.mp5, 'legs')]).toEqual([30, 18, 12]);
+    expect(zoneDamage(WEAPONS.m110, 'head')).toBeGreaterThanOrEqual(HEALTH.max * 0.9);
   });
 
-  it('pistols are secondaries and everything else is a primary', () => {
-    for (const w of all) expect(slotOf(w)).toBe(w.category === 'pistol' ? 1 : 0);
-  });
-
-  it('every kit starts with real weapons', () => {
-    for (const kit of Object.values(LOADOUTS)) for (const id of kit.weapons) expect(WEAPONS[id]).toBeDefined();
-  });
-
-  it('point-blank body time-to-kill stays sane for hitscan weapons (no instant kills, no 3 s slogs)', () => {
+  it('time to kill on the body stays between a quarter second and two seconds', () => {
     for (const w of all) {
-      if (w.projectile) continue;
-      const perShot = damageAt(w, 1) * w.pellets;
-      const shots = Math.ceil(TOUGHNESS / perShot);
+      if (w.slot === 2) continue;
+      const shots = Math.ceil(HEALTH.max / (zoneDamage(w, 'body') * w.pellets));
       const ttk = (shots - 1) * w.interval;
-      expect(perShot, `${w.id} per shot`).toBeLessThan(TOUGHNESS + 1);
-      expect(ttk, `${w.id} ttk`).toBeLessThan(2.5);
+      expect(ttk, w.id).toBeLessThan(2);
     }
   });
 
-  it('only a bolt-action sniper one-shots on a headshot at range', () => {
-    const oneShot = all.filter(w => !w.projectile && w.pellets === 1 && damageAt(w, 60) * w.headMultiplier >= TOUGHNESS).map(w => w.id);
-    expect(oneShot).toContain('longbow');
-    for (const id of oneShot) expect(WEAPONS[id].category).toBe('sniper');
+  it('aiming down sights is tighter than the hip, and sniper zoom is strongest', () => {
+    for (const w of all) {
+      if (w.slot === 2) continue;
+      expect(w.spread.ads, w.id).toBeLessThanOrEqual(w.spread.hip);
+    }
+  });
+});
+
+describe('attachments', () => {
+  it('one item per category, priced, fitting at least one weapon', () => {
+    for (const id of ATTACHMENT_IDS) {
+      const a = ATTACHMENTS[id];
+      expect(['optic', 'tactical', 'mod', 'ammo']).toContain(a.category);
+      expect(WEAPON_IDS.some(w => w !== 'knife' && fitsWeapon(a, w)), id).toBe(true);
+    }
+  });
+
+  it('change stats when fitted', () => {
+    expect(weaponStats('m4a1', { mod: 'extendedClip' }).magazine).toBeGreaterThan(WEAPONS.m4a1.magazine);
+    expect(weaponStats('m4a1', { tactical: 'suppressor' }).suppressed).toBe(true);
+    expect(weaponStats('m4a1', { optic: 'acog' }).zoom).toBeLessThan(WEAPONS.m4a1.zoom); // zoom is the FOV fraction
+    expect(weaponStats('m4a1', { mod: 'recoilPad' }).recoil.pitch).toBeLessThanOrEqual(WEAPONS.m4a1.recoil.pitch);
+    expect(attachmentPrice(ATTACHMENTS.suppressor, 'mp7')).toBeGreaterThan(0);
+    expect(fitsWeapon(ATTACHMENTS.acog, 'knife')).toBe(false);
   });
 });

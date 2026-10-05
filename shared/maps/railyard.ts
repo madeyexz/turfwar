@@ -42,8 +42,8 @@ export function railyard(): MapDef {
     id: 'railyard', name: 'Railyard', region: 'DESERT TERMINUS / FREIGHT YARD',
     description: 'Four tracks of boxcars, twin depots, footbridges and a turntable plaza.',
     theme: 'desert', halfX: HALF_X, halfZ: HALF_Z, seed: 23, roll: 0, ridge: 0,
+    sabotage: { sites: ['B'], attackerSpawn: 1 },
     sun: { x: 0.5, y: 0.66, z: -0.4 },
-    teamSize: 8,
     // Flat ballast inside the fences, rising into embankments past the bounds.
     ground: (x, z) => { const e = Math.max(Math.abs(x) - 72, Math.abs(z) - 52); return e > 0 ? Math.min(14, e * 1.2) : 0; },
   });
@@ -181,12 +181,8 @@ export function railyard(): MapDef {
     b.box(-36.5, 0, -53, 71, 2.4, 0.3, 'wallDark');
     b.box(-36.5, 0, 53, 71, 2.4, 0.3, 'wallDark');
 
-    // ---- Pickups ----
-    b.pickup(-17, depot.top, 40, 'lancer', 45);                  // exposed on the depot roof
-    b.pickup(-21, 0, 33, 'scatter', 35);                         // depot ground floor
-    b.pickup(-36, 5.5, 14, 'stinger', 30);                       // middle of the footbridge
-    b.pickup(-25, 0, -4.5, 'ammo', 20);                          // outside the shed's east end
-    b.pickup(-14, 0, 15, 'armor', 40);                           // south lane by the turntable
+    // ---- Ammo crates ----
+    b.ammoCrate(-25, 0, -4.5);                          // outside the shed's east end
   });
 
   return b.build();

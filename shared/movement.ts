@@ -48,6 +48,8 @@ export interface MoveInput {
   crouch: boolean;
   sprint: boolean;
   ads: boolean;
+  /** Speed multiplier from the weapon in hand and attachments (BeGone movement %; default 1). */
+  speed?: number;
 }
 
 export interface MoveEvents { jumped: boolean; landed: number; slideStarted: boolean; stepped: number }
@@ -98,6 +100,7 @@ export function stepMovement(world: CollisionWorld, s: MoveState, input: MoveInp
   let maxSpeed = sprinting ? MOVE.sprint : input.ads ? MOVE.ads : MOVE.walk;
   if (s.crouch > 0) maxSpeed = Math.min(maxSpeed, maxSpeed + (MOVE.crouch * (input.ads ? 0.85 : 1) - maxSpeed) * s.crouch);
   if (fx < -0.1) maxSpeed *= MOVE.backward;
+  maxSpeed *= input.speed ?? 1;
 
   if (s.grounded && s.slideTime > 0) {
     // Sliding: low friction, light steering only.

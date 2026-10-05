@@ -31,8 +31,8 @@ export interface BuilderOptions {
   sun: { x: number; y: number; z: number };
   /** Hand-authored base ground; replaces the mirrored noise and boundary ridges. */
   ground?: (x: number, z: number) => number;
-  /** Soldiers per team the layout is built for (see MapDef.teamSize). */
-  teamSize?: number;
+  /** Sabotage bomb sites and the attacking base (see MapDef.sabotage). */
+  sabotage?: MapDef['sabotage'];
 }
 
 /**
@@ -155,15 +155,13 @@ export class MapBuilder {
     this.points.push({ id, name, x: this.tx(x), y, z: this.tz(z), radius });
   }
 
-  spawn(team: 0 | 1, x: number, y: number, z: number, yaw: number, point?: PointId) {
-    const slot: SpawnDef = { team: this.team(team), x: this.tx(x), y, z: this.tz(z), yaw: this.rot(yaw) };
-    if (point) slot.point = point;
-    this.spawns.push(slot);
+  spawn(team: 0 | 1, x: number, y: number, z: number, yaw: number) {
+    this.spawns.push({ team: this.team(team), x: this.tx(x), y, z: this.tz(z), yaw: this.rot(yaw) });
   }
 
-  /** Pickup resting on the floor at (x, z); `y` is the floor height (or 'ground'). */
-  pickup(x: number, y: number | 'ground', z: number, item: PickupDef['item'], respawn = 30) {
-    this.pickups.push({ x: this.tx(x), y: y === 'ground' ? this.ground(x, z) : y, z: this.tz(z), item, respawn });
+  /** Ammo crate standing on the floor at (x, z); `y` is the floor height (or 'ground'). */
+  ammoCrate(x: number, y: number | 'ground', z: number) {
+    this.pickups.push({ x: this.tx(x), y: y === 'ground' ? this.ground(x, z) : y, z: this.tz(z), item: 'ammo', respawn: 0 });
   }
 
   raw(decor: Decor) { this.decor.push(decor); }
@@ -263,7 +261,7 @@ export class MapBuilder {
       bounds: { minX: -o.halfX, maxX: o.halfX, minZ: -o.halfZ, maxZ: o.halfZ },
       terrain: this.terrain, solids: this.solids, ramps: this.ramps, points: this.points, spawns: this.spawns,
       decor: this.decor, sun: o.sun,
-      ...(o.teamSize ? { teamSize: o.teamSize } : {}),
+      ...(o.sabotage ? { sabotage: o.sabotage } : {}),
       ...(this.pickups.length ? { pickups: this.pickups } : {}),
     };
   }

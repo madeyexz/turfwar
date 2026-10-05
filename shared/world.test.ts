@@ -21,10 +21,4 @@ describe('thrown bodies', () => {
     expect(Math.hypot(b.vx, b.vz)).toBeLessThan(0.5);
   });
 
-  it('graviton charges stop dead on contact and spend their fuse', () => {
-    const b = body('charge', 0, 2, 0, 0, -10, 0);
-    for (let i = 0; i < 60; i++) stepBodies([b], PHYSICS_STEP, flat);
-    expect(b.timer).toBe(0);
-    expect(b.vx === 0 && b.vy === 0 && b.vz === 0).toBe(true);
-  });
 });

@@ -26,10 +26,61 @@ export function loadMap(id: string): LoadedMap {
     const factory = factories[id];
     if (!factory) throw new Error(`Unknown map ${id}`);
     const def = factory();
-    loaded = { def, world: new CollisionWorld(def.solids, def.ramps, def.terrain, def.bounds) };
+    const world = new CollisionWorld(def.solids, def.ramps, def.terrain, def.bounds);
+    furnishBases(def, world);
+    loaded = { def, world };
     cache.set(id, loaded);
   }
   return loaded;
+}
+
+/** Spawn slots each base needs: a Mega server is 12 a side. */
+export const BASE_SLOTS = 12;
+
+/**
+ * Every round deploys the whole team in its base at once, so each base needs room for a Mega
+ * server, plus an ammo crate. Maps built for fewer slots get extra ones on clear, level floor
+ * next to their own (deterministic, so Solo and the server agree).
+ */
+function furnishBases(def: MapDef, world: CollisionWorld) {
+  const fits = (x: number, y: number, z: number, taken: { x: number; z: number }[], gap: number) => {
+    const b = def.bounds;
+    if (x < b.minX + 2 || x > b.maxX - 2 || z < b.minZ + 2 || z > b.maxZ - 2) return undefined;
+    const floor = world.groundHeight(x, z, y + 0.6, 0.35);
+    if (Math.abs(floor - y) > 0.45) return undefined;
+    if (world.overlapsSolid({ x, y: floor + 0.05, z }, 0.45, 1.7)) return undefined;
+    if (taken.some(p => Math.hypot(p.x - x, p.z - z) < gap)) return undefined;
+    return floor;
+  };
+  const rings = [1.8, 3.4, 5];
+  for (const team of [0, 1] as const) {
+    const own = def.spawns.filter(s => s.team === team);
+    if (!own.length) continue;
+    const taken = def.spawns.map(s => ({ x: s.x, z: s.z }));
+    for (const r of rings) for (let k = 0; k < 8 && own.length < BASE_SLOTS; k++) {
+      for (const base of own.slice()) {
+        if (own.length >= BASE_SLOTS) break;
+        const a = (k / 8) * Math.PI * 2;
+        const x = base.x + Math.cos(a) * r, z = base.z + Math.sin(a) * r;
+        const y = fits(x, base.y, z, taken, 1.5);
+        if (y === undefined) continue;
+        const slot = { team, x, y, z, yaw: base.yaw };
+        def.spawns.push(slot); own.push(slot); taken.push(slot);
+      }
+    }
+    const cx = own.reduce((a, s) => a + s.x, 0) / own.length, cz = own.reduce((a, s) => a + s.z, 0) / own.length;
+    def.pickups ??= [];
+    if (def.pickups.some(p => Math.hypot(p.x - cx, p.z - cz) < 20)) continue;
+    // A crate a few metres from the slots, so it never blocks a deploying soldier.
+    search: for (const r of [3, 4.5, 6]) for (const base of own) for (let k = 0; k < 8; k++) {
+      const a = (k / 8) * Math.PI * 2;
+      const x = base.x + Math.cos(a) * r, z = base.z + Math.sin(a) * r;
+      const y = fits(x, base.y, z, taken, 2.2);
+      if (y === undefined) continue;
+      def.pickups.push({ x, y, z, item: 'ammo', respawn: 0 });
+      break search;
+    }
+  }
 }
 
 /** Navigation is built lazily: only bot hosts (offline client, server module) need it. */
@@ -42,7 +93,6 @@ export function loadNav(id: string): NavGraph {
 export function mapSummaries() {
   return MAP_IDS.map(id => {
     const d = loadMap(id).def;
-    // Maps without their own size use the default skirmish size (6 a side).
-    return { id, name: d.name, region: d.region, description: d.description, theme: d.theme, teamSize: d.teamSize ?? 6, flags: d.points.length };
+    return { id, name: d.name, region: d.region, description: d.description, theme: d.theme, sites: d.sabotage?.sites.length ?? 0 };
   });
 }

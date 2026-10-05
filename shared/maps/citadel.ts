@@ -25,7 +25,8 @@ export function citadelKeep(): MapDef {
   const b = new MapBuilder({
     id: 'citadel', name: 'Citadel Keep', region: 'VERDANT HIGHLANDS / HILLTOP FORTRESS',
     description: 'Hilltop castle: rampart walks, twin keeps over the inner courtyard, gatehouse barbicans and an open outer bailey.',
-    theme: 'forest', halfX: 70, halfZ: 70, seed: 23, roll: 0.8, ridge: 12, teamSize: 8,
+    theme: 'forest', halfX: 70, halfZ: 70, seed: 23, roll: 0.8, ridge: 12,
+    sabotage: { sites: ['B'], attackerSpawn: 1 },
     sun: { x: -0.5, y: 0.66, z: 0.4 },
   });
 
@@ -193,12 +194,8 @@ export function citadelKeep(): MapDef {
     b.solidProp('Prop_Crate_Large', -22, 'ground', 52, 0.3, 1.9, 1.3, 1.9);
     for (const [x, z, s, v] of [[-50, 26, 1, 1], [-46, 46, 1.2, 0], [-22, 60, 1.1, 2], [-8, 36, 0.9, 1], [-58, 54, 1, 0], [-34, 58, 1.1, 1]]) b.tree(x, z, s, v);
 
-    // ---- Pickups ----
-    b.pickup(-23.4, top, -23.4, 'lancer', 45);           // exposed bastion top
-    b.pickup(-9, roof, -8, 'graviton', 45);              // keep roof over the courtyard
-    b.pickup(-18, P, -22.4, 'scatter', 35);              // north gallery corridor
-    b.pickup(-42, P, 8.5, 'ammo', 20);                   // barbican, off the point
-    b.pickup(-16, 'ground', -36, 'armor', 40);           // north bailey flank
+    // ---- Ammo crates ----
+    b.ammoCrate(-42, P, 8.5);                   // barbican, off the point
   });
 
   return b.build();

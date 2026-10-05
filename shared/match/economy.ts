@@ -1,131 +1,174 @@
-import { ECONOMY, GRENADE, HEALTH, LOADOUTS, WEAPONS, slotOf, type LoadoutId, type WeaponDef, type WeaponId } from '../weapons';
 import type { MapDef } from '../maps/types';
-import type { MatchState, Soldier } from './state';
+import {
+  ATTACHMENTS, DEFAULT_WEAPONS, GRENADE, HIGH_EXPLOSIVE, WEAPONS, attachmentPrice, fitsWeapon, weaponStats,
+  type AttachmentId, type WeaponDef, type WeaponId,
+} from '../weapons';
+import type { MatchState, RoundStats, Soldier, Team } from './state';
 
 /**
- * Credits and gear: soldiers earn credits for kills and captures, spend them in the buy
- * menu on weapons that last until death, and swap weapons from pickups placed on the map. The same
- * rules run in Solo and on the server, so every purchase and pickup is validated there.
+ * BeGone's cash and store ([W:Cash], v1.8+): credits come from kills, assists, headshots, round
+ * results and the bomb; weapons and attachments bought with B last for the whole match, owned
+ * weapons swap in free during buy time, and ammo crates restock half a magazine. Shared by Solo
+ * and the server, so every purchase is validated there.
  */
-export type BuyItem = WeaponId | 'grenade';
+export const CASH = {
+  matchBonus: 1000, max: 16000,
+  kill: 500, grenadeKill: 900, knifeKill: 600, firstKill: 300, lastEnemy: 300,
+  multiKill: 300, multiKillWindow: 4, streakEvery: 5, streak: 100,
+  assist: 200, assistWindow: 3, trade: 100, firstBlood: 300, headshot: 100, headshotCap: 3,
+  roundWin: 500, survivor: 200, lastStanding: 300, lossBonus: 500, lossBonusAfter: 3,
+  loyalty: 1000, loyaltyEvery: 5, bomb: 500, crate: 300,
+};
 
-/** Distance (m) within which a weapon pickup can be taken with E, or ammo/armor is collected. */
-export const PICKUP_REACH = 2.2;
+export type BuyItem = WeaponId | 'grenade' | 'highExplosive';
 
-export const kitWeapons = (loadout: LoadoutId): [WeaponId, WeaponId] => [...LOADOUTS[loadout].weapons];
-const spare = (w: WeaponDef) => w.magazine * ECONOMY.spareMags;
+/** Distance (m) within which an ammo crate can be used. */
+export const CRATE_REACH = 2.4;
 
-/** Put `id` into its slot with a full magazine and spare ammo, and bring it up. */
-export function equip(s: Soldier, id: WeaponId) {
-  const w = WEAPONS[id], slot = slotOf(w);
-  s.weapons[slot] = id;
-  s.ammo[slot] = w.magazine;
-  s.reserve[slot] = spare(w);
-  s.weapon = slot; s.reloadLeft = 0; s.switchLeft = w.equipTime;
+export const newRoundStats = (): RoundStats => ({ kills: 0, streak: 0, lastKillAt: -99, chain: 0, lastVictim: -1, hits: [], headshots: {}, damage: 0, crate: false });
+
+/** Effective stats of the weapon in a slot, with its attachments. */
+export function statsOf(s: Soldier, slot = s.weapon): WeaponDef {
+  const id = slot === 2 ? 'knife' : s.weapons[slot];
+  return weaponStats(id, s.attachments[id]);
 }
 
-/** Fresh deployment: the kit's weapons, full ammo, then rebuy what this soldier last bought. */
-export function outfit(s: Soldier, random: () => number, free = false) {
-  s.weapons = kitWeapons(s.loadout);
-  s.ammo = [WEAPONS[s.weapons[0]].magazine, WEAPONS[s.weapons[1]].magazine];
-  s.reserve = [spare(WEAPONS[s.weapons[0]]), spare(WEAPONS[s.weapons[1]])];
-  s.sinceSpawn = 0;
-  if (s.bot) botShop(s, random);
-  else for (const id of s.bought) {
-    const price = free ? 0 : WEAPONS[id || 'sidearm'].price;
-    if (id && price <= s.money && s.weapons[slotOf(WEAPONS[id])] !== id) { s.money -= price; equip(s, id); }
+/** Fresh match inventory: the defaults, no attachments, the new-match bonus. */
+export function resetInventory(s: Soldier) {
+  s.weapons = [...DEFAULT_WEAPONS];
+  s.owned = [...DEFAULT_WEAPONS];
+  s.attachments = {};
+  s.grenades = 0; s.grenadeHE = false;
+  s.money = CASH.matchBonus;
+}
+
+/** Full magazines and reserves for both equipped weapons (each round and after buying). */
+export function refillAmmo(s: Soldier) {
+  for (const slot of [0, 1] as const) {
+    const w = statsOf(s, slot);
+    s.ammo[slot] = w.magazine; s.reserve[slot] = w.reserve;
   }
-  s.weapon = 0; s.switchLeft = WEAPONS[s.weapons[0]].equipTime;
 }
 
-export function award(s: Soldier | undefined, amount: number) {
-  if (s) s.money = Math.min(ECONOMY.max, s.money + amount);
+export function award(state: MatchState, s: Soldier | undefined, amount: number, reason: string, emit?: (e: { type: 'reward'; id: number; amount: number; reason: string }) => void) {
+  if (!s || amount <= 0 || state.config.practice) return;
+  s.money = Math.min(CASH.max, s.money + amount);
+  emit?.({ type: 'reward', id: s.id, amount, reason });
 }
 
-/** Buying works for a short while after deploying, and always near your own team's spawn (anywhere with free buying). */
-export function canBuy(s: Soldier, map: MapDef, free = false) {
-  if (!s.alive) return false;
-  if (free) return true;
-  if (s.sinceSpawn < ECONOMY.buyTime) return true;
-  return map.spawns.some(p => p.team === s.team && !p.point && Math.hypot(p.x - s.m.x, p.z - s.m.z) < ECONOMY.buyRadius);
+/** Inside your own team's base (near any of its spawn slots) — where the store sells weapons. */
+export function inBase(s: Soldier, map: MapDef, side: Team) {
+  return map.spawns.some(p => p.team === side && Math.hypot(p.x - s.m.x, p.z - s.m.z) < 16);
 }
 
-export function buy(state: MatchState, map: MapDef, s: Soldier | undefined, item: BuyItem): { ok: boolean; message: string } {
-  if (!s || !s.alive || state.phase === 'ended') return { ok: false, message: 'Deploy first.' };
+/** Weapons: own base during buy time (dead players may shop for next round). Attachments: anywhere. */
+export function canBuyWeapons(state: MatchState, map: MapDef, s: Soldier, side: Team) {
+  if (state.config.freeBuy) return true;
+  if (state.roundClock > state.config.buyTime) return false;
+  return !s.alive || inBase(s, map, side);
+}
+
+const ok = (message: string) => ({ ok: true, message });
+const no = (message: string) => ({ ok: false, message });
+
+/** Buy (or, if owned, equip for free) a weapon, the M67 or its High Explosive mod. */
+export function buy(state: MatchState, map: MapDef, s: Soldier | undefined, item: BuyItem, side: Team): { ok: boolean; message: string } {
+  if (!s || state.phase === 'ended') return no('Not in a match.');
   const free = !!state.config.freeBuy;
-  if (!canBuy(s, map, free)) return { ok: false, message: 'Buy time is over — return to your spawn.' };
-  if (item === 'grenade') {
-    if (s.grenades >= GRENADE.perLife) return { ok: false, message: 'Grenades full.' };
-    const cost = free ? 0 : ECONOMY.grenade;
-    if (s.money < cost) return { ok: false, message: 'Not enough credits.' };
-    s.money -= cost; s.grenades++;
-    return { ok: true, message: 'Grenade' };
+  if (item === 'grenade' || item === 'highExplosive') {
+    if (item === 'grenade') {
+      if (s.grenades >= GRENADE.max) return no('You already carry an M67.');
+      if (!free && s.money < GRENADE.price) return no('Not enough cash.');
+      if (!free) s.money -= GRENADE.price;
+      s.grenades++;
+      return ok('M67');
+    }
+    if (s.grenadeHE) return no('High Explosive already fitted.');
+    if (!free && s.money < HIGH_EXPLOSIVE.price) return no('Not enough cash.');
+    if (!free) s.money -= HIGH_EXPLOSIVE.price;
+    s.grenadeHE = true;
+    return ok('High Explosive');
   }
   const w = WEAPONS[item];
-  if (!w) return { ok: false, message: 'Unknown item.' };
-  if (s.weapons[slotOf(w)] === item) return { ok: false, message: `${w.short} already equipped.` };
-  const price = free ? 0 : w.price;
-  if (s.money < price) return { ok: false, message: 'Not enough credits.' };
-  s.money -= price;
-  equip(s, item);
-  s.bought[slotOf(w)] = item;
-  return { ok: true, message: w.name };
+  if (!w || w.slot === 2) return no('Unknown item.');
+  if (!canBuyWeapons(state, map, s, side)) return no('Buy time is over — weapons are sold in your base at the start of a round.');
+  const slot = w.slot;
+  if (!s.owned.includes(item)) {
+    if (!free && s.money < w.price) return no('Not enough cash.');
+    if (!free) s.money -= w.price;
+    s.owned.push(item);
+  } else if (s.weapons[slot] === item) return no(`${w.name} already equipped.`);
+  s.weapons[slot] = item;
+  const stats = statsOf(s, slot);
+  s.ammo[slot] = stats.magazine; s.reserve[slot] = stats.reserve;
+  if (s.alive) { s.weapon = slot; s.reloadLeft = 0; s.switchLeft = stats.equipTime; }
+  return ok(w.name);
 }
 
-/** Take pickup `index`: weapons swap into their slot; ammo refills spare ammo; armor restores vitals. */
-export function takePickup(state: MatchState, map: MapDef, s: Soldier, index: number) {
-  const def = map.pickups?.[index];
-  if (!def || !s.alive || (state.pickupLeft[index] ?? 0) > 0) return false;
-  if (Math.hypot(def.x - s.m.x, def.z - s.m.z) > PICKUP_REACH || Math.abs(def.y - s.m.y) > 2) return false;
-  if (def.item === 'ammo') {
-    const full = s.weapons.every((id, i) => s.reserve[i] >= spare(WEAPONS[id]));
-    if (full) return false;
-    s.weapons.forEach((id, i) => { s.reserve[i] = spare(WEAPONS[id]); });
-  } else if (def.item === 'armor') {
-    if (s.health >= HEALTH.max && s.shield >= HEALTH.shield) return false;
-    s.health = HEALTH.max; s.shield = HEALTH.shield;
-  } else {
-    if (!WEAPONS[def.item] || s.weapons[slotOf(WEAPONS[def.item])] === def.item) return false;
-    equip(s, def.item);
+/** Fit an attachment to an owned weapon (anywhere, any time); it replaces that category's item. */
+export function buyAttachment(state: MatchState, s: Soldier | undefined, weapon: WeaponId, id: AttachmentId): { ok: boolean; message: string } {
+  if (!s || state.phase === 'ended') return no('Not in a match.');
+  const a = ATTACHMENTS[id];
+  if (!a || !s.owned.includes(weapon) || !fitsWeapon(a, weapon)) return no('That attachment does not fit.');
+  const fitted = s.attachments[weapon] ?? {};
+  if (fitted[a.category] === id || (a.id === 'irons' && !fitted.optic)) return no(`${a.name} already fitted.`);
+  const price = state.config.freeBuy ? 0 : attachmentPrice(a, weapon);
+  if (s.money < price) return no('Not enough cash.');
+  s.money -= price;
+  s.attachments[weapon] = { ...fitted, [a.category]: id };
+  // Magazine size can change (extended clip, special ammo): keep what's loaded within the new size.
+  for (const slot of [0, 1] as const) {
+    if (s.weapons[slot] !== weapon) continue;
+    s.ammo[slot] = Math.min(s.ammo[slot], statsOf(s, slot).magazine);
   }
-  state.pickupLeft[index] = def.respawn;
+  return ok(a.name);
+}
+
+/** Ammo crate (E): the first use each round costs $300, then it's free; each use adds RestockQuantity. */
+export function useCrate(state: MatchState, map: MapDef, s: Soldier, index: number) {
+  const crate = map.pickups?.[index];
+  if (!crate || !s.alive || s.weapon === 2) return false;
+  if (Math.hypot(crate.x - s.m.x, crate.z - s.m.z) > CRATE_REACH || Math.abs(crate.y - s.m.y) > 2) return false;
+  const w = statsOf(s);
+  if (s.reserve[s.weapon] >= w.reserve) return false;
+  if (!s.round.crate && !state.config.freeBuy) {
+    if (s.money < CASH.crate) return false;
+    s.money -= CASH.crate;
+  }
+  s.round.crate = true;
+  s.reserve[s.weapon] = Math.min(w.reserve, s.reserve[s.weapon] + w.restock);
   return true;
 }
 
-/**
- * Per tick: pickups come back, everyone walks over ammo and armor, and bots grab a lying weapon
- * that is better (pricier) than what they carry in that slot. Humans take weapons with E.
- */
-export function updatePickups(state: MatchState, map: MapDef, dt: number) {
-  const pickups = map.pickups;
-  if (!pickups?.length) return;
-  for (let i = 0; i < pickups.length; i++) {
-    if (state.pickupLeft[i] > 0) { state.pickupLeft[i] = Math.max(0, state.pickupLeft[i] - dt); continue; }
-    const def = pickups[i];
-    for (const s of state.soldiers) {
-      if (!s.alive || Math.abs(def.x - s.m.x) > PICKUP_REACH || Math.abs(def.z - s.m.z) > PICKUP_REACH) continue;
-      const weapon = def.item !== 'ammo' && def.item !== 'armor' ? WEAPONS[def.item] : undefined;
-      if (weapon && (!s.bot || weapon.price <= WEAPONS[s.weapons[slotOf(weapon)]].price)) continue;
-      if (takePickup(state, map, s, i)) break;
-    }
-  }
-}
-
-/** Bots spend like a careless player: usually the priciest primary they can afford, sometimes they save. */
-function botShop(s: Soldier, random: () => number) {
-  if (random() < 0.25) return;
-  const options = Object.values(WEAPONS).filter(w => slotOf(w) === 0 && w.price <= s.money && w.price > WEAPONS[s.weapons[0]].price);
-  if (!options.length) return;
-  let best = options[0], bestScore = -Infinity;
-  for (const w of options) { const score = w.price + random() * 1500; if (score > bestScore) { bestScore = score; best = w; } }
-  s.money -= best.price;
-  equip(s, best.id);
-}
-
-/** Reload from spare ammo; bots carry endless spares (they never go looking for ammo). */
+/** Reload from the reserve; bots carry endless spares (they never go looking for crates). */
 export function finishReload(s: Soldier, w: WeaponDef) {
+  if (s.weapon === 2) return;
   const need = w.magazine - s.ammo[s.weapon];
   const take = s.bot ? need : Math.min(need, s.reserve[s.weapon]);
   s.ammo[s.weapon] += take;
   if (!s.bot) s.reserve[s.weapon] -= take;
+}
+
+/** Bots shop like casual players at the start of a round: the best primary they can afford, sometimes an optic and a frag. */
+export function botShop(s: Soldier, random: () => number) {
+  const primaries = (Object.values(WEAPONS) as WeaponDef[]).filter(w => w.slot === 0 && w.price > 0);
+  if (random() < 0.7) {
+    const options = primaries.filter(w => w.price <= s.money && !s.owned.includes(w.id));
+    if (options.length) {
+      let best = options[0], bestScore = -Infinity;
+      for (const w of options) { const score = w.price + random() * 1500; if (score > bestScore) { bestScore = score; best = w; } }
+      s.money -= best.price; s.owned.push(best.id);
+    }
+  }
+  const owned = primaries.filter(w => s.owned.includes(w.id));
+  if (owned.length) s.weapons[0] = owned[Math.floor(random() * owned.length)].id;
+  if (s.money > 2500 && random() < 0.4) {
+    const fitted = s.attachments[s.weapons[0]] ?? {};
+    if (!fitted.optic) {
+      const optic = (['holo', 'reflex', 'acog'] as const)[Math.floor(random() * 3)];
+      const a = ATTACHMENTS[optic];
+      if (fitsWeapon(a, s.weapons[0]) && s.money >= a.price) { s.money -= a.price; s.attachments[s.weapons[0]] = { ...fitted, optic }; }
+    }
+  }
+  if (s.grenades < GRENADE.max && s.money > 3000 && random() < 0.5) { s.money -= GRENADE.price; s.grenades = 1; }
 }

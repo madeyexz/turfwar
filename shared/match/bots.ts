@@ -1,12 +1,13 @@
 import { chestPoint } from '../hitbox';
 import { clamp, dirFromAngles, wrapAngle, type Vec3 } from '../math';
 import { MOVE, eyeHeight, stepMovement, type MoveInput } from '../movement';
-import { GRENADE, LOADOUTS, WEAPONS, type WeaponId } from '../weapons';
-import { eyeOf, feetOf, launchCharge, resolvePellets, resolveShot, spreadFor, throwGrenadeFrom, traceShot, weaponOf, type SimContext } from './combat';
+import { GRENADE, STAMINA } from '../weapons';
+import { eyeOf, feetOf, resolvePellets, resolveShot, sideOf, spreadFor, throwGrenadeFrom, traceShot, weaponOf, type SimContext } from './combat';
 import { findPath, nearestNode } from './nav';
-import type { BotBrain, MatchState, Soldier } from './state';
+import { ATTACKERS, type BotBrain, type MatchState, type Soldier } from './state';
 
-/** Distance each weapon's bot tries to fight from. */
+/** Distance (m) from a bomb site's centre at which a bot stops to arm or disarm. */
+const SITE_STOP = 3;
 
 const CALLSIGNS = [
   'Halcyon', 'Vex', 'Marrow', 'Kestrel', 'Onyx', 'Sable', 'Rook', 'Cinder', 'Talon', 'Wren', 'Juno', 'Brask',
@@ -29,7 +30,7 @@ export function botName(state: MatchState, random: () => number) {
 
 export function createBrain(skill: number): BotBrain {
   return {
-    skill, goal: '', goalX: 0, goalZ: 0, path: [], pathIndex: 0, repath: 0, target: -1, reaction: 0, lastSeen: -99,
+    skill, goal: '', goalLeft: 0, goalX: 0, goalZ: 0, path: [], pathIndex: 0, repath: 0, target: -1, reaction: 0, lastSeen: -99,
     seenX: 0, seenY: 0, seenZ: 0, aimYaw: 0, aimPitch: 0, errYaw: 0, errPitch: 0, strafe: 1, strafeLeft: 0,
     crouchLeft: 0, burst: 0, burstPause: 0, stuck: 0, lastX: 0, lastZ: 0, think: 0, grenadeCooldown: 6, jump: false,
   };
@@ -38,24 +39,51 @@ export function createBrain(skill: number): BotBrain {
 const yawTo = (from: Vec3, to: Vec3) => Math.atan2(-(to.x - from.x), -(to.z - from.z));
 const pitchTo = (from: Vec3, to: Vec3) => Math.atan2(to.y - from.y, Math.hypot(to.x - from.x, to.z - from.z));
 
-/** Choose which capture point this bot should work on. */
+const sabotageOn = (state: MatchState, ctx: SimContext) => state.config.mode === 'sabotage' && !!ctx.map.sabotage?.sites.length;
+
+/** Bomb site centres for this map, in site order. */
+function sitesOf(ctx: SimContext) {
+  return (ctx.map.sabotage?.sites ?? []).map(id => ctx.map.points.find(p => p.id === id)!);
+}
+
+/**
+ * Choose where to go. Elimination: sweep the map's landmarks toward the enemy, then hunt the nearest
+ * enemy once the round drags on (a timed-out round is a replay). Sabotage: Militia pushes the round's
+ * site and arms it; SWAT spreads over the sites, and everyone converges on an armed bomb.
+ */
 function chooseGoal(state: MatchState, ctx: SimContext, bot: Soldier, brain: BotBrain) {
-  let best = state.points[0], bestScore = -Infinity;
-  for (const p of state.points) {
-    const def = ctx.map.points.find(d => d.id === p.id)!;
-    const distance = Math.hypot(def.x - bot.m.x, def.z - bot.m.z);
-    let score = (p.owner !== bot.team ? 1.1 : 0.25) + (p.contested ? 0.7 : 0) + (p.capturing !== -1 && p.capturing !== bot.team ? 0.9 : 0);
-    score -= distance / 140;
-    // Spread the team out: discourage piling onto one point.
-    const mates = state.soldiers.filter(s => s.bot && s.team === bot.team && s.id !== bot.id && s.brain?.goal === p.id).length;
-    score -= mates * 0.18;
-    score += ctx.random() * 0.45;
+  brain.repath = 0;
+  brain.goalLeft = 8 + ctx.random() * 8;
+  if (sabotageOn(state, ctx)) {
+    const sites = sitesOf(ctx);
+    const attacking = bot.team === ATTACKERS;
+    // Attackers commit to one site per round; defenders split between the sites.
+    let site = state.bomb.armed || state.bomb.site >= 0 ? state.bomb.site
+      : attacking ? state.round % sites.length : bot.id % sites.length;
+    if (site < 0) site = 0;
+    const p = sites[site];
+    const near = attacking || state.bomb.armed ? SITE_STOP * 0.4 : p.radius * 0.8;
+    const angle = ctx.random() * Math.PI * 2, r = ctx.random() * near;
+    brain.goal = 'site'; brain.goalX = p.x + Math.cos(angle) * r; brain.goalZ = p.z + Math.sin(angle) * r;
+    return;
+  }
+  const enemies = state.soldiers.filter(s => s.alive && s.team !== bot.team);
+  if (enemies.length && (state.roundClock > 35 || ctx.random() < 0.25)) {
+    let nearest = enemies[0], best = Infinity;
+    for (const e of enemies) { const d = Math.hypot(e.m.x - bot.m.x, e.m.z - bot.m.z); if (d < best) { best = d; nearest = e; } }
+    brain.goal = 'hunt'; brain.goalX = nearest.m.x; brain.goalZ = nearest.m.z; brain.goalLeft = 4 + ctx.random() * 3;
+    return;
+  }
+  // Landmarks, weighted toward the enemy's half of the map.
+  const enemyBase = ctx.map.spawns.filter(p => p.team === sideOf(state, ctx.map, (1 - bot.team) as 0 | 1));
+  const ex = enemyBase.reduce((a, p) => a + p.x, 0) / (enemyBase.length || 1), ez = enemyBase.reduce((a, p) => a + p.z, 0) / (enemyBase.length || 1);
+  let best = ctx.map.points[0], bestScore = -Infinity;
+  for (const p of ctx.map.points) {
+    const score = -Math.hypot(p.x - ex, p.z - ez) / 120 - Math.hypot(p.x - bot.m.x, p.z - bot.m.z) / 200 + ctx.random() * 0.9;
     if (score > bestScore) { bestScore = score; best = p; }
   }
-  const def = ctx.map.points.find(d => d.id === best.id)!;
-  const angle = ctx.random() * Math.PI * 2, r = ctx.random() * def.radius * 0.7;
-  brain.goal = best.id; brain.goalX = def.x + Math.cos(angle) * r; brain.goalZ = def.z + Math.sin(angle) * r;
-  brain.repath = 0;
+  const angle = ctx.random() * Math.PI * 2, r = ctx.random() * best.radius;
+  brain.goal = 'roam'; brain.goalX = best.x + Math.cos(angle) * r; brain.goalZ = best.z + Math.sin(angle) * r;
 }
 
 function plan(ctx: SimContext, bot: Soldier, brain: BotBrain, tx: number, ty: number, tz: number) {
@@ -120,9 +148,15 @@ export function updateBot(state: MatchState, ctx: SimContext, bot: Soldier, dt: 
   const visible = !!target && state.time - brain.lastSeen < 0.3;
 
   // ---- Goals and navigation ------------------------------------------------------
-  if (!brain.goal || brain.repath <= 0) {
-    const goalPoint = state.points.find(p => p.id === brain.goal);
-    if (!brain.goal || !goalPoint || (goalPoint.owner === bot.team && !goalPoint.contested && ctx.random() < 0.5)) chooseGoal(state, ctx, bot, brain);
+  brain.goalLeft -= dt;
+  const sabotage = sabotageOn(state, ctx);
+  // Re-plan at once when the bomb goes down or a new arm starts somewhere else.
+  if (sabotage && brain.goal === 'site') {
+    const p = state.bomb.site >= 0 ? sitesOf(ctx)[state.bomb.site] : undefined;
+    if (p && Math.hypot(brain.goalX - p.x, brain.goalZ - p.z) > p.radius) brain.goalLeft = 0;
+  }
+  if (!brain.goal || brain.goalLeft <= 0) chooseGoal(state, ctx, bot, brain);
+  if (brain.repath <= 0) {
     if (target && !visible && state.time - brain.lastSeen < 2.2) plan(ctx, bot, brain, brain.seenX, brain.seenY, brain.seenZ);
     else plan(ctx, bot, brain, brain.goalX, bot.m.y, brain.goalZ);
     brain.repath = 2.5 + ctx.random() * 2;
@@ -136,7 +170,7 @@ export function updateBot(state: MatchState, ctx: SimContext, bot: Soldier, dt: 
     const node = brain.path[i];
     const dx = nav.x[node] - bot.m.x, dz = nav.z[node] - bot.m.z, d = Math.hypot(dx, dz);
     if (d > 0.6 || i < brain.path.length - 1) { moveX = dx / (d || 1); moveZ = dz / (d || 1); }
-    else if (ctx.random() < dt * 0.6) { brain.repath = 0; }
+    else if (ctx.random() < dt * 0.6) { brain.goalLeft = Math.min(brain.goalLeft, 1.5); }
     if (nav.y[node] - bot.m.y > 0.9 && bot.m.grounded && d < 2) brain.jump = true;
   }
 
@@ -156,7 +190,7 @@ export function updateBot(state: MatchState, ctx: SimContext, bot: Soldier, dt: 
     bot.yaw = wrapAngle(bot.yaw + clamp(wrapAngle(wantYaw - bot.yaw), -turn, turn));
     bot.pitch = clamp(bot.pitch + clamp(wantPitch - bot.pitch, -turn, turn), -1.3, 1.3);
     const aligned = Math.abs(wrapAngle(wantYaw - bot.yaw)) < 0.06 && Math.abs(wantPitch - bot.pitch) < 0.06;
-    wantAds = distance > 22 && w.category !== 'pistol' && w.category !== 'shotgun';
+    wantAds = w.class === 'sniper' || ((w.class === 'rifle' || w.class === 'lmg') && distance > 18) || (w.class === 'smg' && distance > 26);
 
     // Strafe and range-keeping while fighting.
     if (brain.strafeLeft <= 0) { brain.strafe = ctx.random() < 0.5 ? -1 : 1; brain.strafeLeft = 0.5 + ctx.random() * 0.9; }
@@ -168,27 +202,21 @@ export function updateBot(state: MatchState, ctx: SimContext, bot: Soldier, dt: 
     moveZ = moveZ * pathWeight + (fz * advance + rz * brain.strafe * 0.9);
     if (brain.crouchLeft < -2 && ctx.random() < dt * 0.25 * brain.skill && distance > 15) brain.crouchLeft = 0.8 + ctx.random();
 
-    // Launcher bots draw the sidearm when an enemy gets inside the blast, and the launcher back at range.
-    const primary = bot.weapons[0];
-    const blast = WEAPONS[primary].projectile?.radius;
-    if (blast && bot.switchLeft <= 0 && bot.reloadLeft <= 0 && (bot.weapon === 0 ? distance < blast + 2 : distance > blast + 6)) {
-      bot.weapon = bot.weapon === 0 ? 1 : 0; bot.switchLeft = weaponOf(bot).equipTime;
+    // Knife anyone who closes right in; draw the gun again once they back off.
+    if (bot.switchLeft <= 0 && bot.reloadLeft <= 0 && (bot.weapon === 2 ? distance > 3.5 : distance < 1.6 && ctx.random() < dt * 4)) {
+      bot.weapon = bot.weapon === 2 ? 0 : 2; bot.switchLeft = weaponOf(bot).equipTime;
     }
 
     // Fire in bursts once the reaction delay has passed.
     if (brain.reaction <= 0 && aligned && bot.reloadLeft <= 0 && bot.switchLeft <= 0 && bot.fireCooldown <= 0 && brain.burstPause <= 0 && distance < w.range * 0.6) {
-      if (bot.ammo[bot.weapon] <= 0) { bot.reloadLeft = w.reload; }
+      if (bot.weapon !== 2 && bot.ammo[bot.weapon] <= 0) { bot.reloadLeft = w.reload; }
       else {
         const spread = (w.pellets > 1 ? 0.8 : spreadFor({ ...bot, ads: wantAds }, w)) * (1.35 - brain.skill * 0.55) * Math.PI / 180;
         const yaw = bot.yaw + (ctx.random() - 0.5) * 2 * spread, pitch = bot.pitch + (ctx.random() - 0.5) * 2 * spread;
-        if (w.projectile) {
-          // Lob over the drop.
-          const flight = distance / w.projectile.speed;
-          const lob = Math.atan2(0.5 * 9.8 * flight * flight, Math.max(1, distance));
-          launchCharge(state, ctx, bot, w, eye, dirFromAngles(yaw, pitch + lob));
-        } else if (w.pellets > 1) resolvePellets(state, ctx, bot, w, eye, dirFromAngles(yaw, pitch), wantAds);
+        if (w.pellets > 1) resolvePellets(state, ctx, bot, w, eye, dirFromAngles(yaw, pitch), wantAds);
         else resolveShot(state, ctx, bot, w, eye, traceShot(state, ctx, bot, eye, dirFromAngles(yaw, pitch), w.range));
-        bot.ammo[bot.weapon]--; bot.sinceShot = 0;
+        if (bot.weapon !== 2) bot.ammo[bot.weapon]--;
+        bot.sinceShot = 0;
         bot.fireCooldown = w.auto ? w.interval : w.interval * (1.15 + ctx.random() * 0.6);
         brain.burst++;
         const burstLength = w.auto ? 3 + Math.floor(ctx.random() * (distance < 15 ? 8 : 4)) : 1;
@@ -203,7 +231,8 @@ export function updateBot(state: MatchState, ctx: SimContext, bot: Soldier, dt: 
       bot.pitch *= Math.exp(-dt * 3);
     }
     brain.burst = 0;
-    if (bot.ammo[bot.weapon] < weaponOf(bot).magazine * 0.4 && bot.reloadLeft <= 0) bot.reloadLeft = w.reload;
+    if (bot.weapon === 2 && bot.switchLeft <= 0) { bot.weapon = 0; bot.switchLeft = weaponOf(bot).equipTime; }
+    else if (bot.weapon !== 2 && bot.ammo[bot.weapon] < w.magazine * 0.4 && bot.reloadLeft <= 0) bot.reloadLeft = w.reload;
     // Grenade the last known position of an enemy who ducked behind cover.
     if (target && brain.grenadeCooldown <= 0 && bot.grenades > 0 && state.time - brain.lastSeen < 2.5) {
       const d = Math.hypot(brain.seenX - bot.m.x, brain.seenZ - bot.m.z);
@@ -216,6 +245,16 @@ export function updateBot(state: MatchState, ctx: SimContext, bot: Soldier, dt: 
       }
       brain.grenadeCooldown = 9 + ctx.random() * 8;
     }
+  }
+
+  // ---- Sabotage: hold E on the site (standing still) to arm or disarm --------------
+  bot.using = false;
+  if (sabotage && !visible && bot.m.grounded) {
+    const site = state.bomb.armed ? state.bomb.site : bot.team === ATTACKERS ? sitesOf(ctx).findIndex(p => Math.hypot(p.x - bot.m.x, p.z - bot.m.z) < SITE_STOP) : -1;
+    const p = site >= 0 ? sitesOf(ctx)[site] : undefined;
+    const busy = state.bomb.by !== -1 && state.bomb.by !== bot.id;
+    const myJob = state.bomb.armed ? bot.team !== ATTACKERS : bot.team === ATTACKERS;
+    if (p && myJob && !busy && Math.hypot(p.x - bot.m.x, p.z - bot.m.z) < SITE_STOP) { bot.using = true; moveX = 0; moveZ = 0; }
   }
 
   // ---- Stuck detection ------------------------------------------------------------
@@ -232,7 +271,8 @@ export function updateBot(state: MatchState, ctx: SimContext, bot: Soldier, dt: 
   const forward = moveX * fx + moveZ * fz, strafe = moveX * rx + moveZ * rz;
   const input: MoveInput = {
     forward, strafe, yaw: bot.yaw, jump: brain.jump, crouch: brain.crouchLeft > 0,
-    sprint: !visible && len > 0.5 && forward > 0.7 && bot.reloadLeft <= 0, ads: wantAds && visible,
+    sprint: !visible && len > 0.5 && forward > 0.7 && bot.reloadLeft <= 0 && bot.stamina > (bot.sprint ? 0 : STAMINA.tired),
+    ads: wantAds && visible, speed: w.speed,
   };
   brain.jump = false;
   bot.sprint = input.sprint && bot.m.grounded; bot.ads = input.ads;

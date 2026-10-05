@@ -11,6 +11,7 @@ export function verdantDivide(): MapDef {
     id: 'verdant', name: 'Verdant Divide', region: 'AMERISH-CLASS JUNGLE / UPLINK ARRAY',
     description: 'A plateau uplink over dense jungle flanks and clearing bunkers.',
     theme: 'forest', halfX: 86, halfZ: 58, seed: 31, roll: 1.6, ridge: 20,
+    sabotage: { sites: ['B'], attackerSpawn: 1 },
     sun: { x: -0.3, y: 0.7, z: 0.45 },
   });
 
@@ -79,11 +80,7 @@ export function verdantDivide(): MapDef {
     b.solidProp('Prop_Crate_Tarp', -18, 'ground', 18, 0.9, 1.4, 1.05, 1.4);
     b.box(-36, b.ground(-36, 14), 14, 0.8, 2.2, 5, 'wall');
 
-    // ---- Pickups ----
-    b.pickup(-11, 'ground', 0, 'graviton', 45);                 // foot of the plateau, under fire from B
-    b.pickup(-17, 'ground', 31, 'scatter', 35);                 // creek bed
-    b.pickup(-30, 'ground', 1.5, 'ammo', 20);                   // behind the mid container
-    b.pickup(-48, 'ground', 13, 'armor', 40);                   // behind the flank barrier
+    // ---- Ammo crates ----
 
     // ---- Jungle: trees break sightlines on both flanks ----
     const trees: [number, number, number, number][] = [

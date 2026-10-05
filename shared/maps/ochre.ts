@@ -75,6 +75,7 @@ export function ochreQuarter(): MapDef {
     id: 'ochre', name: 'Ochre Quarter', region: 'INDAR-CLASS DESERT / OLD TOWN',
     description: 'Asymmetric two-site old town: Long, Mid, Catwalk and Tunnels.',
     theme: 'desert', halfX: HALF_X, halfZ: HALF_Z, seed: 2, roll: 0, ridge: 0,
+    sabotage: { sites: ['A', 'C'], attackerSpawn: 0 },
     sun: { x: 0.45, y: 0.7, z: 0.4 },
     ground: (x, z) => floorAt(x, z) ?? 0,
   });
@@ -160,15 +161,7 @@ export function ochreQuarter(): MapDef {
   b.solidProp('Prop_Crate', 10, 0, -44, 0.2, 1.2, 1.0, 1.2);
   b.light(17, 6, -55.6, 0x58b6ff, 8, 20);
 
-  // ---- Pickups: one close-quarters gun, ammo and armor per side, the rail rifle contested in mid ----
-  b.pickup(3, 'ground', -16, 'lancer', 45);                     // north mid, under the doors
-  b.pickup(-34, 'ground', 2, 'scatter', 35);                    // attackers: upper tunnels
-  b.pickup(40, 'ground', 38, 'ammo', 20);                       // attackers: outside long
-  b.pickup(-17, 'ground', 5, 'armor', 40);                      // attackers: lower tunnels
-  b.pickup(-17, 'ground', -40, 'stinger', 35);                  // defenders: C-doors corridor
-  b.pickup(-2, 'ground', -36, 'ammo', 20);                      // defenders: their side of mid
-  b.pickup(19, 2.5, -32, 'armor', 40);                          // defenders: short
-  b.pickup(42, 'ground', 20, 'armor', 40);                      // contested: long corner
+  // ---- Ammo crates ----
 
   return b.build();
 }

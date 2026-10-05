@@ -80,15 +80,15 @@ function ground(x: number, z: number) {
   return inner * (1 - rise) + rise * (32 + (fbm(x * 0.03, z * 0.03, 41) + fbm(-x * 0.03, -z * 0.03, 41)) * 14);
 }
 
-const MIRROR: Record<PointId, PointId> = { A: 'E', B: 'D', C: 'C', D: 'B', E: 'A' };
 
 export function meridianDistrict(): MapDef {
   const b = new MapBuilder({
     id: 'meridian', name: 'Meridian District', region: 'INDAR-CLASS DESERT / CITY QUARTER',
     description: 'Conquest across a war-torn city: park, construction site, canal bridges, highways and a central square. Spawn on the flags you hold.',
     theme: 'desert', halfX: HALF_X, halfZ: HALF_Z, seed: 41, roll: 0, ridge: 0,
+    sabotage: { sites: ['A', 'B'], attackerSpawn: 1 },
     sun: { x: -0.5, y: 0.66, z: 0.42 },
-    ground, teamSize: 50,
+    ground,
   });
 
   // ---- Terrain shaping (before the heightfield is sampled) ----
@@ -205,14 +205,8 @@ export function meridianDistrict(): MapDef {
     twoStorey(b, -52, 22, g(-52, 22));      // hotel by the square
     twoStorey(b, -144, -42, g(-144, -42));  // offices by the base
 
-    // ---- Pickups: power weapons in the open, close-quarters guns indoors ----
-    b.pickup(-100, HWY_Y, HWY_Z, 'lancer', 45);                       // north highway deck
-    b.pickup(-49, g(-54, -61) + 8.4, -61, 'graviton', 45);            // upper deck of the steel frame (B)
-    b.pickup(-97, 'ground', -14, 'scatter', 35);                      // ruined block
-    b.pickup(-52, g(-52, 22), 22, 'stinger', 30);                     // hotel ground floor
-    b.pickup(-122, 'ground', 18, 'armor', 40);                        // park edge, short of A
-    b.pickup(-76, 'ground', -54, 'ammo', 20);                         // beside the construction site
-    b.pickup(-3, CANAL_Y, -50, 'ammo', 20);                           // canal bed
+    // ---- Ammo crate ----
+    b.ammoCrate(-3, CANAL_Y, -50);                           // canal bed
   });
 
   // ---- Points A, B and their mirrors D, E (ids do not mirror, so they are placed here) ----
@@ -220,28 +214,6 @@ export function meridianDistrict(): MapDef {
   b.point('B', 'Construction Site', -64, -2.5, -38, 12);
   b.point('D', 'Construction Site', 64, -2.5, 38, 12);
   b.point('E', 'Park', 128, g(-128, 40), -40, 13);
-
-  // ---- Forward spawns: every point, both teams, back from the flag toward each team's base ----
-  const forward: Record<'A' | 'B' | 'C', [[number, number][], [number, number][]]> = {
-    A: [
-      [[-147, 32], [-147, 38], [-147, 44], [-143, 28], [-143, 50], [-147, 54]],
-      [[-104, 36], [-104, 42], [-104, 48], [-112, 32], [-112, 46], [-103, 30]],
-    ],
-    B: [
-      [[-86, -36], [-86, -41], [-86, -46], [-82, -38], [-82, -44], [-88, -51]],
-      [[-46, -26], [-46, -32], [-46, -40], [-38, -24], [-38, -34], [-38, -44]],
-    ],
-    C: [[[-26, -12], [-26, -6], [-26, 6], [-26, 12], [-31, -17], [-31, 9]], []],
-  };
-  const yaw = (team: 0 | 1) => (team === 0 ? -Math.PI / 2 : Math.PI / 2);
-  for (const p of ['A', 'B', 'C'] as const) {
-    forward[p].forEach((slots, team) => {
-      for (const [x, z] of slots) {
-        b.spawn(team as 0 | 1, x, g(x, z), z, yaw(team as 0 | 1), p);
-        b.spawn((1 - team) as 0 | 1, -x, g(x, z), -z, yaw((1 - team) as 0 | 1), MIRROR[p]);
-      }
-    });
-  }
 
   return b.build();
 }

@@ -49,8 +49,9 @@ export function skylineRooftops(): MapDef {
     id: 'skyline', name: 'Skyline Rooftops', region: 'BOREAL ARCOLOGY / UPPER CITY',
     description: '8v8 across frozen rooftops: bridges, a sky-bridge corridor and a penthouse. The streets are a hundred metres down.',
     theme: 'desert', halfX: HALF, halfZ: HALF, seed: 23, roll: 0, ridge: 0,
+    sabotage: { sites: ['B'], attackerSpawn: 1 },
     sun: { x: 0.42, y: 0.55, z: -0.5 },
-    ground: () => STREET, teamSize: 8,
+    ground: () => STREET,
   });
   b.buildTerrain(4);
 
@@ -163,12 +164,8 @@ export function skylineRooftops(): MapDef {
     for (const [x, z, w, d, top] of towers) b.box(x, STREET - 2, z, w, top - STREET + 2, d, top > 70 ? 'wall' : 'wallDark');
     b.light(-12, 110, -98, 0xff4a3a, 6, 30);
 
-    // ---- Pickups: power weapons in the open, close-quarters guns indoors ----
-    b.pickup(-38, h.y, -24, 'lancer', 45);                        // exposed helipad corner
-    b.pickup(-31, p.y, -4, 'scatter', 35);                        // penthouse suite
-    b.pickup(0, o.y, -38, 'stinger', 30);                         // office floor
-    b.pickup(-28, k.y, 34, 'armor', 40);
-    b.pickup(-50, bb.y, 32, 'ammo', 20);
+    // ---- Ammo crates ----
+    b.ammoCrate(-50, bb.y, 32);
   });
 
   // ---- B: the central tower, highest roof ----

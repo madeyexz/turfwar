@@ -11,6 +11,7 @@ export function cinderBasin(): MapDef {
     id: 'cinder', name: 'Cinder Basin', region: 'INDAR-CLASS DESERT / TECH OUTPOST',
     description: 'Three lanes, two bunkers, one open plaza. Long sightlines over the ridge.',
     theme: 'desert', halfX: 86, halfZ: 58, seed: 7, roll: 1.2, ridge: 16,
+    sabotage: { sites: ['B'], attackerSpawn: 1 },
     sun: { x: -0.55, y: 0.62, z: 0.36 },
   });
 
@@ -110,11 +111,7 @@ export function cinderBasin(): MapDef {
     b.box(-55, b.ground(-55, -10), -10, 0.8, 1.3, 4.4, 'concrete');
     b.box(-50, b.ground(-50, 18), 18, 3.2, 2.2, 3.2, 'rock');
 
-    // ---- Pickups ----
-    b.pickup(-14.5, ry + 4.6, -37, 'lancer', 45);          // exposed ridge watchtower
-    b.pickup(-28.5, 'ground', 29.5, 'scatter', 35);              // close quarters among the containers
-    b.pickup(-28, 'ground', 13.5, 'ammo', 20);             // mid lane, off point A
-    b.pickup(-47, 'ground', 9, 'armor', 40);               // spawn exit flank
+    // ---- Ammo crates ----
   });
 
   // Outer boundary blockers sit just beyond the playable bounds.
