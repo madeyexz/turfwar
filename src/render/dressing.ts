@@ -5,6 +5,7 @@ import { mergeGeometries } from 'three/examples/jsm/utils/BufferGeometryUtils.js
 import type { Decor } from '../../shared/maps/types';
 import { rng } from '../../shared/math';
 import { buildSkyline, type SkylineData } from './skyline';
+import { lotDetail, type LotRow } from './lotdetail';
 
 /**
  * Dressing sets (street furniture and skylines) and model instances. A set is plain data the
@@ -23,12 +24,23 @@ export interface StreetData {
 }
 /** A district mesh from the source game (GLB in source coordinates) and the atlas it maps. */
 interface DistrictData { mesh: string; atlas: string }
-interface DressingSet { street?: StreetData; skyline?: SkylineData; district?: DistrictData }
+interface DressingSet { street?: StreetData; skyline?: SkylineData; district?: DistrictData; lots?: LotRow[] }
 
 const SETS: Record<string, () => Promise<DressingSet>> = {
   taipei: async () => {
-    const [s, k] = await Promise.all([import('../../shared/maps/taipei-street'), import('../../shared/maps/taipei-skyline')]);
+    const [s, k, t] = await Promise.all([import('../../shared/maps/taipei-street'), import('../../shared/maps/taipei-skyline'), import('../../shared/maps/taipei-data')]);
+    // A side faces a street if it has an arcade or a traffic road's sidewalk lies just outside it.
+    const onRoad = (x: number, z: number) => t.ROADS.some(r => {
+      const off = Math.abs((r[3] === 'x' ? z : x) - r[4]), along = r[3] === 'x' ? x : z;
+      return off < r[9] && along > r[5] && along < r[6];
+    });
+    const lots: LotRow[] = t.LOTS.map(([, floors, x0, z0, x1, z1, ground, top, tint, arcade]) => {
+      const a = arcade.split(' ').map(Number), mx = (x0 + x1) / 2, mz = (z0 + z1) / 2;
+      const out: [number, number][] = [[mx, z0 - 3], [x1 + 3, mz], [mx, z1 + 3], [x0 - 3, mz]];
+      return { x0, z0, x1, z1, ground, top, tint, floors, street: out.map(([x, z], k) => a[k] > 0 || onRoad(x, z)) as LotRow['street'] };
+    });
     return {
+      lots,
       street: { boxes: s.STREET_BOXES, glows: s.STREET_GLOWS, cyls: s.STREET_CYLS, plates: s.STREET_PLATES, marks: s.STREET_MARKS, models: s.STREET_MODELS },
       skyline: { buildings: k.FAR_BUILDINGS, landmarks: k.FAR_LANDMARKS, hills: k.FAR_HILLS, roads: k.FAR_ROADS, ground: k.FAR_GROUND, heights: k.FAR_HEIGHTS },
       district: { mesh: 'taipei-district.glb', atlas: 'taipei-atlas.webp' },
@@ -52,6 +64,7 @@ export async function addDressing(group: THREE.Group, decor: Decor[]) {
     if (set.district) group.add(await districtGroup(set.district, d.x, d.z, cutTest(d.cut ?? [])));
     if (set.street) group.add(streetGroup(cutStreet(set.street, d.x, d.z, cutTest([...(d.cut ?? []), ...(d.clear ?? [])])), d.x, d.z, models));
     if (set.skyline) group.add(buildSkyline(set.skyline, d.x, d.z));
+    if (set.lots) group.add(lotDetail(set.lots, d.x, d.z));
   }
   const byModel = new Map<string, number[]>();
   for (const d of instances) byModel.set(d.model, [...(byModel.get(d.model) ?? []), ...d.data]);
