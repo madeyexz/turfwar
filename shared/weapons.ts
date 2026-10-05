@@ -4,6 +4,9 @@ import type { Vec3 } from './math';
 export type WeaponId = 'carbine' | 'lancer' | 'sidearm' | 'magnum' | 'scatter' | 'stinger' | 'graviton';
 export type LoadoutId = 'assault' | 'recon' | 'breacher' | 'grenadier';
 
+/** Buy-menu group. Pistols fill the secondary slot; everything else is a primary. */
+export type WeaponCategory = 'pistol' | 'smg' | 'shotgun' | 'rifle' | 'sniper' | 'heavy';
+
 export interface WeaponDef {
   id: WeaponId;
   name: string;
@@ -30,6 +33,11 @@ export interface WeaponDef {
   movePenalty: number;
   /** Pellets per shot, fired in a fixed pattern across the hip/ADS cone (see pelletDirs). */
   pellets: number;
+  /** Buy-menu price in credits. */
+  price: number;
+  category: WeaponCategory;
+  /** Distance bots try to fight at with this weapon. */
+  botRange: number;
   /** Lawful projectile instead of hitscan: it falls under the current gravity law and world time. */
   projectile?: { speed: number; fuse: number; proximity: number; radius: number; damage: number };
 }
@@ -42,6 +50,7 @@ export const WEAPONS: Record<WeaponId, WeaponDef> = {
     spread: { hip: 2.4, ads: 0.18, moving: 1.6, air: 3.5, bloomPerShot: 0.32, bloomMax: 2.6, recovery: 9 },
     recoil: { pitch: 0.62, yaw: 0.22, pattern: [0.1, 0.25, 0.15, -0.2, -0.35, -0.1, 0.3, 0.4, 0.1, -0.3], recover: 9, viewPunch: 0.9 },
     adsFov: 52, adsTime: 0.16, equipTime: 0.42, movePenalty: 1, pellets: 1,
+    price: 2700, category: 'rifle', botRange: 20,
   },
   lancer: {
     id: 'lancer', name: 'L-90 Lancer Rail Rifle', short: 'L-90', model: 'Gun_Sniper', auto: false,
@@ -50,6 +59,7 @@ export const WEAPONS: Record<WeaponId, WeaponDef> = {
     spread: { hip: 4.5, ads: 0.02, moving: 3, air: 6, bloomPerShot: 0, bloomMax: 0, recovery: 6 },
     recoil: { pitch: 3.4, yaw: 0.6, pattern: [0.3, -0.4, 0.2], recover: 5, viewPunch: 3.2 },
     adsFov: 18, adsTime: 0.3, equipTime: 0.6, movePenalty: 0.88, pellets: 1,
+    price: 4200, category: 'sniper', botRange: 45,
   },
   sidearm: {
     id: 'sidearm', name: 'P-12 Sidearm', short: 'P-12', model: 'Gun_Pistol', auto: false,
@@ -58,6 +68,7 @@ export const WEAPONS: Record<WeaponId, WeaponDef> = {
     spread: { hip: 1.6, ads: 0.3, moving: 1.0, air: 3, bloomPerShot: 0.5, bloomMax: 2, recovery: 10 },
     recoil: { pitch: 1.3, yaw: 0.35, pattern: [0.2, -0.3, 0.1, 0.35], recover: 12, viewPunch: 1.4 },
     adsFov: 62, adsTime: 0.12, equipTime: 0.28, movePenalty: 1.05, pellets: 1,
+    price: 200, category: 'pistol', botRange: 16,
   },
   magnum: {
     id: 'magnum', name: 'R-6 Magnum', short: 'R-6', model: 'Gun_Revolver', auto: false,
@@ -66,6 +77,7 @@ export const WEAPONS: Record<WeaponId, WeaponDef> = {
     spread: { hip: 1.8, ads: 0.2, moving: 1.2, air: 3, bloomPerShot: 0.9, bloomMax: 2.2, recovery: 7 },
     recoil: { pitch: 3.2, yaw: 0.6, pattern: [0.4, -0.3, 0.25], recover: 8, viewPunch: 2.6 },
     adsFov: 58, adsTime: 0.14, equipTime: 0.32, movePenalty: 1.05, pellets: 1,
+    price: 700, category: 'pistol', botRange: 18,
   },
   scatter: {
     id: 'scatter', name: 'S-8 Breacher Scattergun', short: 'S-8', model: 'Gun_Scatter', auto: false,
@@ -74,6 +86,7 @@ export const WEAPONS: Record<WeaponId, WeaponDef> = {
     spread: { hip: 4.6, ads: 3.2, moving: 0, air: 0, bloomPerShot: 0, bloomMax: 0, recovery: 6 },
     recoil: { pitch: 4.2, yaw: 0.8, pattern: [0.3, -0.4], recover: 7, viewPunch: 3.6 },
     adsFov: 64, adsTime: 0.15, equipTime: 0.45, movePenalty: 1.02, pellets: 9,
+    price: 1500, category: 'shotgun', botRange: 7,
   },
   stinger: {
     id: 'stinger', name: 'K-9 Stinger Machine Pistol', short: 'K-9', model: 'Gun_Stinger', auto: true,
@@ -82,6 +95,7 @@ export const WEAPONS: Record<WeaponId, WeaponDef> = {
     spread: { hip: 2.6, ads: 0.9, moving: 0.9, air: 2.5, bloomPerShot: 0.18, bloomMax: 2.2, recovery: 11 },
     recoil: { pitch: 0.45, yaw: 0.4, pattern: [0.3, -0.35, 0.2, -0.25, 0.4, -0.1], recover: 12, viewPunch: 0.6 },
     adsFov: 64, adsTime: 0.12, equipTime: 0.26, movePenalty: 1.06, pellets: 1,
+    price: 1200, category: 'smg', botRange: 12,
   },
   graviton: {
     id: 'graviton', name: 'G-0 Graviton Launcher', short: 'G-0', model: 'Gun_Graviton', auto: false,
@@ -90,6 +104,7 @@ export const WEAPONS: Record<WeaponId, WeaponDef> = {
     spread: { hip: 0, ads: 0, moving: 0, air: 0, bloomPerShot: 0, bloomMax: 0, recovery: 6 },
     recoil: { pitch: 2.6, yaw: 0.5, pattern: [0.2, -0.3], recover: 6, viewPunch: 2.8 },
     adsFov: 60, adsTime: 0.2, equipTime: 0.5, movePenalty: 0.95, pellets: 1,
+    price: 4000, category: 'heavy', botRange: 20,
     projectile: { speed: 34, fuse: 2.6, proximity: 1.1, radius: 4.5, damage: 105 },
   },
 };
@@ -99,6 +114,21 @@ export const LOADOUTS: Record<LoadoutId, { name: string; role: string; weapons: 
   recon: { name: 'Recon', role: 'Rail rifle and magnum. Holds lanes and ridges.', weapons: ['lancer', 'magnum'] },
   breacher: { name: 'Breacher', role: 'Scattergun and machine pistol. Clears rooms and doorways.', weapons: ['scatter', 'stinger'] },
   grenadier: { name: 'Grenadier', role: 'Graviton launcher and sidearm. Its charges fall with the laws.', weapons: ['graviton', 'sidearm'] },
+};
+
+/** Slot a weapon occupies: pistols are secondaries (1), everything else primaries (0). */
+export const slotOf = (w: WeaponDef): 0 | 1 => w.category === 'pistol' ? 1 : 0;
+
+/** Credits: earned in the field, spent in the buy menu (B) on weapons that last until death. */
+export const ECONOMY = {
+  start: 800, max: 16000, kill: 300, headshotBonus: 100, capture: 300, droneKill: 150,
+  /** Seconds after (re)spawning during which buying works anywhere. */
+  buyTime: 15,
+  /** Metres from one of your team's spawn slots within which buying always works. */
+  buyRadius: 18,
+  grenade: 300,
+  /** Spare magazines carried for each weapon (reserve ammo) and bought with the gun. */
+  spareMags: 3,
 };
 
 export const GRENADE = { fuse: 2.2, radius: 6.5, damage: 110, throwSpeed: 19, perLife: 2 };

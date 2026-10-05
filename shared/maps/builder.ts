@@ -1,6 +1,6 @@
 import { terrainHeight, type Heightfield, type Ramp, type Solid, type Surface } from '../collision';
 import type { Laws } from '../laws';
-import type { BlockStyle, CapturePointDef, Decor, MapDef, PointId, SpawnDef, ThemeId } from './types';
+import type { BlockStyle, CapturePointDef, Decor, MapDef, PickupDef, PointId, SpawnDef, ThemeId } from './types';
 
 // Deterministic value noise so the server and every client generate identical terrain.
 function hash(ix: number, iz: number, seed: number) {
@@ -49,6 +49,7 @@ export class MapBuilder {
   decor: Decor[] = [];
   points: CapturePointDef[] = [];
   spawns: SpawnDef[] = [];
+  pickups: PickupDef[] = [];
   pads: Pad[] = [];
   bumps: Bump[] = [];
   terrain!: Heightfield;
@@ -164,6 +165,11 @@ export class MapBuilder {
     this.spawns.push(slot);
   }
 
+  /** Pickup resting on the floor at (x, z); `y` is the floor height (or 'ground'). */
+  pickup(x: number, y: number | 'ground', z: number, item: PickupDef['item'], respawn = 30) {
+    this.pickups.push({ x: this.tx(x), y: y === 'ground' ? this.ground(x, z) : y, z: this.tz(z), item, respawn });
+  }
+
   raw(decor: Decor) { this.decor.push(decor); }
   at(x: number, z: number) { return { x: this.tx(x), z: this.tz(z) }; }
   rotation(r: number) { return this.rot(r); }
@@ -267,6 +273,7 @@ export class MapBuilder {
       anomaly: { x: anomaly.x, y: anomaly.y + 5, z: anomaly.z }, decor: this.decor, laws: o.laws, sun: o.sun,
       ...(o.teamSize ? { teamSize: o.teamSize } : {}),
       ...(o.reactor ? { reactor: o.reactor } : {}),
+      ...(this.pickups.length ? { pickups: this.pickups } : {}),
     };
   }
 }

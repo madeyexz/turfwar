@@ -1,15 +1,20 @@
 import { CollisionWorld } from '../collision';
 import { buildNav, type NavGraph } from '../match/nav';
 import { cinderBasin } from './cinder';
+import { citadelKeep } from './citadel';
 import { frostlineReach } from './frostline';
 import { meridianDistrict } from './meridian';
 import { ochreQuarter } from './ochre';
+import { railyard } from './railyard';
+import { skylineRooftops } from './skyline';
 import { verdantDivide } from './verdant';
 import type { MapDef, PointId } from './types';
 
-export const MAP_IDS = ['cinder', 'frostline', 'verdant', 'ochre', 'meridian'] as const;
+export const MAP_IDS = ['cinder', 'frostline', 'verdant', 'ochre', 'citadel', 'railyard', 'skyline', 'meridian'] as const;
 export type MapId = (typeof MAP_IDS)[number];
-const factories: Record<string, () => MapDef> = { cinder: cinderBasin, frostline: frostlineReach, verdant: verdantDivide, ochre: ochreQuarter, meridian: meridianDistrict };
+const factories: Record<string, () => MapDef> = {
+  cinder: cinderBasin, frostline: frostlineReach, verdant: verdantDivide, ochre: ochreQuarter, citadel: citadelKeep, railyard, skyline: skylineRooftops, meridian: meridianDistrict,
+};
 
 export interface LoadedMap { def: MapDef; world: CollisionWorld; nav?: NavGraph }
 const cache = new Map<string, LoadedMap>();

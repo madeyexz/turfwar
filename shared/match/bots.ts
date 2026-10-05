@@ -8,7 +8,6 @@ import { findPath, nearestNode } from './nav';
 import type { BotBrain, MatchState, Soldier } from './state';
 
 /** Distance each weapon's bot tries to fight from. */
-const PREFERRED_RANGE: Partial<Record<WeaponId, number>> = { lancer: 45, magnum: 18, scatter: 7, stinger: 12, graviton: 20 };
 
 const CALLSIGNS = [
   'Halcyon', 'Vex', 'Marrow', 'Kestrel', 'Onyx', 'Sable', 'Rook', 'Cinder', 'Talon', 'Wren', 'Juno', 'Brask',
@@ -163,7 +162,7 @@ export function updateBot(state: MatchState, ctx: SimContext, bot: Soldier, dt: 
 
     // Strafe and range-keeping while fighting.
     if (brain.strafeLeft <= 0) { brain.strafe = ctx.random() < 0.5 ? -1 : 1; brain.strafeLeft = 0.5 + ctx.random() * 0.9; }
-    const preferred = PREFERRED_RANGE[w.id] ?? 20;
+    const preferred = w.botRange;
     const fx = -Math.sin(bot.yaw), fz = -Math.cos(bot.yaw), rx = Math.cos(bot.yaw), rz = -Math.sin(bot.yaw);
     const advance = distance > preferred * 1.4 ? 0.7 : distance < preferred * 0.5 ? -0.6 : 0;
     const pathWeight = distance > preferred ? 0.6 : 0.2;

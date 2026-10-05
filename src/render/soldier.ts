@@ -150,7 +150,7 @@ export class SoldierView {
   /** Dev inspection of IK targets. */
   debug?: { chest: THREE.Vector3; grip: THREE.Vector3; fore: THREE.Vector3 };
 
-  constructor(assets: Assets, readonly team: number, loadout: LoadoutId) {
+  constructor(private assets: Assets, readonly team: number, loadout: LoadoutId) {
     armorKit ??= buildArmor(assets);
     this.model = SkeletonUtils.clone(assets.soldier.scene);
     const colors = TEAM_ARMOR[team];
@@ -307,6 +307,7 @@ export class SoldierView {
 
     // ---- Weapon placement ----
     if (this.currentGun !== p.weapon) {
+      this.addGun(this.assets, p.weapon); // bought or picked up: any weapon can be in hand
       for (const [id, g] of this.guns) g.visible = id === p.weapon;
       this.currentGun = p.weapon;
       this.muzzle.position.copy(GUN_POINTS[p.weapon].muzzle);

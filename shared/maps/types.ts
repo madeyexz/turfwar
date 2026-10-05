@@ -1,6 +1,7 @@
 import type { Heightfield, Ramp, Solid } from '../collision';
 import type { Laws } from '../laws';
 import type { Vec3 } from '../math';
+import type { WeaponId } from '../weapons';
 
 export type ThemeId = 'desert' | 'snow' | 'forest';
 
@@ -24,6 +25,11 @@ export type PointId = 'A' | 'B' | 'C' | 'D' | 'E';
 
 export interface CapturePointDef { id: PointId; name: string; x: number; y: number; z: number; radius: number }
 /** A spawn slot. With `point`, it is a forward spawn: open only while its team holds that point. */
+/**
+ * Item lying on the battlefield: walk over ammo/armor to take it; press E on a weapon to swap it in.
+ * It comes back `respawn` seconds after being taken.
+ */
+export interface PickupDef { x: number; y: number; z: number; item: WeaponId | 'ammo' | 'armor'; respawn: number }
 export interface SpawnDef { team: 0 | 1; x: number; y: number; z: number; yaw: number; point?: PointId }
 
 export type Decor =
@@ -59,6 +65,8 @@ export interface MapDef {
   laws: Laws;
   /** Sun direction and environment tint used by the renderer. */
   sun: Vec3;
+  /** Weapon, ammo and armor pickups (mirrored like everything else on symmetric maps). */
+  pickups?: PickupDef[];
   /** The point with the reactor and its orbiting sentinels (defaults to B). */
   reactor?: PointId;
   /** Soldiers per team this battlefield is built for (bots fill the gap); defaults to the mode's size. */
