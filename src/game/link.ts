@@ -32,5 +32,13 @@ export interface GameLink {
   /** Chat line to everyone, or to the team only. */
   say(text: string, team: boolean): void;
   status(): string;
+  /** Online: career stats of the players who have played on this server, best first. */
+  leaderboard?(): CareerStats[];
   dispose(): void;
+}
+
+export interface CareerStats {
+  name: string; mine: boolean;
+  kills: number; deaths: number; assists: number; headshots: number;
+  roundsWon: number; roundsPlayed: number; matchesWon: number; matchesPlayed: number;
 }

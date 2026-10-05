@@ -138,6 +138,20 @@ export const Point = __t.object("Point", {
 });
 export type Point = __Infer<typeof Point>;
 
+export const Profile = __t.object("Profile", {
+  identity: __t.identity(),
+  name: __t.string(),
+  kills: __t.u32(),
+  deaths: __t.u32(),
+  assists: __t.u32(),
+  headshots: __t.u32(),
+  roundsWon: __t.u32(),
+  roundsPlayed: __t.u32(),
+  matchesWon: __t.u32(),
+  matchesPlayed: __t.u32(),
+});
+export type Profile = __Infer<typeof Profile>;
+
 export const Roster = __t.object("Roster", {
   id: __t.u32(),
   name: __t.string(),

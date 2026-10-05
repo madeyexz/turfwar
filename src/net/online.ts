@@ -2,7 +2,7 @@ import type { Identity, Infer } from 'spacetimedb';
 import type { Vec3 } from '../../shared/math';
 import type { ClientReport, MatchEvent, MatchState, ShotClaim, Soldier, Team } from '../../shared/match/state';
 import type { Body } from '../../shared/world';
-import type { GameLink } from '../game/link';
+import type { CareerStats, GameLink } from '../game/link';
 import type { DbConnection } from '../module_bindings';
 import type RosterTable from '../module_bindings/roster_table';
 import { decodeFrame, type DecodedFrame, type FramePose } from '../../shared/match/frame';
@@ -148,6 +148,12 @@ export class OnlineLink implements GameLink {
   drainEvents() { const e = this.events; this.events = []; return e; }
   update() { /* the server ticks the match */ }
 
+  leaderboard(): CareerStats[] {
+    const rows: CareerStats[] = [];
+    for (const p of this.conn.db.profile.iter()) rows.push({ ...p, mine: p.identity.isEqual(this.identity) });
+    return rows.sort((a, b) => b.matchesWon - a.matchesWon || b.kills - a.kills);
+  }
+
   status() {
     if (this.disconnected) return 'DISCONNECTED';
     const humans = this.view?.soldiers.filter(s => !s.bot).length ?? 0;
@@ -209,7 +215,7 @@ export async function connectOnline(name: string, team: Team | undefined, status
           })
           .onError(() => { clearTimeout(timer); reject(new Error('Subscription failed.')); })
           // Per-tick state arrives packed in `frame`; `soldier` and `body` are server-side detail.
-          .subscribe(['SELECT * FROM match', 'SELECT * FROM roster', 'SELECT * FROM frame', 'SELECT * FROM player', 'SELECT * FROM match_event']);
+          .subscribe(['SELECT * FROM match', 'SELECT * FROM roster', 'SELECT * FROM frame', 'SELECT * FROM player', 'SELECT * FROM match_event', 'SELECT * FROM profile']);
       })
       .onConnectError((_ctx, error) => { clearTimeout(timer); reject(new Error(`Could not reach the match server (${error?.message ?? 'connection refused'}).`)); })
       .onDisconnect(() => { link?.markDisconnected(); })

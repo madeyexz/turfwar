@@ -55,6 +55,7 @@ import MatchRow from "./match_table";
 import MatchEventRow from "./match_event_table";
 import PlayerRow from "./player_table";
 import PointRow from "./point_table";
+import ProfileRow from "./profile_table";
 import RosterRow from "./roster_table";
 import SoldierRow from "./soldier_table";
 
@@ -125,6 +126,17 @@ const tablesSchema = __schema({
       { name: 'point_id_key', constraint: 'unique', columns: ['id'] },
     ],
   }, PointRow),
+  profile: __table({
+    name: 'profile',
+    indexes: [
+      { accessor: 'identity', name: 'profile_identity_idx_btree', algorithm: 'btree', columns: [
+        'identity',
+      ] },
+    ],
+    constraints: [
+      { name: 'profile_identity_key', constraint: 'unique', columns: ['identity'] },
+    ],
+  }, ProfileRow),
   roster: __table({
     name: 'roster',
     indexes: [

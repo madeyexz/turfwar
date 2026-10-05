@@ -1,4 +1,4 @@
-import { ScheduleAt } from 'spacetimedb';
+import { ScheduleAt, type Identity } from 'spacetimedb';
 import { schema, table, t, SenderError, type ReducerCtx, type InferSchema } from 'spacetimedb/server';
 import { MAP_IDS, loadMap, loadNav } from '../../shared/maps/index';
 import type { SimContext } from '../../shared/match/combat';
@@ -113,12 +113,19 @@ const historyTable = table({ name: 'history' }, { slot: t.u32().primaryKey(), js
 
 const eventTable = table({ name: 'match_event', public: true, event: true }, { seq: t.u32(), json: t.string() });
 
+/** Career stats per identity (BeGone profile): the public leaderboard reads this. */
+const profileTable = table({ name: 'profile', public: true }, {
+  identity: t.identity().primaryKey(), name: t.string(),
+  kills: t.u32(), deaths: t.u32(), assists: t.u32(), headshots: t.u32(),
+  roundsWon: t.u32(), roundsPlayed: t.u32(), matchesWon: t.u32(), matchesPlayed: t.u32(),
+});
+
 const tickTable = table({ name: 'tick_schedule' }, { scheduledId: t.u64().primaryKey().autoInc(), scheduledAt: t.scheduleAt() });
 
 const spacetimedb = schema({
   match: matchTable, clock: clockTable, soldier: soldierTable, roster: rosterTable, frame: frameTable, botBrain: brainTable,
   point: pointTable, body: bodyTable, player: playerTable, inbox: inboxTable, command: commandTable, history: historyTable,
-  matchEvent: eventTable, tickSchedule: tickTable,
+  matchEvent: eventTable, tickSchedule: tickTable, profile: profileTable,
 });
 export default spacetimedb;
 
@@ -316,7 +323,47 @@ function withMatch<T>(ctx: Ctx, fn: (state: MatchState, sim: SimContext, loaded:
   const sim: SimContext = { map: def, world, nav: loadNav(loaded.state.mapId), random: () => ctx.random(), emit: e => events.push(e) };
   const result = fn(loaded.state, sim, loaded);
   save(ctx, loaded, events, frame);
+  recordStats(ctx, loaded.state, events);
   return result;
+}
+
+type ProfileRow = Parameters<Ctx['db']['profile']['insert']>[0];
+
+/** Fold this tick's kills and round results into the humans' career stats. */
+function recordStats(ctx: Ctx, state: MatchState, events: MatchEvent[]) {
+  if (!events.some(e => e.type === 'kill' || e.type === 'round' || e.type === 'phase')) return;
+  const owners = new Map<number, Identity>();
+  for (const p of ctx.db.player.iter()) owners.set(p.soldierId, p.identity);
+  const rows = new Map<number, ProfileRow>();
+  const profile = (soldierId: number) => {
+    const identity = owners.get(soldierId);
+    if (!identity) return undefined;
+    let row = rows.get(soldierId);
+    if (!row) {
+      const name = state.soldiers.find(s => s.id === soldierId)?.name ?? '';
+      row = ctx.db.profile.identity.find(identity) ?? { identity, name, kills: 0, deaths: 0, assists: 0, headshots: 0, roundsWon: 0, roundsPlayed: 0, matchesWon: 0, matchesPlayed: 0 };
+      row = { ...row, name: name || row.name };
+      rows.set(soldierId, row);
+    }
+    return row;
+  };
+  for (const e of events) {
+    if (e.type === 'kill') {
+      const killer = e.killer !== e.victim ? profile(e.killer) : undefined;
+      if (killer) { killer.kills++; if (e.head) killer.headshots++; }
+      const victim = profile(e.victim);
+      if (victim) victim.deaths++;
+    } else if (e.type === 'reward' && e.reason === 'Assist') {
+      const r = profile(e.id); if (r) r.assists++;
+    } else if (e.type === 'round' && e.phase === 'over') {
+      for (const s of state.soldiers) { const r = profile(s.id); if (r) { r.roundsPlayed++; if (s.team === e.winner) r.roundsWon++; } }
+    } else if (e.type === 'phase' && e.phase === 'ended') {
+      for (const s of state.soldiers) { const r = profile(s.id); if (r) { r.matchesPlayed++; if (s.team === e.winner) r.matchesWon++; } }
+    }
+  }
+  for (const row of rows.values()) {
+    if (ctx.db.profile.identity.find(row.identity)) ctx.db.profile.identity.update(row); else ctx.db.profile.insert(row);
+  }
 }
 
 function mySoldier(ctx: Ctx) {
