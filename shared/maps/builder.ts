@@ -1,5 +1,5 @@
 import { terrainHeight, type Heightfield, type Ramp, type Solid, type Surface } from '../collision';
-import type { BlockStyle, CapturePointDef, Decor, MapDef, PickupDef, PointId, SpawnDef, ThemeId } from './types';
+import type { BlockStyle, CapturePointDef, Decor, MapDef, PickupDef, PointId, RampStyle, SpawnDef, ThemeId } from './types';
 
 // Deterministic value noise so the server and every client generate identical terrain.
 function hash(ix: number, iz: number, seed: number) {
@@ -127,11 +127,48 @@ export class MapBuilder {
   }
 
   /** Ramp rising toward local direction dir (0:+X 1:+Z 2:-X 3:-Z). */
-  ramp(x: number, z: number, w: number, d: number, y0: number, y1: number, dir: 0 | 1 | 2 | 3, style: 'stairs' | 'ramp' = 'ramp') {
+  ramp(x: number, z: number, w: number, d: number, y0: number, y1: number, dir: 0 | 1 | 2 | 3, style: RampStyle = 'ramp') {
     const cx = this.tx(x), cz = this.tz(z);
     const mdir = (this.s < 0 ? (dir + 2) % 4 : dir) as 0 | 1 | 2 | 3;
     this.ramps.push({ minX: cx - w / 2, maxX: cx + w / 2, minZ: cz - d / 2, maxZ: cz + d / 2, y0, y1, dir: mdir, surface: 'metal' });
     this.decor.push({ kind: 'ramp', ramp: this.ramps.length - 1, style });
+  }
+
+  /** Tint the block made by `box` (team crates, painted plaster, rusty steel). Returns the solid. */
+  paint(solid: number, color: number) {
+    for (let i = this.decor.length - 1; i >= 0; i--) {
+      const d = this.decor[i];
+      if (d.kind === 'block' && d.solid === solid) { d.color = color; break; }
+    }
+    return solid;
+  }
+
+  /** Wooden crate standing on y (or the ground), optionally tinted. */
+  crate(x: number, y: number | 'ground', z: number, w = 1.5, h = w, d = w, color?: number) {
+    const i = this.box(x, y === 'ground' ? this.ground(x, z) : y, z, w, h, d, 'crate');
+    return color === undefined ? i : this.paint(i, color);
+  }
+
+  /**
+   * Cylinder resting on y: upright (`axis` 'y', `length` is its height) or lying along x/z. Its
+   * collision is a fan of boxes inscribed in the circle, so cover stays within 10% of the surface.
+   */
+  cylinder(x: number, y: number, z: number, radius: number, length: number, style: BlockStyle, axis: 'x' | 'y' | 'z' = 'y', color?: number) {
+    const surface = surfaceFor(style);
+    const n = radius < 0.8 ? 2 : radius < 2 ? 3 : 5;
+    for (let k = 0; k < n; k++) {
+      const a = ((k + 0.5) / n) * Math.PI / 2, u = radius * Math.cos(a) * 2, v = radius * Math.sin(a) * 2;
+      if (axis === 'y') this.box(x, y, z, u, length, v, 'invisible', surface);
+      else if (axis === 'x') this.box(x, y + radius - v / 2, z, length, v, u, 'invisible', surface);
+      else this.box(x, y + radius - v / 2, z, u, v, length, 'invisible', surface);
+    }
+    // Mirroring swaps nothing for an axis-aligned cylinder: only its centre moves.
+    this.decor.push({ kind: 'cylinder', x: this.tx(x), y, z: this.tz(z), radius, height: length, axis, style, ...(color === undefined ? {} : { color }) });
+  }
+
+  /** Still water filling a w×d basin at height y (decorative; dig the basin with a terrain pad). */
+  water(x: number, y: number, z: number, w: number, d: number) {
+    this.decor.push({ kind: 'water', x: this.tx(x), y, z: this.tz(z), w, d });
   }
 
   prop(model: string, x: number, y: number | 'ground', z: number, rotY = 0, scale = 1) {
@@ -277,6 +314,9 @@ export type Side = 'n' | 's' | 'e' | 'w';
 function surfaceFor(style: BlockStyle): Surface {
   switch (style) {
     case 'concrete': case 'pillar': case 'sandstone': return 'concrete';
+    // Masonry and timber both throw up dust and splinters like concrete.
+    case 'brick': case 'plaster': case 'cobble': case 'slab': case 'wood': case 'crate': return 'concrete';
+    case 'hedge': return 'dirt';
     case 'rock': return 'rock';
     case 'glass': return 'glass';
     case 'shield': return 'energy';

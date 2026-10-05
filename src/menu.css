@@ -124,6 +124,10 @@
 #menu [data-theme='desert'] { --swatch: #d9a75e; }
 #menu [data-theme='snow'] { --swatch: #cfe8f2; }
 #menu [data-theme='forest'] { --swatch: #7fc56b; }
+#menu [data-theme='dusk'] { --swatch: #f0a560; }
+#menu [data-theme='twilight'] { --swatch: #8aa6c8; }
+#menu [data-theme='steppe'] { --swatch: #d8c9a4; }
+#menu [data-theme='meadow'] { --swatch: #8fc46a; }
 
 /* Connection badge (online block and public rooms) */
 #menu .conn { display: inline-flex; align-items: center; gap: 7px; font-size: 11px; font-weight: 700; letter-spacing: 0.14em; text-transform: uppercase; color: var(--muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; min-width: 0; }

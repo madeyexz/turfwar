@@ -12,3 +12,8 @@ path: https://polyhaven.com/a/grass_path_2
 concrete: https://polyhaven.com/a/concrete_floor_02
 metalplate: https://polyhaven.com/a/metal_plate
 container: https://polyhaven.com/a/container_side
+brick: https://polyhaven.com/a/brick_wall_001
+planks: https://polyhaven.com/a/raw_plank_wall
+corrugated: https://polyhaven.com/a/worn_corrugated_iron
+plaster: https://polyhaven.com/a/worn_mossy_plasterwall
+cobble: https://polyhaven.com/a/cobblestone_floor_08

@@ -29,6 +29,8 @@ const report = (s: Soldier, over: Partial<Parameters<typeof reportState>[3]> = {
 /** Start the match and skip the round-start freeze. */
 const goLive = (state: MatchState, ctx: SimContext) => { resetMatch(state, ctx); tick(state, ctx, state.config.freezeTime + 0.1); };
 
+const ASYMMETRIC = ['ochre', 'crane', 'tower', 'pipeline', 'timbertown'];
+
 describe('maps and navigation', () => {
   for (const id of MAP_IDS) {
     it(`${id}: every landmark and bomb site is reachable from both bases`, () => {
@@ -44,8 +46,8 @@ describe('maps and navigation', () => {
       const { def } = loadMap(id);
       for (const team of [0, 1]) expect(def.spawns.filter(s => s.team === team).length).toBeGreaterThanOrEqual(def.big ? 24 : 12);
     });
-    // Ochre Quarter keeps its source layout's attacker/defender asymmetry on purpose.
-    it.skipIf(id === 'ochre')(`${id}: is rotationally symmetric for fairness`, () => {
+    // Ochre Quarter and the BeGone homages keep their source layouts' asymmetry on purpose.
+    it.skipIf(ASYMMETRIC.includes(id))(`${id}: is rotationally symmetric for fairness`, () => {
       const { def } = loadMap(id);
       const key = (s: { minX: number; maxX: number; minZ: number; maxZ: number; minY: number; maxY: number }) => [s.minX, s.maxX, s.minZ, s.maxZ, s.minY, s.maxY].map(v => v.toFixed(2)).join();
       const all = new Set(def.solids.map(key));
