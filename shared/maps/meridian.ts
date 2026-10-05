@@ -208,6 +208,13 @@ export function meridianDistrict(): MapDef {
 
     // ---- Ammo crate ----
     b.ammoCrate(-3, CANAL_Y, -50);                           // canal bed
+
+    // ---- Vehicles on the base boulevard: two cars, two scooters and a helicopter ----
+    b.vehicle('car', -166, 'ground', -30, 0);
+    b.vehicle('car', -166, 'ground', 30, Math.PI);
+    b.vehicle('scooter', -166, 'ground', -40, 0);
+    b.vehicle('scooter', -166, 'ground', 40, Math.PI);
+    b.vehicle('heli', -166, 'ground', -85, 0);
   });
 
   // ---- Points A, B and their mirrors D, E (ids do not mirror, so they are placed here) ----

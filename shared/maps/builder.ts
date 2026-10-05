@@ -1,4 +1,5 @@
 import { terrainHeight, type Heightfield, type Ladder, type Ramp, type Solid, type Surface } from '../collision';
+import type { VehicleKind, VehicleSpot } from '../vehicles';
 import type { BlockStyle, CapturePointDef, Decor, MapDef, PickupDef, PointId, RampStyle, SpawnDef, ThemeId } from './types';
 
 // Deterministic value noise so the server and every client generate identical terrain.
@@ -49,6 +50,7 @@ export class MapBuilder {
   spawns: SpawnDef[] = [];
   pickups: PickupDef[] = [];
   ladders: Ladder[] = [];
+  vehicles: VehicleSpot[] = [];
   pads: Pad[] = [];
   bumps: Bump[] = [];
   terrain!: Heightfield;
@@ -252,6 +254,11 @@ export class MapBuilder {
     this.pickups.push({ x: this.tx(x), y: y === 'ground' ? this.ground(x, z) : y, z: this.tz(z), item: 'ammo', respawn: 0 });
   }
 
+  /** Drivable vehicle parked at (x, z) on the floor at y (or 'ground'), facing yaw. */
+  vehicle(kind: VehicleKind, x: number, y: number | 'ground', z: number, yaw = 0) {
+    this.vehicles.push({ kind, x: this.tx(x), y: y === 'ground' ? this.ground(x, z) : y, z: this.tz(z), yaw: this.rot(yaw) });
+  }
+
   raw(decor: Decor) { this.decor.push(decor); }
   at(x: number, z: number) { return { x: this.tx(x), z: this.tz(z) }; }
   rotation(r: number) { return this.rot(r); }
@@ -353,6 +360,7 @@ export class MapBuilder {
       ...(o.big ? { big: true } : {}),
       ...(this.pickups.length ? { pickups: this.pickups } : {}),
       ...(this.ladders.length ? { ladders: this.ladders } : {}),
+      ...(this.vehicles.length ? { vehicles: this.vehicles } : {}),
     };
   }
 }

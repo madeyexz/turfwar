@@ -2,6 +2,8 @@ import type { WeaponId } from '../shared/weapons';
 
 type V3 = { x: number; y: number; z: number };
 type Listener = { pos: V3; yaw: number };
+/** A looping vehicle sound (see Audio.engine). */
+export interface EngineVoice { set(rpm: number, listener?: Listener, at?: V3): void; stop(): void }
 
 /**
  * Sound design. Firearms are recorded CC0 gunshots (public/assets/sfx, built by
@@ -743,6 +745,103 @@ export class Audio {
   }
 
   ui() { if (!this.ready) return; const t = this.now(); this.tone(this.out(0.2, undefined, undefined, 0.05), t, 'sine', 900, 1100, 0.05, 0.2); }
+
+  /**
+   * A running vehicle: a looping synthesized voice. Cars growl (two detuned saws through a low-pass
+   * that opens with the revs), scooters buzz (a 125 cc single: square and saw through a band-pass),
+   * the helicopter chops (filtered noise gated at the blade rate over a low thump). `set` moves revs
+   * (0..1), level and position every frame; `stop` fades it out. Undefined until audio has started.
+   */
+  engine(kind: 'car' | 'scooter' | 'heli'): EngineVoice | undefined {
+    const ctx = this.ctx;
+    if (!(ctx instanceof AudioContext) || !this.live) return undefined;
+    const t = this.now();
+    const out = ctx.createGain(); out.gain.value = 0;
+    const pan = ctx.createStereoPanner();
+    out.connect(pan).connect(this.world);
+    const nodes: AudioScheduledSourceNode[] = [];
+    const osc = (type: OscillatorType, f: number) => { const o = ctx.createOscillator(); o.type = type; o.frequency.value = f; o.start(t); nodes.push(o); return o; };
+    let tune: (rpm: number) => void;
+    if (kind === 'heli') {
+      const src = ctx.createBufferSource(); src.buffer = this.noise; src.loop = true; src.start(t); nodes.push(src);
+      const lp = ctx.createBiquadFilter(); lp.type = 'lowpass'; lp.frequency.value = 700;
+      const chop = ctx.createGain(); chop.gain.value = 0.5;
+      const lfo = osc('sine', 10); const depth = ctx.createGain(); depth.gain.value = 0.5;
+      lfo.connect(depth).connect(chop.gain);
+      src.connect(lp).connect(chop).connect(out);
+      const thump = osc('sine', 46); const tg = ctx.createGain(); tg.gain.value = 0.5;
+      thump.connect(tg).connect(out);
+      const whine = osc('sawtooth', 380); const wf = ctx.createBiquadFilter(); wf.type = 'bandpass'; wf.frequency.value = 900; wf.Q.value = 4;
+      const wg = ctx.createGain(); wg.gain.value = 0.05; whine.connect(wf).connect(wg).connect(out);
+      tune = rpm => {
+        const now = ctx.currentTime;
+        lfo.frequency.setTargetAtTime(3 + rpm * 10, now, 0.1);
+        thump.frequency.setTargetAtTime(30 + rpm * 22, now, 0.1);
+        whine.frequency.setTargetAtTime(160 + rpm * 300, now, 0.2);
+        lp.frequency.setTargetAtTime(400 + rpm * 700, now, 0.1);
+      };
+    } else if (kind === 'scooter') {
+      const a = osc('square', 60), b = osc('sawtooth', 121);
+      const bp = ctx.createBiquadFilter(); bp.type = 'bandpass'; bp.frequency.value = 900; bp.Q.value = 0.8;
+      const mix = ctx.createGain(); mix.gain.value = 0.22;
+      a.connect(bp); b.connect(bp); bp.connect(mix).connect(out);
+      tune = rpm => {
+        const now = ctx.currentTime, f = 55 + rpm * 165;
+        a.frequency.setTargetAtTime(f, now, 0.06); b.frequency.setTargetAtTime(f * 2.02, now, 0.06);
+        bp.frequency.setTargetAtTime(700 + rpm * 1500, now, 0.08);
+      };
+    } else {
+      const a = osc('sawtooth', 40), b = osc('sawtooth', 40.7), sub = osc('sine', 20);
+      const lp = ctx.createBiquadFilter(); lp.type = 'lowpass'; lp.frequency.value = 500; lp.Q.value = 2;
+      const mix = ctx.createGain(); mix.gain.value = 0.3;
+      a.connect(lp); b.connect(lp); lp.connect(mix).connect(out);
+      const sg = ctx.createGain(); sg.gain.value = 0.4; sub.connect(sg).connect(out);
+      tune = rpm => {
+        const now = ctx.currentTime, f = 34 + rpm * 92;
+        a.frequency.setTargetAtTime(f, now, 0.08); b.frequency.setTargetAtTime(f * 1.012, now, 0.08); sub.frequency.setTargetAtTime(f / 2, now, 0.08);
+        lp.frequency.setTargetAtTime(300 + rpm * 1700, now, 0.08);
+      };
+    }
+    const base = kind === 'heli' ? 0.55 : kind === 'scooter' ? 0.32 : 0.4;
+    let stopped = false;
+    return {
+      set: (rpm, listener, at) => {
+        if (stopped) return;
+        const r = Math.max(0, Math.min(1, rpm));
+        tune(r);
+        let gain = base * (0.55 + r * 0.45), p = 0;
+        if (listener && at) { const sp = this.spatial(listener, at); gain /= 1 + sp.d * 0.07; p = sp.pan; }
+        out.gain.setTargetAtTime(this.muted ? 0 : gain, ctx.currentTime, 0.08);
+        pan.pan.setTargetAtTime(p, ctx.currentTime, 0.05);
+      },
+      stop: () => {
+        if (stopped) return;
+        stopped = true;
+        const now = ctx.currentTime;
+        out.gain.setTargetAtTime(0, now, 0.15);
+        for (const n of nodes) n.stop(now + 0.8);
+        setTimeout(() => out.disconnect(), 1000);
+      },
+    };
+  }
+
+  /** Doors and seat: a latch clunk getting in or out of a vehicle. */
+  door() {
+    if (!this.ready) return;
+    const t = this.now(), out = this.out(0.35, undefined, undefined, 0.15);
+    this.noiseBurst(out, t, 0.09, 'lowpass', 600, 1, 0.9);
+    this.tone(out, t, 'square', 140, 70, 0.07, 0.15);
+    this.noiseBurst(out, t + 0.05, 0.05, 'bandpass', 2200, 3, 0.25);
+  }
+
+  /** Metal impact (a vehicle hitting something), louder with the speed lost. */
+  crash(strength: number, listener?: Listener, at?: V3) {
+    if (!this.ready) return;
+    const t = this.now(), out = this.out(Math.min(1.2, 0.3 + strength * 0.05), listener, at, 0.4);
+    this.noiseBurst(out, t, 0.35, 'lowpass', 900, 0.8, 1);
+    this.noiseBurst(out, t, 0.2, 'bandpass', 2600, 2, 0.5);
+    this.tone(out, t, 'sine', 90, 40, 0.3, 0.6);
+  }
 
   /** Endless low filtered-noise wind bed. */
   private wind() {

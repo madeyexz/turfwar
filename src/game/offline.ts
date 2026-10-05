@@ -1,9 +1,9 @@
 import { rng, type Vec3 } from '../../shared/math';
 import {
-  addSoldier, balanceTeams, buyAttachmentFor, buyItem, createContext, createMatch, fireShot, reload, reportState, switchWeapon,
-  throwGrenade, tickMatch, useAmmoCrate, TICK_RATE, type SimContext,
+  addSoldier, balanceTeams, buyAttachmentFor, buyItem, createContext, createMatch, enterVehicle, exitVehicle, fireShot, reload, reportState,
+  reportVehicle, switchWeapon, throwGrenade, tickMatch, useAmmoCrate, TICK_RATE, type SimContext,
 } from '../../shared/match/sim';
-import { ELIMINATION, PRACTICE_CONFIG, type ClientReport, type MatchConfig, type MatchEvent, type MatchState, type ShotClaim, type Team } from '../../shared/match/state';
+import { ELIMINATION, PRACTICE_CONFIG, type ClientReport, type MatchConfig, type MatchEvent, type MatchState, type ShotClaim, type Team, type VehicleReport } from '../../shared/match/state';
 import type { BuyItem } from '../../shared/match/economy';
 import type { AttachmentId, Slot, WeaponId } from '../../shared/weapons';
 import type { GameLink } from './link';
@@ -20,6 +20,7 @@ export class OfflineLink implements GameLink {
   private ticks = 0;
   /** Game time since the last report: the movement check runs on the same clock as the player. */
   private sinceReport = 0;
+  private sinceVehicleReport = 0;
   private practice: boolean;
 
   constructor(mapId: string, name: string, team: Team | undefined, config: Partial<MatchConfig> = {}, practice = false) {
@@ -38,7 +39,7 @@ export class OfflineLink implements GameLink {
   status() { return this.practice ? 'PRACTICE RANGE' : 'SOLO'; }
 
   update(dt: number) {
-    this.sinceReport += dt;
+    this.sinceReport += dt; this.sinceVehicleReport += dt;
     this.accumulator += Math.min(dt, 0.25);
     const step = 1 / TICK_RATE;
     while (this.accumulator >= step) {
@@ -59,6 +60,12 @@ export class OfflineLink implements GameLink {
   buy(item: BuyItem) { buyItem(this.match, this.ctx, this.me, item); }
   attach(weapon: WeaponId, attachment: AttachmentId) { buyAttachmentFor(this.match, this.me, weapon, attachment); }
   useCrate(index: number) { useAmmoCrate(this.match, this.ctx, this.me, index); }
+  enterVehicle(index: number) { enterVehicle(this.match, this.ctx, this.me, index); }
+  exitVehicle() { exitVehicle(this.match, this.ctx, this.me); }
+  vehicleReport(r: VehicleReport) {
+    reportVehicle(this.match, this.ctx, this.me, r, this.sinceVehicleReport);
+    this.sinceVehicleReport = 0;
+  }
   say(text: string, team: boolean) {
     const s = this.match.soldiers.find(x => x.id === this.me);
     const clean = text.trim().slice(0, 120);
