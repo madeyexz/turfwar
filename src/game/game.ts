@@ -581,6 +581,9 @@ export class Game {
       case 'reward': if (e.id === myId) { this.hud.reward(e.amount, e.reason); this.audio.cash(); } break;
       case 'round': {
         if (e.phase === 'freeze') {
+          // Every round deploys everyone fresh in their base: full magazines, health and stamina,
+          // survivors included (they keep their gear, the server refills it).
+          if (me?.alive) { this.player.spawnFrom(me); this.shownWeapon = ''; }
           this.audio.roundStart();
           const sabotage = modeOf(state, this.map.def) === 'sabotage';
           const goal = !sabotage ? 'Eliminate the enemy team' : me?.team === ATTACKERS ? 'Arm the bomb or eliminate SWAT' : 'Defend the sites or eliminate the Militia';

@@ -239,6 +239,8 @@ export class LocalPlayer {
         if (to !== undefined && to !== this.slot) this.swap(to, result);
       }
       if (input!.take('KeyR')) this.startReload(result);
+      // An empty magazine reloads by itself (when there are spare rounds).
+      if (this.slot !== 2 && this.ammo[this.slot] <= 0 && this.switchLeft <= 0 && this.throwLeft <= 0) this.startReload(result);
       const throwKey = input!.take('Digit4') || input!.take('KeyG');
       if (throwKey && this.grenades > 0 && this.throwLeft <= 0 && this.reloadLeft <= 0) {
         this.throwLeft = 0.32; this.grenades--; this.sinceThrow = 0; this.binoculars = false;
