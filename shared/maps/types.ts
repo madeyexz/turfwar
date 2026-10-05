@@ -47,6 +47,8 @@ export type Decor =
   | { kind: 'cylinder'; x: number; y: number; z: number; radius: number; height: number; axis: 'x' | 'y' | 'z'; style: BlockStyle; color?: number }
   /** Sphere centred at y (statues); collision comes from a box placed with it. */
   | { kind: 'ball'; x: number; y: number; z: number; radius: number; style: BlockStyle; color?: number }
+  /** Lattice girder along its bottom centreline from (x0, y0, z0) to (x1, y1, z1); collision comes from boxes placed with it. */
+  | { kind: 'truss'; x0: number; y0: number; z0: number; x1: number; y1: number; z1: number; w: number; h: number; color?: number }
   /** Still water surface (decorative: bullets and soldiers pass through). */
   | { kind: 'water'; x: number; y: number; z: number; w: number; d: number }
   | { kind: 'ramp'; ramp: number; style: RampStyle }

@@ -8,7 +8,8 @@ export interface Theme {
   groundTint: THREE.Color; rockTint: THREE.Color; dirtTint: THREE.Color;
   skyTop: THREE.Color; skyHorizon: THREE.Color; fog: THREE.Color; fogDensity: number;
   sunColor: THREE.Color; sunIntensity: number; hemiSky: THREE.Color; hemiGround: THREE.Color; hemiIntensity: number;
-  planet: THREE.Color; exposure: number;
+  /** Ringed gas giant in the sky; null for the Earth-like BeGone skies. */
+  planet: THREE.Color | null; exposure: number;
 }
 
 export const THEMES: Record<ThemeId, Theme> = {
@@ -33,13 +34,13 @@ export const THEMES: Record<ThemeId, Theme> = {
     sunColor: new THREE.Color(0xfff0d0), sunIntensity: 3.1, hemiSky: new THREE.Color(0xb8e0d8), hemiGround: new THREE.Color(0x4f5f3d), hemiIntensity: 1.35,
     planet: new THREE.Color(0x9fd6c6), exposure: 0.98,
   },
-  // Low orange sun over grass and bare rock (BeGone's Tower and Crane evenings).
+  // Low sun over grass, sandy paths and grey rock (BeGone's Tower and Crane evenings).
   dusk: {
-    id: 'dusk', ground: 'path', rock: 'cliff', dirt: 'dirt',
-    groundTint: new THREE.Color(0.95, 0.9, 0.72), rockTint: new THREE.Color(0.86, 0.74, 0.66), dirtTint: new THREE.Color(0.96, 0.84, 0.7),
-    skyTop: new THREE.Color(0x3d4f7c), skyHorizon: new THREE.Color(0xf0a560), fog: new THREE.Color(0xc89772), fogDensity: 0.0045,
-    sunColor: new THREE.Color(0xffb878), sunIntensity: 3.2, hemiSky: new THREE.Color(0xb6a8cc), hemiGround: new THREE.Color(0x6e5440), hemiIntensity: 1.2,
-    planet: new THREE.Color(0xe6a27c), exposure: 1.0,
+    id: 'dusk', ground: 'path', rock: 'lichen', dirt: 'sand',
+    groundTint: new THREE.Color(0.8, 1.0, 0.56), rockTint: new THREE.Color(0.9, 0.86, 0.8), dirtTint: new THREE.Color(1.0, 0.9, 0.74),
+    skyTop: new THREE.Color(0x4a6896), skyHorizon: new THREE.Color(0xf0b07a), fog: new THREE.Color(0xc9a68a), fogDensity: 0.0042,
+    sunColor: new THREE.Color(0xffc690), sunIntensity: 3.1, hemiSky: new THREE.Color(0xb4bed8), hemiGround: new THREE.Color(0x5e5a42), hemiIntensity: 1.25,
+    planet: null, exposure: 1.0,
   },
   // Blue hour over a walled garden: cool, soft light that still reads at range.
   twilight: {
@@ -47,7 +48,7 @@ export const THEMES: Record<ThemeId, Theme> = {
     groundTint: new THREE.Color(0.62, 0.8, 0.6), rockTint: new THREE.Color(0.7, 0.76, 0.8), dirtTint: new THREE.Color(0.8, 0.82, 0.8),
     skyTop: new THREE.Color(0x1f3a64), skyHorizon: new THREE.Color(0x8aa6c8), fog: new THREE.Color(0x6a82a2), fogDensity: 0.006,
     sunColor: new THREE.Color(0xc4d2ff), sunIntensity: 2.0, hemiSky: new THREE.Color(0x9cb4dc), hemiGround: new THREE.Color(0x3a4440), hemiIntensity: 1.45,
-    planet: new THREE.Color(0xa8b8e0), exposure: 1.05,
+    planet: null, exposure: 1.05,
   },
 };
 

@@ -57,6 +57,8 @@ function furnishBases(def: MapDef, world: CollisionWorld) {
     const floor = world.groundHeight(x, z, y + 0.6, 0.35);
     if (Math.abs(floor - y) > 0.45) return undefined;
     if (world.overlapsSolid({ x, y: floor + 0.05, z }, 0.45, 1.7)) return undefined;
+    // Not on or under stairs: ramps are walkable but never solid, so the overlap test misses them.
+    if (world.rampsAt(x, z).some(i => { const r = world.ramps[i]; return x > r.minX - 0.5 && x < r.maxX + 0.5 && z > r.minZ - 0.5 && z < r.maxZ + 0.5; })) return undefined;
     if (taken.some(p => Math.hypot(p.x - x, p.z - z) < gap)) return undefined;
     return floor;
   };
