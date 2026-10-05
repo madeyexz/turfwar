@@ -79,27 +79,13 @@ function apartment(b: B, x0: number, x1: number, z0: number, z1: number, nooks: 
 }
 
 /**
- * Stairs up from the ground with stepped supports underneath, so nobody walks into the drawn
- * flight from the side: each metre of run is filled up to just under the tread at its low end.
- */
-function stairs(b: B, x: number, z: number, w: number, d: number, top: number, dir: 0 | 1 | 2 | 3) {
-  b.ramp(x, z, w, d, 0, top, dir, 'stairs');
-  const alongX = dir === 0 || dir === 2, run = alongX ? w : d, sgn = dir === 0 || dir === 1 ? 1 : -1;
-  const low = (alongX ? x : z) - sgn * run / 2;
-  for (let a = 1; a < run - 0.01; a += 1) {
-    const len = Math.min(1, run - a), c = low + sgn * (a + len / 2), h = top * a / run - 0.3;
-    if (alongX) b.box(c, 0, z, len, h, d, 'invisible'); else b.box(x, 0, c, w, h, len, 'invisible');
-  }
-}
-
-/**
  * Straight stairs along a block's north (side -1) or south (+1) face: the flight climbs from `foot`
  * to `top` (x) beside the wall, then a landing spans `top`..`corner` at the roof's corner, where the
  * parapet opens.
  */
 function roofStairs(b: B, faceZ: number, side: -1 | 1, foot: number, top: number, corner: number) {
   const z = faceZ + side * 1.3, sgn = Math.sign(top - foot);
-  stairs(b, (foot + top) / 2, z, Math.abs(top - foot), 2.6, ROOF, top < foot ? 2 : 0);
+  b.stairs((foot + top) / 2, z, Math.abs(top - foot), 2.6, 0, ROOF, top < foot ? 2 : 0);
   b.box((top + corner) / 2, ROOF - 0.3, z, Math.abs(corner - top), 0.3, 2.6, 'floor');
   for (const x of [top + sgn * 0.15, corner - sgn * 0.15]) b.paint(b.box(x, 0, faceZ + side * 2.45, 0.2, ROOF - 0.3, 0.2, 'steel'), 0x6d6a66);
   b.rail(top, faceZ + side * 2.6, corner, faceZ + side * 2.6, ROOF);
@@ -186,9 +172,9 @@ export function timbertown(): MapDef {
   deck(2, 2.3, -7.2, 0.4); deck(4.7, 6.7, -7.2, 0.4); deck(2.3, 4.7, -5.9, 0.4);    // east arm
   deck(-8.2, -7.7, 0.4, 3.6); deck(-5.3, 6.7, 0.4, 3.6);                           // south arm (west stairwell cut out)
   deck(-8.2, -7.7, -7.2, 0.4); deck(-5.3, -3.4, -7.2, 0.4); deck(-7.7, -5.3, -7.2, -1.2); // west arm
-  stairs(b, -6.5, 1.2, 2.4, 4.8, P, 3);                                            // west stairs from the south
-  stairs(b, 3.5, -8.2, 2.4, 4.6, P, 1);                                            // east stairs from the north
-  stairs(b, -1.5, -4.9, 2.4, 4.6, P, 3);                                           // up out of the middle (BeGone's ladder)
+  b.stairs(-6.5, 1.2, 2.4, 4.8, 0, P, 3);                                            // west stairs from the south
+  b.stairs(3.5, -8.2, 2.4, 4.6, 0, P, 1);                                            // east stairs from the north
+  b.stairs(-1.5, -4.9, 2.4, 4.6, 0, P, 3);                                           // up out of the middle (BeGone's ladder)
   const wall = (x0: number, x1: number, z0: number, z1: number) => b.paint(b.box((x0 + x1) / 2, P, (z0 + z1) / 2, x1 - x0, 0.9, z1 - z0, 'slab'), DECK);
   wall(-8.2, 2.3, -10.5, -10.25); wall(4.7, 6.7, -10.5, -10.25);
   wall(-8.2, -7.7, 3.35, 3.6); wall(-5.3, 6.7, 3.35, 3.6);
@@ -229,7 +215,7 @@ export function timbertown(): MapDef {
   b.ramp(42.65, 1.75, 5.1, 13.3, eave, ridge, 2, 'roof');
   for (const z of [-4.25, 7.75]) for (const [y, w] of [[3, 6.8], [3.4, 4.4], [3.8, 2.2]]) b.box(40.1, y, z, w, 0.4, 0.5, 'wood');
   // Inside: stairs up the west wall to a loft under the hole, crates, the ammo crate.
-  stairs(b, 36.75, -1.45, 1.6, 4.9, 2.4, 1);
+  b.stairs(36.75, -1.45, 1.6, 4.9, 0, 2.4, 1);
   b.box(36.95, 0, 2.4, 2, 2.4, 2.8, 'wood');
   b.crate(43.6, 0, -3.3, 1.2); b.crate(43.6, 1.2, -3.3, 1.2); b.crate(42.4, 0, -3.3, 1.2);
   b.ammoCrate(43.4, 0, 6.6);

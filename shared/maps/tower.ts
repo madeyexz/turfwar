@@ -117,8 +117,8 @@ function militiaWarehouse(b: B) {
   // Grated bridge along the south wall (the window landing at its east end), stairs at both ends.
   b.box(-11.7, CAT - 0.25, -18.875, 20.6, 0.25, 3.25, 'floor');
   for (const x of [-18, -13.5, -6]) post(b, x, 0.25, -20.35, CAT - 0.25, YELLOW);
-  b.ramp(-2.4, -23.5, 2, 6, 0.25, CAT, 1, 'stairs');
-  b.ramp(-21, -23.5, 2, 6, 0.25, CAT, 1, 'stairs');
+  b.stairs(-2.4, -23.5, 2, 6, 0.25, CAT, 1);
+  b.stairs(-21, -23.5, 2, 6, 0.25, CAT, 1);
   b.rail(-20, -20.5, -3.4, -20.5, CAT);
   // Containers in an L along the north wall, the wire cage in the corner, the overturned shelf.
   container(b, -16, -9.8, -29.75, -27.35, 0.25);
@@ -172,7 +172,7 @@ function roofBuilding(b: B) {
   }
   b.ramp(6.9, -19, 4.2, 20.4, 5, 6.3, 0, 'roof');
   b.ramp(11.1, -19, 4.2, 20.4, 5, 6.3, 2, 'roof');
-  b.ramp(6.3, -7.4, 1.4, 2.8, CAT, 5.46, 3, 'stairs');
+  b.stairs(6.3, -7.4, 1.4, 2.8, CAT, 5.46, 3);
   b.crate(6.2, 0, -27.5);
   b.crate(7.7, 0, -27.5);
   b.crate(6.2, 1.5, -27.5);
@@ -219,11 +219,11 @@ function brickTower(b: B) {
   b.light(cx, 14.2, cz, 0xffc27a, 4, 12);
   // Fire escape: landing at catwalk height, three flights and two more landings.
   b.box(14.5, CAT - 0.25, -5.55, 2, 0.25, 3.1, 'floor');
-  b.ramp(18, -6.15, 5, 1.9, CAT, 7.2, 0, 'stairs');
+  b.stairs(18, -6.15, 5, 1.9, CAT, 7.2, 0);
   b.box(21.5, 6.95, -7.1, 2, 0.25, 3.8, 'floor');
-  b.ramp(18, -8.05, 5, 1.9, 7.2, 10.8, 2, 'stairs');
+  b.stairs(18, -8.05, 5, 1.9, 7.2, 10.8, 2);
   b.box(14.5, 10.55, -8.05, 2, 0.25, 1.9, 'floor');
-  b.ramp(14.5, -6.3, 2, 1.6, 10.8, 12, 1, 'stairs');
+  b.stairs(14.5, -6.3, 2, 1.6, 10.8, 12, 1);
   post(b, 15.3, 0.35, -4.15, CAT - 0.25);
   post(b, 13.7, 0, -4.15, CAT - 0.25);
   post(b, 22.3, 0, -8.85, 6.95);

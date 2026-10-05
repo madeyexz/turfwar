@@ -50,6 +50,14 @@ export const THEMES: Record<ThemeId, Theme> = {
     sunColor: new THREE.Color(0xfff0d8), sunIntensity: 3.4, hemiSky: new THREE.Color(0xbcd0e6), hemiGround: new THREE.Color(0x7a6a50), hemiIntensity: 1.3,
     planet: null, exposure: 1.0,
   },
+  // Green grass, grey rock outcrops and woods under a clear sky (BeGone's Pipeline).
+  meadow: {
+    id: 'meadow', ground: 'path', rock: 'lichen', dirt: 'dirt',
+    groundTint: new THREE.Color(0.74, 1.0, 0.58), rockTint: new THREE.Color(0.9, 0.92, 0.88), dirtTint: new THREE.Color(0.92, 0.86, 0.76),
+    skyTop: new THREE.Color(0x4f7fb8), skyHorizon: new THREE.Color(0xc9d8e2), fog: new THREE.Color(0xb4c4c8), fogDensity: 0.004,
+    sunColor: new THREE.Color(0xfff4e0), sunIntensity: 3.3, hemiSky: new THREE.Color(0xc0d8ec), hemiGround: new THREE.Color(0x4e5a3a), hemiIntensity: 1.35,
+    planet: null, exposure: 1.0,
+  },
   // Blue hour over a walled garden: cool, soft light that still reads at range.
   twilight: {
     id: 'twilight', ground: 'moss', rock: 'lichen', dirt: 'path',

@@ -103,7 +103,7 @@ export function crane(): MapDef {
   b.box(-31.95, roofTop, -29.75, 0.3, 1, 8.3, 'brick');
   b.box(-31.95, roofTop, -19.1, 0.3, 1, 8.1, 'brick');
   // BeGone's ladder becomes a steel stair up the east face to a landing beside the roof.
-  b.ramp(-31, -19, 1.6, 8, 0, roofTop, 3, 'stairs');
+  b.stairs(-31, -19, 1.6, 8, 0, roofTop, 3);
   b.box(-31, roofTop - 0.35, -24, 1.6, 0.35, 2, 'steel');
   b.box(-30.3, 0, -24.9, 0.2, roofTop - 0.35, 0.2, 'steel');
   b.rail(-30.2, -23, -30.2, -25, roofTop);
@@ -114,7 +114,7 @@ export function crane(): MapDef {
 
   // ---- Tank platform beside the Militia building, and the L-shaped fence facing SWAT ----
   b.box(-25, 0, -10.5, 8, 1.2, 9, 'slab');
-  b.ramp(-26, -16.3, 2.4, 2.6, 0, 1.2, 1, 'stairs');
+  b.stairs(-26, -16.3, 2.4, 2.6, 0, 1.2, 1);
   for (const z of [-12.8, -10.5, -8.2]) {
     for (const x of [-27.3, -22.7]) b.box(x, 1.2, z, 0.4, 0.3, 1.5, 'steel');
     b.cylinder(-25, 1.5, z, 1, 6.5, 'steel', 'x', TANK_WHITE);
@@ -143,8 +143,8 @@ export function crane(): MapDef {
   // The stairs at the back: up to the lower roof, then on up to the barn roof.
   b.box(21.5, 2.35, -9.9, 4, 0.25, 2.8, 'roof');
   for (const z of [-11.1, -8.7]) b.box(23.3, 0, z, 0.2, 2.35, 0.2, 'steel');
-  b.ramp(22.5, -5.5, 2, 6, 0, 2.6, 3, 'stairs');
-  b.ramp(21.5, -10.4, 3.8, 1.6, 2.6, 4.45, 2, 'stairs');
+  b.stairs(22.5, -5.5, 2, 6, 0, 2.6, 3);
+  b.stairs(21.5, -10.4, 3.8, 1.6, 2.6, 4.45, 2);
   b.point('A', 'Ammo House', 14.5, 0, -6.8, 6);
   b.ammoCrate(3.6, 0, -9.9);
   b.crate(6.2, 0, -9.6); b.crate(6.2, 1.5, -9.6); b.crate(7.7, 0, -9.8, 1.5, 1.2, 1.5);
@@ -159,7 +159,7 @@ export function crane(): MapDef {
   b.box(silo.x, silo.h, silo.z - silo.r + 0.3, 2.6, 0.9, 0.25, 'slab');    // rim walls (open to the west stairs)
   b.box(silo.x, silo.h, silo.z + silo.r - 0.3, 2.6, 0.9, 0.25, 'slab');
   b.box(silo.x + silo.r - 0.3, silo.h, silo.z, 0.25, 0.9, 2.6, 'slab');
-  b.ramp(-0.35, -18.25, 1.9, 9.5, 0, silo.h, 3, 'stairs');
+  b.stairs(-0.35, -18.25, 1.9, 9.5, 0, silo.h, 3);
   b.box(0.3, silo.h - 0.35, -24, 3.2, 0.35, 2, 'steel');
   for (const z of [-24.85, -23.15]) b.box(-1.15, 0, z, 0.25, silo.h - 0.35, 0.25, 'steel');
   b.rail(-1.3, -23, -1.3, -24.8, silo.h);
@@ -210,7 +210,7 @@ export function crane(): MapDef {
   b.box(17.2, 4, 18.35, 9.6, 1, 0.15, 'steel');                               // low walls for the platform snipers
   b.box(12.45, 4, 22, 0.15, 1, 7.6, 'steel');
   b.box(13.95, 4, 25.75, 3.1, 1, 0.15, 'steel');
-  b.ramp(16.5, 28.8, 2, 6, 0, 4, 3, 'stairs');
+  b.stairs(16.5, 28.8, 2, 6, 0, 4, 3);
   b.rail(17.5, 25.8, 22, 25.8, 4);
   b.point('B', 'SWAT Base', 11.5, 0, 29, 6);
   b.crate(8, 0, 26.5, 1.5); b.crate(8, 1.5, 26.5, 1.5); b.crate(9.6, 0, 26.3, 1.5, 1.2, 1.5);
