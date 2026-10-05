@@ -2,18 +2,26 @@ import { CollisionWorld } from '../collision';
 import { buildNav, type NavGraph } from '../match/nav';
 import { cinderBasin } from './cinder';
 import { citadelKeep } from './citadel';
+import { courtyard } from './courtyard';
+import { crane } from './crane';
 import { frostlineReach } from './frostline';
 import { meridianDistrict } from './meridian';
 import { ochreQuarter } from './ochre';
+import { pipeline } from './pipeline';
 import { railyard } from './railyard';
 import { skylineRooftops } from './skyline';
+import { timbertown } from './timbertown';
+import { tower } from './tower';
 import { verdantDivide } from './verdant';
+import { warehouse } from './warehouse';
 import type { MapDef } from './types';
 
-export const MAP_IDS = ['cinder', 'frostline', 'verdant', 'ochre', 'citadel', 'railyard', 'skyline', 'meridian'] as const;
+/** BeGone's six maps first (in their release order), then the original battlefields. */
+export const MAP_IDS = ['crane', 'tower', 'warehouse', 'pipeline', 'courtyard', 'timbertown', 'cinder', 'frostline', 'verdant', 'ochre', 'citadel', 'railyard', 'skyline', 'meridian'] as const;
 export type MapId = (typeof MAP_IDS)[number];
 const factories: Record<string, () => MapDef> = {
   cinder: cinderBasin, frostline: frostlineReach, verdant: verdantDivide, ochre: ochreQuarter, citadel: citadelKeep, railyard, skyline: skylineRooftops, meridian: meridianDistrict,
+  crane, tower, warehouse, pipeline, courtyard, timbertown,
 };
 
 export interface LoadedMap { def: MapDef; world: CollisionWorld; nav?: NavGraph }

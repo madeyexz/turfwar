@@ -4,11 +4,24 @@ import { RoundedBoxGeometry } from 'three/examples/jsm/geometries/RoundedBoxGeom
 import type { Assets } from '../assets';
 import { terrainHeight, type Ramp, type Solid } from '../../shared/collision';
 import { fbm } from '../../shared/maps/builder';
-import type { BlockStyle, MapDef } from '../../shared/maps/types';
+import type { BlockStyle, MapDef, RampStyle } from '../../shared/maps/types';
 import { rng } from '../../shared/math';
 import { shieldMaterial, surfaceMaterial, terrainMaterial, type Theme } from './materials';
 
 const TEAM_COLORS = [new THREE.Color(0x3aa0ff), new THREE.Color(0xff4a3a)];
+
+/** Material bucket, texture scale (m per tile), default tint and base occlusion of the realistic styles. */
+const LOOKS = {
+  brick: { material: 'brick', uv: 2, color: 0xe6d8cc, ao: 0.72 },
+  plaster: { material: 'plaster', uv: 3, color: 0xf2eee6, ao: 0.74 },
+  wood: { material: 'planks', uv: 1.8, color: 0xb89a78, ao: 0.75 },
+  roof: { material: 'roof', uv: 1.6, color: 0xc4c4bc, ao: 0.8 },
+  cobble: { material: 'cobble', uv: 2.2, color: 0xd8d4cc, ao: 0.9 },
+  slab: { material: 'steel', uv: 4, color: 0xd2cdc4, ao: 0.95 },
+  steel: { material: 'paint', uv: 2, color: 0x8c5236, ao: 0.78 },
+  concrete: { material: 'steel', uv: 3, color: 0xd6d6d0, ao: 0.74 },
+  rock: { material: 'rock', uv: 2.5, color: 0xffffff, ao: 0.8 },
+} as const;
 
 /** Static battlefield visuals built from shared map data (collision stays authoritative). */
 export class LevelView {
@@ -38,11 +51,22 @@ export class LevelView {
       glass: new THREE.MeshStandardMaterial({ color: 0x6fa8c8, roughness: 0.05, metalness: 0.9, transparent: true, opacity: 0.35 }),
       panel: trimMaterial(assets, 'T_Trim_02_BaseColor', 0xd4dade),
       panelDark: trimMaterial(assets, 'T_Trim_01_BaseColor', 0xa8b0b6),
+      // Realistic architecture (CC0 Poly Haven sets); per-block tints arrive as vertex colours.
+      brick: surfaceMaterial(assets, 'brick', { normalScale: 0.9 }),
+      plaster: surfaceMaterial(assets, 'plaster', { normalScale: 0.6 }),
+      planks: surfaceMaterial(assets, 'planks', { normalScale: 0.8 }),
+      roof: surfaceMaterial(assets, 'corrugated', { metalness: 0.45, roughness: 0.6 }),
+      cobble: surfaceMaterial(assets, 'cobble'),
+      paint: surfaceMaterial(assets, 'metalplate', { metalness: 0.35, normalScale: 0.5 }),
+      hedge: new THREE.MeshStandardMaterial({ color: 0xffffff, roughness: 0.9, flatShading: true, vertexColors: true }),
+      water: new THREE.MeshStandardMaterial({ color: 0x1e3c48, roughness: 0.06, metalness: 0.55, transparent: true, opacity: 0.84, depthWrite: false }),
     };
     this.buildTerrain();
     map.decor.forEach(d => {
       switch (d.kind) {
-        case 'block': this.block(map.solids[d.solid], d.style, d.solid); break;
+        case 'block': this.block(map.solids[d.solid], d.style, d.solid, d.color); break;
+        case 'cylinder': this.cylinder(d.x, d.y, d.z, d.radius, d.height, d.axis, d.style, d.color); break;
+        case 'water': this.add('water', boxGeo(d.x, d.y - 0.01, d.z, d.w, 0.02, d.d)); break;
         case 'ramp': this.ramp(map.ramps[d.ramp], d.style); break;
         case 'prop': this.prop(d.model, d.x, d.y, d.z, d.rotY, d.scale ?? 1); break;
         case 'light': this.light(d.x, d.y, d.z, d.color, d.intensity, d.distance); break;
@@ -82,7 +106,7 @@ export class LevelView {
       const geometry = mergeGeometries(list, false);
       if (!geometry) continue;
       const mesh = new THREE.Mesh(geometry, this.materials[name]);
-      mesh.castShadow = name !== 'glow' && name !== 'glowWarm' && name !== 'glass';
+      mesh.castShadow = name !== 'glow' && name !== 'glowWarm' && name !== 'glass' && name !== 'water';
       mesh.receiveShadow = true;
       mesh.name = `level:${name}`;
       this.group.add(mesh);
@@ -126,11 +150,27 @@ export class LevelView {
   }
 
   // ---- Architecture ----------------------------------------------------------------------
-  private block(s: Solid, style: BlockStyle, index: number) {
+  private block(s: Solid, style: BlockStyle, index: number, color?: number) {
     const w = s.maxX - s.minX, h = s.maxY - s.minY, d = s.maxZ - s.minZ;
     const cx = (s.minX + s.maxX) / 2, cy = (s.minY + s.maxY) / 2, cz = (s.minZ + s.maxZ) / 2;
     const r = rng(index * 977 + 13);
     switch (style) {
+      case 'brick': case 'plaster': case 'wood': case 'roof': case 'cobble': case 'slab': case 'steel': {
+        const look = LOOKS[style];
+        const g = boxGeo(cx, cy, cz, w, h, d, 0, look.uv);
+        tint(g, color ?? look.color, s.minY, h, look.ao);
+        this.add(look.material, g);
+        // Walls get a concrete coping (brick) or plinth (plaster), like the real thing.
+        if (style === 'brick' && h > 2.2 && Math.min(w, d) < 1.2) this.add('steel', boxGeo(cx, s.maxY - 0.06, cz, w + 0.08, 0.12, d + 0.08, 0, 2));
+        if (style === 'plaster' && h > 2.2) {
+          const plinth = boxGeo(cx, s.minY + 0.25, cz, w + 0.04, 0.5, d + 0.04, 0, 2);
+          shade(plinth, s.minY, 0.5, 0.6);
+          this.add('steel', plinth);
+        }
+        return;
+      }
+      case 'crate': this.crate(cx, s.minY, cz, w, h, d, color); return;
+      case 'hedge': this.add('hedge', hedgeGeometry(cx, s.minY, cz, w, h, d, index)); return;
       case 'shield': {
         const mat = shieldMaterial(TEAM_COLORS[s.team ?? 0]);
         this.shields.push(mat);
@@ -223,7 +263,39 @@ export class LevelView {
     this.add('rock', geo);
   }
 
-  private ramp(r: Ramp, style: 'stairs' | 'ramp') {
+  /** Wooden crate: plank body inside a darker frame along all twelve edges. */
+  private crate(cx: number, y: number, cz: number, w: number, h: number, d: number, color = 0xffffff) {
+    const body = boxGeo(cx, y + h / 2, cz, w - 0.04, h - 0.04, d - 0.04, 0, 1.6);
+    tint(body, color, y, h, 0.8);
+    this.add('planks', body);
+    const t = Math.min(0.13, Math.min(w, h, d) * 0.09), frame = new THREE.Color(color).multiplyScalar(0.55).getHex();
+    const edges = [
+      ...[-1, 1].flatMap(sx => [-1, 1].map(sz => boxGeo(cx + sx * (w - t) / 2, y + h / 2, cz + sz * (d - t) / 2, t, h, t, 0, 1.6))),
+      ...[y + t / 2, y + h - t / 2].flatMap(ey => [
+        boxGeo(cx, ey, cz - (d - t) / 2, w, t, t, 0, 1.6), boxGeo(cx, ey, cz + (d - t) / 2, w, t, t, 0, 1.6),
+        boxGeo(cx - (w - t) / 2, ey, cz, t, t, d, 0, 1.6), boxGeo(cx + (w - t) / 2, ey, cz, t, t, d, 0, 1.6),
+      ]),
+    ];
+    for (const e of edges) { tint(e, frame, y, h, 0.85); this.add('planks', e); }
+  }
+
+  private cylinder(x: number, y: number, z: number, radius: number, length: number, axis: 'x' | 'y' | 'z', style: BlockStyle, color?: number) {
+    const look = LOOKS[style as keyof typeof LOOKS] ?? LOOKS.steel;
+    const g = new THREE.CylinderGeometry(radius, radius, length, Math.max(14, Math.round(radius * 14)), 1, false);
+    // Unwrap the side around the circumference and lay the caps flat, at the material's texel density.
+    const uv = g.getAttribute('uv') as THREE.BufferAttribute, n = g.getAttribute('normal') as THREE.BufferAttribute;
+    for (let i = 0; i < uv.count; i++) {
+      if (Math.abs(n.getY(i)) > 0.5) uv.setXY(i, (uv.getX(i) - 0.5) * 2 * radius / look.uv, (uv.getY(i) - 0.5) * 2 * radius / look.uv);
+      else uv.setXY(i, uv.getX(i) * 2 * Math.PI * radius / look.uv, uv.getY(i) * length / look.uv);
+    }
+    if (axis === 'y') g.translate(0, length / 2, 0);
+    else { if (axis === 'x') g.rotateZ(Math.PI / 2); else g.rotateX(Math.PI / 2); g.translate(0, radius, 0); }
+    g.translate(x, y, z);
+    tint(g, color ?? look.color, y, axis === 'y' ? length : radius * 2, look.ao);
+    this.add(look.material, g);
+  }
+
+  private ramp(r: Ramp, style: RampStyle) {
     const w = r.maxX - r.minX, d = r.maxZ - r.minZ;
     const alongX = r.dir === 0 || r.dir === 2;
     const run = alongX ? w : d, width = alongX ? d : w;
@@ -252,13 +324,14 @@ export class LevelView {
           new THREE.Vector3(alongX ? highX : ox, r.y1 + 0.1, alongX ? oz : highZ), 0.12, 0.3));
       }
     } else {
-      const len = Math.hypot(run, rise);
-      const g = new THREE.BoxGeometry(alongX ? len : width, 0.2, alongX ? width : len);
+      const len = Math.hypot(run, rise), roof = style === 'roof';
+      const g = new THREE.BoxGeometry(alongX ? len : width, roof ? 0.08 : 0.2, alongX ? width : len);
       const angle = Math.atan2(rise, run);
       if (r.dir === 0) g.rotateZ(angle); else if (r.dir === 2) g.rotateZ(-angle); else if (r.dir === 1) g.rotateX(-angle); else g.rotateX(angle);
-      g.translate((r.minX + r.maxX) / 2, r.y0 + rise / 2 - 0.1, (r.minZ + r.maxZ) / 2);
-      worldUV(g, 3);
-      this.add('floor', g);
+      g.translate((r.minX + r.maxX) / 2, r.y0 + rise / 2 - (roof ? 0.04 : 0.1), (r.minZ + r.maxZ) / 2);
+      worldUV(g, roof ? LOOKS.roof.uv : 3);
+      if (roof) tint(g, LOOKS.roof.color, r.y0, rise, 1);
+      this.add(roof ? 'roof' : 'floor', g);
     }
   }
 
@@ -407,6 +480,8 @@ export class LevelView {
       // Keep clutter off the lanes: inside the arena only small pebbles.
       const size = inside ? 0.25 + r() * 0.4 : 1.2 + r() * 4.5;
       if (inside && this.map.solids.some(s => x > s.minX - 2 && x < s.maxX + 2 && z > s.minZ - 2 && z < s.maxZ + 2)) continue;
+      // Boulders are scenery past the bounds: one inside the play area would be cover without collision.
+      if (!inside && Math.abs(x) < b.maxX + size && Math.abs(z) < b.maxZ + size) continue;
       const g = rockGeometry(Math.floor(r() * 1000), inside ? 1 : 2);
       g.scale(size * (0.8 + r() * 0.6), size * (0.5 + r() * 0.5), size * (0.8 + r() * 0.6));
       g.rotateY(r() * 6);
@@ -475,6 +550,28 @@ function rockBlockGeometry(seed: number) {
   }
   const ng = nonIndexed(g);
   ng.computeVertexNormals();
+  return ng;
+}
+
+/** Clipped hedge filling its collision box: a lumpy rounded block in mottled greens. */
+function hedgeGeometry(cx: number, y: number, cz: number, w: number, h: number, d: number, seed: number) {
+  const g = new RoundedBoxGeometry(w, h, d, 4, Math.min(0.25, w / 4, d / 4, h / 4));
+  const p = g.getAttribute('position') as THREE.BufferAttribute;
+  const v = new THREE.Vector3();
+  for (let i = 0; i < p.count; i++) {
+    v.fromBufferAttribute(p, i);
+    const k = 1 - Math.abs(fbm(v.x * 3 + seed, v.z * 3 + v.y * 2, seed, 2)) * 0.06;
+    p.setXYZ(i, cx + v.x * k, y + h / 2 + v.y * k, cz + v.z * k);
+  }
+  const ng = nonIndexed(g);
+  ng.computeVertexNormals();
+  const r = rng(seed * 31 + 7), q = ng.getAttribute('position') as THREE.BufferAttribute, c = new Float32Array(q.count * 3);
+  const greens = [0x2c4a24, 0x35562a, 0x3f6230, 0x2a4228];
+  for (let i = 0; i < q.count; i += 3) {
+    const col = new THREE.Color(greens[Math.floor(r() * greens.length)]).multiplyScalar(0.8 + r() * 0.4 + (q.getY(i) - y) / h * 0.25);
+    for (let j = 0; j < 3; j++) c.set([col.r, col.g, col.b], (i + j) * 3);
+  }
+  ng.setAttribute('color', new THREE.BufferAttribute(c, 3));
   return ng;
 }
 
@@ -562,8 +659,8 @@ function shade(g: THREE.BufferGeometry, base: number, height: number, floor: num
   g.setAttribute('color', new THREE.BufferAttribute(c, 3));
 }
 
-function tint(g: THREE.BufferGeometry, hex: number, base: number, height: number) {
-  shade(g, base, height, 0.7);
+function tint(g: THREE.BufferGeometry, hex: number, base: number, height: number, floor = 0.7) {
+  shade(g, base, height, floor);
   const col = new THREE.Color(hex);
   const c = g.getAttribute('color') as THREE.BufferAttribute;
   for (let i = 0; i < c.count; i++) c.setXYZ(i, c.getX(i) * col.r, c.getY(i) * col.g, c.getZ(i) * col.b);
