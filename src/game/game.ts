@@ -135,7 +135,7 @@ export class Game {
     this.buymenu = new BuyMenu(container, {
       buy: item => { this.link.buy(item); this.audio.ui(); },
       attach: (weapon, attachment) => { this.link.attach(weapon, attachment); this.audio.ui(); },
-    });
+    }, assets);
     // The key that closed the menu must not reopen it next frame.
     this.buymenu.onClose = () => { this.input.clear(); void this.input.lock(); };
     this.input.canRelock = () => !this.buymenu.open && !this.hud.chatting && this.link.state()?.phase !== 'ended';
@@ -147,6 +147,7 @@ export class Game {
     this.running = false;
     if (!keepLink) this.link.dispose();
     this.hud.dispose();
+    this.buymenu.dispose?.();
     this.buymenu.root.remove();
     this.renderer.scene.remove(this.level.group, this.effects.group, this.bodies.group, this.crates.group, this.sites.group);
     for (const r of this.remotes.values()) { r.view.dispose(); r.view.gun.removeFromParent(); }
