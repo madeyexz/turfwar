@@ -127,6 +127,7 @@
 #menu .server[data-theme='dusk'] { --swatch: #f0a560; }
 #menu .server[data-theme='twilight'] { --swatch: #8aa6c8; }
 #menu .server[data-theme='steppe'] { --swatch: #d8c9a4; }
+#menu .server[data-theme='meadow'] { --swatch: #8fc46a; }
 #menu .server.online-row { --swatch: #5df29a; }
 #menu .server:hover { background: rgba(127, 246, 255, 0.06); }
 #menu .server[aria-pressed='true'] { background: rgba(127, 246, 255, 0.12); box-shadow: inset 0 0 0 1px rgba(127, 246, 255, 0.55); }

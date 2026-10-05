@@ -74,15 +74,15 @@ export function warehouse(): MapDef {
     // ---- Sniping deck along the end wall, stairs at both ends, two team boxes for cover ----
     b.box(-25.75, DECK - 0.3, 0, 3.5, 0.3, 19, 'floor');
     for (const z of [-9.2, -3, 3, 9.2]) b.paint(b.box(-24.2, 0, z, 0.3, DECK - 0.3, 0.3, 'steel'), GIRDER);
-    b.ramp(-26.6, -12, 1.8, 5, 0, DECK, 1, 'stairs');
-    b.ramp(-26.6, 12, 1.8, 5, 0, DECK, 3, 'stairs');
+    b.stairs(-26.6, -12, 1.8, 5, 0, DECK, 1);
+    b.stairs(-26.6, 12, 1.8, 5, 0, DECK, 3);
     b.rail(-24, -9.5, -24, 9.5, DECK);
     const team = b.mirroredSide ? SWAT_BLUE : MILITIA_GREEN;
     b.crate(-25.6, DECK, -4.5, CRATE, 1.2, CRATE, team);
     b.crate(-25.6, DECK, 5.5, CRATE, 1.2, CRATE, team);
 
     // ---- Bridge: this team's lane climbs from its side; its box half-blocks the lane ----
-    b.ramp(-13.75, -1.5, 4.5, 3, 0, BRIDGE, 0, 'stairs');
+    b.stairs(-13.75, -1.5, 4.5, 3, 0, BRIDGE, 0);
     b.crate(-5.5, BRIDGE, -1.5, CRATE, CRATE, 3, team);
     for (const x of [-11, -5.5]) for (const z of [-2.85, 2.85]) b.paint(b.box(x, 0, z, 0.3, BRIDGE - 0.3, 0.3, 'steel'), GIRDER);
     b.rail(-11.5, -3, 11.5, -3, BRIDGE);
