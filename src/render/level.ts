@@ -520,7 +520,11 @@ export class LevelView {
       const g = rockGeometry(Math.floor(r() * 1000), inside ? 1 : 2);
       g.scale(size * (0.8 + r() * 0.6), size * (0.5 + r() * 0.5), size * (0.8 + r() * 0.6));
       g.rotateY(r() * 6);
-      g.translate(x, terrainHeight(this.map.terrain, x, z) + size * 0.15, z);
+      // Lay it along the slope (tilted to the ground under its footprint) so it never juts out like a shelf.
+      const reach = Math.max(1, size * 0.8), t = (dx: number, dz: number) => terrainHeight(this.map.terrain, x + dx, z + dz);
+      const slope = new THREE.Vector3(t(-reach, 0) - t(reach, 0), 2 * reach, t(0, -reach) - t(0, reach)).normalize();
+      g.applyQuaternion(new THREE.Quaternion().setFromUnitVectors(new THREE.Vector3(0, 1, 0), slope));
+      g.translate(x, t(0, 0) - size * 0.08, z);
       worldUV(g, 2.5);
       rocks.push(g);
     }
