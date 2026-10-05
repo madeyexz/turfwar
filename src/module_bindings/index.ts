@@ -40,6 +40,7 @@ import CreateRoomReducer from "./create_room_reducer";
 import FireReducer from "./fire_reducer";
 import GrenadeReducer from "./grenade_reducer";
 import JoinReducer from "./join_reducer";
+import JoinPublicReducer from "./join_public_reducer";
 import JoinRoomReducer from "./join_room_reducer";
 import LeaveReducer from "./leave_reducer";
 import QuickJoinReducer from "./quick_join_reducer";
@@ -175,6 +176,7 @@ const reducersSchema = __reducers(
   __reducerSchema("fire", FireReducer),
   __reducerSchema("grenade", GrenadeReducer),
   __reducerSchema("join", JoinReducer),
+  __reducerSchema("join_public", JoinPublicReducer),
   __reducerSchema("join_room", JoinRoomReducer),
   __reducerSchema("leave", LeaveReducer),
   __reducerSchema("quick_join", QuickJoinReducer),

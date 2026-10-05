@@ -618,6 +618,13 @@ export const joinRoom = spacetimedb.reducer({ name: t.string(), code: t.string()
   enterRoom(ctx, row.id, name, team);
 });
 
+/** Join a public room picked from the lobby's room list (private rooms need their code). */
+export const joinPublic = spacetimedb.reducer({ name: t.string(), room: t.u8(), team: t.i8() }, (ctx, { name, room, team }) => {
+  const row = ctx.db.match.id.find(room);
+  if (!row || row.code !== '') throw new SenderError('That room is gone; try Quick Play');
+  enterRoom(ctx, room, name, team);
+});
+
 export const leave = spacetimedb.reducer({}, ctx => {
   const player = mySoldier(ctx);
   ctx.db.player.identity.delete(ctx.sender);

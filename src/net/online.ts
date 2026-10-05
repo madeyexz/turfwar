@@ -61,7 +61,8 @@ function soldierFrom(r: RosterRow, p: FramePose, reloadLeft: number, sinceShot: 
 export type OnlineEntry =
   | { kind: 'quick'; size: number }
   | { kind: 'create'; size: number; mode: Mode; mapId: string; bots: boolean }
-  | { kind: 'code'; code: string };
+  | { kind: 'code'; code: string }
+  | { kind: 'room'; room: number };
 
 /** A match hosted by the SpacetimeDB module; this client renders it and sends validated intents. */
 export class OnlineLink implements GameLink {
@@ -231,7 +232,43 @@ function enter(conn: DbConnection, e: { name: string; team: number; how: OnlineE
   const { name, team, how } = e;
   if (how.kind === 'quick') return conn.reducers.quickJoin({ name, team, size: how.size });
   if (how.kind === 'create') return conn.reducers.createRoom({ name, team, size: how.size, mode: how.mode, mapId: how.mapId, bots: how.bots });
+  if (how.kind === 'room') return conn.reducers.joinPublic({ name, team, room: how.room });
   return conn.reducers.joinRoom({ name, team, code: how.code });
+}
+
+/** A public room as the lobby lists it. */
+export interface PublicRoom { room: number; mapId: string; mode: Mode; size: number; humans: number; phase: string; round: number }
+
+/**
+ * Live list of public rooms for the lobby: a light connection that only subscribes to the room rows
+ * (no joining). `onChange` fires whenever a room opens, fills or closes. Returns a stop function.
+ */
+export async function watchRooms(onChange: (rooms: PublicRoom[]) => void, onState: (s: 'connecting' | 'live' | 'offline') => void): Promise<() => void> {
+  const { uri, database } = onlineConfig();
+  if (!uri || !database) { onState('offline'); return () => {}; }
+  onState('connecting');
+  const { DbConnection } = await import('../module_bindings');
+  let conn: DbConnection | undefined, stopped = false;
+  const emit = () => {
+    if (!conn) return;
+    const rooms: PublicRoom[] = [];
+    for (const r of conn.db.match.iter()) {
+      if (r.code !== '') continue;
+      const config = JSON.parse(r.configJson) as { mode: Mode; teamSize: number };
+      rooms.push({ room: r.id, mapId: r.mapId, mode: config.mode, size: config.teamSize, humans: r.humans, phase: r.phase, round: r.score0 + r.score1 + 1 });
+    }
+    onChange(rooms.sort((a, b) => b.humans - a.humans || a.room - b.room));
+  };
+  conn = DbConnection.builder().withUri(uri).withDatabaseName(database)
+    .onConnect(c => {
+      if (stopped) { c.disconnect(); return; }
+      c.db.match.onInsert(emit); c.db.match.onUpdate(emit); c.db.match.onDelete(emit);
+      c.subscriptionBuilder().onApplied(() => { onState('live'); emit(); }).subscribe(['SELECT * FROM match']);
+    })
+    .onConnectError(() => onState('offline'))
+    .onDisconnect(() => { if (!stopped) onState('offline'); })
+    .build();
+  return () => { stopped = true; try { conn?.disconnect(); } catch { /* already closed */ } };
 }
 
 /** Connect, subscribe, enter a room and wait until our soldier exists. */
