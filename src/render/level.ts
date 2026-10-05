@@ -68,6 +68,7 @@ export class LevelView {
         case 'cylinder': this.cylinder(d.x, d.y, d.z, d.radius, d.height, d.axis, d.style, d.color); break;
         case 'water': this.add('water', boxGeo(d.x, d.y - 0.01, d.z, d.w, 0.02, d.d)); break;
         case 'ball': this.ball(d.x, d.y, d.z, d.radius, d.style, d.color); break;
+        case 'truss': this.truss(new THREE.Vector3(d.x0, d.y0, d.z0), new THREE.Vector3(d.x1, d.y1, d.z1), d.w, d.h, d.color ?? LOOKS.steel.color); break;
         case 'ramp': this.ramp(map.ramps[d.ramp], d.style); break;
         case 'prop': this.prop(d.model, d.x, d.y, d.z, d.rotY, d.scale ?? 1); break;
         case 'light': this.light(d.x, d.y, d.z, d.color, d.intensity, d.distance); break;
@@ -303,6 +304,30 @@ export class LevelView {
     worldUV(g, look.uv);
     tint(g, color ?? look.color, y - radius, radius * 2, look.ao);
     this.add(look.material, g);
+  }
+
+  /** Lattice girder: four chords, a vertical and a cross brace at every panel point, diagonals on both sides. */
+  private truss(a: THREE.Vector3, b: THREE.Vector3, w: number, h: number, color: number) {
+    const along = b.clone().sub(a), n = Math.max(1, Math.round(Math.hypot(along.x, along.z) / w));
+    const side = new THREE.Vector3(-along.z, 0, along.x).setLength(w / 2 - 0.06), up = new THREE.Vector3(0, h - 0.1, 0);
+    const lift = new THREE.Vector3(0, 0.06, 0);
+    const parts: THREE.BufferGeometry[] = [];
+    const strut = (p: THREE.Vector3, q: THREE.Vector3, t: number) => parts.push(Math.abs(p.x - q.x) + Math.abs(p.z - q.z) < 1e-3
+      ? boxGeo(p.x, (p.y + q.y) / 2, p.z, t, Math.abs(q.y - p.y), t, 0, 2)
+      : beam(p, q, t, t));
+    const at = (i: number) => a.clone().addScaledVector(along, i / n).add(lift);
+    for (const s of [side, side.clone().negate()]) for (const u of [new THREE.Vector3(), up]) strut(at(0).add(s).add(u), at(n).add(s).add(u), 0.16);
+    for (let i = 0; i <= n; i++) {
+      const p = at(i);
+      for (const s of [side, side.clone().negate()]) strut(p.clone().add(s), p.clone().add(s).add(up), 0.09);
+      strut(p.clone().add(side).add(up), p.clone().sub(side).add(up), 0.08);
+      strut(p.clone().add(side), p.clone().sub(side), 0.08);
+      if (i < n) for (const s of [side, side.clone().negate()]) {
+        const q = at(i + 1);
+        strut(i % 2 ? p.clone().add(s) : p.clone().add(s).add(up), i % 2 ? q.clone().add(s).add(up) : q.clone().add(s), 0.07);
+      }
+    }
+    for (const g of parts) { tint(g, color, Math.min(a.y, b.y), h, LOOKS.steel.ao); this.add(LOOKS.steel.material, g); }
   }
 
   private ramp(r: Ramp, style: RampStyle) {

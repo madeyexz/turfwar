@@ -166,6 +166,21 @@ export class MapBuilder {
     this.decor.push({ kind: 'cylinder', x: this.tx(x), y, z: this.tz(z), radius, height: length, axis, style, ...(color === undefined ? {} : { color }) });
   }
 
+  /**
+   * Lattice girder (fallen cranes, gantries) along its bottom centreline, w wide and h deep. Its
+   * collision per panel is a walkable top chord and a low bottom chord, so shots pass between them.
+   */
+  truss(x0: number, y0: number, z0: number, x1: number, y1: number, z1: number, w: number, h: number, color?: number) {
+    const len = Math.hypot(x1 - x0, z1 - z0), n = Math.max(1, Math.round(len / w)), cell = Math.min(w, len / n + 0.2);
+    for (let i = 0; i < n; i++) {
+      const t = (i + 0.5) / n, x = x0 + (x1 - x0) * t, y = y0 + (y1 - y0) * t, z = z0 + (z1 - z0) * t;
+      this.box(x, y + h - 0.16, z, cell, 0.16, cell, 'invisible', 'metal');
+      this.box(x, y, z, cell, 0.16, cell, 'invisible', 'metal');
+    }
+    const a = this.at(x0, z0), b = this.at(x1, z1);
+    this.decor.push({ kind: 'truss', x0: a.x, y0, z0: a.z, x1: b.x, y1, z1: b.z, w, h, ...(color === undefined ? {} : { color }) });
+  }
+
   /** Sphere centred at height y, with an inscribed box as its collision. */
   ball(x: number, y: number, z: number, radius: number, style: BlockStyle, color?: number) {
     const side = radius * 1.5;
