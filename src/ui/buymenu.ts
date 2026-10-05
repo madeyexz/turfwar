@@ -112,6 +112,8 @@ export class BuyMenu {
   private manualPick = false;
   /** Weapon in hand at the last render (to follow swaps). */
   private hand?: WeaponId;
+  /** Last item clicked and when (double-click to buy). */
+  private lastClick = { key: '', at: 0 };
   private hover?: string;
   private entries: Entry[] = [];
   private last?: { me: Soldier; canBuy: boolean; buyLeft: number; free: boolean };
@@ -165,11 +167,13 @@ export class BuyMenu {
       if (slot) return this.openSlot(slot);
       if (t.closest('[data-buy]')) return this.purchase();
       const key = data('key');
-      if (key) this.select(key);
-    });
-    this.root.addEventListener('dblclick', e => {
-      const key = (e.target as HTMLElement).closest<HTMLElement>('[data-key]')?.dataset.key;
-      if (key) { this.select(key); this.purchase(); }
+      if (!key) return;
+      // Double-click buys. The first click re-renders the list, so the browser's dblclick lands on a
+      // replaced element: detect the second click on the same item ourselves.
+      const now = performance.now(), again = key === this.lastClick.key && now - this.lastClick.at < 450;
+      this.lastClick = again ? { key: '', at: 0 } : { key, at: now };
+      this.select(key);
+      if (again) this.purchase();
     });
     // Hover tries an item on in the preview without selecting it.
     this.el.side.addEventListener('pointerover', e => {
@@ -233,7 +237,7 @@ export class BuyMenu {
   private setTab(tab: Tab) { this.tab = tab; this.hover = undefined; this.render(true); }
 
   private select(key: string) {
-    if (this.tab === 'attachments') this.slotPick[this.slot] = key as AttachmentId;
+    if (this.tab === 'attachments' && key in ATTACHMENTS) { this.slot = ATTACHMENTS[key as AttachmentId].category; this.slotPick[this.slot] = key as AttachmentId; }
     else this.selected[this.tab] = key;
     this.render(true);
   }
@@ -241,13 +245,6 @@ export class BuyMenu {
   private move(d: number) {
     const i = this.entries.findIndex(x => x.key === this.selectedKey());
     const j = i + d;
-    if (this.tab === 'attachments' && (j < 0 || j >= this.entries.length) && this.last) {
-      // Past the end of a slot's options: continue into the next slot.
-      const slots = this.slots(this.pick!), k = slots.indexOf(this.slot);
-      const next = slots[(k + d + slots.length) % slots.length];
-      if (next) { this.openSlot(next); if (d < 0) { const last = this.entries[this.entries.length - 1]; if (last) this.select(last.key); } }
-      return;
-    }
     const next = this.entries[Math.max(0, Math.min(this.entries.length - 1, j))];
     if (next) this.select(next.key);
   }
@@ -268,7 +265,14 @@ export class BuyMenu {
     const owned = this.ownedGuns(this.last.me), i = owned.indexOf(this.pick!);
     this.pickGun(owned[(i + d + owned.length) % owned.length]);
   }
-  private openSlot(slot: AttachmentCategory) { this.slot = slot; this.hover = undefined; this.render(true); }
+  /** A slot header selects what that slot holds (or its first option). */
+  private openSlot(slot: AttachmentCategory) {
+    this.slot = slot; this.hover = undefined;
+    const fitted = this.last?.me.attachments[this.pick!]?.[slot];
+    const first = this.entries.find(e => e.attachment && ATTACHMENTS[e.attachment].category === slot);
+    this.slotPick[slot] = fitted ?? (slot === 'optic' ? 'irons' : first?.attachment);
+    this.render(true);
+  }
 
   private ownedGuns(me: Soldier) { return [...PRIMARY, ...SECONDARY].filter(id => me.owned.includes(id)); }
   /** Slots that take at least one attachment on `wid`. */
@@ -335,9 +339,10 @@ export class BuyMenu {
     } else {
       const wid = this.pick!, fitted = me.attachments[wid] ?? {};
       if (!this.slots(wid).includes(this.slot)) this.slot = 'optic';
-      for (const id of ATTACHMENT_IDS) {
+      // Every slot's options in one list (slot order), so the whole gun is browsable at a glance.
+      for (const id of this.slots(wid).flatMap(c => ATTACHMENT_IDS.filter(x => ATTACHMENTS[x].category === c))) {
         const a = ATTACHMENTS[id];
-        if (a.category !== this.slot || !fitsWeapon(a, wid)) continue;
+        if (!fitsWeapon(a, wid)) continue;
         const on = isFitted(fitted, id), price = id === 'irons' ? 0 : cost(attachmentPrice(a, wid)), short = shortBy(price);
         const summary = changes(wid, fitted, id).list.slice(0, 2).map(x => `${x.text} ${x.name.toLowerCase()}`).join(' · ');
         entries.push({
@@ -413,8 +418,9 @@ export class BuyMenu {
     for (const c of this.slots(wid)) {
       const on = fitted[c], open = c === this.slot;
       const name = on && on !== 'irons' ? ATTACHMENTS[on].name : SLOT[c].empty;
-      html += `<div class="slot${open ? ' open' : ''}${on && on !== 'irons' ? ' filled' : ''}"><button type="button" class="slot-head" data-slot="${c}"><small>${SLOT[c].name}</small><b>${name}${c === 'optic' && !on ? ' <i>default</i>' : ''}</b><span class="chev">${open ? '▾' : '▸'}</span></button>`;
-      if (open) html += `<div class="opts">${this.entries.map((e, i) => `<button type="button" data-key="${e.key}" class="opt${e === sel ? ' sel' : ''}${e.state ? ` ${e.state}` : ''}${e.disabled && !e.state ? ' locked' : ''}"><kbd>${i < 10 ? (i + 1) % 10 : ''}</kbd><span><b>${e.name}</b><small>${e.sub}</small></span>${this.badge(e)}</button>`).join('')}</div>`;
+      const opts = this.entries.map((e, i) => ({ e, i })).filter(({ e }) => e.attachment && ATTACHMENTS[e.attachment].category === c);
+      html += `<div class="slot open${open ? ' current' : ''}${on && on !== 'irons' ? ' filled' : ''}"><button type="button" class="slot-head" data-slot="${c}"><small>${SLOT[c].name}</small><b>${name}${c === 'optic' && !on ? ' <i>default</i>' : ''}</b><span class="chev"></span></button>`;
+      html += `<div class="opts">${opts.map(({ e, i }) => `<button type="button" data-key="${e.key}" class="opt${e === sel ? ' sel' : ''}${e.state ? ` ${e.state}` : ''}${e.disabled && !e.state ? ' locked' : ''}"><kbd>${i < 10 ? (i + 1) % 10 : ''}</kbd><span><b>${e.name}</b><small>${e.sub}</small></span>${this.badge(e)}</button>`).join('')}</div>`;
       html += '</div>';
     }
     return html + '</div>';
@@ -461,7 +467,7 @@ export class BuyMenu {
     const id = e.item as WeaponId, w = weaponStats(id, me.attachments[id]), slot = w.slot as 0 | 1;
     const equippedId = me.weapons[slot], current = weaponStats(equippedId, me.attachments[equippedId]);
     const compare = equippedId === id ? 'Your equipped weapon' : `Compared with your <b>${current.name}</b> <u></u>`;
-    const facts = `<dl><dt>Magazine</dt><dd>${w.magazine} / ${w.reserve}</dd><dt>Reload</dt><dd>${w.reload}s</dd><dt>Fire</dt><dd>${w.auto ? 'Auto' : 'Semi'}</dd><dt>Zoom</dt><dd>${round1(magnify(w))}×</dd></dl>`;
+    const facts = `<dl><dt>Magazine</dt><dd>${w.magazine} / ${w.reserve}</dd><dt>Reload</dt><dd>${w.reload}s</dd><dt>Fire</dt><dd>${w.auto ? 'Auto' : 'Semi'}</dd><dt>Zoom</dt><dd>${round1(magnify(w))}×</dd><dt>Velocity</dt><dd>${w.velocity} m/s</dd></dl>`;
     const customize = me.owned.includes(id) ? `<button type="button" class="link" data-customize="${id}">Customize attachments →</button>` : '';
     return `<div class="stats"><p class="cmp">${compare}</p>${this.bars(w, current)}${facts}</div>${this.action(e, customize)}`;
   }

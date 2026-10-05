@@ -4,7 +4,7 @@ import { MOVE, createMoveState, eyeHeight, isSprinting, stepMovement, type MoveE
 import type { Soldier } from '../../shared/match/state';
 import { DEFAULT_WEAPONS, STAMINA, pelletCone, weaponStats, type Attachments, type Slot, type WeaponDef, type WeaponId } from '../../shared/weapons';
 import type { Input } from './input';
-import { BINOCULAR_ZOOM, adsFov, settings } from './settings';
+import { BINOCULAR_ZOOM, adsFov, settings, isMagnified, opticFov } from './settings';
 
 /** Snipers have a second, stronger scope magnification. */
 const hasSecondZoom = (w: WeaponDef) => w.class === 'sniper';
@@ -85,6 +85,18 @@ export class LocalPlayer {
     if (!this.zoomLevel || !hasSecondZoom(this.weapon)) return first;
     return 2 * Math.atan(Math.tan(first * DEG / 2) / 2) / DEG;
   }
+  /** Field of view of what you aim through: a picture-in-picture scope's lens, else the camera. */
+  get sightFov() {
+    const w = this.weapon;
+    if (this.binoculars || settings.scopeMode !== 'pip' || !isMagnified(w)) return this.aimFov;
+    const lens = opticFov(w);
+    return this.zoomLevel && hasSecondZoom(w) ? 2 * Math.atan(Math.tan(lens * DEG / 2) / 2) / DEG : lens;
+  }
+  /** Mouse scale at the current aim: zoom-matched (tan ratio) times the aiming preference, 1 at the hip. */
+  get lookScale() {
+    const matched = Math.tan(this.sightFov * DEG / 2) / Math.tan(settings.fov * DEG / 2);
+    return 1 + this.ads * (matched * settings.adsSensitivity - 1);
+  }
   /** Magnification of the current aim relative to the base field of view (1 at the hip). */
   get magnification() { return Math.tan(settings.fov * DEG / 2) / Math.tan(this.aimFov * DEG / 2); }
 
@@ -150,8 +162,7 @@ export class LocalPlayer {
     // ---- Look ----
     if (can) {
       const look = input!.consumeLook();
-      const zoom = this.aimFov / settings.fov;
-      const sens = this.sensitivity * input!.sensitivity * (1 - this.ads * (1 - zoom * 1.05));
+      const sens = this.sensitivity * input!.sensitivity * this.lookScale;
       this.yaw -= look.x * sens;
       this.pitch = clamp(this.pitch - look.y * sens, -1.48, 1.48);
     } else input?.consumeLook();

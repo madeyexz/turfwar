@@ -83,7 +83,7 @@
 #store .aside { margin: 4px 2px 0; font-size: 12px; font-weight: 600; color: var(--muted); letter-spacing: 0.06em; text-transform: none; }
 
 /* Attachments: weapon picker and the gun's slots */
-#store .picker { display: grid; grid-template-columns: 26px minmax(0, 1fr) 26px; gap: 4px; align-items: stretch; }
+#store .picker { display: grid; grid-template-columns: 26px minmax(0, 1fr) 26px; gap: 4px; align-items: stretch; position: sticky; top: 0; z-index: 2; padding-bottom: 6px; background: var(--s-bg, #0c161c); }
 #store .picker > div { display: flex; flex-wrap: wrap; gap: 4px; }
 #store .picker .step { font-size: 20px; color: var(--muted) !important; border: 1px solid var(--line) !important; }
 #store .picker .step:hover { color: var(--accent) !important; border-color: var(--accent) !important; }
@@ -93,14 +93,14 @@
 #store .picker small { font-size: 11px; padding: 0 5px; background: var(--accent); color: #031013; }
 #store .mounts { display: flex; flex-direction: column; gap: 3px; }
 #store .slot { border: 1px solid var(--line); background: rgba(255, 255, 255, 0.02); }
-#store .slot.open { border-color: rgba(127, 246, 255, 0.55); background: rgba(127, 246, 255, 0.04); }
+#store .slot.current { border-color: rgba(127, 246, 255, 0.55); background: rgba(127, 246, 255, 0.04); }
 #store .slot-head { width: 100%; display: grid; grid-template-columns: 76px minmax(0, 1fr) 14px; align-items: center; gap: 8px; padding: 6px 10px; text-align: left; }
 #store .slot-head:hover { background: rgba(255, 255, 255, 0.05) !important; }
 #store .slot-head small { font-size: 11px; font-weight: 700; letter-spacing: 0.18em; color: var(--muted); }
 #store .slot-head b { font-size: 15px; color: var(--muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 #store .slot-head b i { font-style: normal; font-size: 10px; letter-spacing: 0.14em; padding: 1px 5px; margin-left: 4px; border: 1px solid var(--line); vertical-align: middle; }
 #store .slot.filled .slot-head b { color: var(--accent); }
-#store .slot.open .slot-head small { color: var(--accent); }
+#store .slot.current .slot-head small { color: var(--accent); }
 #store .chev { color: var(--muted); font-size: 12px; }
 #store .opts { display: flex; flex-direction: column; gap: 3px; padding: 0 6px 6px; }
 #store .opt { padding: 6px 10px; }

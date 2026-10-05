@@ -34,17 +34,19 @@ interface Base {
   reach?: number;
   /** Preferred fighting distance for bots (ours). */
   botRange: number;
+  /** Muzzle velocity (m/s): what tracers show (hits are instant, hitscan). */
+  velocity: number;
 }
 
 const BASE: Record<WeaponId, Base> = {
-  knife: { id: 'knife', name: 'Knife', model: 'Gun_Knife', slot: 2, class: 'melee', price: 0, auto: true, rate: 2, damage: { head: 33, body: 33, limb: 33 }, accuracy: { hip: 100, zoom: 100 }, recoil: { hip: 0, zoom: 0 }, magazine: 0, reserve: 0, restock: 0, reload: 0, equip: 0.3, unequip: 0.3, zoomFov: 70, move: 110, reach: 2.2, botRange: 1.5 },
-  mp5: { id: 'mp5', name: 'MP5', model: 'Gun_MP5', slot: 0, class: 'smg', price: 0, auto: true, rate: 12, damage: { head: 30, body: 18, limb: 12 }, accuracy: { hip: 91, zoom: 94 }, recoil: { hip: 3, zoom: 1.5 }, magazine: 32, reserve: 96, restock: 16, reload: 3.1, equip: 0.6, unequip: 0.4, zoomFov: 20, move: 105, botRange: 14 },
-  m4a1: { id: 'm4a1', name: 'M4A1', model: 'Gun_M4A1', slot: 0, class: 'rifle', price: 3400, auto: true, rate: 9, damage: { head: 33, body: 21, limb: 15 }, accuracy: { hip: 92, zoom: 95 }, recoil: { hip: 2.5, zoom: 1.2 }, magazine: 30, reserve: 90, restock: 15, reload: 3.1, equip: 0.7, unequip: 0.5, zoomFov: 20, move: 100, botRange: 22 },
-  m1014: { id: 'm1014', name: 'M1014', model: 'Gun_M1014', slot: 0, class: 'shotgun', price: 2800, auto: false, rate: 1.5, damage: { head: 24, body: 10, limb: 8 }, accuracy: { hip: 30, zoom: 40 }, recoil: { hip: 35, zoom: 25 }, magazine: 6, reserve: 18, restock: 3, reload: 2.5, equip: 0.7, unequip: 0.5, zoomFov: 20, move: 102, pellets: 14, botRange: 7 },
-  m110: { id: 'm110', name: 'M110', model: 'Gun_M110', slot: 0, class: 'sniper', price: 4000, auto: false, rate: 1.6, damage: { head: 90, body: 40, limb: 30 }, accuracy: { hip: 90, zoom: 98 }, recoil: { hip: 6, zoom: 2 }, magazine: 6, reserve: 18, restock: 3, reload: 3.1, equip: 0.7, unequip: 0.5, zoomFov: 20, move: 100, botRange: 40 },
-  m249: { id: 'm249', name: 'M249', model: 'Gun_M249', slot: 0, class: 'lmg', price: 3800, auto: true, rate: 7, damage: { head: 43, body: 33, limb: 21 }, accuracy: { hip: 86, zoom: 91 }, recoil: { hip: 4, zoom: 2 }, magazine: 86, reserve: 86, restock: 43, reload: 4, equip: 1.2, unequip: 1, zoomFov: 20, move: 90, botRange: 20 },
-  m9a1: { id: 'm9a1', name: 'M9A1', model: 'Gun_M9A1', slot: 1, class: 'pistol', price: 0, auto: false, rate: 13, damage: { head: 29, body: 22, limb: 15 }, accuracy: { hip: 93, zoom: 96 }, recoil: { hip: 3.5, zoom: 1.7 }, magazine: 12, reserve: 36, restock: 6, reload: 3.1, equip: 0.5, unequip: 0.4, zoomFov: 20, move: 107, botRange: 14 },
-  mp7: { id: 'mp7', name: 'MP7', model: 'Gun_MP7', slot: 1, class: 'smg', price: 1800, auto: true, rate: 13, damage: { head: 18, body: 12, limb: 8 }, accuracy: { hip: 93, zoom: 96 }, recoil: { hip: 2.4, zoom: 1.3 }, magazine: 20, reserve: 60, restock: 10, reload: 2.4, equip: 0.5, unequip: 0.4, zoomFov: 20, move: 102, botRange: 12 },
+  knife: { id: 'knife', name: 'Knife', model: 'Gun_Knife', slot: 2, class: 'melee', price: 0, auto: true, rate: 2, damage: { head: 33, body: 33, limb: 33 }, accuracy: { hip: 100, zoom: 100 }, recoil: { hip: 0, zoom: 0 }, magazine: 0, reserve: 0, restock: 0, reload: 0, equip: 0.3, unequip: 0.3, zoomFov: 70, move: 110, reach: 2.2, botRange: 1.5, velocity: 0 },
+  mp5: { id: 'mp5', name: 'MP5', model: 'Gun_MP5', slot: 0, class: 'smg', price: 0, auto: true, rate: 12, damage: { head: 30, body: 18, limb: 12 }, accuracy: { hip: 91, zoom: 94 }, recoil: { hip: 3, zoom: 1.5 }, magazine: 32, reserve: 96, restock: 16, reload: 3.1, equip: 0.6, unequip: 0.4, zoomFov: 20, move: 105, botRange: 14, velocity: 400 },
+  m4a1: { id: 'm4a1', name: 'M4A1', model: 'Gun_M4A1', slot: 0, class: 'rifle', price: 3400, auto: true, rate: 9, damage: { head: 33, body: 21, limb: 15 }, accuracy: { hip: 92, zoom: 95 }, recoil: { hip: 2.5, zoom: 1.2 }, magazine: 30, reserve: 90, restock: 15, reload: 3.1, equip: 0.7, unequip: 0.5, zoomFov: 20, move: 100, botRange: 22, velocity: 910 },
+  m1014: { id: 'm1014', name: 'M1014', model: 'Gun_M1014', slot: 0, class: 'shotgun', price: 2800, auto: false, rate: 1.5, damage: { head: 24, body: 10, limb: 8 }, accuracy: { hip: 30, zoom: 40 }, recoil: { hip: 35, zoom: 25 }, magazine: 6, reserve: 18, restock: 3, reload: 2.5, equip: 0.7, unequip: 0.5, zoomFov: 20, move: 102, pellets: 14, botRange: 7, velocity: 400 },
+  m110: { id: 'm110', name: 'M110', model: 'Gun_M110', slot: 0, class: 'sniper', price: 4000, auto: false, rate: 1.6, damage: { head: 90, body: 40, limb: 30 }, accuracy: { hip: 90, zoom: 98 }, recoil: { hip: 6, zoom: 2 }, magazine: 6, reserve: 18, restock: 3, reload: 3.1, equip: 0.7, unequip: 0.5, zoomFov: 20, move: 100, botRange: 40, velocity: 790 },
+  m249: { id: 'm249', name: 'M249', model: 'Gun_M249', slot: 0, class: 'lmg', price: 3800, auto: true, rate: 7, damage: { head: 43, body: 33, limb: 21 }, accuracy: { hip: 86, zoom: 91 }, recoil: { hip: 4, zoom: 2 }, magazine: 86, reserve: 86, restock: 43, reload: 4, equip: 1.2, unequip: 1, zoomFov: 20, move: 90, botRange: 20, velocity: 915 },
+  m9a1: { id: 'm9a1', name: 'M9A1', model: 'Gun_M9A1', slot: 1, class: 'pistol', price: 0, auto: false, rate: 13, damage: { head: 29, body: 22, limb: 15 }, accuracy: { hip: 93, zoom: 96 }, recoil: { hip: 3.5, zoom: 1.7 }, magazine: 12, reserve: 36, restock: 6, reload: 3.1, equip: 0.5, unequip: 0.4, zoomFov: 20, move: 107, botRange: 14, velocity: 375 },
+  mp7: { id: 'mp7', name: 'MP7', model: 'Gun_MP7', slot: 1, class: 'smg', price: 1800, auto: true, rate: 13, damage: { head: 18, body: 12, limb: 8 }, accuracy: { hip: 93, zoom: 96 }, recoil: { hip: 2.4, zoom: 1.3 }, magazine: 20, reserve: 60, restock: 10, reload: 2.4, equip: 0.5, unequip: 0.4, zoomFov: 20, move: 102, botRange: 12, velocity: 735 },
 };
 
 export const WEAPON_IDS = Object.keys(BASE) as WeaponId[];
@@ -146,6 +148,8 @@ export interface WeaponDef {
   recoil: { pitch: number; adsPitch: number; yaw: number; pattern: number[]; recover: number; viewPunch: number };
   adsTime: number;
   botRange: number;
+  /** Muzzle velocity (m/s, real-world figure); tracers fly at a scaled-down speed so they read on screen. Hits stay hitscan. */
+  velocity: number;
   /** Attachments fitted (for visuals and the HUD). */
   attachments: Attachments;
   /** Suppressed: no tracer or muzzle flash for others. */
@@ -184,7 +188,7 @@ function derive(b: Base, d: Required<Delta>, attachments: Attachments): WeaponDe
     },
     recoil: { pitch: kick * 0.45, adsPitch: zkick * 0.45, yaw: kick * 0.2, pattern: [0.3, -0.35, 0.25, -0.2, 0.4, -0.15], recover: 8, viewPunch: Math.min(4, kick * 0.35) },
     adsTime: melee ? 0.1 : b.class === 'lmg' ? 0.28 : b.class === 'sniper' ? 0.24 : b.class === 'pistol' ? 0.14 : 0.18,
-    botRange: b.botRange,
+    botRange: b.botRange, velocity: b.velocity,
     attachments, suppressed: attachments.muzzle === 'suppressor',
   };
 }

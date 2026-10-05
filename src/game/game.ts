@@ -4,7 +4,7 @@ import { loadMap } from '../../shared/maps/index';
 import { wrapAngle, type Vec3 } from '../../shared/math';
 import { eyeHeight } from '../../shared/movement';
 import { ATTACKERS, TEAM_NAMES, type MatchEvent, type MatchState, type Soldier } from '../../shared/match/state';
-import { pelletCone, pelletDirs, weaponStats, type HitZone, type WeaponId } from '../../shared/weapons';
+import { WEAPONS, pelletCone, pelletDirs, weaponStats, type HitZone, type WeaponId } from '../../shared/weapons';
 import { CASH, CRATE_REACH, canBuyWeapons, inBase } from '../../shared/match/economy';
 import { sideOf } from '../../shared/match/combat';
 import { BOMB_REACH, modeOf } from '../../shared/match/sim';
@@ -477,7 +477,7 @@ export class Game {
       const end = new THREE.Vector3(t.point.x, t.point.y, t.point.z);
       if (melee) { if (t.target >= 0) this.effects.hitSpark(end, false); return; }
       const tracer = !w.suppressed && (w.pellets > 1 ? i % 3 === 0 : Math.random() < (w.auto ? 0.5 : 1));
-      if (tracer) this.effects.tracer(muzzle, end, 0xffe2a0, w.class === 'sniper' ? 2.5 : 1);
+      if (tracer) this.effects.tracer(muzzle, end, 0xffe2a0, w.class === 'sniper' ? 1.8 : 1, w.velocity);
       if (t.target >= 0) this.effects.hitSpark(end, false);
       else if (t.wall) this.effects.impact(end, new THREE.Vector3(t.wall.normal.x, t.wall.normal.y, t.wall.normal.z), t.wall.surface, i < 3, cam.position);
     });
@@ -529,7 +529,7 @@ export class Game {
         if (!pellet && shooterDistance < SHOT_AUDIO_RANGE * (suppressed ? 0.4 : 1) && this.shotVoices++ < 6) this.audio.gunshot(e.weapon, this.listener(), from, suppressed);
         const to = new THREE.Vector3(e.to.x, e.to.y, e.to.z);
         if (e.from.x === e.to.x && e.from.y === e.to.y && e.from.z === e.to.z) break;
-        if (!suppressed && (!pellet || e.hit || Math.random() < 0.3)) this.effects.tracer(from, to, shooter?.team === 0 ? 0xa8dcff : 0xffb0a0, 1.2);
+        if (!suppressed && (!pellet || e.hit || Math.random() < 0.3)) this.effects.tracer(from, to, shooter?.team === 0 ? 0xa8dcff : 0xffb0a0, 1.2, WEAPONS[e.weapon]?.velocity);
         if (e.hit === 0) this.effects.impact(to, from.clone().sub(to).normalize(), e.surface, !pellet);
         else this.effects.hitSpark(to, false);
         break;

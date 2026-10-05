@@ -109,6 +109,7 @@ menu.innerHTML = `
         <div class="field"><span class="label">Optic detail</span><div class="choices segmented" id="opticdetails" style="--n:2"><button class="choice" data-opticdetail="high" title="Smoothest optic models, sharper scope view"><b>High</b></button><button class="choice" data-opticdetail="low" title="Lighter optic models and scope view"><b>Low</b></button></div></div>
         <div class="sliders">
           <label class="field"><span class="label">Mouse sensitivity <output id="sens-out"></output></span><input type="range" id="sens" min="0.2" max="3" step="0.05"></label>
+          <label class="field" title="1.00 = matched: aiming scales your mouse by the zoom you look through, so moves feel the same scoped and unscoped. Lower = slower when aiming."><span class="label">Aim sensitivity <output id="adssens-out"></output></span><input type="range" id="adssens" min="0.5" max="1.5" step="0.05"></label>
           <label class="field"><span class="label">Field of view <output id="fov-out"></output></span><input type="range" id="fov" min="65" max="95" step="1"></label>
           <label class="field"><span class="label">Effects volume <output id="volume-out"></output></span><input type="range" id="volume" min="0" max="1" step="0.05"></label>
           <label class="field"><span class="label">Menu music <output id="music-out"></output></span><input type="range" id="music" min="0" max="1" step="0.05"></label>
@@ -289,12 +290,13 @@ onClick('quality', v => {
 // Server browser: double-click a row to join it, like the real thing.
 menu.querySelectorAll<HTMLButtonElement>('#servers .server').forEach(b => b.addEventListener('dblclick', () => { if (!deploy.disabled) void start(); }));
 
-const sens = menu.querySelector<HTMLInputElement>('#sens')!, fov = menu.querySelector<HTMLInputElement>('#fov')!;
+const sens = menu.querySelector<HTMLInputElement>('#sens')!, fov = menu.querySelector<HTMLInputElement>('#fov')!, adsSens = menu.querySelector<HTMLInputElement>('#adssens')!;
 const volume = menu.querySelector<HTMLInputElement>('#volume')!, music = menu.querySelector<HTMLInputElement>('#music')!;
 const clamp01 = (v: string) => Math.max(0, Math.min(1, Number(v) || 0));
 settings.sensitivity = Math.max(0.2, Math.min(3, Number(store.get('sensitivity', '1')) || 1));
 settings.fov = Math.max(65, Math.min(95, Number(store.get('fov', '78')) || 78));
-sens.value = String(settings.sensitivity); fov.value = String(settings.fov);
+settings.adsSensitivity = Math.max(0.5, Math.min(1.5, Number(store.get('adsSensitivity', '1')) || 1));
+sens.value = String(settings.sensitivity); fov.value = String(settings.fov); adsSens.value = String(settings.adsSensitivity);
 const audio = new Audio();
 audio.volume = clamp01(store.get('volume', '0.8'));
 audio.musicVolume = clamp01(store.get('music', '0.6'));
@@ -304,12 +306,14 @@ const horizontal = (v: number) => Math.round(2 * Math.atan(Math.tan(v * Math.PI 
 const percent = (v: number) => v > 0 ? `${Math.round(v * 100)}%` : 'Off';
 const showSettings = () => {
   menu.querySelector('#sens-out')!.textContent = `${settings.sensitivity.toFixed(2)}×`;
+  menu.querySelector('#adssens-out')!.textContent = `${settings.adsSensitivity.toFixed(2)}×${settings.adsSensitivity === 1 ? ' · matched' : ''}`;
   menu.querySelector('#fov-out')!.textContent = `${settings.fov}° · ${horizontal(settings.fov)}° horizontal`;
   menu.querySelector('#volume-out')!.textContent = percent(audio.volume);
   menu.querySelector('#music-out')!.textContent = percent(audio.musicVolume);
 };
 showSettings();
 sens.addEventListener('input', () => { settings.sensitivity = Number(sens.value); store.set('sensitivity', sens.value); showSettings(); });
+adsSens.addEventListener('input', () => { settings.adsSensitivity = Number(adsSens.value); store.set('adsSensitivity', adsSens.value); showSettings(); });
 fov.addEventListener('input', () => { settings.fov = Number(fov.value); store.set('fov', fov.value); showSettings(); });
 volume.addEventListener('input', () => { audio.setVolume(Number(volume.value)); store.set('volume', volume.value); showSettings(); });
 volume.addEventListener('change', () => audio.cash());

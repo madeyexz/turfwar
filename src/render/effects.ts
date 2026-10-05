@@ -1,7 +1,7 @@
 import * as THREE from 'three';
 
 interface Particle { mesh: THREE.Mesh | THREE.Sprite; velocity: THREE.Vector3; life: number; maxLife: number; gravity: number; grow: number; fade: boolean }
-interface Tracer { mesh: THREE.Mesh; life: number; maxLife: number }
+interface Tracer { mesh: THREE.Mesh; from: THREE.Vector3; dir: THREE.Vector3; total: number; head: number; speed: number; length: number }
 interface Light { light: THREE.PointLight; life: number; maxLife: number; intensity: number }
 
 function radialTexture(inner: string, outer: string) {
@@ -37,15 +37,22 @@ export class Effects {
     }
   }
 
-  tracer(from: THREE.Vector3, to: THREE.Vector3, color = 0xffe2a0, width = 1) {
-    const len = from.distanceTo(to);
-    if (len < 0.5) return;
-    const mat = new THREE.MeshBasicMaterial({ color: new THREE.Color(color).multiplyScalar(4), transparent: true, opacity: 0.9, blending: THREE.AdditiveBlending, depthWrite: false });
+  /**
+   * A bullet tracer: a short glowing streak flying from the muzzle to the hit at `velocity` (m/s,
+   * the gun's muzzle velocity). Real speeds cross a whole map in a few frames, so the streak flies at
+   * a scaled-down but still fast speed with a length that reads as motion blur.
+   */
+  tracer(from: THREE.Vector3, to: THREE.Vector3, color = 0xffe2a0, width = 1, velocity = 800) {
+    const total = from.distanceTo(to);
+    if (total < 0.5) return;
+    const speed = Math.max(240, Math.min(560, velocity * 0.6)), length = Math.min(total, Math.max(1.6, speed * 0.011));
+    const mat = new THREE.MeshBasicMaterial({ color: new THREE.Color(color).multiplyScalar(4), transparent: true, opacity: 0.95, blending: THREE.AdditiveBlending, depthWrite: false });
     const mesh = new THREE.Mesh(this.tracerGeo, mat);
     mesh.position.copy(from); mesh.lookAt(to);
-    mesh.scale.set(width, width, len);
+    mesh.scale.set(width, width, 0.001);
     this.group.add(mesh);
-    this.tracers.push({ mesh, life: 0.07, maxLife: 0.07 });
+    // Start a little out of the barrel so the first frame already shows the streak.
+    this.tracers.push({ mesh, from: from.clone(), dir: to.clone().sub(from).normalize(), total, head: Math.min(total, length * 0.6), speed, length });
   }
 
   flash(at: THREE.Vector3, color = 0xffc070, intensity = 6, life = 0.06, distance = 9) {
@@ -155,9 +162,12 @@ export class Effects {
     }
     for (let i = this.tracers.length - 1; i >= 0; i--) {
       const t = this.tracers[i];
-      t.life -= dt;
-      if (t.life <= 0) { this.dispose(t.mesh); this.tracers.splice(i, 1); continue; }
-      (t.mesh.material as THREE.MeshBasicMaterial).opacity = t.life / t.maxLife;
+      t.head = Math.min(t.total, t.head + t.speed * dt);
+      if (t.head >= t.total) t.length -= t.speed * dt;
+      const tail = Math.max(0, t.head - Math.max(0, t.length));
+      if (t.length <= 0) { this.dispose(t.mesh); this.tracers.splice(i, 1); continue; }
+      t.mesh.position.copy(t.from).addScaledVector(t.dir, tail);
+      t.mesh.scale.z = Math.max(0.001, t.head - tail);
     }
     for (let i = this.lights.length - 1; i >= 0; i--) {
       const l = this.lights[i];

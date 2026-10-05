@@ -22,6 +22,12 @@ const saved = <T extends string>(key: string, options: readonly T[], fallback: T
 /** Player settings shared by every match (set on the deploy screen, saved per browser). */
 export const settings = {
   fov: 78, sensitivity: 1,
+  /**
+   * Aiming sensitivity on top of zoom matching: aiming scales the mouse by the zoom you aim through
+   * (0% monitor-distance matching, as CS2 and Valorant default to), so a flick moves the crosshair the
+   * same distance across what you see whether scoped or not. 1 = matched; lower is slower when aiming.
+   */
+  adsSensitivity: 1,
   scopeMode: saved<ScopeMode>('scopeMode', SCOPE_MODES, 'pip'),
   reticleColor: saved<ReticleColor>('reticleColor', RETICLE_COLORS, 'red'),
   reticleStyle: saved<ReticleStyle>('reticleStyle', RETICLE_STYLES, 'stock'),
