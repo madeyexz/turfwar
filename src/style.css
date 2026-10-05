@@ -185,6 +185,14 @@ body.menu-open #hud, body.menu-open #hud * { visibility: hidden; }
 .arms .carried li.none { opacity: 0.45; }
 .arms .carried kbd { margin-right: 6px; }
 .arms.listed .slots { display: none; }
+/* Weapon list (no Ammo Counter): a compact panel; the lit line already names the gun in hand. */
+.arms.listed { min-width: 0; padding: 6px 10px; clip-path: polygon(8px 0, 100% 0, 100% 100%, 0 100%, 0 8px); }
+.arms.listed .wname { display: none; }
+.arms.listed .ammo { font-size: inherit; }
+.arms.listed .carried { margin: 0; gap: 0; font-size: 12px; line-height: 1.35; }
+.arms.listed .carried li.on { font-size: 14px; }
+.arms.listed .carried kbd { margin-right: 5px; font-size: 10px; padding: 0 0.35em; }
+.arms.listed .reloadbar { height: 2px; margin-top: 3px; }
 .reloadbar { height: 3px; background: rgba(255, 255, 255, 0.1); margin-top: 5px; }
 .reloadbar i { display: block; height: 100%; width: 0; background: var(--amber); }
 .slots { display: flex; justify-content: flex-end; gap: 10px; margin-top: 6px; font-size: 12px; font-weight: 700; color: var(--muted); letter-spacing: 0.08em; }
