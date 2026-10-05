@@ -1,0 +1,22 @@
+Gunshot recordings from "The Free Firearm Sound Library" by Ben Jaszczak, Brian Nelson,
+Kevin Heras and Matthew Nanney — CC0 1.0 Universal (no rights reserved):
+https://opengameart.org/content/the-free-firearm-sound-library
+https://creativecommons.org/publicdomain/zero/1.0/
+
+Trimmed, faded, peak-normalized and encoded to mono 64 kb/s MP3 by tools/fetch-sounds.ts.
+
+pistol-9mm.mp3 ← Walther PPQ/X_39P.wav
+pistol-380.mp3 ← Bersa/F_47P.wav
+pistol-45.mp3 ← 1911/A_42P.wav
+revolver-38.mp3 ← Smith & Wesson 642/V_27P.wav
+smg-9mm.mp3 ← Carl Gustav M45/G_31P.wav
+smg-tokarev.mp3 ← PPSh/P_30P.wav
+shotgun-pump.mp3 ← Benelli Nova/O_21P.wav
+shotgun-m12.mp3 ← Model 12/K_22P.wav
+shotgun-break.mp3 ← CD/H_21P.wav
+rifle-556.mp3 ← AR-15/D_32P.wav
+rifle-762.mp3 ← AK-47/C_28P.wav
+rifle-sks.mp3 ← SKS/U_14P.wav
+sniper-300.mp3 ← Savage 10 .300 Blackout/T_27P.wav
+sniper-mosin.mp3 ← Mosin Nagant/M_21P.wav
+sniper-3006.mp3 ← Tikka/W_29P.wav

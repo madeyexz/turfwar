@@ -3,11 +3,42 @@ import type { WeaponId } from '../shared/weapons';
 type V3 = { x: number; y: number; z: number };
 
 /**
- * Procedural sound design (no sample assets): layered gunshots with transient, body, sub
- * thump and reverb tail; spatialized remote fire, footsteps, reloads, explosions and UI cues.
+ * Sound design: recorded CC0 gunshots (public/assets/sfx, see tools/fetch-sounds.ts) played per
+ * weapon with its own rate, gain and filtering, plus procedural mechanical tails, footsteps,
+ * reloads, explosions and UI cues, all spatialized for remote sources.
  */
 /**
- * Synthesized gunshot per weapon: `heavy` scales the shared crack/body/thump/tail, `layers` add the
+ * Recorded shot per weapon: sample file, playback rate (pitch and length), gain and optional
+ * filters, so guns that share a recording still differ. `layers` keep a synthesized energy
+ * character on the sci-fi guns. Weapons without a sample (the graviton launcher) are synthesized.
+ */
+interface GunSample { file: string; rate: number; gain: number; lowpass?: number; highpass?: number; layers?: GunSound['layers'] }
+const GUN_SAMPLES: Partial<Record<WeaponId, GunSample>> = {
+  sidearm: { file: 'pistol-9mm', rate: 1, gain: 0.85 },
+  hornet: { file: 'pistol-380', rate: 1.06, gain: 0.8, highpass: 180 },
+  warden: { file: 'pistol-45', rate: 0.9, gain: 1 },
+  magnum: { file: 'revolver-38', rate: 0.84, gain: 1 },
+  stinger: { file: 'smg-9mm', rate: 1.14, gain: 0.7, highpass: 320 },
+  wasp: { file: 'smg-9mm', rate: 1, gain: 0.78 },
+  viper: { file: 'smg-tokarev', rate: 0.95, gain: 0.82 },
+  scatter: { file: 'shotgun-pump', rate: 1, gain: 1 },
+  thunder: { file: 'shotgun-m12', rate: 1.05, gain: 0.95 },
+  reaper: { file: 'shotgun-break', rate: 0.92, gain: 1.05, lowpass: 7000 },
+  carbine: { file: 'rifle-556', rate: 1, gain: 0.85, layers: [['sawtooth', 1400, 260, 0.07, 0.05]] },
+  kestrel: { file: 'rifle-556', rate: 1.08, gain: 0.8, highpass: 200 },
+  brawler: { file: 'rifle-762', rate: 1, gain: 0.9 },
+  hammer: { file: 'rifle-762', rate: 0.86, gain: 0.95, lowpass: 5200 },
+  marksman: { file: 'rifle-sks', rate: 1, gain: 0.95 },
+  swift: { file: 'sniper-300', rate: 1, gain: 1 },
+  longbow: { file: 'sniper-mosin', rate: 0.94, gain: 1.1 },
+  lancer: { file: 'sniper-3006', rate: 1.05, gain: 0.95, layers: [['sine', 3200, 600, 0.35, 0.1, 0.02]] },
+};
+
+/** A decoded recording and where its shot starts (skips encoder padding and silence). */
+interface Sample { buffer: AudioBuffer; onset: number }
+
+/**
+ * Synthesized gunshot per weapon (the fallback until samples load, and the menu theme's voice): `heavy` scales the shared crack/body/thump/tail, `layers` add the
  * weapon's character as [oscillator, start Hz, end Hz, seconds, gain, delay?], and `tail` plays the
  * action cycling after the shot.
  */
@@ -49,6 +80,7 @@ export class Audio {
   /** Start time for sounds while recording offline; live play uses the context clock. */
   private clock?: number;
   private music?: { src: AudioBufferSourceNode; gain: GainNode };
+  private samples = new Map<string, Sample>();
   muted = false;
   volume = 0.8;
   musicVolume = 0.6;
@@ -62,6 +94,20 @@ export class Audio {
     this.reverb = ctx.createConvolver(); this.reverb.buffer = reverbImpulse(ctx, 1.6);
     this.reverbSend.connect(this.reverb).connect(this.master);
     this.wind();
+    void this.loadSamples(ctx);
+  }
+
+  /** Fetch and decode the gunshot recordings; until each arrives its weapon stays synthesized. */
+  private async loadSamples(ctx: AudioContext) {
+    const files = [...new Set(Object.values(GUN_SAMPLES).map(g => g!.file))];
+    await Promise.all(files.map(async file => {
+      try {
+        const res = await fetch(`${import.meta.env.BASE_URL}assets/sfx/${file}.mp3`);
+        if (!res.ok) return;
+        const buffer = await ctx.decodeAudioData(await res.arrayBuffer());
+        this.samples.set(file, { buffer, onset: onsetOf(buffer) });
+      } catch { /* keep the synthesized shot */ }
+    }));
   }
 
   private build(ctx: BaseAudioContext) {
@@ -169,6 +215,8 @@ export class Audio {
   gunshot(weapon: WeaponId, listener?: { pos: V3; yaw: number }, at?: V3) {
     if (!this.ready) return;
     const t = this.now();
+    const recorded = GUN_SAMPLES[weapon], sample = recorded && this.samples.get(recorded.file);
+    if (recorded && sample) { this.playShot(recorded, sample, GUN_SOUNDS[weapon], t, listener, at); return; }
     const out = this.out(listener ? 0.75 : 0.55, listener, at, listener ? 0.5 : 0.28);
     const sound = GUN_SOUNDS[weapon];
     if (sound.launcher) {
@@ -187,15 +235,38 @@ export class Audio {
     for (const [type, f0, f1, dur, gain, delay = 0] of sound.layers ?? []) this.tone(out, t + delay, type, f0, f1, dur, gain);
     // Shotguns: a wide low blast.
     if (sound.blast) this.noiseBurst(out, t, 0.22, 'lowpass', 600, 0.6, 0.9);
-    if (sound.tail === 'pump') {
+    this.actionTail(out, sound.tail, t);
+  }
+
+  /** A recorded shot, pitched and filtered per weapon, muffled with distance, then its action cycling. */
+  private playShot(g: GunSample, sample: Sample, sound: GunSound, t: number, listener?: { pos: V3; yaw: number }, at?: V3) {
+    const ctx = this.ctx!;
+    const out = this.out((listener ? 0.7 : 0.5) * g.gain, listener, at, listener ? 0.45 : 0.22);
+    const src = ctx.createBufferSource();
+    src.buffer = sample.buffer;
+    src.playbackRate.value = g.rate * (1 + (Math.random() - 0.5) * 0.05);
+    let node: AudioNode = src;
+    const distance = listener && at ? Math.hypot(at.x - listener.pos.x, at.y - listener.pos.y, at.z - listener.pos.z) : 0;
+    const lowpass = Math.min(g.lowpass ?? 20000, 20000 / (1 + distance * 0.04));
+    if (lowpass < 19000) { const f = ctx.createBiquadFilter(); f.type = 'lowpass'; f.frequency.value = lowpass; node = node.connect(f); }
+    if (g.highpass) { const f = ctx.createBiquadFilter(); f.type = 'highpass'; f.frequency.value = g.highpass; node = node.connect(f); }
+    node.connect(out);
+    src.start(t, sample.onset);
+    for (const [type, f0, f1, dur, gain, delay = 0] of g.layers ?? []) this.tone(out, t + delay, type, f0, f1, dur, gain);
+    this.actionTail(out, sound.tail, t);
+  }
+
+  /** Mechanical cycling after the shot: pump, bolt or a short action clack. */
+  private actionTail(out: AudioNode, tail: GunSound['tail'], t: number) {
+    if (tail === 'pump') {
       this.noiseBurst(out, t + 0.36, 0.05, 'bandpass', 1800, 2, 0.35);
       this.noiseBurst(out, t + 0.5, 0.06, 'bandpass', 1300, 2, 0.4);
-    } else if (sound.tail === 'bolt') {
+    } else if (tail === 'bolt') {
       // Bolt lifted, drawn back and run home.
       this.noiseBurst(out, t + 0.42, 0.04, 'bandpass', 2400, 3, 0.3);
       this.noiseBurst(out, t + 0.55, 0.06, 'bandpass', 1500, 2, 0.35);
       this.noiseBurst(out, t + 0.72, 0.05, 'bandpass', 1900, 2.5, 0.4);
-    } else if (sound.tail === 'action') {
+    } else if (tail === 'action') {
       this.noiseBurst(out, t + 0.07, 0.035, 'bandpass', 2200, 2.5, 0.25);
     }
   }
@@ -306,4 +377,15 @@ export function reverbImpulse(ctx: BaseAudioContext, seconds: number, decay = 3.
     for (let i = 0; i < d.length; i++) d[i] = (Math.random() * 2 - 1) * Math.pow(1 - i / d.length, decay);
   }
   return ir;
+}
+
+/** Seconds into a recording where the shot begins (first sample above 5% of the peak, minus 1 ms). */
+function onsetOf(buffer: AudioBuffer) {
+  const data = buffer.getChannelData(0);
+  let peak = 0;
+  for (let i = 0; i < data.length; i++) peak = Math.max(peak, Math.abs(data[i]));
+  const threshold = peak * 0.05;
+  let i = 0;
+  while (i < data.length && Math.abs(data[i]) < threshold) i++;
+  return Math.max(0, i / buffer.sampleRate - 0.001);
 }

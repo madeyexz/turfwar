@@ -20,7 +20,7 @@ runner (`bun` / `bunx`, never npm/npx).
 | Economy | Credits ($800 to start, max $16,000): $300 a kill (+$100 headshot) and $300 a capture. **B** opens the buy menu — every gun by category with its price, plus grenades — during the first 15 s after deploying or anywhere near your team's spawn. Bought weapons fill their slot (pistols secondary, everything else primary) with spare magazines, last until death and are rebought automatically on respawn while affordable. Reloads draw from spare ammo. Purchases are validated by the host. |
 | Pickups | Every map places weapons, ammo crates and armor cells: **E** swaps in a lying weapon, ammo and armor are collected by walking over them, and each item respawns 20–45 s after being taken. Power weapons (rail rifle, graviton) sit in exposed spots. Bots buy guns when they deploy and grab better weapons they pass. |
 | Movement | Shared deterministic controller: walk, sprint (with sprint-to-fire delay), crouch, slide (crouch while sprinting), jump with coyote time, step-up, ramps/stairs, team shields. |
-| Feel | First-person rigged arms (cut from the soldier rig) posed by IK onto CC0 weapon models; procedural sway, figure-eight bob, kick, sprint carry, ADS with red-dot reticle, scope overlay, reload choreography with a magazine in hand, equip and grenade throw; muzzle flash, tracers, impact sparks and dust, bullet marks, explosions; hit markers, headshot/kill confirms, damage-direction arcs, kill feed, procedural WebAudio gunshots, reloads, footsteps and cues; a looping 60-second menu theme sequenced from those same effects. |
+| Feel | First-person rigged arms (cut from the soldier rig) posed by IK onto CC0 weapon models; procedural sway, figure-eight bob, kick, sprint carry, ADS with red-dot reticle, scope overlay, reload choreography with a magazine in hand, equip and grenade throw; muzzle flash, tracers, impact sparks and dust, bullet marks, explosions; hit markers, headshot/kill confirms, damage-direction arcs, kill feed, recorded CC0 gunshots per weapon (distance-muffled and panned), procedural reloads, footsteps and cues; a looping 60-second menu theme sequenced from those same effects. |
 | Characters | CC0 rigged base body with an armored suit: helmet with glowing visor, plates, pack, pauldrons, bracers and boots as one rigid-skinned geometry (three draw calls per soldier). CC0 animation library retargeted by bone name: idle/walk/jog/sprint/crouch/jump/slide/death blend by speed, legs twist for strafing, cycles reverse when backpedalling, bladed rifle stance, aim pitch through the spine, two-bone arm IK onto the weapon, posed hands, hit flinches. |
 | Bots | Navigation grid generated from each map (multi-level: roofs, catwalks, stairs), A* paths, objective selection that spreads the team, perception with field of view and line of sight, reaction delays, imperfect lead, aim error that settles, strafing and range keeping, burst fire, crouching, reloading and grenades at last-known positions. |
 | Settings | Deploy screen: graphics preset (Low / Medium / High), mouse sensitivity, field of view (vertical, with the 16:9 horizontal equivalent), and a 30-second performance check. Saved per browser. |
@@ -158,10 +158,16 @@ No proprietary game assets are used. Everything is original code or CC0/OFL:
   (https://opengameart.org/content/low-poly-guns-pack). Converted from OBJ by `tools/import-guns.ts`
   (`bun tools/import-guns.ts`, with the pack extracted under `GUN_SRC`; `--preview <dir>` renders
   measured side views for placing grips, sights and muzzles) into `public/assets/guns.glb` (~270 KB).
+- Gunshots: fifteen single-shot recordings from *The Free Firearm Sound Library* by Ben Jaszczak,
+  Brian Nelson, Kevin Heras and Matthew Nanney — CC0 1.0
+  (https://opengameart.org/content/the-free-firearm-sound-library). Trimmed, normalized and encoded to
+  mono 64 kb/s MP3 by `tools/fetch-sounds.ts` into `public/assets/sfx` (~150 KB); see
+  `public/assets/sfx/LICENSE.txt`. Each weapon plays its recording at its own rate, gain and filtering.
 - Terrain and surface textures: Poly Haven, CC0 1.0, fetched by `tools/fetch-textures.ts`; see
   `public/assets/tex/LICENSE.txt`.
 - Font: Rajdhani by Indian Type Foundry, SIL Open Font License 1.1 (`public/fonts/OFL.txt`).
-- Sky, planets, terrain, architecture, armor, effects and audio are procedural.
+- Sky, planets, terrain, architecture, armor, effects and the remaining audio (mechanical tails, reloads,
+  footsteps, explosions, UI, the graviton launcher) are procedural.
 - Engine/libraries: Three.js (MIT), Vite (MIT). The `spacetimedb` npm package declares ISC
   but ships the SpacetimeDB Business Source License 1.1 text; the SpacetimeDB server/CLI is BSL 1.1.
   Review those terms before any commercial self-hosting.
@@ -205,7 +211,7 @@ also has Low / Medium / High graphics presets (`?quality=` works too).
   sight test only the four most pressing candidates.
 - First-person and third-person animation is code-driven on CC0 clips; there are no authored
   rifle-specific reload/hit animations, and fingers are posed procedurally.
-- Audio is synthesized; there are no recorded weapon samples.
+- Gunshots are recorded (CC0) but reloads, bolt/pump actions, footsteps and impacts are still synthesized.
 - No dropped weapons on death, no attachments, and no per-player loadout persistence between sessions.
 - Mobile/touch is not supported. Not tested on Safari/Firefox in this environment.
 
