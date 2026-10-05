@@ -21,6 +21,8 @@ const TEXTURES: [string, string, number?][] = [
   // Realistic architecture for the BeGone maps.
   ['brick_wall_001', 'brick'], ['raw_plank_wall', 'planks'], ['worn_corrugated_iron', 'corrugated'],
   ['worn_mossy_plasterwall', 'plaster'], ['cobblestone_floor_08', 'cobble'],
+  // Taipei: road asphalt, square sidewalk tiles, shop floors and mosaic-tiled facades.
+  ['asphalt_02', 'asphalt'], ['grey_tiles', 'sidewalk', 0], ['floor_tiles_06', 'floortile'], ['long_white_tiles', 'facadetile'],
 ];
 
 const only = process.argv.slice(2);
@@ -39,4 +41,4 @@ for (const [id, name, saturation = 1] of TEXTURES) {
   }
 }
 const credits = TEXTURES.map(([id, name]) => `${name}: https://polyhaven.com/a/${id}`);
-writeFileSync(join(OUT, 'LICENSE.txt'), `Surface textures from Poly Haven (https://polyhaven.com), CC0 1.0 Universal.\nResized to 1024px WebP by tools/fetch-textures.ts (icerock diffuse desaturated to 20%).\n\n${credits.join('\n')}\n`);
+writeFileSync(join(OUT, 'LICENSE.txt'), `Surface textures from Poly Haven (https://polyhaven.com), CC0 1.0 Universal.\nResized to 1024px WebP by tools/fetch-textures.ts (icerock diffuse desaturated to 20%, sidewalk fully).\n\n${credits.join('\n')}\n`);
