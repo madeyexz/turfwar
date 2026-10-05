@@ -1,6 +1,6 @@
 import type { Identity, Infer } from 'spacetimedb';
 import type { Vec3 } from '../../shared/math';
-import type { ClientReport, MatchEvent, MatchState, Mode, ShotClaim, Soldier, Team } from '../../shared/match/state';
+import type { ClientReport, MatchEvent, MatchState, Mode, ShotClaim, Soldier, Team, VehicleReport } from '../../shared/match/state';
 import { sizeLabel } from '../../shared/match/rooms';
 import type { Body } from '../../shared/world';
 import { maxSlack, type Vehicle } from '../../shared/vehicles';
@@ -219,6 +219,13 @@ export class OnlineLink implements GameLink {
   buy(item: BuyItem) { void this.conn.reducers.buy({ item }).catch(() => undefined); }
   attach(weapon: WeaponId, attachment: AttachmentId) { void this.conn.reducers.buyAttachment({ weapon, attachment }).catch(() => undefined); }
   useCrate(index: number) { void this.conn.reducers.useCrate({ index }).catch(() => undefined); }
+  enterVehicle(index: number) { void this.conn.reducers.enterVehicle({ index }).catch(() => undefined); }
+  exitVehicle() { void this.conn.reducers.exitVehicle({}).catch(() => undefined); }
+  vehicleReport(r: VehicleReport) {
+    if (this.reportsInFlight > 3) return;
+    this.reportsInFlight++;
+    void this.conn.reducers.vehicleReport(r).catch(() => undefined).finally(() => { this.reportsInFlight--; });
+  }
   say(text: string, team: boolean) { void this.conn.reducers.say({ text, team }).catch(() => undefined); }
   grenade(o: Vec3, d: Vec3) { void this.conn.reducers.grenade({ ox: o.x, oy: o.y, oz: o.z, dx: d.x, dy: d.y, dz: d.z }).catch(() => undefined); }
   reload() { void this.conn.reducers.reloadWeapon({}).catch(() => undefined); }

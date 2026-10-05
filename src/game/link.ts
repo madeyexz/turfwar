@@ -1,5 +1,5 @@
 import type { Vec3 } from '../../shared/math';
-import type { ClientReport, MatchEvent, MatchState, ShotClaim } from '../../shared/match/state';
+import type { ClientReport, MatchEvent, MatchState, ShotClaim, VehicleReport } from '../../shared/match/state';
 import type { BuyItem } from '../../shared/match/economy';
 import type { AttachmentId, Slot, WeaponId } from '../../shared/weapons';
 
@@ -29,6 +29,12 @@ export interface GameLink {
   attach(weapon: WeaponId, attachment: AttachmentId): void;
   /** Use ammo crate `index` (E). */
   useCrate(index: number): void;
+  /** Get into vehicle `index` (E): the driver's seat, or a teammate's passenger seat. */
+  enterVehicle(index: number): void;
+  /** Get out of the vehicle we sit in (E). */
+  exitVehicle(): void;
+  /** The driver's predicted vehicle pose (validated by the host like movement reports). */
+  vehicleReport(r: VehicleReport): void;
   /** Chat line to everyone, or to the team only. */
   say(text: string, team: boolean): void;
   status(): string;
