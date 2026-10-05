@@ -322,7 +322,7 @@ export class Hud {
     }
     this.avatarsTick(state, me);
     // Sabotage: sites, arming/disarming progress, armed site and its countdown.
-    this.el.bomb.hidden = !sabotage || state.phase !== 'live';
+    this.el.bomb.hidden = !sabotage || state.phase !== 'live' || state.roundPhase === 'over';
     if (sabotage) {
       const b = state.bomb, sites = this.map.sabotage!.sites;
       this.set('sites', sites.map((id, i) => `<b class="${b.site === i ? (b.armed ? 'armed' : b.by >= 0 ? 'busy' : '') : b.armed ? 'inert' : ''}">${id}</b>`).join(''), 'html');

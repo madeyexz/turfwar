@@ -257,7 +257,7 @@ export function throwGrenade(state: MatchState, ctx: SimContext, id: number, ori
 // Rounds
 // ---------------------------------------------------------------------------------------
 
-const roundLength = (state: MatchState, map: MapDef) =>
+export const roundLength = (state: MatchState, map: MapDef) =>
   modeOf(state, map) === 'sabotage' && map.sabotage!.sites.length === 1 ? state.config.roundTimeSingle : state.config.roundTime;
 
 /** A fresh match: scores and inventories reset (new-match bonus), then round 1. */

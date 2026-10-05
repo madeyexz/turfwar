@@ -5,6 +5,8 @@ import type { Body } from '../../shared/world';
 import type { CareerStats, GameLink } from '../game/link';
 import type { DbConnection } from '../module_bindings';
 import type RosterTable from '../module_bindings/roster_table';
+import { loadMap } from '../../shared/maps/index';
+import { roundLength } from '../../shared/match/sim';
 import { decodeFrame, type DecodedFrame, type FramePose } from '../../shared/match/frame';
 import { DEFAULT_WEAPONS, STAMINA, WEAPONS, weaponStats, type AttachmentId, type Attachments, type Slot, type WeaponId } from '../../shared/weapons';
 import { newRoundStats, type BuyItem } from '../../shared/match/economy';
@@ -140,6 +142,10 @@ export class OnlineLink implements GameLink {
       firstKill: false, firstBlood: false, lastKillTeam: -1,
       bomb: sameMap ? frame.bomb : { site: -1, armed: false, progress: 0, by: -1 },
     };
+    // The buy window counts from round start: rebuild that clock from the phase countdown.
+    const v = this.view, config = v.config;
+    v.roundClock = v.roundPhase === 'freeze' ? config.freezeTime - v.phaseLeft
+      : v.roundPhase === 'live' ? config.freezeTime + roundLength(v, loadMap(v.mapId).def) - v.phaseLeft : 999;
     this.dirty = false;
     this.ver++;
     return this.view;

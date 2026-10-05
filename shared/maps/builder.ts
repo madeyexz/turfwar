@@ -114,6 +114,8 @@ export class MapBuilder {
   // ---- Solids --------------------------------------------------------------------------
   /** Axis-aligned block centered at (x, z), bottom at y. Returns its solid index. */
   box(x: number, y: number, z: number, w: number, h: number, d: number, style: BlockStyle, surface: Surface = surfaceFor(style), team?: number) {
+    // BeGone bases are open (and Sabotage swaps them between teams): team spawn shields are not built.
+    if (style === 'shield') return -1;
     const cx = this.tx(x), cz = this.tz(z);
     const solid: Solid = { minX: cx - w / 2, maxX: cx + w / 2, minY: y, maxY: y + h, minZ: cz - d / 2, maxZ: cz + d / 2, surface };
     if (team !== undefined) solid.team = team;
