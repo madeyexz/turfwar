@@ -101,11 +101,8 @@ body.menu-open #hud, body.menu-open #hud * { visibility: hidden; }
 .crosshair[data-style='dot'] .dot { width: 4px; height: 4px; left: -2px; top: -2px; border-radius: 50%; }
 .crosshair[data-style='circle'] .ring { display: block; }
 .crosshair.busy i:not(.dot) { opacity: 0.35; }
-/* Unmagnified optic reticles while aiming (reflex dot, holographic ring). */
-.reticle { position: absolute; left: 50%; top: 50%; width: 0; height: 0; }
-.reticle i { position: absolute; left: -2.5px; top: -2.5px; width: 5px; height: 5px; border-radius: 50%; background: #ff3a2a; box-shadow: 0 0 6px 1px rgba(255, 58, 42, 0.85); }
-.reticle[data-kind='holo']::before { content: ''; position: absolute; left: -24px; top: -24px; width: 44px; height: 44px; border: 2px solid rgba(255, 70, 50, 0.9); border-radius: 50%; box-shadow: 0 0 6px rgba(255, 58, 42, 0.6); }
-.reticle[data-kind='holo'] i { left: -2px; top: -2px; width: 4px; height: 4px; }
+/* Picture-in-picture scope: the view round the eyepiece darkens as it comes to the eye. */
+.pipvig { position: absolute; inset: 0; pointer-events: none; background: radial-gradient(ellipse 75vh 66vh at center, transparent 30%, rgba(0, 0, 0, 0.3) 62%, rgba(0, 0, 0, 0.6)); }
 .hitmarker { position: absolute; left: 50%; top: 50%; width: 30px; height: 30px; margin: -15px 0 0 -15px; opacity: 0; transition: opacity 0.15s; }
 .hitmarker i { position: absolute; left: 9px; top: 14px; width: 12px; height: 2px; background: #fff; box-shadow: 0 0 2px rgba(0, 0, 0, 0.8); }
 .hitmarker i:nth-child(1) { transform: rotate(45deg) translateX(9px); } .hitmarker i:nth-child(2) { transform: rotate(135deg) translateX(9px); }
@@ -221,6 +218,8 @@ body.menu-open #hud, body.menu-open #hud * { visibility: hidden; }
     radial-gradient(circle at center, rgba(16, 34, 44, 0.04) 0, rgba(16, 34, 44, 0.12) calc(var(--lens) * 0.6), rgba(6, 14, 20, 0.6) var(--lens), transparent calc(var(--lens) + 0.2vh)); }
 .scope[data-kind='prism'] { --lens: 40vh; }
 .scope-reticle { position: absolute; left: 50%; top: 50%; width: calc(var(--lens) * 2); height: calc(var(--lens) * 2); transform: translate(-50%, -50%); shape-rendering: geometricPrecision; }
+.scope-reticle .lit { fill: var(--reticle, #ff3a24); }
+.scope-reticle .lit-stroke { stroke: var(--reticle, #ffa21e); }
 .scope[data-kind='prism'] .scope-reticle.sniper, .scope:not([data-kind='prism']) .scope-reticle.prism { display: none; }
 .scope-mag { position: absolute; left: calc(50% + var(--lens) * 0.57); top: calc(50% + var(--lens) * 0.69); font-size: 15px; font-weight: 700; letter-spacing: 0.12em; color: rgba(225, 235, 240, 0.72); text-shadow: 0 0 4px rgba(0, 0, 0, 0.8); }
 .zoomtag { position: absolute; right: calc(50% + 30px); top: calc(50% + 22px); font-size: 12px; font-weight: 700; letter-spacing: 0.1em; color: rgba(255, 255, 255, 0.7); text-shadow: 0 0 3px rgba(0, 0, 0, 0.9); }

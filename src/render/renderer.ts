@@ -4,6 +4,7 @@ import { RenderPass } from 'three/examples/jsm/postprocessing/RenderPass.js';
 import { UnrealBloomPass } from 'three/examples/jsm/postprocessing/UnrealBloomPass.js';
 import { OutputPass } from 'three/examples/jsm/postprocessing/OutputPass.js';
 import type { Theme } from './materials';
+import { ScopePass } from './sights';
 import { SkyView } from './sky';
 
 export interface Quality { pixelRatio: number; shadows: number; bloom: boolean }
@@ -29,6 +30,8 @@ export class Renderer {
   private composer: EffectComposer;
   private bloom: UnrealBloomPass;
   private sunOffset = new THREE.Vector3(-50, 70, 40);
+  /** Picture-in-picture scope view, rendered only while the view model asks for it (a magnified optic raised). */
+  private scope = new ScopePass();
   quality: Quality;
 
   constructor(container: HTMLElement, quality: Quality) {
@@ -119,6 +122,7 @@ export class Renderer {
     this.sun.target.position.set(sx, 0, sz);
     this.sun.position.set(sx + this.sunOffset.x, this.sunOffset.y, sz + this.sunOffset.z);
     this.sky?.update(time, this.camera);
+    this.scope.render(this.renderer, this.scene, this.camera, this.viewCamera);
     this.composer.render();
   }
 }

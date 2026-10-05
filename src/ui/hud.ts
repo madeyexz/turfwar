@@ -7,6 +7,8 @@ import { ATTACKERS, TEAM_NAMES, TEAM_SHORT, type MatchState, type Soldier, type 
 import { ATTACHMENTS, ATTACHMENT_SLOTS, HEALTH, STAMINA, WEAPONS, type AttachmentCategory, type WeaponId } from '../../shared/weapons';
 import type { CareerStats } from '../game/link';
 import type { LocalPlayer } from '../game/player';
+import { isMagnified, settings } from '../game/settings';
+import { RETICLE_CSS } from '../render/sights';
 
 const TEAM_CSS = ['var(--aegis)', 'var(--crimson)'];
 const TEAM_HEX = ['#4aa8ff', '#ff5544'];
@@ -76,7 +78,7 @@ export class Hud {
     this.root.innerHTML = `
       <div class="lowhp" data-k="lowhp" hidden></div>
       <div class="flash" data-k="flash"></div>
-      <div class="scope" data-k="scope" hidden><svg class="scope-reticle sniper" viewBox="-100 -100 200 200" aria-hidden="true"><g fill="#050607"><rect x="-100" y="-1.3" width="68" height="2.6" rx="1.3"/><rect x="32" y="-1.3" width="68" height="2.6" rx="1.3"/><rect x="-1.3" y="32" width="2.6" height="68" rx="1.3"/><rect x="-1.3" y="-100" width="2.6" height="68" rx="1.3"/></g><g stroke="#050607" stroke-width="0.32"><line x1="-32" y1="0" x2="32" y2="0"/><line x1="0" y1="-32" x2="0" y2="32"/></g><g fill="#050607">${[-24, -18, -12, -6, 6, 12, 18, 24].map(i => `<circle cx="${i}" cy="0" r="0.75"/><circle cx="0" cy="${i}" r="0.75"/>`).join('')}</g><circle r="0.55" fill="#ff3a24"/></svg><svg class="scope-reticle prism" viewBox="-100 -100 200 200" aria-hidden="true"><g fill="none" stroke="#ffa21e" stroke-width="1.6" stroke-linejoin="round" filter="url(#hud-glow)"><path d="M -7 7 L 0 -1 L 7 7"/></g><defs><filter id="hud-glow" x="-50%" y="-50%" width="200%" height="200%"><feGaussianBlur stdDeviation="1.2" result="b"/><feMerge><feMergeNode in="b"/><feMergeNode in="SourceGraphic"/></feMerge></filter></defs><g stroke="#08090a" stroke-width="0.5"><line x1="0" y1="9" x2="0" y2="60"/><line x1="-6" y1="18" x2="6" y2="18"/><line x1="-4.5" y1="27" x2="4.5" y2="27"/><line x1="-3.2" y1="36" x2="3.2" y2="36"/><line x1="-2.2" y1="45" x2="2.2" y2="45"/><line x1="-100" y1="0" x2="-30" y2="0"/><line x1="30" y1="0" x2="100" y2="0"/></g></svg><span class="scope-mag" data-k="scopeMag"></span></div>
+      <div class="scope" data-k="scope" hidden><svg class="scope-reticle sniper" viewBox="-100 -100 200 200" aria-hidden="true"><g fill="#050607"><rect x="-100" y="-1.3" width="68" height="2.6" rx="1.3"/><rect x="32" y="-1.3" width="68" height="2.6" rx="1.3"/><rect x="-1.3" y="32" width="2.6" height="68" rx="1.3"/><rect x="-1.3" y="-100" width="2.6" height="68" rx="1.3"/></g><g stroke="#050607" stroke-width="0.32"><line x1="-32" y1="0" x2="32" y2="0"/><line x1="0" y1="-32" x2="0" y2="32"/></g><g fill="#050607">${[-24, -18, -12, -6, 6, 12, 18, 24].map(i => `<circle cx="${i}" cy="0" r="0.75"/><circle cx="0" cy="${i}" r="0.75"/>`).join('')}</g><circle class="lit" r="0.55"/></svg><svg class="scope-reticle prism" viewBox="-100 -100 200 200" aria-hidden="true"><g class="lit-stroke" fill="none" stroke-width="1.6" stroke-linejoin="round" filter="url(#hud-glow)"><path d="M -7 7 L 0 -1 L 7 7"/></g><defs><filter id="hud-glow" x="-50%" y="-50%" width="200%" height="200%"><feGaussianBlur stdDeviation="1.2" result="b"/><feMerge><feMergeNode in="b"/><feMergeNode in="SourceGraphic"/></feMerge></filter></defs><g stroke="#08090a" stroke-width="0.5"><line x1="0" y1="9" x2="0" y2="60"/><line x1="-6" y1="18" x2="6" y2="18"/><line x1="-4.5" y1="27" x2="4.5" y2="27"/><line x1="-3.2" y1="36" x2="3.2" y2="36"/><line x1="-2.2" y1="45" x2="2.2" y2="45"/><line x1="-100" y1="0" x2="-30" y2="0"/><line x1="30" y1="0" x2="100" y2="0"/></g></svg><span class="scope-mag" data-k="scopeMag"></span></div>
       <div class="binos" data-k="binos" hidden>
         <svg viewBox="-100 -50 200 100" preserveAspectRatio="xMidYMid meet" aria-hidden="true">
           <defs>
@@ -104,7 +106,7 @@ export class Hud {
       <div class="killfeed" data-k="feed"></div>
       <div class="markers" data-k="markers"></div>
       <div class="crosshair" data-k="cross"><i class="t"></i><i class="b"></i><i class="l"></i><i class="r"></i><i class="dot"></i><i class="ring"></i></div>
-      <div class="reticle" data-k="reticle" hidden><i></i></div>
+      <div class="pipvig" data-k="pipvig" hidden></div>
       <div class="hitmarker" data-k="hit"><i></i><i></i><i></i><i></i></div>
       <div class="target-tag" data-k="targetTag" hidden></div>
       <div class="damage-ring" data-k="dmg"></div>
@@ -178,11 +180,11 @@ export class Hud {
       cross.style.setProperty('--gap', `${gap.toFixed(1)}px`);
       cross.classList.toggle('busy', p.reloading);
     }
-    // Red-dot / holographic reticle while aiming through an unmagnified optic.
-    const optic = w.attachments.optic;
-    const reticle = optic === 'reflex' ? 'dot' : optic === 'holo' ? 'holo' : '';
-    this.el.reticle.hidden = !(alive && p.ads > 0.85 && reticle && !p.binoculars && !this.scoped);
-    if (reticle && this.el.reticle.dataset.kind !== reticle) this.el.reticle.dataset.kind = reticle;
+    // Red dots and holo sights draw their reticle on the 3D glass (sights.ts). A picture-in-picture scope
+    // darkens the view round the eyepiece as it comes up (eye relief).
+    const pip = alive && !p.binoculars && !this.scoped && settings.scopeMode === 'pip' && isMagnified(w) ? Math.max(0, Math.min(1, (p.ads - 0.55) / 0.35)) : 0;
+    this.el.pipvig.hidden = pip <= 0;
+    if (pip > 0) this.el.pipvig.style.opacity = pip.toFixed(2);
     this.hitTimer -= dt;
     if (this.hitTimer <= 0) this.el.hit.classList.remove('on', 'head', 'kill');
     // Below 25 HP the world goes grey with a red edge (BeGone); deeper as health falls.
@@ -461,6 +463,8 @@ export class Hud {
     this.el.scope.hidden = !this.scoped;
     if (!this.scoped) return;
     if (this.el.scope.dataset.kind !== overlay) this.el.scope.dataset.kind = overlay;
+    const lit = RETICLE_CSS[settings.reticleColor];
+    if (this.el.scope.style.getPropertyValue('--reticle') !== lit) this.el.scope.style.setProperty('--reticle', lit);
     this.set('scopeMag', `${Math.round(magnification * 2) / 2}×`);
   }
 

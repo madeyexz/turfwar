@@ -4,7 +4,7 @@ import { ELIMINATION, ONLINE_CONFIG, SABOTAGE, type Mode, type Team } from '../s
 import { loadAssets, type Assets } from './assets';
 import { Audio } from './audio';
 import { Game } from './game/game';
-import { settings } from './game/settings';
+import { OPTIC_DETAILS, RETICLE_COLORS, RETICLE_STYLES, SCOPE_MODES, settings, type OpticDetail, type ReticleColor, type ReticleStyle, type ScopeMode } from './game/settings';
 import type { GameLink } from './game/link';
 import { OfflineLink } from './game/offline';
 import { Bench, BENCH_SECONDS, benchReport, type BenchResult } from './game/bench';
@@ -12,6 +12,7 @@ import { onlineAvailable, onlineConfig, connectOnline } from './net/online';
 import { LevelView } from './render/level';
 import { THEMES } from './render/materials';
 import { QUALITY, Renderer } from './render/renderer';
+import { RETICLE_CSS } from './render/sights';
 import { renderTheme, THEME_START } from './theme';
 import './style.css';
 import './menu.css';
@@ -49,6 +50,15 @@ const CROSSHAIRS = {
   t: '<path d="M12 15.5v6M2.5 12h6M15.5 12h6"/><circle cx="12" cy="12" r="1.3"/>',
 } as const;
 type Crosshair = keyof typeof CROSSHAIRS;
+/** Red dot / holo reticle icons ('stock': each sight's own). */
+const RETICLES: Record<ReticleStyle, string> = {
+  stock: '<circle cx="12" cy="12" r="1.8"/><path d="M4 8.5V4h4.5M15.5 4H20v4.5M20 15.5V20h-4.5M8.5 20H4v-4.5" fill="none"/>',
+  dot: '<circle cx="12" cy="12" r="2.6"/>',
+  circle: '<circle cx="12" cy="12" r="8" fill="none"/><circle cx="12" cy="12" r="1.5"/>',
+  chevron: '<path d="M5 16.5l7-8 7 8" fill="none" stroke-linejoin="round"/>',
+  cross: '<path d="M12 3v6M12 15v6M3 12h6M15 12h6"/><circle cx="12" cy="12" r="1.3"/>',
+};
+const cap = (s: string) => s[0].toUpperCase() + s.slice(1);
 
 const menu = document.createElement('div');
 menu.id = 'menu';
@@ -95,6 +105,10 @@ menu.innerHTML = `
           <button class="choice" data-quality="low" title="No bloom, 1k shadows"><b>Low</b></button><button class="choice" data-quality="medium" title="Bloom, 2k shadows"><b>Medium</b></button><button class="choice" data-quality="high" title="1.5× resolution"><b>High</b></button>
         </div></div>
         <div class="field"><span class="label">Crosshair</span><div class="choices segmented crosshairs" id="crosshairs" style="--n:4">${Object.entries(CROSSHAIRS).map(([id, svg]) => `<button class="choice" data-crosshair="${id}" title="${id === 't' ? 'T' : id[0].toUpperCase() + id.slice(1)}"><svg viewBox="0 0 24 24" aria-hidden="true">${svg}</svg><b>${id === 't' ? 'T' : id}</b></button>`).join('')}</div></div>
+        <div class="field"><span class="label">Scope view</span><div class="choices segmented" id="scopemodes" style="--n:2"><button class="choice" data-scopemode="pip" title="Magnified optics show the zoom through the lens; the view around it stays wide"><b>Through the lens</b></button><button class="choice" data-scopemode="overlay" title="Magnified optics fill the screen with a black eyepiece"><b>Full-screen</b></button></div></div>
+        <div class="field"><span class="label">Reticle colour</span><div class="choices segmented" id="reticlecolors" style="--n:4">${RETICLE_COLORS.map(c => `<button class="choice" data-reticlecolor="${c}"><b><i style="display:inline-block;width:8px;height:8px;margin-right:6px;border-radius:50%;vertical-align:1px;background:${RETICLE_CSS[c]};box-shadow:0 0 5px ${RETICLE_CSS[c]}"></i>${cap(c)}</b></button>`).join('')}</div></div>
+        <div class="field"><span class="label">Red dot &amp; holo reticle</span><div class="choices segmented crosshairs" id="reticlestyles" style="--n:5">${RETICLE_STYLES.map(id => `<button class="choice" data-reticlestyle="${id}" title="${id === 'stock' ? 'Each sight\'s own: dot for the red dot, circle-dot for the holo' : cap(id)}"><svg viewBox="0 0 24 24" aria-hidden="true">${RETICLES[id]}</svg><b>${id}</b></button>`).join('')}</div></div>
+        <div class="field"><span class="label">Optic detail</span><div class="choices segmented" id="opticdetails" style="--n:2"><button class="choice" data-opticdetail="high" title="Smoothest optic models, sharper scope view"><b>High</b></button><button class="choice" data-opticdetail="low" title="Lighter optic models and scope view"><b>Low</b></button></div></div>
         <div class="sliders">
           <label class="field"><span class="label">Mouse sensitivity <output id="sens-out"></output></span><input type="range" id="sens" min="0.2" max="3" step="0.05"></label>
           <label class="field"><span class="label">Field of view <output id="fov-out"></output></span><input type="range" id="fov" min="65" max="95" step="1"></label>
@@ -219,6 +233,12 @@ const refresh = () => {
   if (!deploy.disabled) deploy.textContent = deployLabel();
 };
 select('teams', 'team', team); select('skills', 'skill', skill); select('qualities', 'quality', quality); select('crosshairs', 'crosshair', crosshair);
+/** Sight options live in `settings` (read from storage there); the buttons write them back. */
+const selectSights = () => {
+  select('scopemodes', 'scopemode', settings.scopeMode); select('reticlecolors', 'reticlecolor', settings.reticleColor);
+  select('reticlestyles', 'reticlestyle', settings.reticleStyle); select('opticdetails', 'opticdetail', settings.opticDetail);
+};
+selectSights();
 const deploy = menu.querySelector<HTMLButtonElement>('#deploy')!;
 const status = menu.querySelector<HTMLElement>('#status')!;
 refresh();
@@ -231,6 +251,10 @@ onClick('map', v => { mapId = v; refresh(); showBackdrop(); });
 onClick('team', v => { team = v; select('teams', 'team', team); });
 onClick('skill', v => { skill = v; select('skills', 'skill', skill); });
 onClick('crosshair', v => { crosshair = v as Crosshair; select('crosshairs', 'crosshair', crosshair); store.set('crosshair', crosshair); });
+onClick('scopemode', v => { if (SCOPE_MODES.includes(v as ScopeMode)) { settings.scopeMode = v as ScopeMode; store.set('scopeMode', v); selectSights(); } });
+onClick('reticlecolor', v => { if (RETICLE_COLORS.includes(v as ReticleColor)) { settings.reticleColor = v as ReticleColor; store.set('reticleColor', v); selectSights(); } });
+onClick('reticlestyle', v => { if (RETICLE_STYLES.includes(v as ReticleStyle)) { settings.reticleStyle = v as ReticleStyle; store.set('reticleStyle', v); selectSights(); } });
+onClick('opticdetail', v => { if (OPTIC_DETAILS.includes(v as OpticDetail)) { settings.opticDetail = v as OpticDetail; store.set('opticDetail', v); selectSights(); } });
 onClick('quality', v => {
   quality = v as keyof typeof QUALITY; select('qualities', 'quality', quality); store.set('quality', quality);
   renderer?.applyQuality(QUALITY[quality]);

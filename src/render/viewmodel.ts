@@ -4,9 +4,11 @@ import { ATTACHMENT_SLOTS, WEAPONS, WEAPON_IDS, type Attachments, type WeaponId 
 import type { LocalPlayer } from '../game/player';
 import { curlFingers, orientHand, restorePose, solveArm, type Bones } from './rig';
 import { GUN_FIT, fitAttachments, overlayFor, vec, type Fitted, type Overlay } from './optics';
+import { opticFov, settings } from '../game/settings';
+import { requestScope } from './sights';
 import { createArms } from './soldier';
 
-/** Where the weapon rests at the hip (gun-group space) and how far ahead of the eye it sits when aimed. */
+/** Where the weapon rests at the hip (gun-group space) and how far ahead of the eye it sits when aimed (fitted sights set their own eye relief). */
 const HOLD: Record<WeaponId, { hip: THREE.Vector3; adsZ: number }> = {
   knife: { hip: new THREE.Vector3(0.16, -0.18, -0.34), adsZ: -0.34 },
   mp5: { hip: new THREE.Vector3(0.14, -0.3, -0.36), adsZ: -0.34 },
@@ -188,7 +190,9 @@ export class ViewModel {
     const breathe = Math.sin(this.time * 1.6) * 0.0022 * (1 - ads * 0.7);
 
     // ---- Base pose: hip -> ADS -> sprint ----
-    const adsPos = new THREE.Vector3(0, -(this.fit.sightLine - fit.grip[1]), hold.adsZ);
+    // The sight's rear surface sits its eye relief ahead of the eye (red dots and holo sights frame the view, scopes fill it).
+    const adsZ = this.fit.relief !== undefined && this.fit.eyeX !== undefined ? -(this.fit.relief + this.fit.eyeX - fit.grip[0]) : hold.adsZ;
+    const adsPos = new THREE.Vector3(0, -(this.fit.sightLine - fit.grip[1]), adsZ);
     const pos = new THREE.Vector3().lerpVectors(hold.hip, adsPos, ads);
     let rx = 0.04 * (1 - ads), ry = 0.085 * (1 - ads), rz = 0.03 * (1 - ads);
     if (knife) { rx = 0.35; ry = 0.25; rz = -0.35; }
@@ -271,9 +275,19 @@ export class ViewModel {
 
     this.flashLeft -= dt;
     this.flash.visible = this.flashLeft > 0 && !(this.overlay && p.ads > 0.95);
-    // Scoped weapons hide the model at full zoom (the HUD draws the eyepiece); binoculars hide it entirely.
-    this.scopeVisible = !!this.overlay && p.ads > 0.92 && !p.binoculars;
+    // Full-screen eyepiece option: scoped weapons hide the model at full zoom (the HUD draws it); binoculars hide it entirely.
+    this.scopeVisible = !!this.overlay && settings.scopeMode === 'overlay' && p.ads > 0.92 && !p.binoculars;
     this.root.visible = !this.scopeVisible && !p.binoculars;
+    // Picture-in-picture: the lens shows the world at the optic's magnification once it is raised to the eye.
+    const lens = this.fit.lens, sight = this.fit.sight;
+    if (lens && sight) {
+      const active = settings.scopeMode === 'pip' && this.root.visible ? Math.max(0, Math.min(1, (ads - 0.55) / 0.35)) : 0;
+      (lens.material as THREE.ShaderMaterial).uniforms.uActive.value = active;
+      if (active > 0) {
+        const w = p.weapon, tanHalf = Math.tan(opticFov(w) * Math.PI / 360) / (p.zoomLevel && w.class === 'sniper' ? 2 : 1);
+        requestScope({ lens, sight, tanHalf, size: settings.opticDetail === 'high' ? 768 : 512 });
+      }
+    }
     if (this.fit.laser) this.fit.laser.visible = sprint < 0.5 && lowered < 0.5;
     this.torch.intensity = this.fit.torch && p.alive && !p.binoculars ? 70 : 0;
   }
