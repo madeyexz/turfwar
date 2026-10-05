@@ -105,9 +105,23 @@ median hedges, the Civic Blvd expressway and the Red House, around the spot wher
 its player. Our game only overlays its bases (SWAT under the expressway, Militia on Zhongxiao W. Rd),
 the bomb sites (A Cinema Street, B the arcade), ammo crates and the playable bounds (about 200 × 250 m,
 Squad rooms). `tools/import-taipei.ts` regenerates `shared/maps/taipei-data.ts` from that game's built
-JavaScript; its header explains how. Approximations: the octagonal Red House is drawn as a round
-drum with a stepped roof, medians follow the junction gaps by rule, and the source's MRT exits,
-street furniture, traffic, pedestrians and generic facade signs are not carried over.
+JavaScript; its header explains how. The same tool also exports what the source *draws*: the
+district's own meshes and canvas atlas (facades, shopfronts, signs, AC units, the cinema and arcade
+interiors: `public/assets/taipei-district.glb`, `taipei-atlas.webp`), its street furniture run through
+the source's own street generator (trees, lamps, traffic signals and street-name plates, bus stops,
+YouBike docks, bollards, hydrants, postboxes, planters, rows of parked scooters, traffic signs:
+`shared/maps/taipei-street.ts`, with the colliders in `taipei-furniture.ts`), the source's prop meshes
+(`public/assets/taipei-props.json`), Ximen station's exit 6, and the city past the backdrop
+(`taipei-skyline.ts`: its buildings out to 1.3 km, landmarks, hills and roads), where Taipei 101 stands
+at the source's site, 1.6 km east-southeast, as a detailed 508 m model with its gold-lit segments.
+The renderer loads these on demand (`src/render/dressing.ts`, `skyline.ts`, `lotdetail.ts`), so the
+server and the other maps never carry them. Gameplay additions over the source: enterable ground
+floors (two 7-TWELVEs, a claw-machine shop, the 51嵐 tea shop and a figure shop by site A) with
+counters, shelves and machines as cover, a stair and a ladder up to two parapeted roofs
+(`taipei-interiors.ts`), and the Ximen station underpass under Zhongxiao W. Rd linking both sidewalks
+(`taipei-underpass.ts`); parked cars and taxis stand in the source's car bays. Approximations: medians
+follow the junction gaps by rule, the generic buildings' balconies, window cages and rooftops are
+drawn by our own rules after the source's, and traffic and pedestrians are not carried over.
 
 Every map has ammo crates (one more stands in each base) and open team bases. Sabotage lists only the
 maps with bomb sites.
@@ -323,7 +337,8 @@ texture, sound and line of code here is original or CC0/OFL.
 - Taipei map layout: the Ximending quarter of *臺北狂飆 / TAIPEI RUSH* (https://taipei-gta.vercel.app)
   — its streets, buildings, signs and landmarks — used with the author's permission and extracted by
   `tools/import-taipei.ts` into `shared/maps/taipei-data.ts`. Its shop names are that game's own parody
-  brands. Facade windows, shopfronts and sign artwork are drawn procedurally in `src/render/level.ts`.
+  brands. Its district meshes and atlas, street furniture, prop meshes (scooter, YouBike, trees,
+  plants, signal heads) and skyline are that game's too, exported by the same tool.
 - Sky, terrain, architecture, effects and the remaining audio (knife, casings, footsteps,
   explosions, heartbeat, bomb, round and cash cues, UI, and the fallback weapon voices used before
   the recordings load) are procedural.

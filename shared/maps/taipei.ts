@@ -26,9 +26,11 @@ import type { BlockStyle, Decor, MapDef, SignStyle } from './types';
  *   C–E are landmarks bots roam to: the Red House, the Ximen gateway and the Emei St stage.
  * Plus ammo crates and the playable bounds.
  *
- * Approximations: the octagonal Red House is a round drum (collision as in the source up to its
- * eaves, its roof stepped), median floors follow the junction gaps by rule, and the source's MRT
- * exits, street furniture, traffic, pedestrians and generic facade signs are not carried over.
+ * The look of the district, its street furniture and the skyline (with Taipei 101) come from the
+ * source too, as a dressing set the renderer loads on demand (taipei-decor.ts places it and its
+ * colliders); taipei-interiors.ts and taipei-underpass.ts add enterable shops, roof access and the
+ * Ximen station underpass. Approximations: median floors follow the junction gaps by rule, and the
+ * source's traffic and pedestrians are not carried over.
  *
  * Coordinates: the source's (+x east, +z south, metres), shifted so the area is centred on 0.
  */
