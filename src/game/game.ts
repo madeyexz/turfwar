@@ -62,6 +62,9 @@ export class Game {
   private fpsFrames = 0;
   private fpsTime = 0;
   private wasAlive = false;
+  private hudReady = false;
+  /** The match-end screen has buttons: free the mouse once when it appears. */
+  private endShown = false;
   private corrections = 0;
   /** Weapon (and attachments) the view model shows, to rebuild it only on change. */
   private shownWeapon = '';
@@ -109,7 +112,7 @@ export class Game {
     });
     // The key that closed the menu must not reopen it next frame.
     this.buymenu.onClose = () => { this.input.clear(); void this.input.lock(); };
-    this.input.canRelock = () => !this.buymenu.open && !this.hud.chatting;
+    this.input.canRelock = () => !this.buymenu.open && !this.hud.chatting && this.link.state()?.phase !== 'ended';
     if (me) this.player.spawnFrom(me);
     if (import.meta.env.DEV) Object.assign(window, { __game: this });
   }
@@ -141,6 +144,8 @@ export class Game {
     if (state.mapId !== this.mapId && this.onMapChange) { this.onMapChange(state.mapId); return; }
     const myId = link.myId();
     const me = state.soldiers.find(s => s.id === myId);
+    if (state.phase === 'ended' && !this.endShown) { this.endShown = true; this.buymenu.close(); document.exitPointerLock?.(); }
+    if (state.phase !== 'ended') this.endShown = false;
     const sabotage = modeOf(state, this.map.def) === 'sabotage';
     const active = this.input.locked && !this.buymenu.open && !this.hud.chatting;
     const released = !this.input.locked && !this.buymenu.open && !this.hud.chatting && !!me?.alive && state.phase !== 'ended';
@@ -209,6 +214,8 @@ export class Game {
 
     // ---- Events ----
     this.shotVoices = 0;
+    // The HUD learns who we are in tick(): run it before the first events (kill marks on the score bar).
+    if (!this.hudReady) { this.hud.tick(this.player, state, me); this.hudReady = true; }
     for (const e of link.drainEvents()) this.handleEvent(e, state, myId);
 
     // ---- World views ----
