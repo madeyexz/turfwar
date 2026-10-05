@@ -1,5 +1,6 @@
 import type { Heightfield, Ladder, Ramp, Solid } from '../collision';
 import type { Vec3 } from '../math';
+import type { VehicleSpot } from '../vehicles';
 
 /**
  * Dusk (low sun), twilight (blue hour), steppe (dry midday) and meadow light the BeGone maps under Earth skies;
@@ -101,4 +102,6 @@ export interface MapDef {
   sabotage?: { sites: PointId[]; attackerSpawn: 0 | 1 };
   /** Big enough for 24v24 (bases padded to 24 slots); only big maps host 24v24. */
   big?: boolean;
+  /** Drivable cars, scooters and helicopters, parked here at every round start. */
+  vehicles?: VehicleSpot[];
 }

@@ -3,6 +3,7 @@ import type { Vec3 } from '../../shared/math';
 import type { ClientReport, MatchEvent, MatchState, Mode, ShotClaim, Soldier, Team } from '../../shared/match/state';
 import { sizeLabel } from '../../shared/match/rooms';
 import type { Body } from '../../shared/world';
+import { maxSlack, type Vehicle } from '../../shared/vehicles';
 import type { CareerStats, GameLink } from '../game/link';
 import type { DbConnection } from '../module_bindings';
 import type RosterTable from '../module_bindings/roster_table';
@@ -160,6 +161,7 @@ export class OnlineLink implements GameLink {
     }
     soldiers.sort((a, b) => a.id - b.id);
     const bodies: Body[] = frame.bodies.map(b => ({ ...b, age: 0, owner: -1, hp: 1, timer: 0 }));
+    const vehicles: Vehicle[] = frame.vehicles.map(v => ({ ...v, steer: 0, slack: maxSlack(v.kind), lastAttacker: -1, lastRun: -9 }));
     if (this.me < 0 && this.entry && !this.rejoining && !this.disconnected) {
       // Backgrounded tabs stop reporting and get dropped as idle; rejoin the same room transparently.
       this.rejoining = true;
@@ -170,7 +172,7 @@ export class OnlineLink implements GameLink {
     const sameMap = this.frameMap === match.mapId;
     this.view = {
       mapId: match.mapId, phase: match.phase as MatchState['phase'], phaseLeft: frame.phaseLeft, time: frame.time, tick: frame.tick,
-      scores: [match.score0, match.score1], soldiers, bodies, nextId: match.nextId,
+      scores: [match.score0, match.score1], soldiers, bodies, vehicles: sameMap ? vehicles : [], nextId: match.nextId,
       winner: match.winner as -1 | Team, config: JSON.parse(match.configJson),
       round: frame.round, roundPhase: frame.roundPhase, roundClock: 0, roundWinner: -1, lossStreak: [0, 0],
       firstKill: false, firstBlood: false, lastKillTeam: -1,

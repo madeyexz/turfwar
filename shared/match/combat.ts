@@ -4,6 +4,7 @@ import type { MapDef } from '../maps/types';
 import { dist3, type Vec3 } from '../math';
 import { createMoveState, eyeHeight } from '../movement';
 import { GRENADE, HEALTH, HIGH_EXPLOSIVE, STAMINA, pelletCone, pelletDirs, zoneDamage, type HitZone, type WeaponDef } from '../weapons';
+import { VEHICLES, raycastVehicle, vehicleCenter, type Vehicle } from '../vehicles';
 import type { Body } from '../world';
 import { CASH, award, statsOf } from './economy';
 import type { NavGraph } from './nav';
@@ -130,7 +131,36 @@ export function spreadFor(s: Soldier, w: WeaponDef, bloom = 0) {
   return spread + bloom;
 }
 
-export interface TraceResult { point: Vec3; soldier?: Soldier; zone?: HitZone; distance: number; surface?: string }
+export interface TraceResult { point: Vec3; soldier?: Soldier; zone?: HitZone; distance: number; surface?: string; vehicle?: Vehicle }
+
+/** The vehicle and seat (0 drives) a soldier occupies, if any. */
+export function seatOf(state: Pick<MatchState, 'vehicles'>, id: number): { vehicle: Vehicle; seat: 0 | 1 } | undefined {
+  for (const v of state.vehicles) {
+    if (v.driver === id) return { vehicle: v, seat: 0 };
+    if (v.passenger === id) return { vehicle: v, seat: 1 };
+  }
+  return undefined;
+}
+
+/** Soldiers sitting inside a closed vehicle (car, helicopter): shots and blasts hit the body instead. */
+export function shieldedIds(state: Pick<MatchState, 'vehicles'>) {
+  const ids = new Set<number>();
+  for (const v of state.vehicles) {
+    if (VEHICLES[v.kind].exposed) continue;
+    if (v.driver >= 0) ids.add(v.driver);
+    if (v.passenger >= 0) ids.add(v.passenger);
+  }
+  return ids;
+}
+
+/** Team aboard a vehicle (-1 empty). */
+export function crewTeam(state: MatchState, v: Vehicle): number {
+  for (const id of [v.driver, v.passenger]) {
+    const s = id >= 0 ? state.soldiers.find(x => x.id === id) : undefined;
+    if (s) return s.team;
+  }
+  return -1;
+}
 
 /**
  * Authoritative hitscan against static geometry and enemy soldiers. `feet` may move a
@@ -140,8 +170,17 @@ export function traceShot(state: MatchState, ctx: SimContext, shooter: Soldier, 
   const wall = ctx.world.raycast(origin, dir, range, shooter.team);
   let best = wall ? wall.t : range;
   let result: TraceResult = { point: wall ? wall.point : { x: origin.x + dir.x * range, y: origin.y + dir.y * range, z: origin.z + dir.z * range }, distance: best, surface: wall?.surface };
+  const shielded = state.vehicles.length ? shieldedIds(state) : undefined;
+  for (const v of state.vehicles) {
+    if (v.driver === shooter.id || v.passenger === shooter.id) continue;
+    const t = raycastVehicle(origin, dir, v);
+    if (t >= 0 && t < best) {
+      best = t;
+      result = { point: { x: origin.x + dir.x * t, y: origin.y + dir.y * t, z: origin.z + dir.z * t }, distance: t, vehicle: v, surface: 'metal' };
+    }
+  }
   for (const s of state.soldiers) {
-    if (!s.alive || s.id === shooter.id || s.team === shooter.team) continue;
+    if (!s.alive || s.id === shooter.id || s.team === shooter.team || shielded?.has(s.id)) continue;
     if (Math.abs(s.m.x - origin.x) > best + 2 || Math.abs(s.m.z - origin.z) > best + 2) continue;
     const hit = raycastSoldier(origin, dir, hitShape(feet(s), s.m.crouch, s.yaw));
     if (hit && hit.t < best) {
@@ -157,7 +196,7 @@ export function resolveShot(state: MatchState, ctx: SimContext, shooter: Soldier
   let hit: 0 | 1 | 2 = 0;
   if (result.soldier && result.zone) {
     if (applyDamage(state, ctx, result.soldier, shooter.id, zoneDamage(w, result.zone), result.zone, origin, w.id)) hit = result.zone === 'head' ? 2 : 1;
-  }
+  } else if (result.vehicle && damageVehicle(state, ctx, result.vehicle, shooter.id, zoneDamage(w, 'body'), w.id)) hit = 1;
   ctx.emit({ type: 'shot', shooter: shooter.id, weapon: w.id, from: origin, to: result.point, hit, surface: result.surface });
 }
 
@@ -167,9 +206,11 @@ export function resolveShot(state: MatchState, ctx: SimContext, shooter: Soldier
  */
 export function resolvePellets(state: MatchState, ctx: SimContext, shooter: Soldier, w: WeaponDef, origin: Vec3, dir: Vec3, ads: boolean, feet: (s: Soldier) => Vec3 = feetOf) {
   const hits = new Map<Soldier, { amount: number; head: boolean }>();
+  const bodies = new Map<Vehicle, number>();
   for (const d of pelletDirs(dir, pelletCone(w, ads), w.pellets)) {
     const r = traceShot(state, ctx, shooter, origin, d, w.range, feet);
     let hit: 0 | 1 | 2 = 0;
+    if (r.vehicle) { bodies.set(r.vehicle, (bodies.get(r.vehicle) ?? 0) + zoneDamage(w, 'body')); hit = 1; }
     if (r.soldier && r.zone) {
       const h = hits.get(r.soldier) ?? { amount: 0, head: false };
       h.amount += zoneDamage(w, r.zone);
@@ -180,6 +221,7 @@ export function resolvePellets(state: MatchState, ctx: SimContext, shooter: Sold
     ctx.emit({ type: 'shot', shooter: shooter.id, weapon: w.id, from: origin, to: r.point, hit, surface: r.surface });
   }
   for (const [target, h] of hits) applyDamage(state, ctx, target, shooter.id, h.amount, h.head ? 'head' : 'body', origin, w.id);
+  for (const [v, amount] of bodies) damageVehicle(state, ctx, v, shooter.id, amount, w.id);
 }
 
 export function spawnBody(state: MatchState, kind: Body['kind'], p: Vec3, v: Vec3, owner: number, team: number, hp = 1, timer = 0): Body {
@@ -206,15 +248,66 @@ export function explode(state: MatchState, ctx: SimContext, g: Body) {
   const { radius, damage } = blastOf(g.hp === 2);
   const center = { x: g.x, y: g.y + 0.2, z: g.z };
   ctx.emit({ type: 'explosion', x: g.x, y: g.y, z: g.z, owner: g.owner, radius, weapon: 'grenade' });
-  const owner = state.soldiers.find(o => o.id === g.owner);
+  blast(state, ctx, center, radius, damage, g.owner, 'grenade', VEHICLE_BLAST);
+}
+
+/** Frags hurt vehicle bodies harder than soldiers (a well-placed M67 wrecks a scooter). */
+const VEHICLE_BLAST = 1.6;
+
+/** Damage everything in `radius` of `center` with line of sight, falling off with distance; no friendly fire. */
+function blast(state: MatchState, ctx: SimContext, center: Vec3, radius: number, damage: number, ownerId: number, weapon: string, vehicleScale: number, except?: Vehicle) {
+  const owner = state.soldiers.find(o => o.id === ownerId);
+  const shielded = shieldedIds(state);
   for (const s of state.soldiers) {
-    if (!s.alive) continue;
+    if (!s.alive || shielded.has(s.id)) continue;
     const chest = chestPoint(feetOf(s), s.m.crouch);
     const d = dist3(center, chest);
     if (d > radius || !ctx.world.lineOfSight(center, chest, -2)) continue;
     if (owner && owner.team === s.team && owner.id !== s.id) continue;
-    applyDamage(state, ctx, s, g.owner, damage * (1 - d / radius) ** 1.2, 'blast', center, 'grenade');
+    applyDamage(state, ctx, s, ownerId, damage * (1 - d / radius) ** 1.2, 'blast', center, weapon);
   }
+  for (const v of state.vehicles) {
+    if (v === except || v.wrecked) continue;
+    const c = vehicleCenter(v), d = Math.max(0, dist3(center, c) - VEHICLES[v.kind].box.w);
+    if (d > radius || !ctx.world.lineOfSight(center, c, -2)) continue;
+    damageVehicle(state, ctx, v, ownerId, damage * vehicleScale * (1 - d / radius) ** 1.2, weapon);
+  }
+}
+
+/** Radius and damage of a vehicle's wreck explosion. */
+export const WRECK_BLAST = { radius: 7, damage: 90 };
+
+/**
+ * Damage a vehicle's body (bullets on cars and the helicopter, blasts, crashes). A crewed vehicle
+ * takes no damage from its crew's team; an empty one is fair game. At zero it wrecks.
+ */
+export function damageVehicle(state: MatchState, ctx: SimContext, v: Vehicle, attackerId: number, amount: number, weapon: string) {
+  if (v.wrecked || amount <= 0 || state.phase === 'ended' || state.roundPhase === 'over') return false;
+  const attacker = attackerId >= 0 ? state.soldiers.find(s => s.id === attackerId) : undefined;
+  const crew = crewTeam(state, v), aboard = attackerId === v.driver || attackerId === v.passenger;
+  if (attacker && !aboard && crew === attacker.team) return false;
+  v.health -= amount;
+  if (attacker && !aboard) v.lastAttacker = attacker.id;
+  ctx.emit({ type: 'vehicle', action: 'hit', vehicle: v.id, id: attackerId, amount: Math.round(amount) });
+  if (v.health <= 0) wreckVehicle(state, ctx, v, attacker && !aboard ? attacker.id : v.lastAttacker, weapon);
+  return true;
+}
+
+/** The vehicle explodes: its crew dies, the blast hurts whoever stands near, and the hulk stays for the round. */
+export function wreckVehicle(state: MatchState, ctx: SimContext, v: Vehicle, killerId: number, weapon: string) {
+  if (v.wrecked) return;
+  v.health = 0; v.wrecked = true;
+  const center = vehicleCenter(v);
+  ctx.emit({ type: 'vehicle', action: 'wreck', vehicle: v.id, id: killerId });
+  ctx.emit({ type: 'explosion', x: center.x, y: center.y, z: center.z, owner: killerId, radius: WRECK_BLAST.radius, weapon: 'vehicle' });
+  const killer = killerId >= 0 ? state.soldiers.find(s => s.id === killerId) : undefined;
+  for (const id of [v.driver, v.passenger]) {
+    const s = id >= 0 ? state.soldiers.find(x => x.id === id) : undefined;
+    if (s?.alive) killSoldier(state, ctx, s, killer && killer.id !== s.id && killer.team !== s.team ? killer : undefined, weapon === 'crash' ? 'crash' : 'vehicle', false);
+  }
+  v.driver = -1; v.passenger = -1;
+  v.vx *= 0.3; v.vz *= 0.3;
+  blast(state, ctx, center, WRECK_BLAST.radius, WRECK_BLAST.damage, killerId, 'vehicle', 2.5, v);
 }
 
 export function teamCount(state: MatchState, team: Team, humansOnly = false) {

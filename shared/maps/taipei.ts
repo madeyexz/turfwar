@@ -2,6 +2,7 @@ import { MapBuilder } from './builder';
 import {
   AREA, BILLBOARDS, BRANDS, EXPRESSWAY, HEDGES, LOTS, POIS, RED_HOUSE, ROADS, START, XIMEN_SHELLS, XIMEN_SHOPS, XIMEN_SIGNS, XIMEN_SOLIDS,
 } from './taipei-data';
+import { parkTaipeiVehicles } from './taipei-vehicles';
 import type { BlockStyle, Decor, MapDef, SignStyle } from './types';
 
 /**
@@ -292,6 +293,9 @@ export function taipei(): MapDef {
   b.point('D', 'Ximen Gateway 西門町牌樓', X(-757), KERB, Z(-184), 6);
   b.point('E', 'Emei St Stage 峨眉街', X(-757), KERB, Z(-207), 6);
   for (const [x, z] of [[-826, -253], [-757, -238], [-813, -207], [-770, -110], [-860.5, -206], [-715.5, -230]]) b.ammoCrate(X(x), floorAt(x, z), Z(z));
+
+  // ---- Drivable vehicles (shared/maps/taipei-vehicles.ts) ----------------------------------
+  parkTaipeiVehicles(b, X, Z, floorAt);
 
   return b.build();
 }
