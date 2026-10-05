@@ -34,11 +34,13 @@ import {
 } from "spacetimedb";
 
 // Import all reducer arg schemas
+import BuyReducer from "./buy_reducer";
 import ChooseLoadoutReducer from "./choose_loadout_reducer";
 import FireReducer from "./fire_reducer";
 import GrenadeReducer from "./grenade_reducer";
 import JoinReducer from "./join_reducer";
 import LeaveReducer from "./leave_reducer";
+import PickupItemReducer from "./pickup_item_reducer";
 import ReloadWeaponReducer from "./reload_weapon_reducer";
 import ReportReducer from "./report_reducer";
 import RewriteLawReducer from "./rewrite_law_reducer";
@@ -149,11 +151,13 @@ const tablesSchema = __schema({
 
 /** The schema information for all reducers in this module. This is defined the same way as the reducers would have been defined in the server, except the body of the reducer is omitted in code generation. */
 const reducersSchema = __reducers(
+  __reducerSchema("buy", BuyReducer),
   __reducerSchema("choose_loadout", ChooseLoadoutReducer),
   __reducerSchema("fire", FireReducer),
   __reducerSchema("grenade", GrenadeReducer),
   __reducerSchema("join", JoinReducer),
   __reducerSchema("leave", LeaveReducer),
+  __reducerSchema("pickup_item", PickupItemReducer),
   __reducerSchema("reload_weapon", ReloadWeaponReducer),
   __reducerSchema("report", ReportReducer),
   __reducerSchema("rewrite_law", RewriteLawReducer),

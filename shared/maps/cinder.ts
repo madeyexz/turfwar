@@ -112,6 +112,12 @@ export function cinderBasin(): MapDef {
     b.box(-48, b.ground(-48, 4), 4, 4.6, 1.25, 0.8, 'concrete');
     b.box(-55, b.ground(-55, -10), -10, 0.8, 1.3, 4.4, 'concrete');
     b.box(-50, b.ground(-50, 18), 18, 3.2, 2.2, 3.2, 'rock');
+
+    // ---- Pickups ----
+    b.pickup(-14.5, ry + 4.6, -37, 'lancer', 45);          // exposed ridge watchtower
+    b.pickup(-25.5, yy, 29.5, 'scatter', 35);              // close quarters among the containers
+    b.pickup(-28, 'ground', 13.5, 'ammo', 20);             // mid lane, off point A
+    b.pickup(-47, 'ground', 9, 'armor', 40);               // spawn exit flank
   });
 
   // Outer boundary blockers sit just beyond the playable bounds.

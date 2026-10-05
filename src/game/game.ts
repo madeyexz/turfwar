@@ -4,7 +4,8 @@ import { parseLawCommand, type LawCommand } from '../../shared/laws';
 import { loadMap, reactorPoint } from '../../shared/maps/index';
 import { raySphere, type Vec3 } from '../../shared/math';
 import type { MatchEvent, MatchState, Soldier } from '../../shared/match/state';
-import { LOADOUTS, pelletCone, pelletDirs, type HitZone, type LoadoutId } from '../../shared/weapons';
+import { ECONOMY, WEAPONS, pelletCone, pelletDirs, type HitZone, type LoadoutId } from '../../shared/weapons';
+import { PICKUP_REACH, canBuy } from '../../shared/match/economy';
 import { BODY_RADIUS } from '../../shared/world';
 import type { Assets } from '../assets';
 import { Audio } from '../audio';
@@ -13,10 +14,12 @@ import { BodiesView } from '../render/bodies';
 import { Effects } from '../render/effects';
 import { InterpBuffer } from '../render/interp';
 import { LevelView } from '../render/level';
+import { PickupsView } from '../render/pickups';
 import { THEMES } from '../render/materials';
 import type { Renderer } from '../render/renderer';
 import { SoldierView } from '../render/soldier';
 import { ViewModel } from '../render/viewmodel';
+import { BuyMenu } from '../ui/buymenu';
 import { Hud } from '../ui/hud';
 import { LawBar } from '../ui/lawbar';
 import { Input } from './input';
@@ -45,6 +48,10 @@ export class Game {
   private remotes = new Map<number, Remote>();
   private hud: Hud;
   private lawbar: LawBar;
+  private buymenu: BuyMenu;
+  private pickups: PickupsView;
+  /** Game time of our last deployment (buy time counts from here). */
+  private spawnedAt = 0;
   private map: ReturnType<typeof loadMap>;
   private lastVersion = -1;
   private time = 0;
@@ -82,6 +89,8 @@ export class Game {
     renderer.scene.add(this.level.group, this.effects.group);
     this.bodies = new BodiesView(assets);
     renderer.scene.add(this.bodies.group);
+    this.pickups = new PickupsView(assets, def.pickups);
+    renderer.scene.add(this.pickups.group);
     this.input = new Input(renderer.renderer.domElement);
     this.input.sensitivity = settings.sensitivity;
     const me = link.state()?.soldiers.find(s => s.id === link.myId());
@@ -93,7 +102,9 @@ export class Game {
     this.hud.onMenu = () => this.onExit?.();
     this.lawbar = new LawBar(container, (command, source, text) => this.applyLaw(command, source, text));
     this.lawbar.onClose = () => { void this.input.lock(); };
-    this.input.canRelock = () => !this.lawbar.open;
+    this.buymenu = new BuyMenu(container, item => { this.link.buy(item); this.audio.ui(); });
+    this.buymenu.onClose = () => { void this.input.lock(); };
+    this.input.canRelock = () => !this.lawbar.open && !this.buymenu.open;
     if (me) this.player.spawnFrom(me);
     this.refreshLaws();
     if (import.meta.env.DEV) Object.assign(window, { __game: this });
@@ -110,7 +121,8 @@ export class Game {
     if (!keepLink) this.link.dispose();
     this.hud.dispose();
     this.lawbar.root.remove();
-    this.renderer.scene.remove(this.level.group, this.effects.group, this.bodies.group);
+    this.buymenu.root.remove();
+    this.renderer.scene.remove(this.level.group, this.effects.group, this.bodies.group, this.pickups.group);
     for (const r of this.remotes.values()) { r.view.dispose(); r.view.gun.removeFromParent(); }
     this.viewmodel.root.removeFromParent();
     this.input.dispose();
@@ -133,14 +145,19 @@ export class Game {
     if (state.mapId !== this.mapId && this.onMapChange) { this.onMapChange(state.mapId); return; }
     const myId = link.myId();
     const me = state.soldiers.find(s => s.id === myId);
-    const active = this.input.locked && !this.lawbar.open;
+    const active = this.input.locked && !this.lawbar.open && !this.buymenu.open;
     // Mouse released while alive in a live round (online: the match keeps going).
-    const released = !this.input.locked && !this.lawbar.open && !!me?.alive && state.phase !== 'ended';
+    const released = !this.input.locked && !this.lawbar.open && !this.buymenu.open && !!me?.alive && state.phase !== 'ended';
     this.hud.released(released, link.mode === 'offline');
 
     // ---- Hotkeys ----
     if (active) {
       if (this.input.take('Slash')) { this.lawbar.show(); this.input.clear(); }
+      if (this.input.take('KeyB') && me?.alive) { this.buymenu.show(); this.input.clear(); }
+      if (this.input.take('KeyE') && me?.alive) {
+        const i = this.pickups.nearestWeapon(this.player.m.x, this.player.m.y, this.player.m.z, PICKUP_REACH, state.pickupLeft);
+        if (i >= 0) { link.pickup(i); this.audio.ui(); }
+      }
       for (let i = 0; i < 4; i++) if (this.input.take(`Digit${i + 1}`)) void this.applyLaw(presets[i].command, 'PRESET', presets[i].sentence);
     }
     this.hud.scoreboard(this.input.down('Tab'), state, myId);
@@ -148,7 +165,9 @@ export class Game {
     // ---- Server reconciliation ----
     if (me) {
       this.myTeam = me.team;
-      if (me.alive && !this.wasAlive) { this.player.spawnFrom(me); this.viewmodel.setWeapon(LOADOUTS[me.loadout].weapons[0]); }
+      if (me.alive && !this.wasAlive) { this.player.spawnFrom(me); this.viewmodel.setWeapon(me.weapons[0]); this.spawnedAt = this.time; }
+      else if (me.alive) this.player.syncGear(me);
+      if (!me.alive) this.buymenu.close();
       if (!me.alive && this.wasAlive) { this.player.alive = false; this.deathCam.set(this.player.m.x, this.player.m.y + 1.6, this.player.m.z); }
       if (me.corrections !== this.corrections) { if (this.wasAlive && me.alive) this.player.correct(me); this.corrections = me.corrections; }
       this.wasAlive = me.alive;
@@ -204,7 +223,7 @@ export class Game {
       lodSphere.center.set(sample.x, sample.y + 1, sample.z);
       const distance = lodSphere.center.distanceTo(cam0.position);
       r.view.setLod(!frustum.intersectsSphere(lodSphere) ? 3 : distance < LOD_NEAR ? 0 : distance < LOD_MID ? 1 : 2);
-      const w = LOADOUTS[s.loadout].weapons[s.weapon];
+      const w = s.weapons[s.weapon];
       r.view.update(dt, {
         x: sample.x, y: sample.y, z: sample.z, vx: sample.vx, vy: sample.vy, vz: sample.vz, yaw: sample.yaw, pitch: sample.pitch, crouch: sample.crouch,
         grounded: s.m.grounded, sprint: s.sprint, ads: s.ads, slide: s.m.slideTime > 0, alive: s.alive, weapon: w,
@@ -226,6 +245,7 @@ export class Game {
       r.last = (r.last ?? new THREE.Vector3()).copy(r.pos);
     }
     this.bodies.update(dt, renderTime, this.time);
+    this.pickups.update(this.time, state.pickupLeft);
     this.effects.update(dt);
     this.level.update(this.time);
     const b = state.points.find(p => p.id === reactorPoint(this.map.def));
@@ -269,6 +289,14 @@ export class Game {
     if (this.hudTimer <= 0) {
       this.hudTimer = 0.1;
       this.hud.tick(this.player, state, me, this.map.def.points);
+      // Buy time counts from our own deployment (the host checks the same rule).
+      const since = this.time - this.spawnedAt;
+      const buyable = !!me && canBuy({ ...me, sinceSpawn: since }, this.map.def) && state.phase !== 'ended';
+      this.buymenu.update(me, buyable, ECONOMY.buyTime - since);
+      this.hud.buyHint(buyable && !this.buymenu.open);
+      const near = me?.alive ? this.pickups.nearestWeapon(this.player.m.x, this.player.m.y, this.player.m.z, PICKUP_REACH, state.pickupLeft) : -1;
+      const item = near >= 0 ? this.map.def.pickups![near].item : undefined;
+      this.hud.prompt(item && item in WEAPONS ? `<kbd>E</kbd> PICK UP ${WEAPONS[item as keyof typeof WEAPONS].name.toUpperCase()}` : '');
       if (state.config.lawCooldown > 0 && me) this.refreshLaws(me.lawCooldown);
       this.hud.net(link.status());
     }

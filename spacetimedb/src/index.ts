@@ -5,11 +5,12 @@ import { MAP_IDS, loadMap, loadNav } from '../../shared/maps/index';
 import type { SimContext } from '../../shared/match/combat';
 import { encodeFrame } from '../../shared/match/frame';
 import {
-  addSoldier, applyLaw, balanceTeams, createMatch, fireShot, HISTORY_SECONDS, reload, removeSoldier, reportState, resetMatch,
+  addSoldier, applyLaw, balanceTeams, buyItem, createMatch, pickUp, fireShot, HISTORY_SECONDS, reload, removeSoldier, reportState, resetMatch,
   setLoadout, switchWeapon, teamSizeFor, throwGrenade, tickMatch, TICK_RATE,
 } from '../../shared/match/sim';
 import { ONLINE_CONFIG, type BotBrain, type MatchEvent, type MatchState, type PointState, type Soldier, type Team, type WorldSnapshot } from '../../shared/match/state';
-import { LOADOUTS, type LoadoutId } from '../../shared/weapons';
+import { LOADOUTS, WEAPONS, type LoadoutId, type WeaponId } from '../../shared/weapons';
+import { kitWeapons, type BuyItem } from '../../shared/match/economy';
 import type { Body } from '../../shared/world';
 
 /**
@@ -44,6 +45,7 @@ const clockTable = table({ name: 'clock' }, {
   id: t.u8().primaryKey(),
   phaseLeft: t.f64(), time: t.f64(), worldTime: t.f64(), tick: t.u32(), scoreTimer: t.f64(), lawLeft: t.f64(), rewindLeft: t.u32(),
   nextId: t.u32(), droneTimer: t.f64(), historyHead: t.u32(), historyLength: t.u32(), lastTickMicros: t.u64(),
+  pickupsJson: t.string().default('[]'),
 });
 
 const soldierTable = table({ name: 'soldier', public: true }, {
@@ -56,6 +58,8 @@ const soldierTable = table({ name: 'soldier', public: true }, {
   lawCooldown: t.f32(), sprint: t.bool(), ads: t.bool(), sinceShot: t.f32(), corrections: t.u32(), idle: t.f32(),
   // Appended with defaults so existing databases migrate in place.
   moveSlack: t.f32().default(6), groundY: t.f32().default(0),
+  weapon0: t.string().default(''), weapon1: t.string().default(''), reserve0: t.u16().default(0), reserve1: t.u16().default(0),
+  money: t.u32().default(800), bought0: t.string().default(''), bought1: t.string().default(''), sinceSpawn: t.f32().default(99),
 });
 
 /** What other players need about a soldier, rewritten only when it changes (not every tick). */
@@ -65,6 +69,7 @@ const rosterTable = table({ name: 'roster', public: true }, {
   /** Match time (`frame.time`) at which the soldier respawns / may rewrite a law again. */
   respawnAt: t.f32(), lawReadyAt: t.f32(),
   protect: t.bool(), lastAttacker: t.i32(), corrections: t.u32(),
+  weapon0: t.string(), weapon1: t.string(), reserve0: t.u16(), reserve1: t.u16(), money: t.u32(),
 });
 
 /** One row, rewritten every tick: the packed binary snapshot from shared/match/frame.ts. */
@@ -120,7 +125,9 @@ type Command =
   | { kind: 'grenade'; origin: { x: number; y: number; z: number }; dir: { x: number; y: number; z: number } }
   | { kind: 'reload' }
   | { kind: 'switch'; slot: 0 | 1 }
-  | { kind: 'loadout'; loadout: LoadoutId };
+  | { kind: 'loadout'; loadout: LoadoutId }
+  | { kind: 'buy'; item: BuyItem }
+  | { kind: 'pickup'; index: number };
 
 // ---- Row <-> state conversion ------------------------------------------------------------
 
@@ -133,9 +140,13 @@ function soldierFromRow(r: SoldierRow, brain?: BotBrain): Soldier {
     protectLeft: r.protectLeft, sinceHit: r.sinceHit, lastAttacker: r.lastAttacker, kills: r.kills, deaths: r.deaths, score: r.score,
     captures: r.captures, lawCooldown: r.lawCooldown, sprint: r.sprint, ads: r.ads, sinceShot: r.sinceShot, corrections: r.corrections,
     idle: r.idle, moveSlack: r.moveSlack, groundY: r.groundY, brain,
+    // Rows from before the economy carry no weapons: fall back to the kit.
+    weapons: [weaponOr(r.weapon0, kitWeapons(r.loadout as LoadoutId)[0]), weaponOr(r.weapon1, kitWeapons(r.loadout as LoadoutId)[1])],
+    reserve: [r.reserve0, r.reserve1], money: r.money, bought: [weaponOr(r.bought0, ''), weaponOr(r.bought1, '')], sinceSpawn: r.sinceSpawn,
   };
 }
 
+const weaponOr = <T extends string>(id: string, fallback: T): WeaponId | T => (id in WEAPONS ? id as WeaponId : fallback);
 const u = (v: number, max = 0xffffffff) => Math.max(0, Math.min(max, Math.round(v)));
 function soldierToRow(s: Soldier): SoldierRow {
   const m = s.m;
@@ -149,6 +160,8 @@ function soldierToRow(s: Soldier): SoldierRow {
     protectLeft: s.protectLeft, sinceHit: Math.min(s.sinceHit, 999), lastAttacker: s.lastAttacker, kills: u(s.kills), deaths: u(s.deaths),
     score: u(s.score), captures: u(s.captures), lawCooldown: s.lawCooldown, sprint: s.sprint, ads: s.ads, sinceShot: Math.min(s.sinceShot, 999),
     corrections: u(s.corrections), idle: Math.min(s.idle, 9999), moveSlack: s.moveSlack, groundY: s.groundY,
+    weapon0: s.weapons[0], weapon1: s.weapons[1], reserve0: u(s.reserve[0], 65535), reserve1: u(s.reserve[1], 65535),
+    money: u(s.money), bought0: s.bought[0], bought1: s.bought[1], sinceSpawn: Math.min(s.sinceSpawn, 999),
   };
 }
 
@@ -160,6 +173,7 @@ function rosterRow(s: Soldier, time: number): RosterRow {
     kills: u(s.kills), deaths: u(s.deaths), score: u(s.score), captures: u(s.captures),
     respawnAt: s.alive ? 0 : at(time, s.respawnLeft), lawReadyAt: at(time, s.lawCooldown),
     protect: s.protectLeft > 0, lastAttacker: s.lastAttacker, corrections: u(s.corrections),
+    weapon0: s.weapons[0], weapon1: s.weapons[1], reserve0: u(s.reserve[0], 65535), reserve1: u(s.reserve[1], 65535), money: u(s.money),
   };
 }
 /** Compare roster rows ignoring the sub-second drift of countdowns that are already running. */
@@ -184,7 +198,7 @@ function load(ctx: Ctx): Loaded {
   const clock: ClockRow = existing ?? {
     id: 0, phaseLeft: row.phaseLeft, time: row.time, worldTime: row.worldTime, tick: row.tick, scoreTimer: row.scoreTimer, lawLeft: row.lawLeft,
     rewindLeft: row.rewindLeft, nextId: row.nextId, droneTimer: row.droneTimer, historyHead: row.historyHead, historyLength: row.historyLength,
-    lastTickMicros: row.lastTickMicros,
+    lastTickMicros: row.lastTickMicros, pickupsJson: '[]',
   };
   const brains = new Map<number, BotBrain>();
   const brainKeys = new Map<number, string>();
@@ -208,6 +222,7 @@ function load(ctx: Ctx): Loaded {
     scores: [row.score0, row.score1], scoreTimer: clock.scoreTimer, laws: JSON.parse(row.lawsJson), lawAuthor: row.lawAuthor, lawText: row.lawText,
     lawLeft: clock.lawLeft, rewindLeft: clock.rewindLeft, soldiers, points, bodies, nextId: clock.nextId, droneTimer: clock.droneTimer,
     winner: row.winner as -1 | Team, config: JSON.parse(row.configJson),
+    pickupLeft: (map.pickups ?? []).map((_, i) => (JSON.parse(clock.pickupsJson || '[]') as number[])[i] ?? 0),
   };
   return { state, row, clock: { ...clock }, clockExists: !!existing, soldierKeys, rosterKeys, bodyKeys, pointKeys, brainKeys };
 }
@@ -217,6 +232,7 @@ function save(ctx: Ctx, loaded: Loaded, events: MatchEvent[], frame: boolean) {
   Object.assign(clock, {
     phaseLeft: state.phaseLeft, time: state.time, worldTime: state.worldTime, tick: state.tick >>> 0, scoreTimer: state.scoreTimer,
     lawLeft: state.lawLeft, rewindLeft: u(state.rewindLeft), nextId: state.nextId, droneTimer: state.droneTimer,
+    pickupsJson: JSON.stringify(state.pickupLeft.map(v => Math.round(v * 100) / 100)),
   });
   if (loaded.clockExists) ctx.db.clock.id.update(clock); else { ctx.db.clock.insert(clock); loaded.clockExists = true; }
   const humans = state.soldiers.filter(s => !s.bot).length;
@@ -382,6 +398,8 @@ function applyInputs(ctx: Ctx, state: MatchState, sim: SimContext) {
       case 'reload': reload(state, c.soldierId); break;
       case 'switch': switchWeapon(state, c.soldierId, cmd.slot); break;
       case 'loadout': setLoadout(state, c.soldierId, cmd.loadout); break;
+      case 'buy': buyItem(state, sim, c.soldierId, cmd.item); break;
+      case 'pickup': pickUp(state, sim, c.soldierId, cmd.index); break;
     }
   }
 }
@@ -484,6 +502,15 @@ export const chooseLoadout = spacetimedb.reducer({ loadout: t.string() }, (ctx, 
   if (!(loadout in LOADOUTS)) throw new SenderError('Unknown loadout');
   queue(ctx, { kind: 'loadout', loadout: loadout as LoadoutId });
 });
+
+/** Buy menu purchase; validated by the next tick (buy time / spawn zone, credits). */
+export const buy = spacetimedb.reducer({ item: t.string() }, (ctx, { item }) => {
+  if (item !== 'grenade' && !(item in WEAPONS)) throw new SenderError('Unknown item');
+  queue(ctx, { kind: 'buy', item: item as BuyItem });
+});
+
+/** Take the weapon lying at a map pickup (E); validated by the next tick (reach, availability). */
+export const pickupItem = spacetimedb.reducer({ index: t.u32() }, (ctx, { index }) => { queue(ctx, { kind: 'pickup', index }); });
 
 /** Law commands arrive as JSON and are validated/clamped by the shared Zod schema. */
 export const rewriteLaw = spacetimedb.reducer({ commandJson: t.string(), source: t.string(), text: t.string() }, (ctx, a) => {

@@ -117,6 +117,12 @@ export function frostlineReach(): MapDef {
     b.solidProp('Prop_Crate_Large', -3.5, 'ground', -24.5, 0.2, 1.9, 1.3, 1.9);
     b.box(-46, b.ground(-46, 29), 29, 2.6, 1.6, 2.2, 'rock');                    // tower A → ridge
     b.box(-34, b.ground(-34, 27), 27, 3.6, 1.25, 0.8, 'concrete');
+
+    // ---- Pickups ----
+    b.pickup(-29, ry + 3.6, 45, 'lancer', 45);             // ice-ridge sniper perch
+    b.pickup(-35, b.ground(-35, -39.5), -39.5, 'stinger', 35); // frozen trench, close quarters
+    b.pickup(-30, 'ground', 17, 'ammo', 20);               // relay tower approach, off point A
+    b.pickup(-23, 'ground', 2, 'armor', 40);               // mid-field toward the courtyard
   });
   return b.build();
 }

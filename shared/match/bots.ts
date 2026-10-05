@@ -171,7 +171,7 @@ export function updateBot(state: MatchState, ctx: SimContext, bot: Soldier, dt: 
     if (brain.crouchLeft < -2 && ctx.random() < dt * 0.25 * brain.skill && distance > 15) brain.crouchLeft = 0.8 + ctx.random();
 
     // Launcher bots draw the sidearm when an enemy gets inside the blast, and the launcher back at range.
-    const [primary] = LOADOUTS[bot.loadout].weapons;
+    const primary = bot.weapons[0];
     const blast = WEAPONS[primary].projectile?.radius;
     if (blast && bot.switchLeft <= 0 && bot.reloadLeft <= 0 && (bot.weapon === 0 ? distance < blast + 2 : distance > blast + 6)) {
       bot.weapon = bot.weapon === 0 ? 1 : 0; bot.switchLeft = weaponOf(bot).equipTime;

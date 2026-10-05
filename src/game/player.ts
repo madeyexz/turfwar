@@ -2,7 +2,7 @@ import { CollisionWorld } from '../../shared/collision';
 import { clamp, dirFromAngles, type Vec3 } from '../../shared/math';
 import { MOVE, createMoveState, eyeHeight, isSprinting, stepMovement, type MoveEvents, type MoveInput, type MoveState } from '../../shared/movement';
 import type { Soldier } from '../../shared/match/state';
-import { GRENADE, LOADOUTS, WEAPONS, pelletCone, type LoadoutId, type WeaponDef } from '../../shared/weapons';
+import { GRENADE, WEAPONS, pelletCone, type LoadoutId, type WeaponDef, type WeaponId } from '../../shared/weapons';
 import type { Input } from './input';
 import { adsFov, settings } from './settings';
 
@@ -31,7 +31,11 @@ export class LocalPlayer {
   team = 0;
   loadout: LoadoutId = 'assault';
   slot: 0 | 1 = 0;
+  /** Weapons in the primary/secondary slots (kit, bought or picked up; the host decides). */
+  weapons: [WeaponId, WeaponId] = ['carbine', 'sidearm'];
   ammo: [number, number] = [30, 14];
+  /** Spare rounds per slot as last reported by the host. */
+  reserve: [number, number] = [0, 0];
   reloadLeft = 0;
   reloadTotal = 1;
   switchLeft = 0;
@@ -59,16 +63,30 @@ export class LocalPlayer {
   bobPhase = 0;
   sensitivity = 0.0022;
 
-  get weapon(): WeaponDef { return WEAPONS[LOADOUTS[this.loadout].weapons[this.slot]]; }
+  get weapon(): WeaponDef { return WEAPONS[this.weapons[this.slot]]; }
   get reloading() { return this.reloadLeft > 0; }
 
   spawnFrom(s: Soldier) {
     this.m = { ...s.m, vx: 0, vy: 0, vz: 0 };
     this.prev = { x: s.m.x, y: s.m.y, z: s.m.z, crouch: s.m.crouch };
     this.yaw = s.yaw; this.pitch = 0; this.team = s.team; this.loadout = s.loadout; this.slot = 0;
-    this.ammo = [WEAPONS[LOADOUTS[s.loadout].weapons[0]].magazine, WEAPONS[LOADOUTS[s.loadout].weapons[1]].magazine];
-    this.reloadLeft = 0; this.switchLeft = WEAPONS[LOADOUTS[s.loadout].weapons[0]].equipTime; this.fireCooldown = 0; this.bloom = 0; this.ads = 0;
+    this.weapons = [...s.weapons]; this.reserve = [...s.reserve];
+    this.ammo = [WEAPONS[s.weapons[0]].magazine, WEAPONS[s.weapons[1]].magazine];
+    this.reloadLeft = 0; this.switchLeft = WEAPONS[s.weapons[0]].equipTime; this.fireCooldown = 0; this.bloom = 0; this.ads = 0;
     this.grenades = GRENADE.perLife; this.alive = true; this.recoilDebt = 0; this.accumulator = 0;
+  }
+
+  /**
+   * Follow the host's gear: a bought or picked-up weapon arrives with a full magazine and brings
+   * itself up; spare ammo follows the host (reloads and ammo pickups), except mid-reload.
+   */
+  syncGear(s: Soldier) {
+    for (const i of [0, 1] as const) {
+      if (s.weapons[i] === this.weapons[i]) continue;
+      this.weapons[i] = s.weapons[i]; this.ammo[i] = WEAPONS[s.weapons[i]].magazine;
+      this.slot = i; this.reloadLeft = 0; this.switchLeft = WEAPONS[s.weapons[i]].equipTime; this.bloom = 0; this.ads = 0;
+    }
+    if (this.reloadLeft <= 0) this.reserve = [...s.reserve];
   }
 
   /** Snap to the server's position after a rejected movement report. */
@@ -107,7 +125,11 @@ export class LocalPlayer {
     this.bloom = Math.max(0, this.bloom - w.spread.recovery * dt * (this.sinceShot > 0.08 ? 1 : 0.25));
     if (this.reloadLeft > 0) {
       this.reloadLeft -= dt;
-      if (this.reloadLeft <= 0) { this.reloadLeft = 0; this.ammo[this.slot] = w.magazine; }
+      if (this.reloadLeft <= 0) {
+        this.reloadLeft = 0;
+        const take = Math.min(w.magazine - this.ammo[this.slot], this.reserve[this.slot]);
+        this.ammo[this.slot] += take; this.reserve[this.slot] -= take;
+      }
     }
 
     // ---- Movement (fixed 120 Hz using the shared controller) ----
@@ -221,7 +243,7 @@ export class LocalPlayer {
 
   startReload(result?: FrameResult) {
     const w = this.weapon;
-    if (this.reloadLeft > 0 || this.ammo[this.slot] >= w.magazine || this.switchLeft > 0) return;
+    if (this.reloadLeft > 0 || this.ammo[this.slot] >= w.magazine || this.switchLeft > 0 || this.reserve[this.slot] <= 0) return;
     this.reloadLeft = this.reloadTotal = w.reload;
     if (result) result.reloadStarted = true;
   }

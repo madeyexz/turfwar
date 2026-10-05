@@ -44,7 +44,17 @@ export interface Soldier {
   health: number;
   shield: number;
   weapon: 0 | 1;
+  /** Weapons in the primary and secondary slots (the kit's, unless bought or picked up). */
+  weapons: [WeaponId, WeaponId];
   ammo: [number, number];
+  /** Spare rounds per slot (reloads draw from these). */
+  reserve: [number, number];
+  /** Credits for the buy menu. */
+  money: number;
+  /** What this soldier last bought per slot, rebought automatically on respawn when affordable. */
+  bought: [WeaponId | '', WeaponId | ''];
+  /** Seconds since the last deployment (buy time). */
+  sinceSpawn: number;
   reloadLeft: number;
   fireCooldown: number;
   switchLeft: number;
@@ -125,6 +135,8 @@ export interface MatchState {
   soldiers: Soldier[];
   points: PointState[];
   bodies: Body[];
+  /** Per map pickup: seconds until it is back (0 = lying there). */
+  pickupLeft: number[];
   nextId: number;
   droneTimer: number;
   winner: -1 | Team;

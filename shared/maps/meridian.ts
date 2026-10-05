@@ -207,6 +207,15 @@ export function meridianDistrict(): MapDef {
     construction(b, g);
     twoStorey(b, -52, 22, g(-52, 22));      // hotel by the square
     twoStorey(b, -144, -42, g(-144, -42));  // offices by the base
+
+    // ---- Pickups: power weapons in the open, close-quarters guns indoors ----
+    b.pickup(-100, HWY_Y, HWY_Z, 'lancer', 45);                       // north highway deck
+    b.pickup(-49, g(-54, -61) + 8.4, -61, 'graviton', 45);            // upper deck of the steel frame (B)
+    b.pickup(-97, 'ground', -14, 'scatter', 35);                      // ruined block
+    b.pickup(-52, g(-52, 22), 22, 'stinger', 30);                     // hotel ground floor
+    b.pickup(-122, 'ground', 18, 'armor', 40);                        // park edge, short of A
+    b.pickup(-76, 'ground', -54, 'ammo', 20);                         // beside the construction site
+    b.pickup(-3, CANAL_Y, -50, 'ammo', 20);                           // canal bed
   });
 
   // ---- Points A, B and their mirrors D, E (ids do not mirror, so they are placed here) ----

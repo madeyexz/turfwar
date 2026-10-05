@@ -7,7 +7,8 @@ import type { DbConnection } from '../module_bindings';
 import type RosterTable from '../module_bindings/roster_table';
 import { loadMap } from '../../shared/maps/index';
 import { decodeFrame, framePoints, type DecodedFrame, type FramePose } from '../../shared/match/frame';
-import { LOADOUTS, WEAPONS, type LoadoutId } from '../../shared/weapons';
+import { LOADOUTS, WEAPONS, type LoadoutId, type WeaponId } from '../../shared/weapons';
+import type { BuyItem } from '../../shared/match/economy';
 
 type RosterRow = Infer<typeof RosterTable>;
 
@@ -34,7 +35,10 @@ export function onlineAvailable(): { ok: boolean; reason: string } {
 }
 
 /** Rebuild a shared Soldier from its roster row and its pose in the latest frame. */
+const weaponOr = (id: string, fallback: WeaponId): WeaponId => (id in WEAPONS ? id as WeaponId : fallback);
+
 function soldierFrom(r: RosterRow, p: FramePose, time: number, reloadLeft: number, sinceShot: number): Soldier {
+  const kit = LOADOUTS[r.loadout as LoadoutId]?.weapons ?? LOADOUTS.assault.weapons;
   return {
     id: r.id, name: r.name, team: r.team as Team, bot: r.bot, loadout: r.loadout as LoadoutId,
     m: { x: p.x, y: p.y, z: p.z, vx: p.vx, vy: p.vy, vz: p.vz, grounded: p.grounded, crouch: p.crouch, slideTime: p.slide ? 0.2 : 0, slideCooldown: 0, airTime: 0, prevCrouchInput: false, prevJumpInput: false },
@@ -43,6 +47,8 @@ function soldierFrom(r: RosterRow, p: FramePose, time: number, reloadLeft: numbe
     protectLeft: r.protect ? 1 : 0, sinceHit: 99, lastAttacker: r.lastAttacker, kills: r.kills, deaths: r.deaths, score: r.score,
     captures: r.captures, lawCooldown: Math.max(0, r.lawReadyAt - time), sprint: p.sprint, ads: p.ads, sinceShot, corrections: r.corrections,
     idle: 0, moveSlack: 0, groundY: 0,
+    weapons: [weaponOr(r.weapon0, kit[0]), weaponOr(r.weapon1, kit[1])], reserve: [r.reserve0, r.reserve1], money: r.money,
+    bought: ['', ''], sinceSpawn: 0,
   };
 }
 
@@ -106,7 +112,7 @@ export class OnlineLink implements GameLink {
       let reloadLeft = 0;
       if (p.reloading) {
         if (!this.reloadStart.has(r.id)) this.reloadStart.set(r.id, now);
-        const total = WEAPONS[LOADOUTS[r.loadout as LoadoutId]?.weapons[p.weapon] ?? 'carbine'].reload;
+        const total = WEAPONS[weaponOr(p.weapon ? r.weapon1 : r.weapon0, 'carbine')].reload;
         reloadLeft = Math.max(0.01, total - (now - this.reloadStart.get(r.id)!) / 1000);
       } else this.reloadStart.delete(r.id);
       const shot = this.lastShot.get(r.id);
@@ -130,6 +136,7 @@ export class OnlineLink implements GameLink {
       tick: frame.tick, scores: [match.score0, match.score1], scoreTimer: 0, laws: JSON.parse(match.lawsJson), lawAuthor: match.lawAuthor,
       lawText: match.lawText, lawLeft: frame.lawLeft, rewindLeft: frame.rewindLeft, soldiers, points, bodies, nextId: match.nextId,
       droneTimer: 0, winner: match.winner as -1 | Team, config: JSON.parse(match.configJson),
+      pickupLeft: this.frameMap === match.mapId ? frame.pickups : [],
     };
     this.dirty = false;
     this.ver++;
@@ -157,6 +164,8 @@ export class OnlineLink implements GameLink {
   fire(c: ShotClaim) {
     void this.conn.reducers.fire({ weapon: c.weapon, ox: c.origin.x, oy: c.origin.y, oz: c.origin.z, dx: c.dir.x, dy: c.dir.y, dz: c.dir.z, target: c.target, zone: c.zone, px: c.point.x, py: c.point.y, pz: c.point.z }).catch(() => undefined);
   }
+  buy(item: BuyItem) { void this.conn.reducers.buy({ item }).catch(() => undefined); }
+  pickup(index: number) { void this.conn.reducers.pickupItem({ index }).catch(() => undefined); }
   grenade(o: Vec3, d: Vec3) { void this.conn.reducers.grenade({ ox: o.x, oy: o.y, oz: o.z, dx: d.x, dy: d.y, dz: d.z }).catch(() => undefined); }
   reload() { void this.conn.reducers.reloadWeapon({}).catch(() => undefined); }
   switchWeapon(slot: 0 | 1) { void this.conn.reducers.switchSlot({ slot }).catch(() => undefined); }

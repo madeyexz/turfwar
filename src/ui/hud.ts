@@ -57,9 +57,11 @@ export class Hud {
       <div class="weapon panel">
         <div class="name" data-k="weapon"></div>
         <div class="ammo" data-k="ammo">30<small>/30</small></div>
-        <div class="extra"><span>Grenades <b data-k="nades">2</b></span><span data-k="fire"></span></div>
+        <div class="extra"><span class="credits" data-k="money">$800</span><span>Grenades <b data-k="nades">2</b></span><span data-k="fire"></span></div>
         <div class="reloadbar"><i data-k="reload"></i></div>
       </div>
+      <div class="prompt" data-k="prompt" hidden></div>
+      <div class="buyhint" data-k="buyhint" hidden><kbd>B</kbd> BUY MENU</div>
       <div class="toast panel" data-k="toast"></div>
       <div class="announce" data-k="announce"><b></b><small></small></div>
       <div class="score-pop" data-k="pop"></div>
@@ -81,6 +83,15 @@ export class Hud {
     this.root.querySelectorAll<HTMLButtonElement>('[data-loadout]').forEach(b => b.addEventListener('click', () => this.onLoadout?.(b.dataset.loadout as LoadoutId)));
     this.el.endMenu.addEventListener('click', () => this.onMenu?.());
   }
+
+  /** Context prompt above the crosshair (e.g. "E — pick up S-8"), or hidden. */
+  prompt(text: string) {
+    this.el.prompt.hidden = !text;
+    if (text) this.set('prompt', text, 'html');
+  }
+
+  /** "B — buy menu" reminder while buying is possible. */
+  buyHint(show: boolean) { this.el.buyhint.hidden = !show; }
 
   private set(key: string, value: string, prop: 'text' | 'html' | 'width' = 'text') {
     if (this.cache.get(key + prop) === value) return;
@@ -221,9 +232,10 @@ export class Hud {
       this.el.healthMeter.classList.toggle('low', health < 35);
     }
     const w = p.weapon;
-    this.set('weapon', `${w.name} · ${LOADOUTS[p.loadout].weapons.map(id => WEAPONS[id].short).join(' / ')}`);
+    this.set('weapon', `${w.name} · ${p.weapons.map(id => WEAPONS[id].short).join(' / ')}`);
     const ammo = p.ammo[p.slot];
-    this.set('ammo', `${ammo}<small>/${w.magazine}</small>`, 'html');
+    this.set('ammo', `${ammo}<small>/${p.reserve[p.slot]}</small>`, 'html');
+    if (me) this.set('money', `$${me.money}`);
     this.el.ammo.classList.toggle('low', ammo > 0 && ammo <= w.magazine * 0.25);
     this.el.ammo.classList.toggle('empty', ammo === 0);
     this.set('nades', String(p.grenades));

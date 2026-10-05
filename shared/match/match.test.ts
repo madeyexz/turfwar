@@ -5,11 +5,11 @@ import { rng, wrapAngle } from '../math';
 import { CollisionWorld } from '../collision';
 import { createMoveState, eyeHeight, stepMovement } from '../movement';
 import { hitShape } from '../hitbox';
-import { LOADOUTS, WEAPONS, pelletCone, pelletDirs } from '../weapons';
+import { ECONOMY, GRENADE, LOADOUTS, WEAPONS, pelletCone, pelletDirs } from '../weapons';
 import { findPath, nearestNode } from './nav';
-import { addSoldier, applyLaw, balanceTeams, createContext, createMatch, fireShot, reportState, teamSizeFor, tickMatch, TICK_RATE } from './sim';
+import { addSoldier, applyLaw, balanceTeams, buyItem, createContext, createMatch, fireShot, pickUp, reload, reportState, teamSizeFor, tickMatch, TICK_RATE } from './sim';
 import { OFFLINE_CONFIG, ONLINE_CONFIG, type MatchEvent, type MatchState, type Soldier } from './state';
-import { MOVE_SLACK, spawnSoldier, type SimContext } from './combat';
+import { MOVE_SLACK, killSoldier, spawnSoldier, type SimContext } from './combat';
 import { decodeFrame, encodeFrame } from './frame';
 
 function setup(config = OFFLINE_CONFIG, seed = 1) {
@@ -115,13 +115,13 @@ describe('server-side validation', () => {
     expect(fireShot(state, ctx, a.id, claimAt(a, b))).toBe(true);
     expect(fireShot(state, ctx, a.id, claimAt(a, b))).toBe(false);
     // Slow weapons get no burst: a second instant rail shot is refused, a timely one accepted.
-    a.loadout = 'recon'; a.ammo = [5, 6]; a.fireCooldown = 0; b.health = 1000;
+    a.loadout = 'recon'; a.weapons = ['lancer', 'magnum']; a.ammo = [5, 6]; a.fireCooldown = 0; b.health = 1000;
     expect(fireShot(state, ctx, a.id, claimAt(a, b))).toBe(true);
     expect(fireShot(state, ctx, a.id, claimAt(a, b))).toBe(false);
     a.fireCooldown -= 0.8;
     expect(fireShot(state, ctx, a.id, claimAt(a, b))).toBe(true);
     expect(b.health).toBeLessThan(1000 - 92);
-    a.loadout = 'assault'; a.ammo = [30, 14]; b.health = 100; b.shield = 50;
+    a.loadout = 'assault'; a.weapons = ['carbine', 'sidearm']; a.ammo = [30, 14]; b.health = 100; b.shield = 50;
     // Empty magazine.
     a.fireCooldown = 0; a.ammo[0] = 0;
     expect(fireShot(state, ctx, a.id, claimAt(a, b))).toBe(false);
@@ -450,6 +450,7 @@ describe('100-soldier battles', () => {
     const { ctx, state } = city();
     balanceTeams(state, ctx);
     tick(state, ctx, 3);
+    state.pickupLeft = [0, 12.2, 300];
     state.bodies.push({ id: 999, kind: 'charge', x: 1, y: 2, z: 3, vx: 30, vy: 1, vz: 0, age: 0, owner: 1, team: 0, hp: 1, timer: 2 });
     const a = state.soldiers[3];
     a.yaw = -2.5; a.pitch = 0.4; a.reloadLeft = 1; a.sinceShot = 0;
@@ -464,7 +465,118 @@ describe('100-soldier battles', () => {
     expect(p.reloading).toBe(true); expect(p.firing).toBe(true); expect(p.alive).toBe(a.alive);
     expect(frame.bodies.map(b => b.kind)).toEqual(state.bodies.map(b => b.kind));
     expect(frame.points.map(x => x.owner)).toEqual(state.points.map(x => x.owner));
+    expect(frame.pickups).toEqual([0, 13, 255]);
     expect(frame.shots[0]).toMatchObject({ shooter: a.id, weapon: 'lancer', hit: 1, surface: 'concrete' });
     expect(frame.shots[0].to.z).toBeCloseTo(-80.02, 1);
   });
 });
+
+describe('credits, buying and pickups', () => {
+  function armed() {
+    const env = setup();
+    const a = addSoldier(env.state, env.ctx, { name: 'A', team: 0, bot: false });
+    const b = addSoldier(env.state, env.ctx, { name: 'B', team: 1, bot: false });
+    return { ...env, a, b };
+  }
+
+  it('earns credits for kills and headshots, and keeps them through death', () => {
+    const { state, ctx, a, b } = armed();
+    expect(a.money).toBe(ECONOMY.start);
+    killSoldier(state, ctx, b, a, 'carbine', true);
+    expect(a.money).toBe(ECONOMY.start + ECONOMY.kill + ECONOMY.headshotBonus);
+    killSoldier(state, ctx, a, b, 'carbine', false);
+    expect(a.money).toBe(ECONOMY.start + ECONOMY.kill + ECONOMY.headshotBonus);
+  });
+
+  it('buys during buy time or near the spawn, charges the price and fills the right slot', () => {
+    const { state, ctx, a } = armed();
+    a.money = 5000;
+    const r = buyItem(state, ctx, a.id, 'lancer');
+    expect(r.ok).toBe(true);
+    expect(a.money).toBe(5000 - WEAPONS.lancer.price);
+    expect(a.weapons[0]).toBe('lancer'); expect(a.weapon).toBe(0);
+    expect(a.ammo[0]).toBe(WEAPONS.lancer.magazine); expect(a.reserve[0]).toBe(WEAPONS.lancer.magazine * ECONOMY.spareMags);
+    expect(buyItem(state, ctx, a.id, 'magnum').ok).toBe(true);
+    expect(a.weapons).toEqual(['lancer', 'magnum']);
+    // Too poor.
+    a.money = 100;
+    expect(buyItem(state, ctx, a.id, 'carbine').ok).toBe(false);
+    expect(a.weapons[0]).toBe('lancer');
+    // Buy time over, away from the spawn: refused; back at the spawn: allowed.
+    a.money = 5000; a.sinceSpawn = 99;
+    place(a, 0, 22, ctx);
+    expect(buyItem(state, ctx, a.id, 'carbine').ok).toBe(false);
+    const home = ctx.map.spawns.find(p => p.team === a.team && !p.point)!;
+    place(a, home.x, home.z, ctx, home.y + 1);
+    expect(buyItem(state, ctx, a.id, 'carbine').ok).toBe(true);
+    // Grenades are capped.
+    a.grenades = GRENADE.perLife;
+    expect(buyItem(state, ctx, a.id, 'grenade').ok).toBe(false);
+  });
+
+  it('loses bought weapons on death and rebuys them on respawn when affordable', () => {
+    const { state, ctx, a, b } = armed();
+    a.money = 5000;
+    buyItem(state, ctx, a.id, 'scatter');
+    killSoldier(state, ctx, a, b, 'carbine', false);
+    a.money = 2000;
+    spawnSoldier(state, ctx, a);
+    expect(a.weapons[0]).toBe('scatter');
+    expect(a.money).toBe(2000 - WEAPONS.scatter.price);
+    killSoldier(state, ctx, a, b, 'carbine', false);
+    a.money = 100;
+    spawnSoldier(state, ctx, a);
+    expect(a.weapons[0]).toBe('carbine');
+    expect(a.money).toBe(100);
+  });
+
+  it('reloads from spare ammo and cannot reload without it; bots never run dry', () => {
+    const { state, a } = armed();
+    a.ammo[0] = 10; a.reserve[0] = 12;
+    reload(state, a.id);
+    expect(a.reloadLeft).toBeGreaterThan(0);
+    a.reloadLeft = 0.001;
+    tickMatch(state, createContext('cinder', rng(1), () => {}), 1 / TICK_RATE);
+    expect(a.ammo[0]).toBe(22); expect(a.reserve[0]).toBe(0);
+    a.ammo[0] = 5;
+    reload(state, a.id);
+    expect(a.reloadLeft).toBe(0);
+  });
+
+  it('weapon pickups swap with E in reach; ammo and armor are collected by walking over them; all come back', () => {
+    const { state, ctx: base, a } = armed();
+    const map = { ...base.map, pickups: [
+      { x: 0, y: 0, z: 22, item: 'lancer' as const, respawn: 30 },
+      { x: 4, y: 0, z: 22, item: 'ammo' as const, respawn: 20 },
+      { x: 8, y: 0, z: 22, item: 'armor' as const, respawn: 40 },
+    ] };
+    for (const p of map.pickups) p.y = base.world.groundHeight(p.x, p.z, 50, 0.3);
+    const ctx = { ...base, map };
+    state.pickupLeft = [0, 0, 0];
+    place(a, 10, 30, ctx);
+    expect(pickUp(state, ctx, a.id, 0)).toBe(false); // out of reach
+    place(a, 0.5, 22, ctx);
+    expect(pickUp(state, ctx, a.id, 0)).toBe(true);
+    expect(a.weapons[0]).toBe('lancer');
+    expect(state.pickupLeft[0]).toBe(30);
+    expect(pickUp(state, ctx, a.id, 0)).toBe(false); // already taken
+    a.reserve = [0, 0]; a.shield = 0; a.health = 40;
+    place(a, 4, 22, ctx);
+    tickMatch(state, ctx, 1 / TICK_RATE);
+    expect(a.reserve[0]).toBe(WEAPONS.lancer.magazine * ECONOMY.spareMags);
+    place(a, 8, 22, ctx);
+    tickMatch(state, ctx, 1 / TICK_RATE);
+    expect(a.health).toBe(100); expect(a.shield).toBe(50);
+    tick(state, ctx, 31);
+    expect(state.pickupLeft[0]).toBe(0);
+  });
+
+  it('bots spend their credits on better guns when they deploy', () => {
+    const { state, ctx } = setup();
+    const bot = addSoldier(state, ctx, { name: 'Rich', team: 0, bot: true, loadout: 'assault' });
+    let upgraded = 0;
+    for (let i = 0; i < 20; i++) { bot.money = 6000; spawnSoldier(state, ctx, bot); if (WEAPONS[bot.weapons[0]].price > WEAPONS.carbine.price) upgraded++; }
+    expect(upgraded).toBeGreaterThan(5);
+  });
+});
+

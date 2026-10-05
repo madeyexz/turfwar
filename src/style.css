@@ -242,3 +242,26 @@ body.rewinding #hud::after { content: ''; position: fixed; inset: 0; background:
   #menu { grid-template-columns: 1fr; }
   .laws, .minimap { display: none; }
 }
+
+/* ---- Economy: credits, pickup prompt, buy menu ---- */
+.weapon .credits { color: #9cf08a; font-weight: 700; }
+.prompt { position: absolute; left: 50%; top: 58%; transform: translateX(-50%); padding: 6px 14px; font-size: 16px; font-weight: 700; letter-spacing: 0.08em; background: rgba(8, 16, 22, 0.72); border: 1px solid var(--line); }
+.prompt kbd, .buyhint kbd { display: inline-block; min-width: 18px; padding: 0 5px; margin-right: 6px; border: 1px solid var(--accent); color: var(--accent); font-family: inherit; }
+.buyhint { position: absolute; right: 22px; bottom: 150px; font-size: 13px; font-weight: 700; letter-spacing: 0.14em; color: var(--muted); }
+#buymenu { position: fixed; left: 50%; top: 50%; transform: translate(-50%, -50%); width: min(860px, 94vw); max-height: 86vh; overflow: auto; z-index: 7; padding: 18px 20px 16px; background: var(--panel-solid); border: 1px solid var(--accent); box-shadow: 0 0 40px rgba(127, 246, 255, 0.18); }
+#buymenu header { display: flex; align-items: baseline; justify-content: space-between; gap: 12px; margin-bottom: 12px; }
+#buymenu h2 { margin: 0; font-size: 24px; letter-spacing: 0.16em; }
+#buymenu .money { font-size: 22px; font-weight: 700; color: #9cf08a; }
+#buymenu .status { font-size: 13px; color: var(--muted); letter-spacing: 0.08em; }
+#buymenu .status.closed { color: var(--crimson); }
+#buymenu .group { margin-top: 10px; }
+#buymenu .group > b { display: block; font-size: 12px; letter-spacing: 0.18em; color: var(--muted); margin-bottom: 6px; }
+#buymenu .items { display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 6px; }
+#buymenu button { display: flex; flex-direction: column; align-items: flex-start; gap: 2px; padding: 8px 10px; text-align: left; color: var(--ink); background: rgba(127, 246, 255, 0.05); border: 1px solid var(--line); cursor: pointer; font: inherit; }
+#buymenu button:hover:not(:disabled) { border-color: var(--accent); background: rgba(127, 246, 255, 0.12); }
+#buymenu button:disabled { opacity: 0.4; cursor: not-allowed; }
+#buymenu button.owned { border-color: #9cf08a; }
+#buymenu button span { font-size: 15px; font-weight: 700; }
+#buymenu button small { font-size: 12px; color: var(--muted); }
+#buymenu button em { font-style: normal; font-size: 14px; font-weight: 700; color: #9cf08a; }
+#buymenu .hint { margin-top: 12px; font-size: 12px; color: var(--muted); letter-spacing: 0.06em; }

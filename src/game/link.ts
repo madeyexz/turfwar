@@ -1,5 +1,6 @@
 import type { Vec3 } from '../../shared/math';
 import type { ClientReport, MatchEvent, MatchState, ShotClaim } from '../../shared/match/state';
+import type { BuyItem } from '../../shared/match/economy';
 import type { LoadoutId } from '../../shared/weapons';
 
 /**
@@ -23,6 +24,10 @@ export interface GameLink {
   reload(): void;
   switchWeapon(slot: 0 | 1): void;
   setLoadout(loadout: LoadoutId): void;
+  /** Buy menu purchase (validated by the host: buy time or spawn zone, credits). */
+  buy(item: BuyItem): void;
+  /** Take the weapon lying at map pickup `index` (E). */
+  pickup(index: number): void;
   law(command: unknown, source: string, text: string): Promise<{ ok: boolean; message: string }>;
   status(): string;
   dispose(): void;

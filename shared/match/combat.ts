@@ -4,8 +4,9 @@ import type { Laws } from '../laws';
 import type { MapDef } from '../maps/types';
 import { dist3, raySphere, type Vec3 } from '../math';
 import { createMoveState, eyeHeight } from '../movement';
-import { GRENADE, HEALTH, LOADOUTS, WEAPONS, damageAt, pelletCone, pelletDirs, zoneMultiplier, type HitZone, type WeaponDef } from '../weapons';
+import { ECONOMY, GRENADE, HEALTH, LOADOUTS, WEAPONS, damageAt, pelletCone, pelletDirs, zoneMultiplier, type HitZone, type WeaponDef } from '../weapons';
 import { BODY_RADIUS, type Body } from '../world';
+import { award, outfit } from './economy';
 import type { NavGraph } from './nav';
 import type { MatchEvent, MatchState, Soldier, Team, WorldSnapshot } from './state';
 
@@ -22,7 +23,7 @@ export const TICK_RATE = 30;
 export const RESPAWN_PROTECT = 1.6;
 export const DRONE = { max: 4, hp: 55, range: 28, boltSpeed: 30, boltDamage: 16, interval: 1.35, respawn: 9, score: 50 };
 
-export const weaponOf = (s: Soldier): WeaponDef => WEAPONS[LOADOUTS[s.loadout].weapons[s.weapon]];
+export const weaponOf = (s: Soldier): WeaponDef => WEAPONS[s.weapons[s.weapon]];
 export const eyeOf = (s: Soldier): Vec3 => ({ x: s.m.x, y: s.m.y + eyeHeight(s.m), z: s.m.z });
 export const feetOf = (s: Soldier): Vec3 => ({ x: s.m.x, y: s.m.y, z: s.m.z });
 export const isHostile = (a: number, b: number) => a !== b || a === -1;
@@ -55,8 +56,7 @@ export function spawnSoldier(state: MatchState, ctx: SimContext, s: Soldier) {
   s.m.y = ctx.world.groundHeight(s.m.x, s.m.z, best.y + 1, 0.3);
   s.yaw = best.yaw; s.pitch = 0;
   s.alive = true; s.health = HEALTH.max; s.shield = HEALTH.shield;
-  const [a, b] = LOADOUTS[s.loadout].weapons;
-  s.ammo = [WEAPONS[a].magazine, WEAPONS[b].magazine]; s.weapon = 0;
+  outfit(s, ctx.random);
   s.reloadLeft = 0; s.fireCooldown = 0; s.switchLeft = 0; s.grenades = GRENADE.perLife;
   s.protectLeft = RESPAWN_PROTECT; s.sinceHit = 99; s.lastAttacker = -1; s.sinceShot = 99; s.moveSlack = MOVE_SLACK.max; s.groundY = s.m.y;
   if (s.brain) { s.brain.path = []; s.brain.target = -1; s.brain.repath = 0; s.brain.goal = ''; }
@@ -83,6 +83,7 @@ export function killSoldier(state: MatchState, ctx: SimContext, victim: Soldier,
   victim.reloadLeft = 0; victim.m.vx = 0; victim.m.vz = 0;
   if (killer && killer.id !== victim.id) {
     killer.kills++; killer.score += head ? 125 : 100;
+    if (killer.team !== victim.team) award(killer, ECONOMY.kill + (head ? ECONOMY.headshotBonus : 0));
     if (state.phase === 'live') state.scores[killer.team] += 1;
   }
   ctx.emit({ type: 'kill', killer: killer?.id ?? -1, victim: victim.id, weapon, head });
@@ -134,7 +135,7 @@ export function damageDrone(state: MatchState, ctx: SimContext, drone: Body, amo
   const i = state.bodies.indexOf(drone);
   if (i >= 0) state.bodies.splice(i, 1);
   const killer = state.soldiers.find(s => s.id === killerId);
-  if (killer) killer.score += DRONE.score;
+  if (killer) { killer.score += DRONE.score; award(killer, ECONOMY.droneKill); }
   ctx.emit({ type: 'droneDown', x: drone.x, y: drone.y, z: drone.z, killer: killerId });
 }
 

@@ -5,9 +5,10 @@ import { loadMap, loadNav, reactorPoint } from '../maps/index';
 import type { MapDef } from '../maps/types';
 import { clamp, cloneData, dist3, normalize3, segmentPointDistance, type Vec3 } from '../math';
 import { MOVE, createMoveState } from '../movement';
-import { HEALTH, LOADOUTS, WEAPONS, type LoadoutId } from '../weapons';
+import { ECONOMY, HEALTH, LOADOUTS, WEAPONS, slotOf, type LoadoutId } from '../weapons';
 import { BODY_RADIUS, History, PHYSICS_STEP, circularSpeed, stepBodies, timeFactor, type Body } from '../world';
 import { botName, createBrain, updateBot } from './bots';
+import { award, buy, equip, finishReload, kitWeapons, takePickup, updatePickups, type BuyItem } from './economy';
 import {
   DRONE, MOVE_SLACK, TICK_RATE, applyDamage, explode, eyeOf, feetOf, isHostile, killSoldier, launchCharge, resolvePellets, resolveShot,
   spawnBody, spawnSoldier, throwGrenadeFrom, traceShot, weaponOf, type SimContext, type TraceResult,
@@ -34,7 +35,7 @@ export function createMatch(mapId: string, config: MatchConfig, random: () => nu
     mapId, phase: 'warmup', phaseLeft: config.warmup, time: 0, worldTime: 0, tick: 0, scores: [0, 0], scoreTimer: 0,
     laws: cloneData(def.laws), lawAuthor: -1, lawText: '', lawLeft: -1, rewindLeft: 0,
     soldiers: [], points: def.points.map(p => ({ id: p.id, progress: 0, owner: -1, contested: false, capturing: -1 })),
-    bodies: [], nextId: 1, droneTimer: 0, winner: -1, config,
+    bodies: [], pickupLeft: (def.pickups ?? []).map(() => 0), nextId: 1, droneTimer: 0, winner: -1, config,
   };
   seedAnomaly(state, def, random);
   return state;
@@ -71,6 +72,7 @@ export function addSoldier(state: MatchState, ctx: SimContext, opts: { name: str
   const s: Soldier = {
     id: state.nextId++, name: opts.name.slice(0, 20), team, bot: opts.bot, loadout,
     m: createMoveState(0, 0, 0), yaw: 0, pitch: 0, alive: false, health: 0, shield: 0, weapon: 0,
+    weapons: kitWeapons(loadout), reserve: [0, 0], money: ECONOMY.start, bought: ['', ''], sinceSpawn: 0,
     ammo: [WEAPONS[LOADOUTS[loadout].weapons[0]].magazine, WEAPONS[LOADOUTS[loadout].weapons[1]].magazine],
     reloadLeft: 0, fireCooldown: 0, switchLeft: 0, grenades: 0, respawnLeft: 0, protectLeft: 0, sinceHit: 99, lastAttacker: -1,
     kills: 0, deaths: 0, score: 0, captures: 0, lawCooldown: 0, sprint: false, ads: false, sinceShot: 99, corrections: 0, moveSlack: MOVE_SLACK.max, groundY: 0, idle: 0,
@@ -166,14 +168,14 @@ export function switchWeapon(state: MatchState, id: number, slot: 0 | 1) {
   const s = state.soldiers.find(x => x.id === id);
   if (!s || !s.alive || s.weapon === slot) return;
   s.weapon = slot; s.reloadLeft = 0;
-  s.switchLeft = WEAPONS[LOADOUTS[s.loadout].weapons[slot]].equipTime;
+  s.switchLeft = WEAPONS[s.weapons[slot]].equipTime;
 }
 
 export function reload(state: MatchState, id: number) {
   const s = state.soldiers.find(x => x.id === id);
   if (!s || !s.alive || s.reloadLeft > 0) return;
   const w = weaponOf(s);
-  if (s.ammo[s.weapon] < w.magazine) s.reloadLeft = w.reload;
+  if (s.ammo[s.weapon] < w.magazine && (s.bot || s.reserve[s.weapon] > 0)) s.reloadLeft = w.reload;
 }
 
 export function setLoadout(state: MatchState, id: number, loadout: LoadoutId) {
@@ -182,8 +184,8 @@ export function setLoadout(state: MatchState, id: number, loadout: LoadoutId) {
   s.loadout = loadout;
   // Takes effect on the next deployment unless the soldier has not fired since spawning.
   if (s.alive && s.sinceShot > 50 && s.protectLeft > 0) {
-    const [a, b] = LOADOUTS[loadout].weapons;
-    s.ammo = [WEAPONS[a].magazine, WEAPONS[b].magazine]; s.weapon = 0;
+    for (const wid of kitWeapons(loadout)) if (s.bought[slotOf(WEAPONS[wid])] === '') equip(s, wid);
+    s.weapon = 0;
   }
 }
 
@@ -258,6 +260,17 @@ function lagShift(shape: ReturnType<typeof hitShape>, point: Vec3): Vec3 {
   return { x: (point.x - q.x) * k, y: (point.y - q.y) * k, z: (point.z - q.z) * k };
 }
 
+/** Buy menu purchase (validated: alive, buy time or near own spawn, enough credits). */
+export function buyItem(state: MatchState, ctx: SimContext, id: number, item: BuyItem) {
+  return buy(state, ctx.map, state.soldiers.find(x => x.id === id && !x.bot), item);
+}
+
+/** Swap in the weapon lying at pickup `index` (E). Ammo and armor are collected by walking over them. */
+export function pickUp(state: MatchState, ctx: SimContext, id: number, index: number) {
+  const s = state.soldiers.find(x => x.id === id);
+  return !!s && Number.isInteger(index) && takePickup(state, ctx.map, s, index);
+}
+
 export function throwGrenade(state: MatchState, ctx: SimContext, id: number, origin: Vec3, dir: Vec3) {
   const s = state.soldiers.find(x => x.id === id);
   if (!s || !s.alive || state.phase === 'ended') return false;
@@ -316,9 +329,10 @@ export function resetMatch(state: MatchState, ctx: SimContext) {
   state.laws = cloneData(ctx.map.laws); state.lawAuthor = -1; state.lawText = ''; state.lawLeft = -1;
   state.points = ctx.map.points.map(p => ({ id: p.id, progress: 0, owner: -1, contested: false, capturing: -1 }));
   state.bodies = [];
+  state.pickupLeft = (ctx.map.pickups ?? []).map(() => 0);
   ctx.history.clear();
   seedAnomaly(state, ctx.map, ctx.random);
-  for (const s of state.soldiers) { s.kills = 0; s.deaths = 0; s.score = 0; s.captures = 0; s.lawCooldown = 0; spawnSoldier(state, ctx, s); }
+  for (const s of state.soldiers) { s.kills = 0; s.deaths = 0; s.score = 0; s.captures = 0; s.lawCooldown = 0; s.money = ECONOMY.start; s.bought = ['', '']; spawnSoldier(state, ctx, s); }
   ctx.emit({ type: 'phase', phase: 'warmup', winner: -1 });
 }
 
@@ -384,6 +398,8 @@ export function tickMatch(state: MatchState, ctx: SimContext, dt: number) {
     }
   }
 
+  updatePickups(state, ctx.map, dt);
+
   // ---- Team score ticks on wall-clock time ----
   if (state.phase === 'live') {
     state.scoreTimer += dt;
@@ -404,10 +420,10 @@ function updateTimers(state: MatchState, ctx: SimContext, s: Soldier, dt: number
   s.fireCooldown = Math.max(0, s.fireCooldown - dt);
   s.switchLeft = Math.max(0, s.switchLeft - dt);
   s.protectLeft = Math.max(0, s.protectLeft - dt);
-  s.sinceShot += dt; s.sinceHit += dt;
+  s.sinceShot += dt; s.sinceHit += dt; s.sinceSpawn += dt;
   if (s.reloadLeft > 0) {
     s.reloadLeft -= dt;
-    if (s.reloadLeft <= 0) { s.reloadLeft = 0; s.ammo[s.weapon] = weaponOf(s).magazine; }
+    if (s.reloadLeft <= 0) { s.reloadLeft = 0; finishReload(s, weaponOf(s)); }
   }
   if (s.sinceHit > HEALTH.shieldDelay) s.shield = Math.min(HEALTH.shield, s.shield + HEALTH.shieldRate * dt);
   if (s.sinceHit > HEALTH.healthDelay) s.health = Math.min(HEALTH.max, s.health + HEALTH.healthRate * dt);
@@ -518,7 +534,7 @@ function updatePoints(state: MatchState, ctx: SimContext, dtW: number) {
     if (p.owner === -1 && Math.abs(p.progress) >= 100) {
       p.owner = team; p.capturing = -1;
       for (const s of state.soldiers) {
-        if (s.alive && s.team === team && Math.hypot(s.m.x - def.x, s.m.z - def.z) <= def.radius) { s.score += 150; s.captures++; }
+        if (s.alive && s.team === team && Math.hypot(s.m.x - def.x, s.m.z - def.z) <= def.radius) { s.score += 150; s.captures++; award(s, ECONOMY.capture); }
       }
       if (p.id === reactorPoint(ctx.map)) for (const b of state.bodies) if (b.kind === 'drone') b.team = team;
       ctx.emit({ type: 'capture', point: p.id, team });

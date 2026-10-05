@@ -47,6 +47,7 @@ export const Clock = __t.object("Clock", {
   historyHead: __t.u32(),
   historyLength: __t.u32(),
   lastTickMicros: __t.u64(),
+  pickupsJson: __t.string(),
 });
 export type Clock = __Infer<typeof Clock>;
 
@@ -158,6 +159,11 @@ export const Roster = __t.object("Roster", {
   protect: __t.bool(),
   lastAttacker: __t.i32(),
   corrections: __t.u32(),
+  weapon0: __t.string(),
+  weapon1: __t.string(),
+  reserve0: __t.u16(),
+  reserve1: __t.u16(),
+  money: __t.u32(),
 });
 export type Roster = __Infer<typeof Roster>;
 
@@ -208,6 +214,14 @@ export const Soldier = __t.object("Soldier", {
   idle: __t.f32(),
   moveSlack: __t.f32(),
   groundY: __t.f32(),
+  weapon0: __t.string(),
+  weapon1: __t.string(),
+  reserve0: __t.u16(),
+  reserve1: __t.u16(),
+  money: __t.u32(),
+  bought0: __t.string(),
+  bought1: __t.string(),
+  sinceSpawn: __t.f32(),
 });
 export type Soldier = __Infer<typeof Soldier>;
 

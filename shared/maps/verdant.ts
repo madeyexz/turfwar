@@ -82,6 +82,12 @@ export function verdantDivide(): MapDef {
     b.solidProp('Prop_Crate_Tarp', -18, 'ground', 18, 0.9, 1.4, 1.05, 1.4);
     b.box(-36, b.ground(-36, 14), 14, 0.8, 2.2, 5, 'wall');
 
+    // ---- Pickups ----
+    b.pickup(-11, 'ground', 0, 'graviton', 45);                 // foot of the plateau, under fire from B
+    b.pickup(-17, 'ground', 31, 'scatter', 35);                 // creek bed
+    b.pickup(-30, 'ground', 1.5, 'ammo', 20);                   // behind the mid container
+    b.pickup(-48, 'ground', 13, 'armor', 40);                   // behind the flank barrier
+
     // ---- Jungle: trees break sightlines on both flanks ----
     const trees: [number, number, number, number][] = [
       [-60, -20, 1.2, 0], [-54, -40, 1.4, 1], [-46, -32, 1.0, 2], [-32, -40, 1.3, 0], [-20, -44, 1.1, 1], [-8, -40, 1.2, 2],

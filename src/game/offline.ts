@@ -1,9 +1,10 @@
 import { rng, type Vec3 } from '../../shared/math';
 import {
-  addSoldier, applyLaw, balanceTeams, createContext, createMatch, fireShot, reload, reportState, setLoadout, switchWeapon,
+  addSoldier, applyLaw, balanceTeams, buyItem, createContext, createMatch, fireShot, pickUp, reload, reportState, setLoadout, switchWeapon,
   throwGrenade, tickMatch, TICK_RATE, type SimContext,
 } from '../../shared/match/sim';
 import { OFFLINE_CONFIG, PRACTICE_CONFIG, type ClientReport, type MatchConfig, type MatchEvent, type MatchState, type ShotClaim, type Team } from '../../shared/match/state';
+import type { BuyItem } from '../../shared/match/economy';
 import type { LoadoutId } from '../../shared/weapons';
 import type { GameLink } from './link';
 
@@ -56,6 +57,8 @@ export class OfflineLink implements GameLink {
   reload() { reload(this.match, this.me); }
   switchWeapon(slot: 0 | 1) { switchWeapon(this.match, this.me, slot); }
   setLoadout(loadout: LoadoutId) { setLoadout(this.match, this.me, loadout); }
+  buy(item: BuyItem) { buyItem(this.match, this.ctx, this.me, item); }
+  pickup(index: number) { pickUp(this.match, this.ctx, this.me, index); }
   async law(command: unknown, source: string, text: string) { return applyLaw(this.match, this.ctx, this.me, command, source, text); }
   dispose() { this.events = []; }
 }

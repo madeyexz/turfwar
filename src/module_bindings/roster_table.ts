@@ -27,4 +27,9 @@ export default __t.row({
   protect: __t.bool(),
   lastAttacker: __t.i32().name("last_attacker"),
   corrections: __t.u32(),
+  weapon0: __t.string().name("weapon_0"),
+  weapon1: __t.string().name("weapon_1"),
+  reserve0: __t.u16().name("reserve_0"),
+  reserve1: __t.u16().name("reserve_1"),
+  money: __t.u32(),
 });

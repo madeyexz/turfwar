@@ -10,7 +10,7 @@ import type { MatchEvent, MatchState, PointState, Team } from './state';
  * row per tick, so a hundred soldiers cost one small row update per client instead of hundreds of
  * row updates. Positions are quantized to 2 cm, velocities to 1 cm/s.
  */
-export const FRAME_VERSION = 1;
+export const FRAME_VERSION = 2;
 
 const POS = 50;          // units per metre (2 cm)
 const VEL = 100;         // units per m/s
@@ -36,10 +36,12 @@ export interface DecodedFrame extends FrameClock {
   poses: FramePose[];
   bodies: Pick<Body, 'id' | 'kind' | 'x' | 'y' | 'z' | 'vx' | 'vy' | 'vz' | 'team'>[];
   points: Pick<PointState, 'progress' | 'owner' | 'contested' | 'capturing'>[];
+  /** Per map pickup: whole seconds until it is back (0 = lying there). */
+  pickups: number[];
   shots: Extract<MatchEvent, { type: 'shot' }>[];
 }
 
-const HEADER = 1 + 4 + 4 * 4 + 2 + 1 + 2 + 2 + 2;
+const HEADER = 1 + 4 + 4 * 4 + 2 + 1 + 1 + 2 + 2 + 2;
 const POSE = 22, BODY = 16, POINT = 5, SHOT = 16;
 const i16 = (v: number) => Math.max(-32768, Math.min(32767, Math.round(v)));
 const u8 = (v: number) => Math.max(0, Math.min(255, Math.round(v)));
@@ -47,7 +49,8 @@ const u8 = (v: number) => Math.max(0, Math.min(255, Math.round(v)));
 export function encodeFrame(state: MatchState, shots: Extract<MatchEvent, { type: 'shot' }>[]): Uint8Array {
   const soldiers = state.soldiers, bodies = state.bodies, points = state.points;
   const sentShots = shots.slice(0, 2000);
-  const buf = new ArrayBuffer(HEADER + soldiers.length * POSE + bodies.length * BODY + points.length * POINT + sentShots.length * SHOT);
+  const pickups = state.pickupLeft.slice(0, 255);
+  const buf = new ArrayBuffer(HEADER + soldiers.length * POSE + bodies.length * BODY + points.length * POINT + pickups.length + sentShots.length * SHOT);
   const v = new DataView(buf);
   let o = 0;
   v.setUint8(o, FRAME_VERSION); o += 1;
@@ -55,6 +58,7 @@ export function encodeFrame(state: MatchState, shots: Extract<MatchEvent, { type
   for (const f of [state.time, state.worldTime, state.phaseLeft, state.lawLeft]) { v.setFloat32(o, f, true); o += 4; }
   v.setUint16(o, Math.min(65535, state.rewindLeft), true); o += 2;
   v.setUint8(o, points.length); o += 1;
+  v.setUint8(o, pickups.length); o += 1;
   v.setUint16(o, soldiers.length, true); o += 2;
   v.setUint16(o, bodies.length, true); o += 2;
   v.setUint16(o, sentShots.length, true); o += 2;
@@ -85,6 +89,7 @@ export function encodeFrame(state: MatchState, shots: Extract<MatchEvent, { type
     v.setInt8(o + 2, p.owner); v.setInt8(o + 3, p.capturing); v.setUint8(o + 4, p.contested ? 1 : 0);
     o += POINT;
   }
+  for (const left of pickups) { v.setUint8(o, Math.min(255, Math.ceil(left))); o += 1; }
   for (const s of sentShots) {
     v.setUint16(o, s.shooter & 0xffff, true);
     v.setUint8(o + 2, Math.max(0, SHOT_WEAPONS.indexOf(s.weapon)));
@@ -106,6 +111,7 @@ export function decodeFrame(bytes: Uint8Array): DecodedFrame | undefined {
   const time = v.getFloat32(o, true), worldTime = v.getFloat32(o + 4, true), phaseLeft = v.getFloat32(o + 8, true), lawLeft = v.getFloat32(o + 12, true); o += 16;
   const rewindLeft = v.getUint16(o, true); o += 2;
   const pointCount = v.getUint8(o); o += 1;
+  const pickupCount = v.getUint8(o); o += 1;
   const soldierCount = v.getUint16(o, true), bodyCount = v.getUint16(o + 2, true), shotCount = v.getUint16(o + 4, true); o += 6;
   const poses: FramePose[] = [];
   for (let i = 0; i < soldierCount; i++, o += POSE) {
@@ -132,6 +138,8 @@ export function decodeFrame(bytes: Uint8Array): DecodedFrame | undefined {
   for (let i = 0; i < pointCount; i++, o += POINT) {
     points.push({ progress: v.getInt16(o, true) / 100, owner: v.getInt8(o + 2) as -1 | Team, capturing: v.getInt8(o + 3) as -1 | Team, contested: v.getUint8(o + 4) === 1 });
   }
+  const pickups: number[] = [];
+  for (let i = 0; i < pickupCount; i++, o += 1) pickups.push(v.getUint8(o));
   const shots: DecodedFrame['shots'] = [];
   for (let i = 0; i < shotCount; i++, o += SHOT) {
     const hs = v.getUint8(o + 3);
@@ -142,7 +150,7 @@ export function decodeFrame(bytes: Uint8Array): DecodedFrame | undefined {
       to: { x: v.getInt16(o + 10, true) / POS, y: v.getInt16(o + 12, true) / POS, z: v.getInt16(o + 14, true) / POS },
     });
   }
-  return { tick, time, worldTime, phaseLeft, lawLeft, rewindLeft, poses, bodies, points, shots };
+  return { tick, time, worldTime, phaseLeft, lawLeft, rewindLeft, poses, bodies, points, pickups, shots };
 }
 
 /** Point states in map order (the frame carries them by index). */

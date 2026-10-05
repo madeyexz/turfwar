@@ -57,4 +57,12 @@ export default __t.row({
   idle: __t.f32(),
   moveSlack: __t.f32().name("move_slack"),
   groundY: __t.f32().name("ground_y"),
+  weapon0: __t.string().name("weapon_0"),
+  weapon1: __t.string().name("weapon_1"),
+  reserve0: __t.u16().name("reserve_0"),
+  reserve1: __t.u16().name("reserve_1"),
+  money: __t.u32(),
+  bought0: __t.string().name("bought_0"),
+  bought1: __t.string().name("bought_1"),
+  sinceSpawn: __t.f32().name("since_spawn"),
 });
