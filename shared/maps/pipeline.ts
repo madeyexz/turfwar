@@ -162,6 +162,7 @@ export function pipeline(): MapDef {
   // Annex: its flat roof and the shed roof make the L; stairs climb its north face from the yard.
   block(b, -30.7, -15.9, 14.6, 10.2, 5, 'brick', 0xd8c8bc);
   b.stairs(-27.25, -21.9, 6.5, 1.8, 0, 5.3, 2);
+  b.ladder(-23.25, -14, b.ground(-22.6, -14), 5.3, 2);                         // BeGone's ladder, east face
   // The covered loading dock on its south side.
   b.paint(b.box(-30.6, 0, -8.7, 12, 1.1, 4.2, 'wood'), WEATHERED);
   b.stairs(-23.6, -8.7, 2, 4.2, 0, 1.1, 2);
@@ -199,7 +200,9 @@ export function pipeline(): MapDef {
   b.paint(b.box(-3.6, ROOF_TOP - 0.15, -7.3, 2.5, 0.15, 1.6, 'wood'), WEATHERED);
   b.paint(b.box(-13.45, 0, -8.25, 1.9, 2.4, 0.3, 'wood'), WEATHERED);
   b.tree(-3.7, -4.2, 0.75, 1);
-  // Stairs up both sides of the row (BeGone's ladders).
+  // Ladders up both sides of the row, as in BeGone, and stairs at its ends.
+  b.ladder(3, -8.55, b.ground(3, -9.2), ROOF_TOP, 1);
+  b.ladder(-18.6, -0.85, b.ground(-18.6, -0.2), ROOF_TOP, 3);
   b.stairs(-19.9, -9.25, 5.8, 1.6, 0, ROOF_TOP, 0);
   b.stairs(6.9, -4.75, 1.6, 6.5, 0, ROOF_TOP, 1);
   skip(b, 11.3, -7.4, 6.2, 2.6);
@@ -239,6 +242,7 @@ export function pipeline(): MapDef {
   }
   b.paint(b.box(-7, HOUSE_ROOF, HOUSE_Z1 - 0.15, 14, 0.9, 0.3, 'plaster'), PLASTER_WHITE);   // roof parapet facing the valley
   b.stairs(-8.8, HOUSE_Z0 + 1.35, 6, 1.6, HOUSE_FLOOR, HOUSE_ROOF, 0);
+  b.ladder(-4.4, HOUSE_Z0, b.ground(-4.4, HOUSE_Z0 - 0.6), HOUSE_ROOF, 1);       // and BeGone's ladder up its north face, over the tunnel mouth
   b.box(-7, HOUSE_FLOOR - 0.3, HOUSE_Z1 + 0.8, 6, 0.3, 1.6, 'wood');                         // balcony
   b.rail(-10, HOUSE_Z1 + 1.55, -4, HOUSE_Z1 + 1.55, HOUSE_FLOOR);
   b.light(-7, HOUSE_FLOOR + 2.4, HOUSE_Z1 + 0.3, 0xfff1d0, 4, 10);

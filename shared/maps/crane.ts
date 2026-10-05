@@ -99,10 +99,12 @@ export function crane(): MapDef {
   // Parapet for the roof snipers, open where the stairs land on the east side.
   b.box(-36.5, roofTop, -34.05, 9.4, 1, 0.3, 'brick');
   b.box(-36.5, roofTop, -14.95, 9.4, 1, 0.3, 'brick');
-  b.box(-41.05, roofTop, -24.5, 0.3, 1, 18.8, 'brick');
+  b.box(-41.05, roofTop, -29.5, 0.3, 1, 8.8, 'brick');                      // west parapet, open over the ladder
+  b.box(-41.05, roofTop, -19.5, 0.3, 1, 8.8, 'brick');
   b.box(-31.95, roofTop, -29.75, 0.3, 1, 8.3, 'brick');
   b.box(-31.95, roofTop, -19.1, 0.3, 1, 8.1, 'brick');
-  // BeGone's ladder becomes a steel stair up the east face to a landing beside the roof.
+  // BeGone's ladder up the back, where the Militia deploys, plus a steel stair up the east face.
+  b.ladder(-41.2, -24.5, g(-41.8, -24.5), roofTop, 0);
   b.stairs(-31, -19, 1.6, 8, 0, roofTop, 3);
   b.box(-31, roofTop - 0.35, -24, 1.6, 0.35, 2, 'steel');
   b.box(-30.3, 0, -24.9, 0.2, roofTop - 0.35, 0.2, 'steel');
@@ -152,13 +154,14 @@ export function crane(): MapDef {
   b.crate(18, 0, -3.9, 1.5, 1.2, 1.5);
   b.light(1.6, 3.4, -6.9, 0xffc27a, 5, 12);
 
-  // ---- Silo: a concrete cylinder with stairs (BeGone's ladder) to its rim ----
+  // ---- Silo: a concrete cylinder with its ladder and a stair to its rim ----
   const silo = { x: 4, z: -23, r: 3.2, h: 7.5 };
   b.cylinder(silo.x, 0, silo.z, silo.r, silo.h, 'concrete');
   b.cylinder(silo.x, silo.h, silo.z, 1.3, 0.3, 'steel', 'y', 0x4a4a46);   // hatch
   b.box(silo.x, silo.h, silo.z - silo.r + 0.3, 2.6, 0.9, 0.25, 'slab');    // rim walls (open to the west stairs)
-  b.box(silo.x, silo.h, silo.z + silo.r - 0.3, 2.6, 0.9, 0.25, 'slab');
+  for (const dx of [-0.95, 0.95]) b.box(silo.x + dx, silo.h, silo.z + silo.r - 0.3, 0.7, 0.9, 0.25, 'slab');   // open over the ladder
   b.box(silo.x + silo.r - 0.3, silo.h, silo.z, 0.25, 0.9, 2.6, 'slab');
+  b.ladder(silo.x, silo.z + silo.r, g(silo.x, silo.z + silo.r + 0.6), silo.h, 3);   // the silo's own ladder, south side
   b.stairs(-0.35, -18.25, 1.9, 9.5, 0, silo.h, 3);
   b.box(0.3, silo.h - 0.35, -24, 3.2, 0.35, 2, 'steel');
   for (const z of [-24.85, -23.15]) b.box(-1.15, 0, z, 0.25, silo.h - 0.35, 0.25, 'steel');
@@ -211,6 +214,7 @@ export function crane(): MapDef {
   b.box(12.45, 4, 22, 0.15, 1, 7.6, 'steel');
   b.box(13.95, 4, 25.75, 3.1, 1, 0.15, 'steel');
   b.stairs(16.5, 28.8, 2, 6, 0, 4, 3);
+  b.ladder(22, 20, g(22.6, 20), 4, 2);                                          // and a ladder up the east side
   b.rail(17.5, 25.8, 22, 25.8, 4);
   b.point('B', 'SWAT Base', 11.5, 0, 29, 6);
   b.crate(8, 0, 26.5, 1.5); b.crate(8, 1.5, 26.5, 1.5); b.crate(9.6, 0, 26.3, 1.5, 1.2, 1.5);

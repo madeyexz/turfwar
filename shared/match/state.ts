@@ -28,7 +28,7 @@ export interface BotBrain {
   strafe: number; strafeLeft: number;
   crouchLeft: number;
   burst: number; burstPause: number;
-  stuck: number; lastX: number; lastZ: number;
+  stuck: number; lastX: number; lastY: number; lastZ: number;
   think: number;
   grenadeCooldown: number;
   jump: boolean;

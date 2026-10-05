@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { CollisionWorld, type Heightfield, type Solid } from './collision';
+import { CollisionWorld, type Heightfield, type Ladder, type Solid } from './collision';
 import { MOVE, createMoveState, eyeHeight, idleInput, stepMovement, type MoveInput } from './movement';
 
 const flat: Heightfield = { x0: -100, z0: -100, spacing: 4, n: 51, heights: new Float32Array(51 * 51) };
@@ -103,5 +103,49 @@ describe('collision queries', () => {
     expect(rampHit.point.y).toBeCloseTo(1); expect(rampHit.normal.x).toBeGreaterThan(0);
     const ground = new CollisionWorld([], [], flat, bounds).raycast({ x: 0, y: 5, z: 0 }, { x: 0.6, y: -0.8, z: 0 }, 20)!;
     expect(ground.point.y).toBeCloseTo(0, 2); expect(ground.index).toBe(-1);
+  });
+});
+
+describe('ladders', () => {
+  // A 4 m block with a ladder up its west face, and a deck on posts whose ladder leans on its edge.
+  const ladder: Ladder = { x: 2, z: 0, y0: 0, y1: 4, width: 0.9, dir: 0 };
+  const deckLadder: Ladder = { x: 2, z: 20, y0: 0, y1: 3, width: 0.9, dir: 0 };
+  const world = new CollisionWorld([box(2, 0, -2, 8, 4, 2), box(2, 2.7, 18, 8, 3, 22)], [], flat, bounds, [ladder, deckLadder]);
+  const east = -Math.PI / 2, west = Math.PI / 2;
+
+  it('climbs up toward the rungs and steps off onto the landing', () => {
+    const s = run(world, { forward: 1, yaw: east }, 1.5, createMoveState(1.3, 0, 0));
+    expect(s.y).toBeCloseTo(4, 2);
+    expect(s.x).toBeGreaterThan(2.2);
+    expect(s.grounded).toBe(true);
+  });
+
+  it('walking off the top climbs down at climbing speed instead of falling', () => {
+    const s = createMoveState(2.6, 4, 0);
+    let slowest = 0;
+    for (let i = 0; i < 360; i++) { stepMovement(world, s, { ...idleInput(west), forward: 1 }, 1 / 120); slowest = Math.min(slowest, s.vy); }
+    expect(s.y).toBeCloseTo(0, 2);
+    expect(slowest).toBeGreaterThan(-MOVE.climb - 1.5);
+  });
+
+  it('holds on without input and lets go when jumping', () => {
+    const s = run(world, { forward: 1, yaw: east }, 0.6, createMoveState(1.3, 0, 0));
+    const held = run(world, { yaw: east }, 1, s);
+    expect(held.y).toBeGreaterThan(1.5);
+    const off = run(world, { yaw: east, jump: true }, 1.2, held);
+    expect(off.x).toBeLessThan(0.8);
+    expect(off.y).toBeCloseTo(0, 2);
+  });
+
+  it('a climber stays in front of a deck the ladder leans on, then lands on it', () => {
+    let underDeck = false;
+    const s = createMoveState(1.3, 0, 20);
+    for (let i = 0; i < 170; i++) {
+      stepMovement(world, s, { ...idleInput(east), forward: 1 }, 1 / 120);
+      if (s.y < 2.3 && s.x > 2 - MOVE.radius + 0.01) underDeck = true;
+    }
+    expect(underDeck).toBe(false);
+    expect(s.y).toBeCloseTo(3, 2);
+    expect(s.x).toBeGreaterThan(2.2);
   });
 });

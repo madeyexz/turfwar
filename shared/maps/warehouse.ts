@@ -6,7 +6,8 @@ import type { MapDef } from './types';
  * skylit hall: each team deploys in a wide empty bay under its sniping deck, the middle is a
  * maze of wooden crates, and a bridge crosses over the maze carrying the hall's only fixed ammo
  * crate. The bridge is two offset lanes, each climbed by stairs from one team's side, with a
- * team-coloured box half-blocking each lane. Militia (team 1) holds the west bay, SWAT the east.
+ * team-coloured box half-blocking each lane. Each deck has stairs at both ends and four ladders up
+ * its face. Militia (team 1) holds the west bay, SWAT the east.
  *
  * Coordinates: +X east, +Z south, metres. Everything inside `mirrored()` is repeated rotated
  * 180° for the other team, so the two halves are identical, as in the original.
@@ -76,7 +77,11 @@ export function warehouse(): MapDef {
     for (const z of [-9.2, -3, 3, 9.2]) b.paint(b.box(-24.2, 0, z, 0.3, DECK - 0.3, 0.3, 'steel'), GIRDER);
     b.stairs(-26.6, -12, 1.8, 5, 0, DECK, 1);
     b.stairs(-26.6, 12, 1.8, 5, 0, DECK, 3);
-    b.rail(-24, -9.5, -24, 9.5, DECK);
+    // The original's four ladders up the deck's face from the bay (one comes up behind a team box),
+    // with the railing open where each one arrives.
+    const ladders = [-7.4, -4.5, 1.4, 7.4];
+    for (const z of ladders) b.ladder(-24, z, 0, DECK, 2);
+    [-9.5, ...ladders.flatMap(z => [z - 0.6, z + 0.6]), 9.5].forEach((z, i, all) => { if (i % 2 === 0) b.rail(-24, z, -24, all[i + 1], DECK); });
     const team = b.mirroredSide ? SWAT_BLUE : MILITIA_GREEN;
     b.crate(-25.6, DECK, -4.5, CRATE, 1.2, CRATE, team);
     b.crate(-25.6, DECK, 5.5, CRATE, 1.2, CRATE, team);

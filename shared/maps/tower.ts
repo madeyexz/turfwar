@@ -201,16 +201,19 @@ function catwalk(b: B) {
 }
 
 /**
- * The Tower: a round brick tower with a crow's nest under a tin canopy. A steel fire escape on
- * its north side (BeGone has a ladder) climbs from the catwalk landing in three flights; the
- * generator below is the jump-down hiding spot.
+ * The Tower: a round brick tower with a crow's nest under a tin canopy. BeGone's ladder runs up
+ * from the SWAT yard, and a steel fire escape on its north side climbs from the catwalk landing in
+ * three flights; the generator below is the jump-down hiding spot.
  */
 function brickTower(b: B) {
   const cx = 18.5, cz = -1.5;
   b.cylinder(cx, 0, cz, 4.2, 0.35, 'concrete');
   b.cylinder(cx, 0, cz, 3, 11.7, 'brick');
   b.box(18, 11.7, cz, 9, 0.3, 8, 'floor');
-  b.rail(13.5, 2.5, 22.5, 2.5, 12);
+  // BeGone's ladder: straight up from the SWAT yard to the nest's south edge, the railing open over it.
+  b.ladder(cx, 2.5, b.ground(cx, 3.1), 12, 3);
+  b.rail(13.5, 2.5, cx - 0.6, 2.5, 12);
+  b.rail(cx + 0.6, 2.5, 22.5, 2.5, 12);
   b.rail(22.5, -5.5, 22.5, 2.5, 12);
   b.rail(13.5, -4, 13.5, 2.5, 12);
   b.rail(15.5, -5.5, 22.5, -5.5, 12);
