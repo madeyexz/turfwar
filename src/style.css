@@ -180,6 +180,11 @@ body.menu-open #hud, body.menu-open #hud * { visibility: hidden; }
 .arms .ammo.low { color: var(--amber); }
 .arms .ammo.empty { color: var(--crimson); }
 .arms .ammo .melee { font-size: 26px; color: var(--muted); letter-spacing: 0.2em; }
+.arms .carried { list-style: none; margin: 2px 0 0; padding: 0; display: flex; flex-direction: column; align-items: flex-end; gap: 2px; font-size: 15px; font-weight: 700; letter-spacing: 0.1em; text-transform: uppercase; color: var(--muted); }
+.arms .carried li.on { color: var(--ink); font-size: 18px; }
+.arms .carried li.none { opacity: 0.45; }
+.arms .carried kbd { margin-right: 6px; }
+.arms.listed .slots { display: none; }
 .reloadbar { height: 3px; background: rgba(255, 255, 255, 0.1); margin-top: 5px; }
 .reloadbar i { display: block; height: 100%; width: 0; background: var(--amber); }
 .slots { display: flex; justify-content: flex-end; gap: 10px; margin-top: 6px; font-size: 12px; font-weight: 700; color: var(--muted); letter-spacing: 0.08em; }

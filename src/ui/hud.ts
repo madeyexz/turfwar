@@ -349,14 +349,19 @@ export class Hud {
     if (me) this.set('cash', `$${me.money.toLocaleString('en-US')}`);
     this.el.vitals.classList.toggle('dead', !me?.alive);
     this.el.arms.classList.toggle('dead', !me?.alive);
-    // Weapon in hand, its attachments, magazine / reserve, then the four loadout keys.
-    const w = p.weapon, melee = w.class === 'melee';
+    // Weapon in hand, then the magazine / reserve: only with an Ammo Counter fitted (BeGone), then the loadout keys.
+    const w = p.weapon, melee = w.class === 'melee', counter = w.attachments.counter === 'ammoCounter';
     this.set('weapon', w.name);
-    this.set('atts', CATEGORIES.map(c => w.attachments[c]).filter(a => a && a !== 'irons').map(a => `<i>${ATTACHMENTS[a!].name}</i>`).join(''), 'html');
+    this.set('atts', '', 'html');
     const ammo = p.ammo[p.slot as 0 | 1] ?? 0;
-    this.set('ammo', melee ? '<span class="melee">MELEE</span>' : `${ammo}<small>/ ${p.reserve[p.slot as 0 | 1]}</small>`, 'html');
-    this.el.ammo.classList.toggle('low', !melee && ammo > 0 && ammo <= Math.max(3, w.magazine * 0.25));
-    this.el.ammo.classList.toggle('empty', !melee && ammo === 0);
+    // Without a counter the panel is a plain list of what you carry (key, weapon), the one in hand lit.
+    const carried = [[3, WEAPONS[p.weapons[0]].name, p.slot === 0], [2, WEAPONS[p.weapons[1]].name, p.slot === 1], [1, 'Knife', p.slot === 2],
+      [4, `M67 ×${p.grenades}${me?.grenadeHE ? ' HE' : ''}`, false]] as [number, string, boolean][];
+    const list = `<ul class="carried">${carried.map(([k, name, on]) => `<li class="${on ? 'on' : ''}${k === 4 && !p.grenades ? ' none' : ''}"><kbd>${k}</kbd>${name}</li>`).join('')}</ul>`;
+    this.set('ammo', counter && !melee ? `${ammo}<small>/ ${p.reserve[p.slot as 0 | 1]}</small>` : list, 'html');
+    this.el.arms.classList.toggle('listed', !counter || melee);
+    this.el.ammo.classList.toggle('low', counter && !melee && ammo > 0 && ammo <= Math.max(3, w.magazine * 0.25));
+    this.el.ammo.classList.toggle('empty', counter && !melee && ammo === 0);
     this.set('reload', `${p.reloading ? (1 - p.reloadLeft / p.reloadTotal) * 100 : 0}%`, 'width');
     const slot = (key: number, name: string, on: boolean, extra = '') => `<span class="${on ? 'on' : ''}"><kbd>${key}</kbd>${name}${extra}</span>`;
     this.set('slots', slot(1, 'KNIFE', p.slot === 2) + slot(2, WEAPONS[p.weapons[1]].name, p.slot === 1) + slot(3, WEAPONS[p.weapons[0]].name, p.slot === 0)

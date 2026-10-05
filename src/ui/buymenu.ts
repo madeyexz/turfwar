@@ -28,7 +28,7 @@ const NOTES: Partial<Record<AttachmentId, string>> = {
   acog: 'Magnified 4× prism scope for mid-range fights.',
   x4: 'Pistol scope: 4× magnification on the M9A1.',
   x6: 'Sniper scope: 6× magnification for the M110.',
-  ammoCounter: 'Shows the rounds left in the magazine on the gun.',
+  ammoCounter: 'Without it you do not see your ammo: shows the magazine and spare rounds on the gun and the HUD.',
   laser: 'Tightens hip-fire. The beam is visible — others can see it.',
   flashlight: 'Lights a cone ahead of you; adds a little recoil.',
   suppressor: 'Hides your tracer and muzzle flash and keeps you off enemy minimaps. Slightly less damage.',
