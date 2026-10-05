@@ -64,12 +64,18 @@ export class LevelView {
       marking: new THREE.MeshStandardMaterial({ roughness: 0.75, vertexColors: true, polygonOffset: true, polygonOffsetFactor: -2, polygonOffsetUnits: -2 }),
     };
     if (map.decor.some(d => d.kind === 'block' && d.style === 'facade')) this.materials.facade = facadeMaterial();
+    if (map.decor.some(d => 'style' in d && d.style === 'curtain')) this.materials.curtain = curtainMaterial();
+    // Self-lit strips and lamps: vertex colours brighter than white, so bloom picks them up.
+    this.materials.neon = new THREE.MeshBasicMaterial({ vertexColors: true });
     const signs: SignDecor[] = [];
     this.buildTerrain();
-    map.decor.forEach(d => {
+    map.decor.forEach((d, i) => {
       switch (d.kind) {
         case 'block': this.block(map.solids[d.solid], d.style, d.solid, d.color); break;
-        case 'cylinder': this.cylinder(d.x, d.y, d.z, d.radius, d.height, d.axis, d.style, d.color); break;
+        case 'detail': this.block({ minX: d.x - d.w / 2, maxX: d.x + d.w / 2, minY: d.y, maxY: d.y + d.h, minZ: d.z - d.d / 2, maxZ: d.z + d.d / 2, surface: 'metal' }, d.style, 100000 + i, d.color); break;
+        case 'loft': this.loft(d); break;
+        case 'disc': this.disc(d); break;
+        case 'cylinder': this.cylinder(d.x, d.y, d.z, d.radius, d.height, d.axis, d.style, d.color, d.top); break;
         case 'water': this.add('water', boxGeo(d.x, d.y - 0.01, d.z, d.w, 0.02, d.d)); break;
         case 'ball': this.ball(d.x, d.y, d.z, d.radius, d.style, d.color); break;
         case 'truss': this.truss(new THREE.Vector3(d.x0, d.y0, d.z0), new THREE.Vector3(d.x1, d.y1, d.z1), d.w, d.h, d.color ?? LOOKS.steel.color); break;
@@ -121,7 +127,7 @@ export class LevelView {
       const geometry = mergeGeometries(list, false);
       if (!geometry) continue;
       const mesh = new THREE.Mesh(geometry, this.materials[name]);
-      mesh.castShadow = name !== 'glow' && name !== 'glowWarm' && name !== 'glass' && name !== 'water' && name !== 'marking';
+      mesh.castShadow = name !== 'glow' && name !== 'glowWarm' && name !== 'glass' && name !== 'water' && name !== 'marking' && name !== 'neon';
       mesh.receiveShadow = true;
       mesh.name = `level:${name}`;
       this.group.add(mesh);
@@ -249,6 +255,13 @@ export class LevelView {
         return;
       }
       case 'glass': this.add('glass', boxGeo(cx, cy, cz, w, h, d)); return;
+      case 'curtain': {
+        const g = windowBox(cx, s.minY, cz, w, h, d, CURTAIN_BAY * CURTAIN_TILE, CURTAIN_FLOOR * CURTAIN_TILE);
+        tint(g, color ?? 0x8fb4b8, s.minY, Math.min(h, 6), 0.9);
+        this.add('curtain', g);
+        return;
+      }
+      case 'neon': this.add('neon', glowing(boxGeo(cx, cy, cz, w, h, d), color ?? 0xffe0a0)); return;
       case 'invisible': return;
       default: {
         // Armored wall: trim-sheet panelling (CC0 MegaKit textures), concrete foot, cap band,
@@ -308,9 +321,9 @@ export class LevelView {
     for (const e of edges) { tint(e, frame, y, h, 0.85); this.add('planks', e); }
   }
 
-  private cylinder(x: number, y: number, z: number, radius: number, length: number, axis: 'x' | 'y' | 'z', style: BlockStyle, color?: number) {
+  private cylinder(x: number, y: number, z: number, radius: number, length: number, axis: 'x' | 'y' | 'z', style: BlockStyle, color?: number, top = radius) {
     const look = LOOKS[style as keyof typeof LOOKS] ?? LOOKS.steel;
-    const g = new THREE.CylinderGeometry(radius, radius, length, Math.max(14, Math.round(radius * 14)), 1, false);
+    const g = new THREE.CylinderGeometry(top, radius, length, Math.min(48, Math.max(14, Math.round(radius * 14))), 1, false);
     // Unwrap the side around the circumference and lay the caps flat, at the material's texel density.
     const uv = g.getAttribute('uv') as THREE.BufferAttribute, n = g.getAttribute('normal') as THREE.BufferAttribute;
     for (let i = 0; i < uv.count; i++) {
@@ -320,7 +333,58 @@ export class LevelView {
     if (axis === 'y') g.translate(0, length / 2, 0);
     else { if (axis === 'x') g.rotateZ(Math.PI / 2); else g.rotateX(Math.PI / 2); g.translate(0, radius, 0); }
     g.translate(x, y, z);
-    tint(g, color ?? look.color, y, axis === 'y' ? length : radius * 2, look.ao);
+    this.styled(g, style, color, y, axis === 'y' ? length : radius * 2, LOOKS.steel);
+  }
+
+  /** Notched-square tower section (Taipei 101): the outline at y0 lofted to the one at y1, flat-shaded. */
+  private loft(d: Extract<Decor, { kind: 'loft' }>) {
+    const a = notchedSquare(d.half0, d.notch0), b = notchedSquare(d.half1, d.notch1), n = a.length;
+    const pos: number[] = [], uv: number[] = [];
+    // Panels: u runs around the perimeter in metres, v up the height (curtain walls tile by floor).
+    const tileW = d.style === 'curtain' ? CURTAIN_BAY * CURTAIN_TILE : 3, tileH = d.style === 'curtain' ? CURTAIN_FLOOR * CURTAIN_TILE : 3;
+    let along = 0;
+    for (let i = 0; i < n; i++) {
+      const j = (i + 1) % n, len = Math.hypot(a[j][0] - a[i][0], a[j][1] - a[i][1]);
+      const p = (q: number[][], k: number, y: number) => [d.x + q[k][0], y, d.z + q[k][1]];
+      const quad = [p(a, i, d.y0), p(b, j, d.y1), p(a, j, d.y0), p(a, i, d.y0), p(b, i, d.y1), p(b, j, d.y1)];
+      const u0 = along / tileW, u1 = (along + len) / tileW, v1 = (d.y1 - d.y0) / tileH;
+      const uvs = [[u0, 0], [u1, v1], [u1, 0], [u0, 0], [u0, v1], [u1, v1]];
+      for (const v of quad) pos.push(...v);
+      for (const v of uvs) uv.push(...v);
+      along += len;
+    }
+    if (d.cap) for (let i = 0; i < n; i++) {
+      const j = (i + 1) % n;
+      pos.push(d.x, d.y1, d.z, d.x + b[j][0], d.y1, d.z + b[j][1], d.x + b[i][0], d.y1, d.z + b[i][1]);
+      uv.push(0.003, 0.003, 0.003, 0.003, 0.003, 0.003);
+    }
+    const g = new THREE.BufferGeometry();
+    g.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3));
+    g.setAttribute('uv', new THREE.Float32BufferAttribute(uv, 2));
+    g.computeVertexNormals();
+    this.styled(g, d.style, d.color, d.y0, Math.max(1, d.y1 - d.y0));
+  }
+
+  /** Disc ornament facing its normal (the 101's ruyi and coins). */
+  private disc(d: Extract<Decor, { kind: 'disc' }>) {
+    const g = new THREE.CylinderGeometry(1, 1, d.depth, 28, 1, false);
+    g.scale(d.rx, 1, d.ry);
+    const n = new THREE.Vector3(d.nx, d.ny, d.nz).normalize();
+    // Lay the ellipse's x axis along the level tangent (−nz, 0, nx), which turning the disc's
+    // axis from +y onto the normal leaves in place.
+    g.rotateY(Math.atan2(-n.x, -n.z));
+    g.applyQuaternion(new THREE.Quaternion().setFromUnitVectors(new THREE.Vector3(0, 1, 0), n));
+    g.translate(d.x, d.y, d.z);
+    worldUV(g, 2);
+    this.styled(g, d.style, d.color, d.y - d.ry, d.ry * 2);
+  }
+
+  /** File a decorative mesh under its style's material, tinted (or lit, for neon). */
+  private styled(g: THREE.BufferGeometry, style: BlockStyle, color: number | undefined, base: number, height: number, fallback: (typeof LOOKS)[keyof typeof LOOKS] = LOOKS.concrete) {
+    if (style === 'neon') { this.add('neon', glowing(g, color ?? 0xffe0a0)); return; }
+    if (style === 'curtain') { tint(g, color ?? 0x8fb4b8, base, height, 0.9); this.add('curtain', g); return; }
+    const look = LOOKS[style as keyof typeof LOOKS] ?? fallback;
+    tint(g, color ?? look.color, base, height, look.ao);
     this.add(look.material, g);
   }
 
@@ -801,6 +865,68 @@ function bannerTexture(team: 0 | 1) {
 function nonIndexed(g: THREE.BufferGeometry) { return g.index ? g.toNonIndexed() : g; }
 
 // ---- City buildings and signs ------------------------------------------------------------
+
+/** Taipei 101's section outline: a square of half-size n, each corner stepped in twice by r (its sawtooth corners). */
+function notchedSquare(n: number, r: number) {
+  const quarter = [[n, n - 2 * r], [n - r, n - 2 * r], [n - r, n - r], [n - 2 * r, n - r], [n - 2 * r, n]];
+  const out: number[][] = [];
+  for (let k = 0; k < 4; k++) for (const [x, z] of quarter) {
+    let a = x, b = z;
+    for (let t = 0; t < k; t++) [a, b] = [-b, a];
+    out.push([a, b]);
+  }
+  return out;
+}
+
+/** Vertex colours for a self-lit mesh: the colour pushed past white so bloom picks it up. */
+function glowing(g: THREE.BufferGeometry, hex: number, strength = 2.2) {
+  const n = g.getAttribute('position').count, c = new Float32Array(n * 3), col = new THREE.Color(hex).multiplyScalar(strength);
+  for (let i = 0; i < n; i++) c.set([col.r, col.g, col.b], i * 3);
+  g.setAttribute('color', new THREE.BufferAttribute(c, 3));
+  return g;
+}
+
+/** Curtain-wall sheet: 6 panels × 6 floors per tile, 1.5 m panels on 4 m floors. */
+const CURTAIN_BAY = 1.5, CURTAIN_FLOOR = 4, CURTAIN_TILE = 6;
+
+/**
+ * Glass curtain wall: dark tinted panels that pick up the sky, slim mullions, a spandrel band at
+ * every floor slab, and office floors lit warm or cool behind about a third of the panels.
+ */
+function curtainMaterial() {
+  const size = 512, cell = size / CURTAIN_TILE;
+  const wall = document.createElement('canvas'), lit = document.createElement('canvas');
+  wall.width = wall.height = lit.width = lit.height = size;
+  const c = wall.getContext('2d')!, e = lit.getContext('2d')!;
+  const r = rng(11);
+  e.fillStyle = '#000'; e.fillRect(0, 0, size, size);
+  for (let fy = 0; fy < CURTAIN_TILE; fy++) {
+    // A floor's offices are lit together, in runs, the way towers look at night.
+    let run = 0, warm = true, on = false;
+    for (let bx = 0; bx < CURTAIN_TILE; bx++) {
+      if (run-- <= 0) { run = 1 + Math.floor(r() * 4); on = r() < 0.3; warm = r() < 0.75; }
+      const x = bx * cell, y = fy * cell, shade = 0.75 + r() * 0.35;
+      const g = c.createLinearGradient(x, y, x + cell, y + cell);
+      g.addColorStop(0, `rgb(${70 * shade},${104 * shade},${118 * shade})`); g.addColorStop(1, `rgb(${30 * shade},${48 * shade},${60 * shade})`);
+      c.fillStyle = g; c.fillRect(x, y, cell, cell);
+      if (on) {
+        e.fillStyle = warm ? '#ffd9a0' : '#d8ecff'; e.globalAlpha = 0.45 + r() * 0.5;
+        e.fillRect(x + 3, y + cell * 0.22, cell - 6, cell * 0.74); e.globalAlpha = 1;
+        c.fillStyle = 'rgba(255,230,190,0.25)'; c.fillRect(x + 3, y + cell * 0.22, cell - 6, cell * 0.74);
+      }
+      // Mullion, spandrel and the slab edge.
+      c.fillStyle = '#9aa4a8'; c.fillRect(x, y, 3, cell);
+      c.fillStyle = '#56636a'; c.fillRect(x, y, cell, cell * 0.2);
+      c.fillStyle = '#b8c2c6'; c.fillRect(x, y + cell * 0.2 - 2, cell, 2);
+    }
+  }
+  // Roofs and soffits map the sheet's corner (uv 0.003, 0.003): plain grey, unlit.
+  c.fillStyle = '#6a6e70'; c.fillRect(0, size - 8, 8, 8);
+  e.fillStyle = '#000'; e.fillRect(0, size - 8, 8, 8);
+  const map = new THREE.CanvasTexture(wall), emissiveMap = new THREE.CanvasTexture(lit);
+  for (const t of [map, emissiveMap]) { t.wrapS = t.wrapT = THREE.RepeatWrapping; t.colorSpace = THREE.SRGBColorSpace; t.anisotropy = 4; }
+  return new THREE.MeshStandardMaterial({ map, emissiveMap, emissive: 0xffffff, emissiveIntensity: 0.75, roughness: 0.18, metalness: 0.55, vertexColors: true });
+}
 
 /** Window grid of the facade sheet: 4 bays × 4 floors per tile. */
 const BAY = 3.1, FLOOR = 3.2, TILE_BAYS = 4, TILE_FLOORS = 4;

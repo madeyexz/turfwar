@@ -29,7 +29,7 @@ const report = (s: Soldier, over: Partial<Parameters<typeof reportState>[3]> = {
 /** Start the match and skip the round-start freeze. */
 const goLive = (state: MatchState, ctx: SimContext) => { resetMatch(state, ctx); tick(state, ctx, state.config.freezeTime + 0.1); };
 
-const ASYMMETRIC = ['ochre', 'crane', 'tower', 'pipeline', 'timbertown', 'taipei'];
+const ASYMMETRIC = ['ochre', 'crane', 'tower', 'pipeline', 'timbertown', 'taipei', 'xinyi'];
 
 describe('maps and navigation', () => {
   for (const id of MAP_IDS) {
@@ -95,6 +95,18 @@ describe('bot matches', () => {
 
   it('Sabotage on Taipei: Militia bots find their way through Ximending to a site and arm it', () => {
     const { ctx, state, events } = setup({ ...SABOTAGE, teamSize: 0, warmup: 0, botSkill: 0.2 }, 5, 'taipei');
+    for (let i = 0; i < 4; i++) addSoldier(state, ctx, { name: `M${i}`, team: ATTACKERS, bot: true });
+    const swat = addSoldier(state, ctx, { name: 'S', team: (1 - ATTACKERS) as 0 | 1, bot: false });
+    resetMatch(state, ctx);
+    for (let i = 0; i < 110 * TICK_RATE && !state.bomb.armed; i++) {
+      swat.m.x = 0; swat.m.y = -30; swat.m.z = 0;
+      tickMatch(state, ctx, 1 / TICK_RATE);
+    }
+    expect(events.some(e => e.type === 'bomb' && e.action === 'armed')).toBe(true);
+  });
+
+  it('Sabotage on Xinyi: Militia bots reach a site round Taipei 101 (the sunken atrium or the west plaza) and arm it', () => {
+    const { ctx, state, events } = setup({ ...SABOTAGE, teamSize: 0, warmup: 0, botSkill: 0.2 }, 5, 'xinyi');
     for (let i = 0; i < 4; i++) addSoldier(state, ctx, { name: `M${i}`, team: ATTACKERS, bot: true });
     const swat = addSoldier(state, ctx, { name: 'S', team: (1 - ATTACKERS) as 0 | 1, bot: false });
     resetMatch(state, ctx);
