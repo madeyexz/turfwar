@@ -365,6 +365,7 @@ function surfaceFor(style: BlockStyle): Surface {
     // Masonry and timber both throw up dust and splinters like concrete.
     case 'brick': case 'plaster': case 'cobble': case 'slab': case 'wood': case 'crate': return 'concrete';
     case 'hedge': return 'dirt';
+    case 'facade': return 'concrete';
     case 'rock': return 'rock';
     case 'glass': return 'glass';
     case 'shield': return 'energy';
