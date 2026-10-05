@@ -1,24 +1,33 @@
 import * as THREE from 'three';
 
 /**
- * Weapons the CC0 packs do not include, built in code in the same model space as the imported
- * guns: barrel along -X, up +Y, origin near the trigger. Registered next to the GLB models so the
- * view model and third-person soldiers treat them identically.
+ * Parts the CC0 gun pack lacks, built in code in the imported guns' model space (barrel along -X,
+ * up +Y, origin at the grip) and added to the shared models before they are refinished, so the view
+ * model, soldiers and buy menu all show the same weapon: the M249's stock, ammo box and folded
+ * bipod, the M110's brake and bipod, the M4A1's vertical grip and the M1014's shell carrier.
  */
 export function addProceduralGuns(weapons: Map<string, THREE.Object3D>) {
-  weapons.set('Gun_Scatter', scattergun());
-  weapons.set('Gun_Stinger', stinger(weapons));
-  weapons.set('Gun_Graviton', graviton());
+  const grip = weapons.get('Acc_Grip');
+  const m249 = weapons.get('Gun_M249');
+  if (m249) saw(m249);
+  const m110 = weapons.get('Gun_M110');
+  if (m110) {
+    part(m110, tube(0.0135, 0.055, 8), mat(0x1c1d1f, 0.5, 0.6), -0.875, 0.175);
+    for (const x of [-0.862, -0.886]) part(m110, box(0.006, 0.02, 0.031), mat(0x1c1d1f, 0.5, 0.6), x, 0.175);
+    bipod(m110, -0.58, 0.129, 0.2);
+  }
+  const m4 = weapons.get('Gun_M4A1');
+  if (m4 && grip) { const g = grip.clone(); g.scale.setScalar(0.9); g.position.set(-0.33, 0.05, 0); m4.add(g); }
+  const m1014 = weapons.get('Gun_M1014');
+  if (m1014) shellCarrier(m1014);
 }
 
-const mat = (color: number, roughness = 0.6, metalness = 0.35, emissive = 0, glow = 1.2) => new THREE.MeshStandardMaterial({
-  color, roughness, metalness, flatShading: true, emissive, emissiveIntensity: emissive ? glow : 0,
-});
-const METAL = mat(0x2a2e35, 0.45, 0.6);
-const POLYMER = mat(0x4b515e, 0.85, 0.05);
-const LIGHT = mat(0xb9bec6, 0.6, 0.2);
+const mat = (color: number, roughness = 0.6, metalness = 0.35) => new THREE.MeshStandardMaterial({ color, roughness, metalness });
+const box = (x: number, y: number, z: number) => new THREE.BoxGeometry(x, y, z);
+/** Cylinder lying along the barrel axis (X). */
+const tube = (r: number, len: number, sides = 10) => new THREE.CylinderGeometry(r, r, len, sides).rotateZ(Math.PI / 2);
 
-function part(group: THREE.Group, geo: THREE.BufferGeometry, material: THREE.Material, x: number, y: number, z = 0, rotZ = 0) {
+function part(group: THREE.Object3D, geo: THREE.BufferGeometry, material: THREE.Material, x: number, y: number, z = 0, rotZ = 0) {
   const mesh = new THREE.Mesh(geo, material);
   mesh.position.set(x, y, z);
   mesh.rotation.z = rotZ;
@@ -26,65 +35,48 @@ function part(group: THREE.Group, geo: THREE.BufferGeometry, material: THREE.Mat
   group.add(mesh);
   return mesh;
 }
-const box = (x: number, y: number, z: number) => new THREE.BoxGeometry(x, y, z);
-/** Cylinder lying along the barrel axis (X). */
-const tube = (r: number, len: number, sides = 10) => new THREE.CylinderGeometry(r, r, len, sides).rotateZ(Math.PI / 2);
-/** Ring facing down the barrel. */
-const ring = (r: number, t: number) => new THREE.TorusGeometry(r, t, 6, 18).rotateY(Math.PI / 2);
 
-/** S-8 Breacher: pump scattergun with a glowing front bead (its holographic sight is mounted in optics.ts). */
-function scattergun() {
-  const g = new THREE.Group();
-  g.name = 'Gun_Scatter';
-  const accent = mat(0xd8762a, 0.7, 0.1);
-  part(g, box(0.34, 0.11, 0.07), LIGHT, 0.03, 0.06);
-  part(g, box(0.58, 0.014, 0.028), METAL, -0.25, 0.127);
-  part(g, tube(0.026, 0.56), METAL, -0.42, 0.095);
-  part(g, tube(0.021, 0.44), METAL, -0.36, 0.044);
-  part(g, box(0.2, 0.068, 0.082), accent, -0.4, 0.046);
-  part(g, box(0.06, 0.07, 0.07), METAL, -0.71, 0.095);
-  part(g, box(0.012, 0.026, 0.012), mat(0xffb35a, 0.4, 0, 0xff8a2a), -0.7, 0.14);
-  part(g, box(0.055, 0.13, 0.045), POLYMER, 0.09, -0.04, 0, 0.3);
-  part(g, box(0.24, 0.085, 0.05), POLYMER, 0.32, 0.03, 0, -0.08);
-  part(g, box(0.025, 0.11, 0.056), METAL, 0.445, 0.02);
-  return g;
+/** Side profile (x, y) extruded to `depth` across the gun, centred. */
+function profile(points: [number, number][], depth: number) {
+  const shape = new THREE.Shape(points.map(([x, y]) => new THREE.Vector2(x, y)));
+  return new THREE.ExtrudeGeometry(shape, { depth, bevelEnabled: true, bevelThickness: 0.003, bevelSize: 0.003, bevelSegments: 1 }).translate(0, 0, -depth / 2);
 }
 
-/** K-9 Stinger: the sidearm frame converted to full auto, with an extended magazine and compensator. */
-function stinger(weapons: Map<string, THREE.Object3D>) {
-  const g = new THREE.Group();
-  g.name = 'Gun_Stinger';
-  const pistol = weapons.get('Gun_Pistol')!.clone();
-  pistol.traverse(o => {
-    const m = o as THREE.Mesh;
-    if (m.isMesh) { m.material = (m.material as THREE.MeshStandardMaterial).clone(); (m.material as THREE.MeshStandardMaterial).color.set(0xa9c4ff); }
-  });
-  g.add(pistol);
-  const mag = weapons.get('Gun_SMG_Ammo')!.clone();
-  mag.position.set(0.035, -0.13, 0); mag.rotation.z = 0.18; mag.scale.setScalar(0.85);
-  g.add(mag);
-  const glow = mat(0x6ff0e8, 0.4, 0, 0x2fd8d0);
-  part(g, box(0.07, 0.045, 0.042), METAL, -0.405, 0.105);
-  part(g, box(0.05, 0.006, 0.044), glow, -0.405, 0.084);
-  part(g, box(0.14, 0.008, 0.036), glow, -0.2, 0.06);
-  return g;
+/** Folded bipod: a clamp under the handguard at (x, y) with both legs swung forward along the barrel. */
+function bipod(gun: THREE.Object3D, x: number, y: number, leg: number) {
+  const steel = mat(0x1d1f22, 0.5, 0.6), rubber = mat(0x0d0d0e, 0.9, 0);
+  part(gun, box(0.04, 0.022, 0.04), steel, x, y - 0.011);
+  part(gun, tube(0.006, 0.03, 8), steel, x - 0.01, y - 0.026);
+  for (const z of [-0.011, 0.011]) {
+    part(gun, box(leg, 0.011, 0.009), steel, x - 0.02 - leg / 2, y - 0.03, z);
+    part(gun, box(0.018, 0.016, 0.014), rubber, x - 0.02 - leg, y - 0.03, z);
+  }
 }
 
-/** G-0 Graviton: launcher whose violet coils lob arcing charges. */
-function graviton() {
-  const g = new THREE.Group();
-  g.name = 'Gun_Graviton';
-  const glow = mat(0x6a4fb0, 0.3, 0, 0x7a4cff, 0.7);
-  part(g, box(0.42, 0.13, 0.1), METAL, 0.02, 0.05);
-  part(g, tube(0.055, 0.5, 12), POLYMER, -0.42, 0.075);
-  part(g, tube(0.04, 0.012, 12), glow, -0.672, 0.075);
-  for (const x of [-0.3, -0.42, -0.54]) part(g, ring(0.066, 0.011), glow, x, 0.075);
-  // Charge cell glowing through a window in the receiver's side.
-  part(g, new THREE.SphereGeometry(0.034, 12, 8), glow, 0.06, 0.05, 0.035);
-  part(g, ring(0.03, 0.005), METAL, -0.02, 0.205);
-  part(g, box(0.03, 0.05, 0.02), METAL, -0.02, 0.15);
-  part(g, box(0.055, 0.13, 0.045), POLYMER, 0.1, -0.05, 0, 0.3);
-  part(g, box(0.04, 0.1, 0.04), POLYMER, -0.25, -0.04);
-  part(g, box(0.2, 0.1, 0.06), LIGHT, 0.32, 0.05);
-  return g;
+/** M249 SAW: skeleton stock, 200-round soft ammo box on the left with a belt into the feed tray, heavy barrel, bipod. */
+function saw(gun: THREE.Object3D) {
+  const body = mat(0x3c4236, 0.55, 0.4), dark = mat(0x1c1e1a, 0.7, 0.3), pouch = mat(0x535a40, 0.95, 0), brass = mat(0xb08a3e, 0.35, 0.85);
+  part(gun, profile([[0.07, 0.212], [0.35, 0.178], [0.372, 0.18], [0.372, 0.02], [0.345, 0.02], [0.2, 0.1], [0.07, 0.112]], 0.04), body, 0, 0);
+  part(gun, box(0.016, 0.16, 0.05), dark, 0.372, 0.1);
+  // Ammo box: soft pouch with a flap and strap, hanging under the receiver on the left side.
+  part(gun, box(0.14, 0.15, 0.1), pouch, -0.23, -0.05, 0.045);
+  part(gun, box(0.142, 0.03, 0.102), mat(0x474d37, 0.95, 0), -0.23, 0.012, 0.045);
+  part(gun, box(0.02, 0.152, 0.104), mat(0x2d3124, 0.9, 0), -0.23, -0.05, 0.045);
+  for (let i = 0; i < 5; i++) part(gun, box(0.008, 0.016, 0.03), brass, -0.27 + i * 0.012, 0.06 + i * 0.012, 0.03, 0.4);
+  // Feed cover ribs and the heavy barrel's flash hider.
+  for (let i = 0; i < 4; i++) part(gun, box(0.012, 0.006, 0.052), dark, -0.04 + i * 0.03, 0.222);
+  part(gun, tube(0.016, 0.05, 8), dark, -1.0, 0.18);
+  part(gun, tube(0.011, 0.34, 10), body, -0.8, 0.18);
+  bipod(gun, -0.6, 0.127, 0.24);
+}
+
+/** M1014: six-shell side saddle on the left of the receiver. */
+function shellCarrier(gun: THREE.Object3D) {
+  const plate = mat(0x1f2124, 0.6, 0.4), hull = mat(0x9c2a22, 0.6, 0.05), brass = mat(0xb48c40, 0.35, 0.85);
+  part(gun, box(0.12, 0.04, 0.006), plate, -0.15, 0.035, 0.03);
+  for (let i = 0; i < 6; i++) {
+    const x = -0.2 + i * 0.02;
+    part(gun, new THREE.CylinderGeometry(0.0075, 0.0075, 0.046, 8), hull, x, 0.035, 0.038);
+    part(gun, new THREE.CylinderGeometry(0.0078, 0.0078, 0.01, 8), brass, x, 0.012, 0.038);
+  }
 }

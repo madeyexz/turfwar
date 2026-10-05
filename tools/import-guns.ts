@@ -7,38 +7,39 @@
  * https://opengameart.org/content/low-poly-guns-pack (ultimate_gun_pack_by_quaternius.zip, also on
  * https://quaternius.itch.io/50-lowpoly-guns), extract it into GUN_SRC, then run:
  *   bun tools/import-guns.ts            # writes public/assets/guns.glb
- *   bun tools/import-guns.ts --preview <dir>   # side views with a 5 cm grid, for placing grips
+ *   bun tools/import-guns.ts --preview <dir> [--all]   # side views with a 5 cm grid, for placing grips (--all: every OBJ in the pack)
  */
 import { Document, NodeIO, type Material } from '@gltf-transform/core';
 import { ALL_EXTENSIONS } from '@gltf-transform/extensions';
 import { dedup, meshopt, prune, weld } from '@gltf-transform/functions';
 import { MeshoptEncoder } from 'meshoptimizer';
 import sharp from 'sharp';
-import { mkdirSync, readFileSync } from 'node:fs';
+import { mkdirSync, readFileSync, readdirSync } from 'node:fs';
 import { join } from 'node:path';
 
 const SRC = join(process.env.GUN_SRC ?? '/tmp/guns-src', 'ultimate/Ultimate Gun Pack - July 2019/OBJ');
 const OUT = join(import.meta.dir, '../public/assets');
 
 /**
- * name: runtime node name; file: source OBJ; length: metres from stock to muzzle (matched to the
- * stylized scale of weapons.glb: pistol ≈ 0.44, rifle ≈ 1.06, sniper ≈ 1.7); grip: where the
- * shooting hand's grip sits (metres, model space with the pack's own origin), moved to the origin.
+ * name: runtime node name; file: source OBJ (accessories under Accessories/); length: metres from
+ * stock to muzzle (matched to the stylized scale of weapons.glb: pistol ≈ 0.44, rifle ≈ 1.06);
+ * grip: where the shooting hand's grip sits (metres, model space with the pack's own origin), moved to
+ * the origin. Accessories set `fit: 'max'` (length = largest extent) and an anchor: 'rear' puts the
+ * back face centre at the origin (suppressors screw onto the muzzle), 'centre' the bounding-box centre.
  */
-export const GUNS = [
-  { name: 'Gun_Hornet', file: 'Pistol_4', length: 0.4, grip: [0, 0] },
-  { name: 'Gun_Warden', file: 'Pistol_6', length: 0.52, grip: [0, 0] },
-  { name: 'Gun_Wasp', file: 'SubmachineGun_1', length: 0.55, grip: [0, 0] },
-  { name: 'Gun_Viper', file: 'SubmachineGun_5', length: 0.72, grip: [0, 0] },
-  { name: 'Gun_Reaper', file: 'Shotgun_SawedOff', length: 0.78, grip: [0, 0] },
-  { name: 'Gun_Thunder', file: 'Shotgun_1', length: 1.12, grip: [0, 0] },
-  { name: 'Gun_Brawler', file: 'AssaultRifle_5', length: 1.08, grip: [0, 0] },
-  { name: 'Gun_Kestrel', file: 'Bullpup_2', length: 0.92, grip: [0, 0] },
-  { name: 'Gun_Marksman', file: 'AssaultRifle2_2', length: 1.1, grip: [0, 0] },
-  { name: 'Gun_Swift', file: 'SniperRifle_4', length: 1.55, grip: [0, 0] },
-  { name: 'Gun_Longbow', file: 'SniperRifle_3', length: 1.72, grip: [0, 0] },
-  { name: 'Gun_Hammer', file: 'Bullpup_3', length: 1.08, grip: [0, 0] },
-] as const;
+interface GunSpec { name: string; file: string; length: number; grip: [number, number]; fit?: 'max'; anchor?: 'rear' | 'centre' }
+export const GUNS: GunSpec[] = [
+  { name: 'Gun_MP5', file: 'SubmachineGun_3', length: 0.74, grip: [0, 0] },
+  { name: 'Gun_MP7', file: 'SubmachineGun_2', length: 0.6, grip: [0, 0] },
+  { name: 'Gun_M4A1', file: 'AssaultRifle2_1', length: 1.02, grip: [0, 0] },
+  { name: 'Gun_M110', file: 'AssaultRifle2_2', length: 1.3, grip: [0, 0] },
+  { name: 'Gun_M249', file: 'AssaultRifle2_3', length: 1.1, grip: [0, 0] },
+  { name: 'Gun_M1014', file: 'Shotgun_1', length: 1.06, grip: [0, 0] },
+  { name: 'Gun_M9A1', file: 'Pistol_3', length: 0.36, grip: [0, 0] },
+  { name: 'Gun_Knife', file: 'Accessories/Bayonet_2', length: 0.34, grip: [0, 0] },
+  { name: 'Acc_Suppressor', file: 'Accessories/Silencer_2', length: 0.22, grip: [0, 0], anchor: 'rear' },
+  { name: 'Acc_Grip', file: 'Accessories/Grip', length: 0.1, grip: [0, 0], fit: 'max', anchor: 'centre' },
+];
 
 interface Obj { positions: number[][]; normals: number[][]; groups: Map<string, [number, number][][]>; colors: Map<string, number[]> }
 
@@ -67,11 +68,14 @@ function parseObj(file: string): Obj {
 }
 
 /** Pack units → model space: flip the barrel from +X to -X (180° about Y), scale, grip at origin. */
-function transform(gun: (typeof GUNS)[number], obj: Obj) {
-  let minX = Infinity, maxX = -Infinity;
-  for (const [x] of obj.positions) { minX = Math.min(minX, x); maxX = Math.max(maxX, x); }
-  const s = gun.length / (maxX - minX);
-  const [gx, gy] = gun.grip;
+function transform(gun: GunSpec, obj: Obj) {
+  const min = [Infinity, Infinity, Infinity], max = [-Infinity, -Infinity, -Infinity];
+  for (const p of obj.positions) for (let i = 0; i < 3; i++) { min[i] = Math.min(min[i], p[i]); max[i] = Math.max(max[i], p[i]); }
+  const s = gun.length / (gun.fit === 'max' ? Math.max(...max.map((m, i) => m - min[i])) : max[0] - min[0]);
+  // Anchors in output space (barrel -X): 'rear' = the +X face (pack's min x), 'centre' = box centre.
+  let [gx, gy] = gun.grip;
+  if (gun.anchor === 'rear') { gx = -min[0] * s; gy = (min[1] + max[1]) / 2 * s; }
+  else if (gun.anchor === 'centre') { gx = -(min[0] + max[0]) / 2 * s; gy = (min[1] + max[1]) / 2 * s; }
   return {
     point: ([x, y, z]: number[]) => [-x * s - gx, y * s - gy, -z * s],
     normal: ([x, y, z]: number[]) => [-x, y, -z],
@@ -135,7 +139,10 @@ if (previewAt > 0) {
   // Side views (looking from +Z) in model space: origin cross = grip, grid every 5 cm, labels every 10 cm.
   const dir = process.argv[previewAt + 1];
   mkdirSync(dir, { recursive: true });
-  for (const gun of GUNS) {
+  // --all previews every OBJ in the pack at 1 m, to choose models.
+  const all = process.argv.includes('--all') ? [...readdirSync(SRC).filter(f => f.endsWith('.obj')), ...readdirSync(join(SRC, 'Accessories')).filter(f => f.endsWith('.obj')).map(f => `Accessories/${f}`)]
+    .map(f => ({ name: f.replace(/\.obj$/, '').replace('/', '_'), file: f.replace(/\.obj$/, ''), length: 1, grip: [0, 0] })) : undefined;
+  for (const gun of all ?? GUNS) {
     const obj = parseObj(gun.file);
     const { point } = transform(gun, obj);
     const tris: { pts: number[][]; z: number; color: string }[] = [];

@@ -104,6 +104,8 @@ export class Game {
     this.myTeam = me?.team ?? 0;
     this.viewmodel = new ViewModel(assets, this.myTeam);
     renderer.viewCamera.add(this.viewmodel.root);
+    // The flashlight attachment lights the world, so it rides on the world camera.
+    renderer.camera.add(this.viewmodel.torch, this.viewmodel.torch.target);
     this.hud = new Hud(container, def);
     this.hud.onMenu = () => this.onExit?.();
     this.buymenu = new BuyMenu(container, {
@@ -125,6 +127,7 @@ export class Game {
     this.renderer.scene.remove(this.level.group, this.effects.group, this.bodies.group, this.crates.group, this.sites.group);
     for (const r of this.remotes.values()) { r.view.dispose(); r.view.gun.removeFromParent(); }
     this.viewmodel.root.removeFromParent();
+    this.viewmodel.torch.removeFromParent(); this.viewmodel.torch.target.removeFromParent();
     this.input.dispose();
     this.hud.released(false, false);
     document.exitPointerLock?.();

@@ -4,8 +4,10 @@ Universal Animation Library and Universal Animation Library 2 (free Standard edi
 CC0 1.0 Universal Public Domain Dedication: https://creativecommons.org/publicdomain/zero/1.0/
 Converted with tools/import-assets.ts (textures resized to WebP; animations meshopt-compressed).
 
-guns.glb: twelve guns from Quaternius' "Ultimate Gun Pack" (July 2019), CC0 1.0 Universal
+guns.glb: guns and accessories from Quaternius' "Ultimate Gun Pack" (July 2019), CC0 1.0 Universal
 (https://opengameart.org/content/low-poly-guns-pack, https://quaternius.itch.io/50-lowpoly-guns):
-Pistol_4, Pistol_6, SubmachineGun_1, SubmachineGun_5, Shotgun_SawedOff, Shotgun_1, AssaultRifle_5,
-Bullpup_2, AssaultRifle2_2, SniperRifle_4, SniperRifle_3, Bullpup_3. Converted from OBJ with
-tools/import-guns.ts (flipped to barrel -X, rescaled, meshopt-compressed).
+SubmachineGun_3 (MP5), SubmachineGun_2 (MP7), AssaultRifle2_1 (M4A1), AssaultRifle2_2 (M110),
+AssaultRifle2_3 (M249), Shotgun_1 (M1014), Pistol_3 (M9A1), Accessories/Bayonet_2 (knife),
+Accessories/Silencer_2 (suppressor) and Accessories/Grip (vertical grip). Converted from OBJ with
+tools/import-guns.ts (flipped to barrel -X, rescaled, meshopt-compressed). Optics, bipods, the M249's
+stock and ammo box, lasers, flashlights and other attachments are modelled in code (src/render).
