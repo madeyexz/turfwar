@@ -4,7 +4,7 @@ import { loadMap } from '../../shared/maps';
 import type { MapDef } from '../../shared/maps/types';
 import { statsOf } from '../../shared/match/economy';
 import { ATTACKERS, TEAM_NAMES, TEAM_SHORT, type MatchState, type Soldier, type Team } from '../../shared/match/state';
-import { ATTACHMENTS, HEALTH, STAMINA, WEAPONS, type AttachmentCategory, type WeaponId } from '../../shared/weapons';
+import { ATTACHMENTS, ATTACHMENT_SLOTS, HEALTH, STAMINA, WEAPONS, type AttachmentCategory, type WeaponId } from '../../shared/weapons';
 import type { CareerStats } from '../game/link';
 import type { LocalPlayer } from '../game/player';
 
@@ -12,7 +12,7 @@ const TEAM_CSS = ['var(--aegis)', 'var(--crimson)'];
 const TEAM_HEX = ['#4aa8ff', '#ff5544'];
 /** Teammate name tags shown at once (nearest first). */
 const NAMETAG_MAX = 8;
-const CATEGORIES: AttachmentCategory[] = ['optic', 'tactical', 'mod', 'ammo'];
+const CATEGORIES: AttachmentCategory[] = ATTACHMENT_SLOTS;
 /** Crosshair styles chosen on the deploy screen (localStorage 'lawbreaker.crosshair'). */
 export type CrosshairStyle = 'classic' | 'dot' | 'circle' | 't';
 const CROSSHAIRS: CrosshairStyle[] = ['classic', 'dot', 'circle', 't'];

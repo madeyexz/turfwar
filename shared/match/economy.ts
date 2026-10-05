@@ -105,13 +105,15 @@ export function buy(state: MatchState, map: MapDef, s: Soldier | undefined, item
   return ok(w.name);
 }
 
-/** Fit an attachment to an owned weapon (anywhere, any time); it replaces that category's item. */
+/** Fit an attachment to an owned weapon (anywhere, any time); it replaces only the item in its own slot. */
 export function buyAttachment(state: MatchState, s: Soldier | undefined, weapon: WeaponId, id: AttachmentId): { ok: boolean; message: string } {
   if (!s || state.phase === 'ended') return no('Not in a match.');
   const a = ATTACHMENTS[id];
   if (!a || !s.owned.includes(weapon) || !fitsWeapon(a, weapon)) return no('That attachment does not fit.');
   const fitted = s.attachments[weapon] ?? {};
   if (fitted[a.category] === id || (a.id === 'irons' && !fitted.optic)) return no(`${a.name} already fitted.`);
+  // Iron sights are the default: switching back to them just takes the optic off, free.
+  if (a.id === 'irons') { const { optic: _, ...rest } = fitted; s.attachments[weapon] = rest; return ok(a.name); }
   const price = state.config.freeBuy ? 0 : attachmentPrice(a, weapon);
   if (s.money < price) return no('Not enough cash.');
   s.money -= price;

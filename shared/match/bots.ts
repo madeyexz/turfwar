@@ -271,7 +271,7 @@ export function updateBot(state: MatchState, ctx: SimContext, bot: Soldier, dt: 
   const forward = moveX * fx + moveZ * fz, strafe = moveX * rx + moveZ * rz;
   const input: MoveInput = {
     forward, strafe, yaw: bot.yaw, jump: brain.jump, crouch: brain.crouchLeft > 0,
-    sprint: !visible && len > 0.5 && forward > 0.7 && bot.reloadLeft <= 0 && bot.stamina > (bot.sprint ? 0 : STAMINA.tired),
+    sprint: !visible && len > 0.5 && forward > 0.7 && bot.stamina > (bot.sprint ? 0 : STAMINA.tired),
     ads: wantAds && visible, speed: w.speed,
   };
   brain.jump = false;

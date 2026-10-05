@@ -2,7 +2,7 @@ import type { BuyItem } from '../../shared/match/economy';
 import type { Soldier } from '../../shared/match/state';
 import {
   ATTACHMENTS, ATTACHMENT_IDS, GRENADE, HIGH_EXPLOSIVE, WEAPONS, attachmentPrice, fitsWeapon, weaponStats,
-  type AttachmentCategory, type AttachmentId, type Attachments, type WeaponClass, type WeaponDef, type WeaponId,
+  groupOf, type AttachmentGroup, type AttachmentId, type Attachments, type WeaponClass, type WeaponDef, type WeaponId,
 } from '../../shared/weapons';
 
 type Tab = 'primary' | 'secondary' | 'tactical' | 'attachments';
@@ -11,7 +11,8 @@ const TABS: { id: Tab; title: string }[] = [
 ];
 const PRIMARY: WeaponId[] = ['mp5', 'm4a1', 'm1014', 'm110', 'm249'];
 const SECONDARY: WeaponId[] = ['m9a1', 'mp7'];
-const CATEGORIES: { id: AttachmentCategory; title: string }[] = [
+/** Store sections; within Tactical and Mods every gadget has its own slot, so they stack. */
+const CATEGORIES: { id: AttachmentGroup; title: string }[] = [
   { id: 'optic', title: 'Optics' }, { id: 'tactical', title: 'Tactical' }, { id: 'mod', title: 'Mods' }, { id: 'ammo', title: 'Ammo' },
 ];
 const CLASS: Record<WeaponClass, string> = { melee: 'Melee', pistol: 'Pistol', smg: 'Submachine gun', rifle: 'Assault rifle', shotgun: 'Shotgun', sniper: 'Sniper rifle', lmg: 'Light machine gun' };
@@ -183,10 +184,11 @@ export class BuyMenu {
       const wid = this.pick!, fitted = me.attachments[wid] ?? {};
       for (const c of CATEGORIES) for (const id of ATTACHMENT_IDS) {
         const a = ATTACHMENTS[id];
-        if (a.category !== c.id || !fitsWeapon(a, wid)) continue;
-        const on = fitted[c.id] === id || (id === 'irons' && !fitted.optic);
+        if (groupOf(a.category) !== c.id || !fitsWeapon(a, wid)) continue;
+        const on = fitted[a.category] === id || (id === 'irons' && !fitted.optic);
         const price = cost(attachmentPrice(a, wid));
         const summary = changes(wid, fitted, id).list.slice(0, 2).map(x => `${x.text} ${x.short}`).join(' · ');
+        if (id === 'irons') { entries.push({ key: id, name: a.name, sub: 'Default · always available', group: c.title, price: 0, state: on ? 'fitted' : '', weapon: wid, attachment: id, disabled: on }); continue; }
         entries.push({ key: id, name: a.name, sub: on ? '' : summary, group: c.title, price, state: on ? 'fitted' : '', weapon: wid, attachment: id, disabled: on || short(price), reason: !on && short(price) ? 'Not enough cash' : undefined });
       }
     }
@@ -194,7 +196,7 @@ export class BuyMenu {
     if (!entries.some(e => e.key === this.selected[this.tab])) this.selected[this.tab] = (entries.find(e => !e.state) ?? entries[0])?.key;
     const sel = entries.find(e => e.key === this.selected[this.tab]);
     // ---- List ----
-    const tag = (e: Entry) => e.state === 'equipped' ? 'EQUIPPED' : e.state === 'owned' ? 'OWNED · equip free' : e.state === 'fitted' ? 'FITTED' : e.state === 'carried' ? 'CARRYING' : e.price ? money(e.price) : 'FREE';
+    const tag = (e: Entry) => e.state === 'equipped' ? 'EQUIPPED' : e.state === 'owned' ? 'OWNED · equip free' : e.state === 'fitted' ? (e.key === 'irons' ? 'DEFAULT' : 'FITTED') : e.state === 'carried' ? 'CARRYING' : e.price ? money(e.price) : 'FREE';
     let html = '';
     if (this.tab === 'attachments') {
       html += `<div class="picker">${owned.map(id => {
@@ -213,7 +215,7 @@ export class BuyMenu {
 
   /** Right panel: stat bars (with the current weapon's mark) and, for attachments, the stat changes. */
   private detail(e: Entry, me: Soldier) {
-    const action = e.state === 'equipped' ? 'Equipped' : e.state === 'fitted' ? 'Fitted' : e.state === 'carried' ? 'Carrying' : e.state === 'owned' ? 'Equip · free' : `Buy · ${e.price ? money(e.price) : 'free'}`;
+    const action = e.key === 'irons' ? (e.state ? 'In use (default)' : 'Use iron sights · free') : e.state === 'equipped' ? 'Equipped' : e.state === 'fitted' ? 'Fitted' : e.state === 'carried' ? 'Carrying' : e.state === 'owned' ? 'Equip · free' : `Buy · ${e.price ? money(e.price) : 'free'}`;
     const button = `${e.reason ? `<p class="why">${e.reason}</p>` : ''}<button type="button" class="buy" data-buy ${e.disabled ? 'disabled' : ''}>${action}</button>`;
     const bars = (w: WeaponDef, ref?: WeaponDef) => `<div class="bars">${BARS.map(b => `<div class="bar"><span>${b.name}</span><div class="track"><i style="width:${(b.value(w) * 100).toFixed(1)}%"></i>${ref && ref !== w ? `<u style="left:${(b.value(ref) * 100).toFixed(1)}%"></u>` : ''}</div><b>${b.label(w)}</b></div>`).join('')}</div>`;
     const facts = (w: WeaponDef) => `<dl><dt>Magazine</dt><dd>${w.magazine} + ${w.reserve}</dd><dt>Reload</dt><dd>${w.reload}s</dd><dt>Zoom</dt><dd>${round1(magnify(w))}×</dd><dt>Recoil</dt><dd>${round1(kick(w))}</dd><dt>Fire</dt><dd>${w.auto ? 'Auto' : 'Semi'}</dd></dl>`;
@@ -229,7 +231,7 @@ export class BuyMenu {
       const { base, next, list } = changes(e.weapon, fitted, e.attachment);
       const rows = list.map(c => `<li class="${c.up ? 'up' : 'down'}"><span>${c.name}</span><b>${c.text}</b></li>`).join('');
       const replaces = fitted[a.category] && fitted[a.category] !== e.attachment ? ` · replaces ${ATTACHMENTS[fitted[a.category]!].name}` : '';
-      return `<h3>${a.name}</h3><small>${CATEGORIES.find(c => c.id === a.category)!.title} · ${WEAPONS[e.weapon].name}${replaces}</small>${NOTES[e.attachment] ? `<p class="note">${NOTES[e.attachment]}</p>` : ''}<ul class="deltas">${rows || '<li><span>No stat change</span></li>'}</ul>${bars(next, base)}${button}`;
+      return `<h3>${a.name}</h3><small>${CATEGORIES.find(c => c.id === groupOf(a.category))!.title} · ${WEAPONS[e.weapon].name}${replaces}</small>${NOTES[e.attachment] ? `<p class="note">${NOTES[e.attachment]}</p>` : ''}<ul class="deltas">${rows || '<li><span>No stat change</span></li>'}</ul>${bars(next, base)}${button}`;
     }
     const id = e.item as WeaponId, w = weaponStats(id, me.attachments[id]);
     const current = weaponStats(me.weapons[w.slot as 0 | 1], me.attachments[me.weapons[w.slot as 0 | 1]]);

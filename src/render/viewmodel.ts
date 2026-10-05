@@ -1,6 +1,6 @@
 import * as THREE from 'three';
 import type { Assets } from '../assets';
-import { WEAPONS, WEAPON_IDS, type Attachments, type WeaponId } from '../../shared/weapons';
+import { ATTACHMENT_SLOTS, WEAPONS, WEAPON_IDS, type Attachments, type WeaponId } from '../../shared/weapons';
 import type { LocalPlayer } from '../game/player';
 import { curlFingers, orientHand, restorePose, solveArm, type Bones } from './rig';
 import { GUN_FIT, fitAttachments, overlayFor, vec, type Fitted, type Overlay } from './optics';
@@ -125,7 +125,7 @@ export class ViewModel {
 
   /** Show weapon `id` with its fitted attachments (rebuilt when they change). */
   setWeapon(id: WeaponId, attachments: Attachments = {}, instant = false) {
-    const key = `${id}|${attachments.optic ?? ''}|${attachments.tactical ?? ''}|${attachments.mod ?? ''}|${attachments.ammo ?? ''}`;
+    const key = `${id}|${ATTACHMENT_SLOTS.map(c => attachments[c] ?? '').join('|')}`;
     let fit = this.fitted.get(key);
     if (!fit) {
       fit = fitAttachments(this.assets.weapons, id, attachments, 'first');
@@ -163,7 +163,7 @@ export class ViewModel {
     this.kickPitch.velocity += 3.4 * strength * (0.8 + Math.random() * 0.4);
     this.kickRoll.velocity += (Math.random() - 0.5) * 3 * strength;
     // A suppressor hides the muzzle flash.
-    this.flashLeft = this.attachments.tactical === 'suppressor' ? 0 : 0.05;
+    this.flashLeft = this.attachments.muzzle === 'suppressor' ? 0 : 0.05;
     this.flash.rotation.z = Math.random() * Math.PI;
     this.flash.scale.setScalar((0.8 + Math.random() * 0.5) * (w.class === 'shotgun' || w.class === 'lmg' ? 1.3 : 1));
   }
@@ -173,7 +173,7 @@ export class ViewModel {
     const fit = GUN_FIT[this.current], hold = HOLD[this.current], knife = fit.kind === 'knife', pistol = fit.kind === 'pistol';
     this.equipT = Math.min(1, this.equipT + dt / Math.max(0.15, p.weapon.equipTime));
     const speed = Math.min(1.4, p.speed() / 6);
-    const sprint = Math.max(0, Math.min(1, this.sprint.update(p.sprinting ? 1 : 0, dt)));
+    const sprint = Math.max(0, Math.min(1, this.sprint.update(p.sprinting ? (p.reloadLeft > 0 ? 0.35 : 1) : 0, dt)));
     // Arming or disarming the bomb lowers the weapon out of the way.
     const lowered = Math.max(0, Math.min(1, this.lower.update(p.using ? 1 : 0, dt)));
     // Coming out of a sprint, the weapon must finish lowering before the sights come up.

@@ -1,5 +1,5 @@
 // Development-only soldier pose sheet: /dev/soldier.html?weapon=m4a1&att=holo,flashlight&only=idle&cam=x,y,z&look=x,y,z&marks
-// Two rows (SWAT front, Militia behind). Keys: 1–8 weapon · O optic · T tactical · M mod · A ammo · X clear · F fire/stab
+// Two rows (SWAT front, Militia behind). Keys: 1–8 weapon · O optic · S suppressor · L laser · T torch · N counter · M mag · K pad · A ammo · X clear · F fire/stab
 import * as THREE from 'three';
 import { loadAssets } from '../src/assets';
 import { THEMES } from '../src/render/materials';

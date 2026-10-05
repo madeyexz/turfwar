@@ -185,7 +185,7 @@ export class LocalPlayer {
       forward: Number(input!.down('KeyW')) - Number(input!.down('KeyS')),
       strafe: Number(input!.down('KeyD')) - Number(input!.down('KeyA')),
       yaw: this.yaw, jump: jumpKey, crouch: input!.down('KeyC') || input!.down('ControlLeft'),
-      sprint: sprintKey && canSprint && this.sprintBlock <= 0 && this.reloadLeft <= 0,
+      sprint: sprintKey && canSprint && this.sprintBlock <= 0,
       ads: (input!.aim && w.class !== 'melee' && this.reloadLeft <= 0 && this.switchLeft < 0.1) || this.binoculars,
       speed: w.speed * (this.tired ? 0.8 : 1),
     } : { forward: 0, strafe: 0, yaw: this.yaw, jump: false, crouch: false, sprint: false, ads: false };

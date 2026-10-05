@@ -8,7 +8,7 @@ import type RosterTable from '../module_bindings/roster_table';
 import { loadMap } from '../../shared/maps/index';
 import { roundLength } from '../../shared/match/sim';
 import { decodeFrame, type DecodedFrame, type FramePose } from '../../shared/match/frame';
-import { DEFAULT_WEAPONS, STAMINA, WEAPONS, weaponStats, type AttachmentId, type Attachments, type Slot, type WeaponId } from '../../shared/weapons';
+import { DEFAULT_WEAPONS, STAMINA, WEAPONS, normalizeAttachments, weaponStats, type AttachmentId, type Attachments, type Slot, type WeaponId } from '../../shared/weapons';
 import { newRoundStats, type BuyItem } from '../../shared/match/economy';
 
 type RosterRow = Infer<typeof RosterTable>;
@@ -37,7 +37,7 @@ export function onlineAvailable(): { ok: boolean; reason: string } {
 
 const weaponOr = (id: string, fallback: WeaponId): WeaponId => (id in WEAPONS && id !== 'knife' ? id as WeaponId : fallback);
 const gearOf = (json: string): { owned: WeaponId[]; attachments: Partial<Record<WeaponId, Attachments>> } => {
-  try { const g = JSON.parse(json); return { owned: g.owned ?? [...DEFAULT_WEAPONS], attachments: g.attachments ?? {} }; } catch { return { owned: [...DEFAULT_WEAPONS], attachments: {} }; }
+  try { const g = JSON.parse(json); return { owned: g.owned ?? [...DEFAULT_WEAPONS], attachments: Object.fromEntries(Object.entries(g.attachments ?? {}).map(([w, a]) => [w, normalizeAttachments(a as Record<string, string>)])) }; } catch { return { owned: [...DEFAULT_WEAPONS], attachments: {} }; }
 };
 
 /** Rebuild a shared Soldier from its roster row and its pose in the latest frame. */

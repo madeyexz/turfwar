@@ -20,15 +20,15 @@ export function cycle(weapon: WeaponId, att: Attachments, category: AttachmentCa
   return out;
 }
 
-/** Keys: 1–8 weapon, O optic, T tactical, M mod, A ammo, X clear. Returns the new state, or undefined for other keys. */
+/** Keys: 1–8 weapon, O optic, S suppressor, L laser, T torch, N ammo counter, M magazine, K recoil pad, A ammo, X clear. Returns the new state, or undefined for other keys. */
 export function gearKey(e: KeyboardEvent, weapon: WeaponId, att: Attachments): { weapon: WeaponId; att: Attachments } | undefined {
   const n = Number(e.key);
   if (n >= 1 && n <= WEAPON_IDS.length) return { weapon: WEAPON_IDS[n - 1], att: {} };
-  const category = ({ o: 'optic', t: 'tactical', m: 'mod', a: 'ammo' } as Record<string, AttachmentCategory>)[e.key.toLowerCase()];
+  const category = ({ o: 'optic', s: 'muzzle', l: 'laser', t: 'light', n: 'counter', m: 'magazine', k: 'stock', a: 'ammo' } as Record<string, AttachmentCategory>)[e.key.toLowerCase()];
   if (category) return { weapon, att: cycle(weapon, att, category) };
   if (e.key.toLowerCase() === 'x') return { weapon, att: {} };
   return undefined;
 }
 
 export const describe = (weapon: WeaponId, att: Attachments) => `${weapon}  ${Object.values(att).join(' + ') || 'no attachments'}`;
-export const KEYS = '1-8 weapon · O optic · T tactical · M mod · A ammo · X clear';
+export const KEYS = '1-8 weapon · O optic · S suppressor · L laser · T torch · N counter · M mag · K pad · A ammo · X clear';

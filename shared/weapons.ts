@@ -53,7 +53,13 @@ export const DEFAULT_WEAPONS: [WeaponId, WeaponId] = ['mp5', 'm9a1'];
 
 // ---- Attachments ---------------------------------------------------------------------------
 
-export type AttachmentCategory = 'optic' | 'tactical' | 'mod' | 'ammo';
+/** Where an attachment mounts: one item per slot, so gadgets in different slots stack on one gun. */
+export type AttachmentCategory = 'optic' | 'muzzle' | 'laser' | 'light' | 'counter' | 'magazine' | 'stock' | 'ammo';
+/** Store grouping (BeGone's four attachment categories). */
+export type AttachmentGroup = 'optic' | 'tactical' | 'mod' | 'ammo';
+export const ATTACHMENT_SLOTS: AttachmentCategory[] = ['optic', 'muzzle', 'laser', 'light', 'counter', 'magazine', 'stock', 'ammo'];
+export const groupOf = (c: AttachmentCategory): AttachmentGroup =>
+  c === 'optic' || c === 'ammo' ? c : c === 'magazine' || c === 'stock' ? 'mod' : 'tactical';
 export type AttachmentId =
   | 'irons' | 'reflex' | 'holo' | 'acog' | 'x4' | 'x6'
   | 'ammoCounter' | 'laser' | 'flashlight' | 'suppressor'
@@ -79,15 +85,15 @@ export const ATTACHMENTS: Record<AttachmentId, AttachmentDef> = {
   acog: { id: 'acog', name: 'ACOG Scope', category: 'optic', price: 1100, delta: { zoomFov: -8, zoomAccuracy: 2.5, move: -1 }, per: { sniper: { zoomAccuracy: 1.8 }, mp5: { zoomRecoil: -0.3 } }, not: ['m9a1'] },
   x4: { id: 'x4', name: 'Zoom x4 Scope', category: 'optic', price: 600, delta: { zoomFov: -10, zoomAccuracy: 3, move: -1 }, only: ['m9a1'] },
   x6: { id: 'x6', name: 'Zoom x6 Scope', category: 'optic', price: 1200, delta: { zoomFov: -12, zoomAccuracy: 2, move: -2 }, only: ['m110'] },
-  ammoCounter: { id: 'ammoCounter', name: 'Ammo Counter', category: 'tactical', price: 200, delta: {} },
-  laser: { id: 'laser', name: 'Laser Sight', category: 'tactical', price: 800, delta: { accuracy: 1.5 } },
-  flashlight: { id: 'flashlight', name: 'Flashlight', category: 'tactical', price: 600, delta: { recoil: 2, zoomRecoil: 1 } },
+  ammoCounter: { id: 'ammoCounter', name: 'Ammo Counter', category: 'counter', price: 200, delta: {} },
+  laser: { id: 'laser', name: 'Laser Sight', category: 'laser', price: 800, delta: { accuracy: 1.5 } },
+  flashlight: { id: 'flashlight', name: 'Flashlight', category: 'light', price: 600, delta: { recoil: 2, zoomRecoil: 1 } },
   suppressor: {
-    id: 'suppressor', name: 'Suppressor', category: 'tactical', price: 1100, delta: { recoil: -1, zoomRecoil: -0.5, head: -4, body: -4, limb: -4 },
+    id: 'suppressor', name: 'Suppressor', category: 'muzzle', price: 1100, delta: { recoil: -1, zoomRecoil: -0.5, head: -4, body: -4, limb: -4 },
     per: { mp7: { price: 1000, recoil: -0.5, zoomRecoil: -0.25, head: -2, body: -2, limb: -2 }, m9a1: { price: 600, recoil: -0.5, zoomRecoil: -0.25, head: -3, body: -3, limb: -3 } },
   },
-  extendedClip: { id: 'extendedClip', name: 'Extended Clip', category: 'mod', price: 900, delta: { magazine: 5, recoil: 0.5, move: -3 }, per: { sniper: { magazine: 1 }, shotgun: { magazine: 2 }, lmg: { magazine: 12 } } },
-  recoilPad: { id: 'recoilPad', name: 'Recoil Pad', category: 'mod', price: 1200, delta: { recoil: -1, zoomRecoil: -0.5, move: -2 }, per: { shotgun: { recoil: -10, zoomRecoil: -5 } } },
+  extendedClip: { id: 'extendedClip', name: 'Extended Clip', category: 'magazine', price: 900, delta: { magazine: 5, recoil: 0.5, move: -3 }, per: { sniper: { magazine: 1 }, shotgun: { magazine: 2 }, lmg: { magazine: 12 } } },
+  recoilPad: { id: 'recoilPad', name: 'Recoil Pad', category: 'stock', price: 1200, delta: { recoil: -1, zoomRecoil: -0.5, move: -2 }, per: { shotgun: { recoil: -10, zoomRecoil: -5 } } },
   explosiveAmmo: {
     id: 'explosiveAmmo', name: 'Explosive Ammo', category: 'ammo', price: 1600, delta: { head: 10, body: 3, limb: 3, magazine: -5, recoil: 1, zoomRecoil: 0.5 },
     per: { sniper: { magazine: -2, head: 15, body: 5, limb: 5 }, shotgun: { magazine: -2, head: 5, body: 2, limb: 2 }, mp5: { magazine: -10 }, m4a1: { magazine: -10 }, lmg: { magazine: -25 } },
@@ -99,8 +105,16 @@ export const ATTACHMENTS: Record<AttachmentId, AttachmentDef> = {
 };
 export const ATTACHMENT_IDS = Object.keys(ATTACHMENTS) as AttachmentId[];
 
-/** One attachment per category on a weapon ('' = none; optics default to iron sights). */
+/** One attachment per slot on a weapon (optics default to iron sights). */
 export type Attachments = Partial<Record<AttachmentCategory, AttachmentId>>;
+
+/** Re-slot a saved attachment set (older saves grouped several gadgets under one key). */
+export function normalizeAttachments(a: Record<string, string | undefined> = {}): Attachments {
+  const out: Attachments = {};
+  for (const id of Object.values(a)) if (id && id in ATTACHMENTS) out[ATTACHMENTS[id as AttachmentId].category] = id as AttachmentId;
+  return out;
+}
+const attachKey = (a: Attachments) => ATTACHMENT_SLOTS.map(c => a[c] ?? '').join('|');
 
 export function fitsWeapon(a: AttachmentDef, w: WeaponId) {
   if (w === 'knife') return false;
@@ -161,7 +175,7 @@ function derive(b: Base, d: Required<Delta>, attachments: Attachments): WeaponDe
     recoil: { pitch: kick * 0.45, adsPitch: zkick * 0.45, yaw: kick * 0.2, pattern: [0.3, -0.35, 0.25, -0.2, 0.4, -0.15], recover: 8, viewPunch: Math.min(4, kick * 0.35) },
     adsTime: melee ? 0.1 : b.class === 'lmg' ? 0.28 : b.class === 'sniper' ? 0.24 : b.class === 'pistol' ? 0.14 : 0.18,
     botRange: b.botRange,
-    attachments, suppressed: attachments.tactical === 'suppressor',
+    attachments, suppressed: attachments.muzzle === 'suppressor',
   };
 }
 
@@ -170,7 +184,7 @@ const ZERO: Required<Delta> = { zoomFov: 0, zoomAccuracy: 0, accuracy: 0, recoil
 
 /** Stats of `id` with its fitted attachments (cached). Iron sights count when no optic is fitted. */
 export function weaponStats(id: WeaponId, attachments: Attachments = {}): WeaponDef {
-  const key = `${id}|${attachments.optic ?? ''}|${attachments.tactical ?? ''}|${attachments.mod ?? ''}|${attachments.ammo ?? ''}`;
+  const key = `${id}|${attachKey(attachments)}`;
   let w = cache.get(key);
   if (w) return w;
   const b = BASE[id];

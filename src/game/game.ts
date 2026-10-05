@@ -1,7 +1,7 @@
 import * as THREE from 'three';
 import { hitShape, raycastSoldier } from '../../shared/hitbox';
 import { loadMap } from '../../shared/maps/index';
-import type { Vec3 } from '../../shared/math';
+import { wrapAngle, type Vec3 } from '../../shared/math';
 import { eyeHeight } from '../../shared/movement';
 import { ATTACKERS, TEAM_NAMES, type MatchEvent, type MatchState, type Soldier } from '../../shared/match/state';
 import { pelletCone, pelletDirs, weaponStats, type HitZone, type WeaponId } from '../../shared/weapons';
@@ -77,7 +77,31 @@ export class Game {
   private deathCam = new THREE.Vector3();
   /** Dead: the soldier whose eyes we watch (the killer first; right click cycles). */
   private spectating = -1;
+  /** First-person stand-in for the watched soldier: drives the view model like the local player. */
+  private watched = new LocalPlayer();
+  private watchedId = -1;
+  private lastWatchedYaw = 0;
+  private lastWatchedPitch = 0;
+  /** View model with the other team's arms, built the first time we watch an enemy. */
+  private otherViewmodel?: ViewModel;
   private lastStepPhase = 0;
+
+  /** Rebuild a view model only when the weapon or its attachments change. */
+  private showWeapon(vm: ViewModel, p: LocalPlayer) {
+    const held = p.slot === 2 ? 'knife' : p.weapons[p.slot];
+    const shown = `${vm === this.viewmodel ? 'own' : 'other'}|${held}|${JSON.stringify(p.attachments[held] ?? {})}`;
+    if (shown !== this.shownWeapon) { vm.setWeapon(held, p.attachments[held] ?? {}, true); this.shownWeapon = shown; }
+  }
+
+  private viewmodelFor(team: number) {
+    if (team === this.myTeam) return this.viewmodel;
+    if (!this.otherViewmodel) {
+      this.otherViewmodel = new ViewModel(this.assets, team);
+      this.renderer.viewCamera.add(this.otherViewmodel.root);
+      this.renderer.camera.add(this.otherViewmodel.torch, this.otherViewmodel.torch.target);
+    }
+    return this.otherViewmodel;
+  }
   private running = true;
   private myTeam = 0;
   onExit?: () => void;
@@ -128,6 +152,7 @@ export class Game {
     for (const r of this.remotes.values()) { r.view.dispose(); r.view.gun.removeFromParent(); }
     this.viewmodel.root.removeFromParent();
     this.viewmodel.torch.removeFromParent(); this.viewmodel.torch.target.removeFromParent();
+    for (const vm of [this.otherViewmodel]) if (vm) { vm.root.removeFromParent(); vm.torch.removeFromParent(); vm.torch.target.removeFromParent(); }
     this.input.dispose();
     this.hud.released(false, false);
     document.exitPointerLock?.();
@@ -182,9 +207,7 @@ export class Game {
       if (me.corrections !== this.corrections) { if (this.wasAlive && me.alive) this.player.correct(me); this.corrections = me.corrections; }
       this.wasAlive = me.alive;
     }
-    const held = this.player.slot === 2 ? 'knife' : this.player.weapons[this.player.slot];
-    const shown = `${held}|${JSON.stringify(this.player.attachments[held] ?? {})}`;
-    if (shown !== this.shownWeapon) { this.viewmodel.setWeapon(held, this.player.attachments[held] ?? {}, !this.shownWeapon); this.shownWeapon = shown; }
+    if (this.player.alive) this.showWeapon(this.viewmodel, this.player);
 
     // ---- Bomb: hold E still on a site ----
     const site = sabotage && me?.alive ? this.siteHere(state) : -1;
@@ -288,13 +311,13 @@ export class Game {
       this.renderer.viewCamera.updateProjectionMatrix();
       // update() also decides visibility: a full-zoom scope or binoculars hide the weapon.
       this.viewmodel.update(dt, this.player, look);
+      if (this.otherViewmodel) { this.otherViewmodel.root.visible = false; this.otherViewmodel.torch.intensity = 0; }
       this.hud.spectate(undefined, 0);
-    } else {
-      this.spectate(state, me, positions, dt, active);
-      this.viewmodel.root.visible = false;
-    }
+    } else this.spectate(state, me, positions, dt, active);
     const mag = this.player.magnification;
-    this.hud.scope(this.player.alive && this.viewmodel.scopeVisible, mag, this.viewmodel.overlay);
+    const watching = !this.player.alive && this.spectating >= 0 && this.watched.alive;
+    const vm = watching ? this.viewmodelFor(this.watched.team) : this.viewmodel;
+    this.hud.scope((this.player.alive || watching) && vm.scopeVisible, watching ? this.watched.magnification : mag, vm.overlay);
     this.hud.binoculars(this.player.alive && this.player.binoculars && this.player.ads > 0.5, mag);
     this.hud.zoomTag(this.player.alive && !this.player.binoculars && !this.viewmodel.overlay && this.player.ads > 0.85 && mag >= 1.5 ? mag : undefined);
     if (render) this.renderer.render(this.time);
@@ -363,11 +386,31 @@ export class Game {
     // The watched soldier died: follow a teammate, then anyone.
     if (!target && living.length) { target = living.find(s => s.team === me?.team) ?? living[0]; this.spectating = target.id; }
     const r = target ? this.remotes.get(target.id) : undefined;
+    for (const vm of [this.viewmodel, this.otherViewmodel]) if (vm) { vm.root.visible = false; vm.torch.intensity = 0; }
+    this.watched.alive = false;
     if (target && r) {
+      // First person through their eyes: their gun, attachments, aim, sprint, reload and shots.
+      const w = this.watched;
+      if (w.team !== target.team || this.watchedId !== target.id) { w.team = target.team; this.watchedId = target.id; w.ads = 0; this.shownWeapon = ''; }
+      w.alive = true; w.slot = target.weapon; w.weapons = target.weapons; w.attachments = target.attachments;
+      w.m = target.m; w.sprinting = target.sprint; w.using = target.using; w.binoculars = false; w.throwLeft = 0;
+      w.reloadTotal = w.weapon.reload; w.reloadLeft = target.reloadLeft;
+      w.ads = Math.max(0, Math.min(1, w.ads + (target.ads ? 1 : -1) * dt / w.weapon.adsTime));
+      if (target.m.grounded) w.bobPhase += dt * Math.hypot(target.m.vx, target.m.vz) * (target.sprint ? 1.5 : 1.75);
       cam.position.set(r.pos.x, r.pos.y + eyeHeight({ crouch: r.crouch }), r.pos.z);
       cam.rotation.set(r.pitch, r.yaw, 0, 'YXZ');
       r.view.root.visible = false; r.view.gun.visible = false;
+      const vm = this.viewmodelFor(target.team);
+      this.showWeapon(vm, w);
+      const look = { x: wrapAngle(this.lastWatchedYaw - r.yaw) * 300, y: (r.pitch - this.lastWatchedPitch) * -300 };
+      this.lastWatchedYaw = r.yaw; this.lastWatchedPitch = r.pitch;
+      vm.update(dt, w, look);
+      const fov = settings.fov + (w.aimFov - settings.fov) * w.ads + (w.sprinting ? 6 : 0);
+      cam.fov += (fov - cam.fov) * Math.min(1, dt * 14); cam.updateProjectionMatrix();
+      this.renderer.viewCamera.fov = 58 - w.ads * (w.weapon.class === 'sniper' ? 0 : 10);
+      this.renderer.viewCamera.updateProjectionMatrix();
       this.hud.spectate(target.name, target.team);
+      return;
     } else {
       this.deathCam.y += (this.player.m.y + 4 - this.deathCam.y) * Math.min(1, dt * 1.5);
       cam.position.lerp(this.deathCam, Math.min(1, dt * 3));
@@ -461,6 +504,10 @@ export class Game {
         const r = this.remotes.get(e.shooter), shooter = find(e.shooter);
         const cam = this.renderer.camera.position;
         const shooterDistance = Math.hypot(e.from.x - cam.x, e.from.y - cam.y, e.from.z - cam.z);
+        if (!this.player.alive && e.shooter === this.spectating && this.watched.alive) {
+          const vm = this.viewmodelFor(this.watched.team), now = performance.now();
+          if (now - (this.lastReport.get(e.shooter) ?? -1e9) >= 40) vm.fire();
+        }
         if (e.weapon === 'knife') { r?.view.shoot(); if (shooterDistance < 12) this.audio.knife(e.hit > 0); break; }
         const suppressed = !!shooter && weaponStats(e.weapon, shooter.attachments[e.weapon]).suppressed;
         // A shotgun blast arrives as one event per pellet: one report and muzzle flash per trigger pull.

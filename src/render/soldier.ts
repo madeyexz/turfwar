@@ -5,7 +5,7 @@ import * as SkeletonUtils from 'three/examples/jsm/utils/SkeletonUtils.js';
 import type { Assets } from '../assets';
 import { dirFromAngles } from '../../shared/math';
 import { curlFingers, orientHand, restorePose, rotateWorld, snapshotPose, solveArm } from './rig';
-import { WEAPONS, type Attachments, type WeaponId } from '../../shared/weapons';
+import { ATTACHMENT_SLOTS, WEAPONS, type Attachments, type WeaponId } from '../../shared/weapons';
 import { GUN_FIT, fitAttachments, vec, type Fitted } from './optics';
 
 /**
@@ -203,7 +203,7 @@ const LOD_INTERVAL = [1, 2, 4, 8] as const;
 
 const up = new THREE.Vector3(0, 1, 0);
 const v1 = new THREE.Vector3(), v2 = new THREE.Vector3(), v3 = new THREE.Vector3(), q1 = new THREE.Quaternion(), q2 = new THREE.Quaternion();
-const attachKey = (a: Attachments = {}) => `${a.optic ?? ''}|${a.tactical ?? ''}|${a.mod ?? ''}|${a.ammo ?? ''}`;
+const attachKey = (a: Attachments = {}) => ATTACHMENT_SLOTS.map(c => a[c] ?? '').join('|');
 
 /** A fully animated third-person soldier (remote players and bots). */
 export class SoldierView {
@@ -288,7 +288,7 @@ export class SoldierView {
     this.fit = fit;
     this.currentGun = id;
     this.muzzle.position.copy(fit.muzzle);
-    this.suppressed = attachments?.tactical === 'suppressor';
+    this.suppressed = attachments?.muzzle === 'suppressor';
   }
 
   hit(fromLeft: boolean) { this.flinch = 1; this.flinchDir = fromLeft ? 1 : -1; }

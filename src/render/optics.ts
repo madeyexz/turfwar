@@ -506,8 +506,7 @@ export function fitAttachments(weapons: Map<string, THREE.Object3D>, id: WeaponI
   if (fit.kind === 'knife') return { group, sightLine: 0, muzzle };
   const optic = opticModel(weapons, id, (att.optic as OpticId | undefined) ?? 'irons');
   if (optic.group.children.length) group.add(optic.group.clone());
-  const t = att.tactical;
-  if (t === 'suppressor') {
+  if (att.muzzle === 'suppressor') {
     const can = weapons.get('Acc_Suppressor')!.clone();
     can.scale.set(fit.bore, fit.bore * 1.55, fit.bore * 1.55);
     can.position.copy(muzzle).x += 0.012;
@@ -515,21 +514,26 @@ export function fitAttachments(weapons: Map<string, THREE.Object3D>, id: WeaponI
     muzzle.x -= 0.22 * fit.bore - 0.01;
   }
   let laser: THREE.Object3D | undefined, torch: THREE.Object3D | undefined;
-  if (t === 'laser' || t === 'flashlight') {
-    const m = t === 'laser' ? laserModule(view) : torchModule(view);
-    const [x, y, z] = fit.rail;
+  const [x, y, z] = fit.rail;
+  if (att.laser === 'laser') {
     // Long guns: on the left side rail (facing the camera in first person); pistols: under the dust cover.
-    m.group.position.set(x, z ? y : y - (t === 'laser' ? 0.012 : 0.016), z ? z + (t === 'laser' ? 0.011 : 0.014) : 0);
-    group.add(m.group);
-    if (t === 'laser') laser = m.emitter; else torch = m.emitter;
+    const m = laserModule(view);
+    m.group.position.set(x, z ? y : y - 0.012, z ? z + 0.011 : 0);
+    group.add(m.group); laser = m.emitter;
   }
-  if (t === 'ammoCounter') {
+  if (att.light === 'flashlight') {
+    // With a laser fitted the light takes the right rail (pistols: further forward under the frame).
+    const m = torchModule(view), both = !!laser;
+    m.group.position.set(x + (both && !z ? 0.034 : 0), z ? y : y - 0.016, z ? (both ? -(z + 0.014) : z + 0.014) : 0);
+    group.add(m.group); torch = m.emitter;
+  }
+  if (att.counter === 'ammoCounter') {
     const side = fit.kind === 'pistol' ? 0.017 : 0.027, at = new THREE.Vector3(fit.mag[0] + 0.07, fit.irons - (fit.kind === 'pistol' ? 0.06 : 0.075), side);
     group.add(mesh(new THREE.BoxGeometry(0.034, 0.02, 0.008), M.housing, at.x, at.y, at.z));
     group.add(mesh(new THREE.PlaneGeometry(0.026, 0.012), M.counter, at.x, at.y, at.z + 0.0042));
   }
   const c = fit.clip;
-  if (att.mod === 'extendedClip') {
+  if (att.magazine === 'extendedClip') {
     if (c.tube) group.add(mesh(new THREE.CylinderGeometry(0.0135, 0.0135, c.w, 12).rotateZ(Math.PI / 2), M.housing, c.at[0] - c.w / 2, c.at[1], c.at[2]));
     else {
       const ext = new THREE.Group();
@@ -540,7 +544,7 @@ export function fitAttachments(weapons: Map<string, THREE.Object3D>, id: WeaponI
       group.add(ext);
     }
   }
-  if (att.mod === 'recoilPad' && fit.butt) group.add(mesh(new THREE.BoxGeometry(0.022, fit.butt[2], 0.05), M.rubber, fit.butt[0] + 0.009, fit.butt[1], 0));
+  if (att.stock === 'recoilPad' && fit.butt) group.add(mesh(new THREE.BoxGeometry(0.022, fit.butt[2], 0.05), M.rubber, fit.butt[0] + 0.009, fit.butt[1], 0));
   if (att.ammo === 'explosiveAmmo' || att.ammo === 'incendiaryAmmo') {
     // A coloured band on the magazine (the shotgun's on its tube) marks the special rounds.
     const band = mesh(new THREE.BoxGeometry(c.tube ? 0.012 : c.w * 1.04, c.tube ? 0.03 : 0.01, c.d * 1.06 + (c.tube ? 0.004 : 0)), M[att.ammo]);

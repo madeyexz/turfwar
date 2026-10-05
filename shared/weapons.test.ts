@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import {
-  ATTACHMENTS, ATTACHMENT_IDS, DEFAULT_WEAPONS, HEALTH, WEAPONS, WEAPON_IDS, attachmentPrice, fitsWeapon, weaponStats, zoneDamage,
+  ATTACHMENTS, ATTACHMENT_IDS, ATTACHMENT_SLOTS, DEFAULT_WEAPONS, HEALTH, WEAPONS, WEAPON_IDS, attachmentPrice, fitsWeapon, normalizeAttachments, weaponStats, zoneDamage,
 } from './weapons';
 
 const all = Object.values(WEAPONS);
@@ -47,20 +47,25 @@ describe('BeGone roster', () => {
 });
 
 describe('attachments', () => {
-  it('one item per category, priced, fitting at least one weapon', () => {
+  it('one item per slot, priced, fitting at least one weapon', () => {
     for (const id of ATTACHMENT_IDS) {
       const a = ATTACHMENTS[id];
-      expect(['optic', 'tactical', 'mod', 'ammo']).toContain(a.category);
+      expect(ATTACHMENT_SLOTS).toContain(a.category);
       expect(WEAPON_IDS.some(w => w !== 'knife' && fitsWeapon(a, w)), id).toBe(true);
     }
   });
 
   it('change stats when fitted', () => {
-    expect(weaponStats('m4a1', { mod: 'extendedClip' }).magazine).toBeGreaterThan(WEAPONS.m4a1.magazine);
-    expect(weaponStats('m4a1', { tactical: 'suppressor' }).suppressed).toBe(true);
+    expect(weaponStats('m4a1', { magazine: 'extendedClip' }).magazine).toBeGreaterThan(WEAPONS.m4a1.magazine);
+    expect(weaponStats('m4a1', { muzzle: 'suppressor' }).suppressed).toBe(true);
     expect(weaponStats('m4a1', { optic: 'acog' }).zoom).toBeLessThan(WEAPONS.m4a1.zoom); // zoom is the FOV fraction
-    expect(weaponStats('m4a1', { mod: 'recoilPad' }).recoil.pitch).toBeLessThanOrEqual(WEAPONS.m4a1.recoil.pitch);
+    expect(weaponStats('m4a1', { stock: 'recoilPad' }).recoil.pitch).toBeLessThanOrEqual(WEAPONS.m4a1.recoil.pitch);
     expect(attachmentPrice(ATTACHMENTS.suppressor, 'mp7')).toBeGreaterThan(0);
     expect(fitsWeapon(ATTACHMENTS.acog, 'knife')).toBe(false);
+    // Gadgets in different slots stack on one gun.
+    const all = weaponStats('m4a1', { optic: 'acog', muzzle: 'suppressor', laser: 'laser', light: 'flashlight', counter: 'ammoCounter', magazine: 'extendedClip', stock: 'recoilPad' });
+    expect(all.suppressed).toBe(true);
+    expect(all.magazine).toBeGreaterThan(WEAPONS.m4a1.magazine);
+    expect(normalizeAttachments({ tactical: 'laser', mod: 'recoilPad' })).toEqual({ laser: 'laser', stock: 'recoilPad' });
   });
 });

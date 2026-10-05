@@ -1,6 +1,6 @@
 // Development-only first-person weapon preview:
 // /dev/viewmodel.html?weapon=m4a1&att=acog,laser&ads=0&sprint=0&reload=0&team=0&slash=0.4&use=1&center&inspect&night
-// Keys: 1–8 weapon · O optic · T tactical · M mod · A ammo · X clear · F fire · R reload · Space aim · U use
+// Keys: 1–8 weapon · O optic · S suppressor · L laser · T torch · N counter · M mag · K pad · A ammo · X clear · F fire · R reload · Space aim · U use
 import * as THREE from 'three';
 import { loadAssets } from '../src/assets';
 import { LocalPlayer } from '../src/game/player';

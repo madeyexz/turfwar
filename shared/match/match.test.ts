@@ -393,6 +393,9 @@ describe('store and cash', () => {
     expect(buyAttachmentFor(state, a.id, 'mp5', 'extendedClip').ok).toBe(true);
     expect(a.money).toBeLessThan(before);
     expect(weaponStats('mp5', a.attachments.mp5).magazine).toBeGreaterThan(WEAPONS.mp5.magazine);
+    // Gadgets stack: a laser, a flashlight and a suppressor together, the optic kept.
+    for (const id of ['laser', 'flashlight', 'suppressor'] as const) expect(buyAttachmentFor(state, a.id, 'mp5', id).ok).toBe(true);
+    expect(a.attachments.mp5).toMatchObject({ optic: 'holo', laser: 'laser', light: 'flashlight', muzzle: 'suppressor', magazine: 'extendedClip' });
   });
 
   it('the M67 is limited to one and High Explosive is an upgrade', () => {

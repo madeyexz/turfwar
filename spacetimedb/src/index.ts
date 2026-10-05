@@ -10,7 +10,7 @@ import {
 import {
   ONLINE_CONFIG, type BombState, type BotBrain, type MatchEvent, type MatchState, type Mode, type RoundStats, type Soldier, type Team,
 } from '../../shared/match/state';
-import { ATTACHMENTS, DEFAULT_WEAPONS, STAMINA, WEAPONS, type AttachmentId, type Attachments, type Slot, type WeaponId } from '../../shared/weapons';
+import { ATTACHMENTS, DEFAULT_WEAPONS, STAMINA, WEAPONS, normalizeAttachments, type AttachmentId, type Attachments, type Slot, type WeaponId } from '../../shared/weapons';
 import { newRoundStats, type BuyItem } from '../../shared/match/economy';
 import { BODY_RADIUS, type Body } from '../../shared/world';
 
@@ -163,7 +163,8 @@ function soldierFromRow(r: SoldierRow, brain?: BotBrain): Soldier {
     id: r.id, name: r.name, team: r.team as Team, bot: r.bot,
     m: { x: r.x, y: r.y, z: r.z, vx: r.vx, vy: r.vy, vz: r.vz, grounded: r.grounded, crouch: r.crouch, slideTime: r.slideTime, slideCooldown: r.slideCooldown, airTime: r.airTime, prevCrouchInput: r.prevCrouch, prevJumpInput: r.prevJump },
     yaw: r.yaw, pitch: r.pitch, alive: r.alive, health: r.health, weapon: slotOf(r.weapon), weapons,
-    owned: gear.owned?.filter(id => id in WEAPONS) ?? [...DEFAULT_WEAPONS], attachments: gear.attachments ?? {},
+    owned: gear.owned?.filter(id => id in WEAPONS) ?? [...DEFAULT_WEAPONS],
+    attachments: Object.fromEntries(Object.entries(gear.attachments ?? {}).map(([w, a]) => [w, normalizeAttachments(a)])),
     ammo: [r.ammo0, r.ammo1], reserve: [r.reserve0, r.reserve1],
     reloadLeft: r.reloadLeft, fireCooldown: r.fireCooldown, switchLeft: r.switchLeft, grenades: r.grenades, grenadeHE: gear.grenadeHE ?? false,
     stamina: gear.stamina ?? STAMINA.max, money: r.money,
