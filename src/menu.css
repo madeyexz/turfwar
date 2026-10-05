@@ -1,32 +1,45 @@
 /* ---------- Home page / lobby ----------
- * Left: callsign and team, then PLAY ONLINE (Quick Play, with private rooms as inline drawers) and
- * PLAY OFFLINE (bots, practice range), then the options drawer. One decision on screen at a time.
- * Right: the live battlefield backdrop, a showcase of the current choice and the live public rooms.
+ * Left: only what starts a match — callsign and team, the room size and QUICK PLAY — then one row of
+ * other ways in (private room, join code, vs bots, practice), each opening its drawer below.
+ * Right: the live battlefield backdrop with the map in view and, only when there are any, public rooms.
+ * Top right: Controls (?) and Settings (gear) open the shared settings dialog.
  */
 #menu {
   position: fixed; inset: 0; z-index: 5;
   display: grid; grid-template-columns: minmax(360px, 440px) 1fr;
   background:
-    linear-gradient(90deg, rgba(4, 9, 12, 0.94) 0, rgba(4, 9, 12, 0.86) 440px, rgba(4, 9, 12, 0.25) 62%, rgba(4, 9, 12, 0) 80%),
-    linear-gradient(0deg, rgba(4, 9, 12, 0.85) 0, rgba(4, 9, 12, 0) 34%);
+    linear-gradient(90deg, rgba(4, 9, 12, 0.94) 0, rgba(4, 9, 12, 0.84) 440px, rgba(4, 9, 12, 0.2) 60%, rgba(4, 9, 12, 0) 78%),
+    linear-gradient(0deg, rgba(4, 9, 12, 0.8) 0, rgba(4, 9, 12, 0) 30%);
 }
 
 /* ---- Panel ---- */
 #menu .panel { display: flex; flex-direction: column; min-height: 0; border-right: 1px solid rgba(190, 236, 244, 0.08); }
-#menu .brand { padding: 30px 36px 0; }
-#menu .tag { color: var(--muted); font-weight: 700; letter-spacing: 0.28em; font-size: 12px; text-transform: uppercase; }
-#menu h1 { margin: 8px 0 0; font-size: clamp(32px, 2.9vw, 40px); line-height: 1; letter-spacing: 0.04em; font-weight: 700; text-transform: uppercase; white-space: nowrap; }
+#menu .brand { padding: 30px 32px 0; }
+#menu .tag { color: var(--muted); font-weight: 700; letter-spacing: 0.28em; font-size: 11px; text-transform: uppercase; }
+#menu h1 { margin: 6px 0 0; font-size: clamp(30px, 2.6vw, 36px); line-height: 1; letter-spacing: 0.04em; font-weight: 700; text-transform: uppercase; white-space: nowrap; }
 #menu h1 em { font-style: normal; color: var(--accent); }
-#menu .lede { margin: 8px 0 0; color: #c3d1d5; font-size: 15px; line-height: 1.3; font-weight: 500; max-width: 36ch; }
+#menu .lede { margin: 6px 0 0; color: var(--muted); font-size: 14px; line-height: 1.3; font-weight: 600; letter-spacing: 0.02em; }
 
-#menu .form { flex: 1; min-height: 0; overflow-y: auto; padding: 20px 36px 20px; display: flex; flex-direction: column; gap: 18px; scrollbar-width: thin; scrollbar-color: rgba(190, 236, 244, 0.2) transparent; }
+#menu .form { flex: 1; min-height: 0; overflow-y: auto; padding: 22px 32px 22px; display: flex; flex-direction: column; gap: 12px; scrollbar-width: thin; scrollbar-color: rgba(190, 236, 244, 0.2) transparent; }
 #menu .field { display: flex; flex-direction: column; gap: 6px; min-width: 0; }
 #menu .label { display: flex; justify-content: space-between; gap: 8px; font-size: 11px; letter-spacing: 0.2em; color: var(--muted); font-weight: 700; text-transform: uppercase; }
-#menu .label output { color: var(--ink); letter-spacing: 0.04em; font-weight: 600; text-transform: none; }
 #menu input[type='text'] { width: 100%; min-width: 0; background: rgba(255, 255, 255, 0.05); border: 1px solid var(--line); border-radius: 3px; padding: 7px 11px; font-size: 17px; font-weight: 600; letter-spacing: 0.04em; outline: none; transition: border-color 0.15s; }
 #menu input[type='text']:focus { border-color: var(--accent); }
-#menu .who { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 12px; align-items: end; }
-#menu .who .segmented .choice { padding: 9px 2px; }
+#menu :focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+#menu input:focus-visible { outline: none; }
+
+/* Callsign (label inside the box) and a compact team toggle on one line. */
+#menu .who { display: flex; gap: 8px; align-items: stretch; margin-bottom: 6px; }
+#menu .callsign {
+  flex: 1; min-width: 0; display: flex; align-items: center; gap: 10px; padding: 0 0 0 11px; height: 38px;
+  border: 1px solid var(--line); border-radius: 3px; background: rgba(255, 255, 255, 0.05); transition: border-color 0.15s;
+}
+#menu .callsign:focus-within { border-color: var(--accent); }
+#menu .callsign .label { flex: none; font-size: 10px; letter-spacing: 0.18em; }
+#menu .callsign input[type='text'] { flex: 1; height: 100%; padding: 0 10px 0 0; border: none; background: none; font-size: 16px; }
+#menu .who .segmented { flex: none; width: 162px; grid-template-columns: 0.8fr 0.95fr 1.1fr; }
+#menu .who .segmented .choice { padding: 0 2px; justify-content: center; }
+#menu .who .segmented .choice b { font-size: 11px; letter-spacing: 0.06em; }
 
 /* Choice cards and segmented controls */
 #menu .choices { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; }
@@ -48,25 +61,18 @@
 #menu .segmented .choice[aria-pressed='true'] { box-shadow: inset 0 -2px 0 var(--accent); }
 #menu .segmented.sizes .choice { padding: 6px 4px; }
 #menu .segmented.sizes .choice b { font-size: 15px; letter-spacing: 0.06em; }
-#menu .segmented.sizes .choice small { font-size: 11px; letter-spacing: 0.06em; text-transform: uppercase; white-space: nowrap; }
+#menu .segmented.sizes .choice small { font-size: 10px; letter-spacing: 0.08em; text-transform: uppercase; white-space: nowrap; }
 #menu .swat { color: var(--aegis); }
 #menu .militia { color: var(--crimson); }
-#menu .crosshairs .choice { flex-direction: row; justify-content: center; gap: 6px; }
-#menu .crosshairs svg { width: 18px; height: 18px; stroke: currentColor; stroke-width: 2; fill: currentColor; color: var(--accent); flex: none; }
-#menu .crosshairs .choice b { text-transform: capitalize; }
 
-/* ---- Play blocks ---- */
-#menu .block { display: flex; flex-direction: column; gap: 9px; }
-#menu .block-head { display: flex; justify-content: space-between; align-items: baseline; gap: 10px; }
-#menu .block > .label { color: var(--ink); }
-#menu .block-head .label { color: var(--ink); }
+/* ---- Play online: sizes, Quick Play, one quiet status line ---- */
+#menu .block { display: flex; flex-direction: column; gap: 8px; }
 #menu .hint { margin: 0; color: var(--muted); font-size: 13px; line-height: 1.3; font-weight: 500; }
 #menu .hint:empty { display: none; }
 #menu .unavailable { margin: 0; color: var(--amber); font-size: 13px; line-height: 1.3; font-weight: 600; }
 #menu .unavailable:empty { display: none; }
-#menu .block.off > :not(.block-head):not(.unavailable) { opacity: 0.45; }
+#menu .block.off > :not(.unavailable) { opacity: 0.45; }
 
-/* Primary: Quick Play */
 #menu .deploy {
   width: 100%; padding: 13px 18px; font-size: 20px; font-weight: 700; letter-spacing: 0.22em; text-transform: uppercase;
   border: 1px solid var(--accent); border-radius: 3px; color: #031014; background: var(--accent);
@@ -77,24 +83,28 @@
 /* Another choice is in focus (a drawer or a public room): Quick Play steps back to an outline. */
 #menu:not(.focus-quick) .deploy:not(:disabled) { background: rgba(127, 246, 255, 0.08); color: var(--accent); box-shadow: none; padding: 10px 18px; font-size: 18px; }
 
-/* Secondary actions: each opens its drawer right below. */
-#menu .subs { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; }
+#menu .rooms-line { display: flex; align-items: center; gap: 8px; margin: 0; min-height: 18px; color: var(--muted); font-size: 13px; font-weight: 600; letter-spacing: 0.02em; line-height: 1.25; }
+#menu .rooms-line[hidden] { display: none; }
+
+/* Connection dot (status line and public rooms) */
+#menu .conn { display: inline-flex; align-items: center; gap: 7px; font-size: 11px; font-weight: 700; letter-spacing: 0.14em; text-transform: uppercase; color: var(--muted); white-space: nowrap; min-width: 0; }
+#menu .conn i { flex: none; width: 7px; height: 7px; border-radius: 50%; background: var(--muted); }
+#menu .conn.live i { background: #5df29a; box-shadow: 0 0 8px #5df29a; }
+#menu .conn.live { color: #9be8b9; }
+#menu .conn.wait i { background: var(--amber); animation: lobby-pulse 1s ease-in-out infinite; }
+#menu .conn.off i { background: var(--crimson); }
+@keyframes lobby-pulse { 50% { opacity: 0.3; } }
+
+/* ---- Other ways in: one row of small actions, each opening its drawer ---- */
+#menu .subs { display: flex; gap: 6px; margin-top: 8px; padding-top: 14px; border-top: 1px solid rgba(190, 236, 244, 0.1); }
 #menu .sub {
-  display: flex; flex-direction: column; gap: 2px; align-items: flex-start; text-align: left; min-width: 0;
-  padding: 7px 10px; border: 1px solid var(--line); border-radius: 3px; background: rgba(255, 255, 255, 0.035);
-  font-size: 13px; font-weight: 700; letter-spacing: 0.1em; text-transform: uppercase; color: var(--ink);
-  transition: border-color 0.15s, background 0.15s;
+  flex: 1 1 auto; min-width: 0; padding: 8px 6px; border: 1px solid var(--line); border-radius: 3px; background: rgba(255, 255, 255, 0.03);
+  font-size: 12px; font-weight: 700; letter-spacing: 0.06em; text-transform: uppercase; color: var(--ink); white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+  transition: border-color 0.15s, background 0.15s, color 0.15s;
 }
-#menu .sub::after { content: ''; }
-#menu .subs:not(.big) .sub { flex-direction: row; justify-content: space-between; align-items: center; }
-#menu .subs:not(.big) .sub::after { content: '+'; color: var(--accent); font-size: 15px; }
-#menu .subs:not(.big) .sub[aria-expanded='true']::after { content: '–'; }
-#menu .subs.big .sub { padding: 9px 11px; }
-#menu .subs.big .sub b { font-size: 15px; letter-spacing: 0.08em; }
-#menu .subs.big .sub small { color: var(--muted); font-size: 12px; font-weight: 500; letter-spacing: 0.02em; text-transform: none; }
 #menu .sub:hover:not(:disabled) { border-color: rgba(127, 246, 255, 0.5); background: rgba(127, 246, 255, 0.05); }
-#menu .sub[aria-expanded='true'] { border-color: var(--accent); background: rgba(127, 246, 255, 0.09); box-shadow: inset 0 -2px 0 var(--accent); }
-#menu .sub:disabled { cursor: not-allowed; }
+#menu .sub[aria-expanded='true'] { border-color: var(--accent); color: var(--accent); background: rgba(127, 246, 255, 0.09); box-shadow: inset 0 -2px 0 var(--accent); }
+#menu .sub:disabled { opacity: 0.4; cursor: not-allowed; }
 
 #menu .drawer { display: none; flex-direction: column; gap: 12px; padding: 12px; border: 1px solid rgba(127, 246, 255, 0.35); border-radius: 3px; background: rgba(127, 246, 255, 0.04); }
 #menu .drawer.open { display: flex; }
@@ -129,94 +139,86 @@
 #menu [data-theme='steppe'] { --swatch: #d8c9a4; }
 #menu [data-theme='meadow'] { --swatch: #8fc46a; }
 
-/* Connection badge (online block and public rooms) */
-#menu .conn { display: inline-flex; align-items: center; gap: 7px; font-size: 11px; font-weight: 700; letter-spacing: 0.14em; text-transform: uppercase; color: var(--muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; min-width: 0; }
-#menu .conn i { flex: none; width: 7px; height: 7px; border-radius: 50%; background: var(--muted); }
-#menu .conn.live i { background: #5df29a; box-shadow: 0 0 8px #5df29a; }
-#menu .conn.live { color: #9be8b9; }
-#menu .conn.wait i { background: var(--amber); animation: lobby-pulse 1s ease-in-out infinite; }
-#menu .conn.off i { background: var(--crimson); }
-@keyframes lobby-pulse { 50% { opacity: 0.3; } }
-
-/* Settings drawer */
-#menu .settings { border-top: 1px solid rgba(190, 236, 244, 0.1); padding-top: 14px; }
-#menu .settings summary { cursor: pointer; list-style: none; font-size: 12px; letter-spacing: 0.2em; font-weight: 700; color: var(--muted); text-transform: uppercase; }
-#menu .settings summary::-webkit-details-marker { display: none; }
-#menu .settings summary::before { content: '+'; display: inline-block; width: 16px; color: var(--accent); }
-#menu .settings[open] summary::before { content: '–'; }
-#menu .settings summary:hover { color: var(--ink); }
-#menu .settings[open] summary { margin-bottom: 16px; }
-#menu .settings-body { display: flex; flex-direction: column; gap: 16px; }
-#menu .sliders { display: grid; gap: 12px; }
-#menu input[type='range'] { width: 100%; accent-color: var(--accent); margin: 0; }
-#menu .controls { display: grid; grid-template-columns: auto 1fr; gap: 4px 14px; margin: 0; font-size: 14px; font-weight: 600; }
-#menu .controls dt { color: var(--ink); }
-#menu .controls dd { margin: 0; color: var(--muted); }
-#menu .bench-link { align-self: flex-start; background: none; border: none; padding: 0; color: var(--muted); font-size: 13px; font-weight: 600; letter-spacing: 0.06em; text-decoration: underline; text-underline-offset: 3px; }
-#menu .bench-link:hover { color: var(--accent); }
-#menu .credits { margin: 0; font-size: 12px; color: #7c8e94; line-height: 1.35; }
-
 /* Status line (connecting, errors): pinned under the panel, only when there is something to say. */
-#menu .status { padding: 10px 36px 12px; border-top: 1px solid rgba(190, 236, 244, 0.1); background: rgba(4, 9, 12, 0.7); font-size: 13px; color: var(--ink); letter-spacing: 0.06em; font-weight: 600; }
+#menu .status { padding: 10px 32px 12px; border-top: 1px solid rgba(190, 236, 244, 0.1); background: rgba(4, 9, 12, 0.7); font-size: 13px; color: var(--ink); letter-spacing: 0.06em; font-weight: 600; }
 #menu .status:empty { display: none; }
 
-/* ---- Stage: showcase of the current choice and the public rooms ---- */
-#menu .stage { position: relative; display: flex; flex-direction: column; justify-content: space-between; gap: 20px; padding: 36px 40px 28px; min-width: 0; min-height: 0; pointer-events: none; }
+/* ---- Top right: Controls and Settings ---- */
+#menu .corner { position: absolute; top: 18px; right: 20px; z-index: 2; display: flex; gap: 8px; }
+#menu .icon-btn {
+  position: relative; display: grid; place-items: center; width: 38px; height: 38px; padding: 0;
+  border: 1px solid var(--line); border-radius: 3px; background: rgba(6, 12, 16, 0.6); backdrop-filter: blur(4px);
+  color: var(--ink); font-size: 18px; font-weight: 700; line-height: 1; transition: border-color 0.15s, color 0.15s, background 0.15s;
+}
+#menu .icon-btn svg { width: 20px; height: 20px; fill: none; stroke: currentColor; stroke-width: 1.8; stroke-linecap: round; }
+#menu .icon-btn:hover { border-color: rgba(127, 246, 255, 0.6); color: var(--accent); background: rgba(6, 12, 16, 0.8); }
+/* Tooltip: the button's name, under it. */
+#menu .icon-btn::after {
+  content: attr(data-tip); position: absolute; top: calc(100% + 6px); right: 0; padding: 3px 8px; white-space: nowrap; pointer-events: none;
+  border: 1px solid var(--line); border-radius: 3px; background: rgba(6, 12, 16, 0.92); color: var(--ink);
+  font-size: 11px; font-weight: 700; letter-spacing: 0.16em; text-transform: uppercase; opacity: 0; transform: translateY(-2px); transition: opacity 0.12s, transform 0.12s;
+}
+#menu .icon-btn:hover::after, #menu .icon-btn:focus-visible::after { opacity: 1; transform: none; }
+
+/* ---- Stage: the map in view and the public rooms ---- */
+#menu .stage { position: relative; display: flex; flex-direction: column; justify-content: space-between; gap: 20px; padding: 88px 36px 28px; min-width: 0; min-height: 0; pointer-events: none; }
 #menu .stage > * { pointer-events: auto; }
 #menu .showcase { align-self: flex-end; max-width: 440px; text-align: right; text-shadow: 0 2px 18px rgba(0, 0, 0, 0.7); }
-#menu .showcase .region { font-size: 12px; font-weight: 700; letter-spacing: 0.24em; color: var(--accent); text-transform: uppercase; }
-#menu .showcase h2 { margin: 6px 0 0; font-size: clamp(32px, 3.4vw, 48px); line-height: 1; letter-spacing: 0.05em; text-transform: uppercase; }
-#menu .showcase .meta { margin-top: 8px; display: inline-block; padding: 3px 10px; font-size: 13px; font-weight: 700; letter-spacing: 0.12em; text-transform: uppercase; border: 1px solid var(--line); border-radius: 999px; background: rgba(4, 9, 12, 0.55); }
-#menu .showcase .about { margin: 10px 0 0; font-size: 15px; line-height: 1.4; color: #d3dee1; font-weight: 500; }
+#menu .showcase h2 { margin: 0; font-size: clamp(30px, 3vw, 44px); line-height: 1; letter-spacing: 0.05em; text-transform: uppercase; }
+#menu .showcase .meta { margin-top: 10px; display: inline-block; padding: 3px 10px; font-size: 13px; font-weight: 700; letter-spacing: 0.12em; text-transform: uppercase; border: 1px solid var(--line); border-radius: 999px; background: rgba(4, 9, 12, 0.55); text-shadow: none; }
 
-/* Public rooms: the live list from the server. */
-#menu .browser { display: flex; flex-direction: column; min-height: 0; border: 1px solid var(--line); border-radius: 4px; background: rgba(6, 12, 16, 0.8); backdrop-filter: blur(6px); max-width: 760px; width: 100%; align-self: flex-end; overflow: hidden; }
-#menu .browser-head { display: flex; justify-content: space-between; align-items: center; gap: 12px; padding: 10px 14px 8px; border-bottom: 1px solid rgba(190, 236, 244, 0.1); }
-#menu .browser-head b { font-size: 13px; letter-spacing: 0.24em; text-transform: uppercase; color: var(--accent); white-space: nowrap; }
-#menu .browser-cols, #menu .room { display: grid; grid-template-columns: minmax(0, 1fr) 130px 52px 76px 84px 64px; gap: 10px; align-items: center; }
-#menu .browser-cols { padding: 6px 14px 6px 17px; font-size: 11px; font-weight: 700; letter-spacing: 0.2em; color: var(--muted); text-transform: uppercase; background: rgba(255, 255, 255, 0.03); }
-#menu .browser-rows { max-height: min(40vh, 340px); overflow-y: auto; scrollbar-width: thin; scrollbar-color: rgba(190, 236, 244, 0.2) transparent; }
+/* Public rooms: a slim card list, only while there are rooms. */
+#menu .browser { display: flex; flex-direction: column; min-height: 0; width: 100%; max-width: 480px; align-self: flex-end; border: 1px solid var(--line); border-radius: 4px; background: rgba(6, 12, 16, 0.8); backdrop-filter: blur(6px); overflow: hidden; }
+#menu .browser[hidden] { display: none; }
+#menu .browser-head { display: flex; justify-content: space-between; align-items: center; gap: 12px; padding: 9px 12px 8px; border-bottom: 1px solid rgba(190, 236, 244, 0.1); }
+#menu .browser-head b { font-size: 12px; letter-spacing: 0.24em; text-transform: uppercase; color: var(--accent); white-space: nowrap; }
+#menu .browser-rows { max-height: min(36vh, 300px); overflow-y: auto; scrollbar-width: thin; scrollbar-color: rgba(190, 236, 244, 0.2) transparent; }
 #menu .room {
-  position: relative; padding: 6px 14px 6px 17px; border-top: 1px solid rgba(190, 236, 244, 0.06);
-  font-size: 14px; font-weight: 600; cursor: pointer; outline: none; transition: background 0.12s;
+  position: relative; display: grid; grid-template-columns: minmax(0, 1fr) auto 42px 44px 58px; gap: 10px; align-items: center;
+  padding: 6px 10px 6px 15px; border-top: 1px solid rgba(190, 236, 244, 0.06); font-size: 14px; font-weight: 600; cursor: pointer; outline: none; transition: background 0.12s;
 }
+#menu .room:first-child { border-top: none; }
 #menu .room::before { content: ''; position: absolute; left: 0; top: 7px; bottom: 7px; width: 3px; border-radius: 2px; background: var(--swatch, var(--muted)); opacity: 0.8; }
 #menu .room:hover, #menu .room:focus-visible { background: rgba(127, 246, 255, 0.06); }
 #menu .room.selected { background: rgba(127, 246, 255, 0.12); box-shadow: inset 0 0 0 1px rgba(127, 246, 255, 0.55); }
-#menu .room .srv { display: flex; flex-direction: column; min-width: 0; }
-#menu .room .srv b { font-size: 15px; letter-spacing: 0.07em; text-transform: uppercase; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-#menu .room .srv small, #menu .room .players small { font-size: 11px; color: var(--muted); letter-spacing: 0.08em; text-transform: uppercase; white-space: nowrap; }
-#menu .room .mode { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-#menu .room .players { display: flex; flex-direction: column; font-variant-numeric: tabular-nums; line-height: 1.1; }
-#menu .room .state { font-size: 12px; letter-spacing: 0.1em; text-transform: uppercase; color: #5df29a; white-space: nowrap; }
+#menu .room .srv { display: flex; align-items: baseline; gap: 8px; min-width: 0; white-space: nowrap; overflow: hidden; }
+#menu .room .srv b { font-size: 15px; letter-spacing: 0.07em; text-transform: uppercase; overflow: hidden; text-overflow: ellipsis; }
+#menu .room .state { flex: none; font-size: 11px; letter-spacing: 0.1em; text-transform: uppercase; color: #5df29a; }
 #menu .room .state.warmup { color: var(--amber); }
 #menu .room .state.ended { color: var(--muted); }
-#menu .room .join { padding: 5px 0; border: 1px solid var(--accent); border-radius: 3px; background: rgba(127, 246, 255, 0.1); color: var(--accent); font-size: 12px; font-weight: 700; letter-spacing: 0.16em; text-transform: uppercase; }
+#menu .room .mode { white-space: nowrap; font-size: 13px; color: var(--muted); }
+#menu .room .size, #menu .room .players { font-variant-numeric: tabular-nums; text-align: right; white-space: nowrap; }
+#menu .room .players { color: var(--muted); }
+#menu .room .join { padding: 4px 0; border: 1px solid var(--accent); border-radius: 3px; background: rgba(127, 246, 255, 0.1); color: var(--accent); font-size: 12px; font-weight: 700; letter-spacing: 0.16em; text-transform: uppercase; }
 #menu .room .join:hover:not(:disabled) { background: rgba(127, 246, 255, 0.22); }
 #menu .room .join:disabled { color: var(--muted); border-color: var(--line); background: transparent; cursor: not-allowed; }
-#menu .room .nm { display: none; }
-#menu .empty { margin: 0; padding: 18px 14px; color: var(--muted); font-size: 14px; font-weight: 600; letter-spacing: 0.04em; }
 
-/* Less room for the list: mode and status move under the map name. */
+/* Less room: the mode keeps its tag only. */
 @media (max-width: 1180px) {
-  #menu .browser-cols, #menu .room { grid-template-columns: minmax(0, 1fr) 46px 64px 60px; }
-  #menu .browser-cols span:nth-child(2), #menu .browser-cols span:nth-child(5), #menu .room .mode, #menu .room .state { display: none; }
-  #menu .room .nm { display: inline; }
+  #menu .room .mname { display: none; }
 }
 
-/* ---- Narrow screens: one scrolling column ---- */
+/* ---- Narrow screens: one scrolling column; public rooms stack under the panel ---- */
 @media (max-width: 900px) {
   #menu { display: block; overflow-y: auto; overflow-x: hidden; background: rgba(4, 9, 12, 0.92); }
   #menu .panel { border-right: none; min-height: auto; }
   #menu .form { flex: none; overflow: visible; }
   #menu .brand, #menu .form, #menu .status { padding-left: 16px; padding-right: 16px; }
+  #menu .brand { padding-top: 20px; }
+  #menu .brand .tag, #menu h1 { margin-right: 92px; }
+  #menu .corner { top: 16px; right: 16px; }
   #menu .status { position: sticky; bottom: 0; }
   #menu .stage { padding: 0 16px 24px; gap: 16px; }
-  #menu .showcase { align-self: stretch; text-align: left; max-width: none; }
-  #menu .browser { align-self: stretch; }
+  #menu .showcase { display: none; }
+  #menu .browser { align-self: stretch; max-width: none; }
   #menu .browser-rows { max-height: none; }
 }
-@media (max-width: 400px) {
-  #menu .who { grid-template-columns: 1fr; }
+@media (max-width: 440px) {
   #menu h1 { font-size: 28px; }
+  #menu .who { flex-wrap: wrap; }
+  #menu .callsign { flex-basis: 100%; }
+  #menu .who .segmented { width: 100%; height: 34px; }
+  #menu .sub { font-size: 11px; letter-spacing: 0.04em; }
+  #menu .room { grid-template-columns: minmax(0, 1fr) auto 40px 40px 52px; gap: 8px; }
+  #menu .room .state { display: none; }
 }
