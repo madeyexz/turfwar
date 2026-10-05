@@ -85,7 +85,7 @@ const MIRROR: Record<PointId, PointId> = { A: 'E', B: 'D', C: 'C', D: 'B', E: 'A
 export function meridianDistrict(): MapDef {
   const b = new MapBuilder({
     id: 'meridian', name: 'Meridian District', region: 'INDAR-CLASS DESERT / CITY QUARTER',
-    description: '50v50 Conquest across a war-torn city: park, construction site, canal bridges, highways and a central square. Spawn on the flags you hold.',
+    description: 'Conquest across a war-torn city: park, construction site, canal bridges, highways and a central square. Spawn on the flags you hold.',
     theme: 'desert', halfX: HALF_X, halfZ: HALF_Z, seed: 41, roll: 0, ridge: 0,
     sun: { x: -0.5, y: 0.66, z: 0.42 },
     ground, teamSize: 50,

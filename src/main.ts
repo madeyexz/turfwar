@@ -2,7 +2,7 @@ import * as THREE from 'three';
 import { inject } from '@vercel/analytics';
 import { loadMap, mapSummaries } from '../shared/maps/index';
 import type { Team } from '../shared/match/state';
-import { LOADOUTS, type LoadoutId } from '../shared/weapons';
+import { LOADOUTS, WEAPONS, type LoadoutId } from '../shared/weapons';
 import { loadAssets, type Assets } from './assets';
 import { Audio } from './audio';
 import { Game } from './game/game';
@@ -16,6 +16,7 @@ import { THEMES } from './render/materials';
 import { QUALITY, Renderer } from './render/renderer';
 import { renderTheme, THEME_START } from './theme';
 import './style.css';
+import './menu.css';
 
 inject();
 
@@ -29,45 +30,65 @@ const store = {
 const menu = document.createElement('div');
 menu.id = 'menu';
 const maps = mapSummaries();
+const sizeLabel = (m: (typeof maps)[number]) => `${m.teamSize}v${m.teamSize} · ${m.flags} flags`;
 menu.innerHTML = `
-  <div class="left">
-    <div class="tag">Lawbreaker // Frontline</div>
-    <h1>HOLD THE<br>LINE <em>TAKE THE CITY</em></h1>
-    <p class="lede">Team infantry combat in the browser. Earn credits for every kill and capture, buy your gun, grab power weapons off the map, and take the flags — from castle walls and rail yards to rooftops and a 100-player city.</p>
-    <label class="field">Callsign<input type="text" id="callsign" maxlength="16" autocomplete="off" spellcheck="false"></label>
-    <div class="field"><label class="field">Mode</label><div class="choices" id="modes">
-      <button class="choice" data-mode="offline"><b>Solo skirmish</b><small>Bots fill both teams in this tab (50v50 on Meridian). Works fully offline.</small></button>
-      <button class="choice" data-mode="online"><b>Online match</b><small id="online-note">Real players via SpacetimeDB; bots fill empty slots.</small></button>
-      <button class="choice" data-mode="lab"><b>Practice range</b><small>No bots. Try every gun and learn the maps.</small></button>
-    </div></div>
-    <div class="field"><label class="field">Battlefield</label><div class="choices" id="maps">${maps.map(m => `<button class="choice" data-map="${m.id}"><b>${m.name}</b><small>${m.description}</small></button>`).join('')}</div></div>
-    <div class="field"><label class="field">Kit</label><div class="choices" id="loadouts">${Object.entries(LOADOUTS).map(([id, l]) => `<button class="choice" data-loadout="${id}"><b>${l.name}</b><small>${l.role}</small></button>`).join('')}</div></div>
-    <div class="field"><label class="field">Faction</label><div class="choices" id="teams" style="grid-template-columns:1fr 1fr 1fr">
-      <button class="choice" data-team="auto"><b>Auto</b></button><button class="choice" data-team="0"><b style="color:var(--aegis)">Aegis</b></button><button class="choice" data-team="1"><b style="color:var(--crimson)">Crimson</b></button>
-    </div></div>
-    <div class="field"><label class="field">Bot difficulty (solo)</label><div class="choices" id="skills" style="grid-template-columns:1fr 1fr 1fr">
-      <button class="choice" data-skill="0.25"><b>Recruit</b></button><button class="choice" data-skill="0.45"><b>Veteran</b></button><button class="choice" data-skill="0.75"><b>Elite</b></button>
-    </div></div>
-    <div class="field"><label class="field">Graphics</label><div class="choices" id="qualities" style="grid-template-columns:1fr 1fr 1fr">
-      <button class="choice" data-quality="low"><b>Low</b><small>No bloom, 1k shadows</small></button><button class="choice" data-quality="medium"><b>Medium</b><small>Bloom, 2k shadows</small></button><button class="choice" data-quality="high"><b>High</b><small>1.5× resolution</small></button>
-    </div></div>
-    <div class="field sliders">
-      <label class="field"><span>Mouse sensitivity · <output id="sens-out"></output></span><input type="range" id="sens" min="0.2" max="3" step="0.05"></label>
-      <label class="field"><span>Field of view · <output id="fov-out"></output></span><input type="range" id="fov" min="65" max="95" step="1"></label>
-      <label class="field"><span>Menu music · <output id="music-out"></output></span><input type="range" id="music" min="0" max="1" step="0.05"></label>
+  <section class="panel">
+    <header class="brand">
+      <div class="tag">Lawbreaker // Frontline</div>
+      <h1><span>Hold the line.</span><em>Take the city.</em></h1>
+      <p class="lede">Earn credits for every kill and capture, buy your gun, grab power weapons off the map and take the flags.</p>
+    </header>
+    <div class="form">
+      <label class="field"><span class="label">Callsign</span><input type="text" id="callsign" maxlength="16" autocomplete="off" spellcheck="false"></label>
+      <div class="field"><span class="label">Mode</span><div class="choices modes" id="modes">
+        <button class="choice" data-mode="offline"><b>Solo</b><small>Bots on both teams. Works offline.</small></button>
+        <button class="choice" data-mode="online"><b>Online</b><small id="online-note">Real players; bots fill the gaps.</small></button>
+        <button class="choice" data-mode="lab"><b>Practice</b><small>No bots. Every gun is free.</small></button>
+      </div></div>
+      <div class="field"><span class="label">Kit</span><div class="choices kits" id="loadouts">${Object.entries(LOADOUTS).map(([id, l]) => `<button class="choice" data-loadout="${id}"><b>${l.name}</b><small>${l.weapons.map(w => WEAPONS[w].short).join(' · ')}</small></button>`).join('')}</div></div>
+      <div class="row">
+        <div class="field"><span class="label">Faction</span><div class="choices segmented" id="teams">
+          <button class="choice" data-team="auto"><b>Auto</b></button><button class="choice" data-team="0"><b class="aegis">Aegis</b></button><button class="choice" data-team="1"><b class="crimson">Crimson</b></button>
+        </div></div>
+        <div class="field"><span class="label">Bots</span><div class="choices segmented" id="skills">
+          <button class="choice" data-skill="0.25"><b>Recruit</b></button><button class="choice" data-skill="0.45"><b>Veteran</b></button><button class="choice" data-skill="0.75"><b>Elite</b></button>
+        </div></div>
+      </div>
+      <details class="settings">
+        <summary>Settings &amp; controls</summary>
+        <div class="field"><span class="label">Graphics</span><div class="choices segmented" id="qualities">
+          <button class="choice" data-quality="low" title="No bloom, 1k shadows"><b>Low</b></button><button class="choice" data-quality="medium" title="Bloom, 2k shadows"><b>Medium</b></button><button class="choice" data-quality="high" title="1.5× resolution"><b>High</b></button>
+        </div></div>
+        <div class="sliders">
+          <label class="field"><span class="label">Mouse sensitivity <output id="sens-out"></output></span><input type="range" id="sens" min="0.2" max="3" step="0.05"></label>
+          <label class="field"><span class="label">Field of view <output id="fov-out"></output></span><input type="range" id="fov" min="65" max="95" step="1"></label>
+          <label class="field"><span class="label">Menu music <output id="music-out"></output></span><input type="range" id="music" min="0" max="1" step="0.05"></label>
+        </div>
+        <dl class="controls">
+          <dt>WASD · Mouse</dt><dd>Move · look</dd><dt>LMB · RMB</dt><dd>Fire · aim down sights</dd>
+          <dt>Shift · Space</dt><dd>Sprint · jump</dd><dt>C / Ctrl</dt><dd>Crouch (slide while sprinting)</dd>
+          <dt>R · Q · G</dt><dd>Reload · swap weapon · grenade</dd><dt>B · E</dt><dd>Buy menu · pick up weapon</dd>
+          <dt>Tab · Esc</dt><dd>Scoreboard · release mouse</dd>
+        </dl>
+        <button class="bench-link" id="bench">Run the ${BENCH_SECONDS}-second performance check</button>
+        <p class="credits">Characters, weapons and props: CC0 packs by Quaternius. Textures: CC0 Poly Haven. Font: Rajdhani (OFL). No proprietary game assets.</p>
+      </details>
     </div>
-    <button class="deploy" id="deploy" disabled>Loading…</button>
-    <div class="status" id="status"></div>
-    <button class="bench-link" id="bench">Run the ${BENCH_SECONDS}-second performance check</button>
-    <div class="controls">
-      <span>WASD · Mouse</span><span>Move · look</span><span>LMB · RMB</span><span>Fire · aim down sights</span>
-      <span>Shift · Space</span><span>Sprint · jump</span><span>C / Ctrl</span><span>Crouch (while sprinting: slide)</span>
-      <span>R · Q / wheel · G</span><span>Reload · swap weapon · grenade</span><span>B · E</span><span>Buy menu · pick up weapon</span>
-      <span>Tab · Esc</span><span>Scoreboard · release mouse</span>
+    <footer class="launch">
+      <button class="deploy" id="deploy" disabled>Loading…</button>
+      <div class="status" id="status"></div>
+    </footer>
+  </section>
+  <section class="stage">
+    <div class="showcase" id="showcase">
+      <div class="region"></div>
+      <h2></h2>
+      <div class="meta"></div>
+      <p class="about"></p>
+      <p class="online-only">Online matches follow the server's map rotation.</p>
     </div>
-    <div class="credits">Characters, weapons and props: CC0 packs by Quaternius. Surface textures: CC0 Poly Haven. Font: Rajdhani (OFL). No proprietary game assets.</div>
-  </div>
-  <div></div>`;
+    <div class="maps" id="maps">${maps.map(m => `<button class="map" data-map="${m.id}" data-theme="${m.theme}"><b>${m.name}</b><small>${sizeLabel(m)}</small></button>`).join('')}</div>
+  </section>`;
 app.appendChild(menu);
 document.body.classList.add('menu-open');
 
@@ -88,12 +109,24 @@ callsign.value = params.get('name') ?? store.get('name', `Lawbreaker-${Math.floo
 const online = onlineAvailable();
 if (!online.ok) {
   (menu.querySelector('[data-mode="online"]') as HTMLButtonElement).disabled = true;
-  menu.querySelector('#online-note')!.textContent = online.reason;
+  const note = menu.querySelector<HTMLElement>('#online-note')!;
+  note.textContent = 'Not set up in this build.';
+  note.parentElement!.title = online.reason;
   if (mode === 'online') mode = 'offline';
 }
+const showcase = () => {
+  const m = maps.find(x => x.id === mapId)!;
+  const box = menu.querySelector<HTMLElement>('#showcase')!;
+  box.querySelector('.region')!.textContent = m.region;
+  box.querySelector('h2')!.textContent = m.name;
+  box.querySelector('.meta')!.textContent = sizeLabel(m);
+  box.querySelector('.about')!.textContent = m.description;
+  menu.classList.toggle('mode-online', mode === 'online');
+};
 select('modes', 'mode', mode); select('maps', 'map', mapId); select('loadouts', 'loadout', loadout); select('teams', 'team', team); select('skills', 'skill', skill); select('qualities', 'quality', quality);
-menu.querySelectorAll<HTMLButtonElement>('[data-mode]').forEach(b => b.addEventListener('click', () => { mode = b.dataset.mode!; select('modes', 'mode', mode); }));
-menu.querySelectorAll<HTMLButtonElement>('[data-map]').forEach(b => b.addEventListener('click', () => { mapId = b.dataset.map!; select('maps', 'map', mapId); showBackdrop(); }));
+showcase();
+menu.querySelectorAll<HTMLButtonElement>('[data-mode]').forEach(b => b.addEventListener('click', () => { mode = b.dataset.mode!; select('modes', 'mode', mode); showcase(); }));
+menu.querySelectorAll<HTMLButtonElement>('[data-map]').forEach(b => b.addEventListener('click', () => { mapId = b.dataset.map!; select('maps', 'map', mapId); showcase(); showBackdrop(); }));
 menu.querySelectorAll<HTMLButtonElement>('[data-loadout]').forEach(b => b.addEventListener('click', () => { loadout = b.dataset.loadout as LoadoutId; select('loadouts', 'loadout', loadout); }));
 menu.querySelectorAll<HTMLButtonElement>('[data-team]').forEach(b => b.addEventListener('click', () => { team = b.dataset.team!; select('teams', 'team', team); }));
 menu.querySelectorAll<HTMLButtonElement>('[data-skill]').forEach(b => b.addEventListener('click', () => { skill = b.dataset.skill!; select('skills', 'skill', skill); }));
@@ -112,7 +145,7 @@ music.value = String(audio.musicVolume);
 const horizontal = (v: number) => Math.round(2 * Math.atan(Math.tan(v * Math.PI / 360) * 16 / 9) * 180 / Math.PI);
 const showSettings = () => {
   menu.querySelector('#sens-out')!.textContent = `${settings.sensitivity.toFixed(2)}×`;
-  menu.querySelector('#fov-out')!.textContent = `${settings.fov}° vertical · ${horizontal(settings.fov)}° horizontal (16:9)`;
+  menu.querySelector('#fov-out')!.textContent = `${settings.fov}° · ${horizontal(settings.fov)}° horizontal`;
   menu.querySelector('#music-out')!.textContent = audio.musicVolume > 0 ? `${Math.round(audio.musicVolume * 100)}%` : 'Off';
 };
 showSettings();

@@ -40,5 +40,9 @@ export function loadNav(id: string): NavGraph {
 }
 
 export function mapSummaries() {
-  return MAP_IDS.map(id => { const d = loadMap(id).def; return { id, name: d.name, region: d.region, description: d.description, theme: d.theme }; });
+  return MAP_IDS.map(id => {
+    const d = loadMap(id).def;
+    // Maps without their own size use the default skirmish size (6 a side).
+    return { id, name: d.name, region: d.region, description: d.description, theme: d.theme, teamSize: d.teamSize ?? 6, flags: d.points.length };
+  });
 }
