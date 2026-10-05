@@ -43,7 +43,6 @@ import LeaveReducer from "./leave_reducer";
 import PickupItemReducer from "./pickup_item_reducer";
 import ReloadWeaponReducer from "./reload_weapon_reducer";
 import ReportReducer from "./report_reducer";
-import RewriteLawReducer from "./rewrite_law_reducer";
 import SwitchSlotReducer from "./switch_slot_reducer";
 
 // Import all procedure arg schemas
@@ -160,7 +159,6 @@ const reducersSchema = __reducers(
   __reducerSchema("pickup_item", PickupItemReducer),
   __reducerSchema("reload_weapon", ReloadWeaponReducer),
   __reducerSchema("report", ReportReducer),
-  __reducerSchema("rewrite_law", RewriteLawReducer),
   __reducerSchema("switch_slot", SwitchSlotReducer),
 );
 

@@ -1,14 +1,13 @@
 import type { CollisionWorld } from '../collision';
 import { chestPoint, hitShape, raycastSoldier } from '../hitbox';
-import type { Laws } from '../laws';
 import type { MapDef } from '../maps/types';
-import { dist3, raySphere, type Vec3 } from '../math';
+import { dist3, type Vec3 } from '../math';
 import { createMoveState, eyeHeight } from '../movement';
 import { ECONOMY, GRENADE, HEALTH, LOADOUTS, WEAPONS, damageAt, pelletCone, pelletDirs, zoneMultiplier, type HitZone, type WeaponDef } from '../weapons';
 import { BODY_RADIUS, type Body } from '../world';
 import { award, outfit } from './economy';
 import type { NavGraph } from './nav';
-import type { MatchEvent, MatchState, Soldier, Team, WorldSnapshot } from './state';
+import type { MatchEvent, MatchState, Soldier, Team } from './state';
 
 export interface SimContext {
   map: MapDef;
@@ -16,12 +15,10 @@ export interface SimContext {
   nav?: NavGraph;
   random: () => number;
   emit: (event: MatchEvent) => void;
-  history: { push(s: WorldSnapshot): void; pop(): WorldSnapshot | undefined; peek(): WorldSnapshot | undefined; readonly length: number; clear(): void };
 }
 
 export const TICK_RATE = 30;
 export const RESPAWN_PROTECT = 1.6;
-export const DRONE = { max: 4, hp: 55, range: 28, boltSpeed: 30, boltDamage: 16, interval: 1.35, respawn: 9, score: 50 };
 
 export const weaponOf = (s: Soldier): WeaponDef => WEAPONS[s.weapons[s.weapon]];
 export const eyeOf = (s: Soldier): Vec3 => ({ x: s.m.x, y: s.m.y + eyeHeight(s.m), z: s.m.z });
@@ -99,10 +96,10 @@ export function spreadFor(s: Soldier, w: WeaponDef, bloom = 0) {
   return spread + bloom;
 }
 
-export interface TraceResult { point: Vec3; soldier?: Soldier; zone?: HitZone; drone?: Body; distance: number; surface?: string }
+export interface TraceResult { point: Vec3; soldier?: Soldier; zone?: HitZone; distance: number; surface?: string }
 
 /**
- * Authoritative hitscan against static geometry, enemy soldiers and drones. `feet` may move a
+ * Authoritative hitscan against static geometry and enemy soldiers. `feet` may move a
  * soldier's hit shape to where the shooter saw it (validated lag compensation for pellets).
  */
 export function traceShot(state: MatchState, ctx: SimContext, shooter: Soldier, origin: Vec3, dir: Vec3, range: number, feet: (s: Soldier) => Vec3 = feetOf): TraceResult {
@@ -118,25 +115,7 @@ export function traceShot(state: MatchState, ctx: SimContext, shooter: Soldier, 
       result = { point: { x: origin.x + dir.x * hit.t, y: origin.y + dir.y * hit.t, z: origin.z + dir.z * hit.t }, soldier: s, zone: hit.zone, distance: hit.t };
     }
   }
-  for (const b of state.bodies) {
-    if (b.kind !== 'drone' || !isHostile(b.team, shooter.team)) continue;
-    const t = raySphere(origin, dir, b, BODY_RADIUS.drone);
-    if (t >= 0 && t < best) {
-      best = t;
-      result = { point: { x: origin.x + dir.x * t, y: origin.y + dir.y * t, z: origin.z + dir.z * t }, drone: b, distance: t };
-    }
-  }
   return result;
-}
-
-export function damageDrone(state: MatchState, ctx: SimContext, drone: Body, amount: number, killerId: number) {
-  drone.hp -= amount;
-  if (drone.hp > 0) return;
-  const i = state.bodies.indexOf(drone);
-  if (i >= 0) state.bodies.splice(i, 1);
-  const killer = state.soldiers.find(s => s.id === killerId);
-  if (killer) { killer.score += DRONE.score; award(killer, ECONOMY.droneKill); }
-  ctx.emit({ type: 'droneDown', x: drone.x, y: drone.y, z: drone.z, killer: killerId });
 }
 
 /** Resolve a hitscan shot result into damage and a replicated tracer event. */
@@ -145,8 +124,6 @@ export function resolveShot(state: MatchState, ctx: SimContext, shooter: Soldier
   if (result.soldier && result.zone) {
     const amount = damageAt(w, result.distance) * zoneMultiplier(w, result.zone);
     if (applyDamage(state, ctx, result.soldier, shooter.id, amount, result.zone, origin, w.id)) hit = result.zone === 'head' ? 2 : 1;
-  } else if (result.drone) {
-    damageDrone(state, ctx, result.drone, damageAt(w, result.distance), shooter.id); hit = 1;
   }
   ctx.emit({ type: 'shot', shooter: shooter.id, weapon: w.id, from: origin, to: result.point, hit, surface: result.surface });
 }
@@ -166,15 +143,13 @@ export function resolvePellets(state: MatchState, ctx: SimContext, shooter: Sold
       h.head ||= r.zone === 'head';
       hits.set(r.soldier, h);
       hit = r.zone === 'head' ? 2 : 1;
-    } else if (r.drone) {
-      damageDrone(state, ctx, r.drone, damageAt(w, r.distance), shooter.id); hit = 1;
     }
     ctx.emit({ type: 'shot', shooter: shooter.id, weapon: w.id, from: origin, to: r.point, hit, surface: r.surface });
   }
   for (const [target, h] of hits) applyDamage(state, ctx, target, shooter.id, h.amount, h.head ? 'head' : 'body', origin, w.id);
 }
 
-/** Launch a graviton charge: a lawful body that bends with gravity and time, detonating on contact. */
+/** Launch a graviton charge: an arcing projectile that detonates on contact or near an enemy. */
 export function launchCharge(state: MatchState, ctx: SimContext, s: Soldier, w: WeaponDef, origin: Vec3, dir: Vec3) {
   const p = w.projectile!;
   const v = { x: dir.x * p.speed + s.m.vx * 0.3, y: dir.y * p.speed + s.m.vy * 0.3, z: dir.z * p.speed + s.m.vz * 0.3 };
@@ -211,15 +186,9 @@ export function explode(state: MatchState, ctx: SimContext, g: Body, blast: Blas
     if (owner && owner.team === s.team && owner.id !== s.id) continue;
     applyDamage(state, ctx, s, g.owner, blast.damage * (1 - d / blast.radius) ** 1.2, 'blast', center, blast.weapon);
   }
-  for (const b of [...state.bodies]) {
-    if (b.kind !== 'drone' || b.id === g.id) continue;
-    const d = dist3(center, b);
-    if (d < blast.radius) damageDrone(state, ctx, b, blast.damage * (1 - d / blast.radius), g.owner);
-  }
 }
 
 export function teamCount(state: MatchState, team: Team, humansOnly = false) {
   return state.soldiers.filter(s => s.team === team && (!humansOnly || !s.bot)).length;
 }
 
-export function lawsEqual(a: Laws, b: Laws) { return JSON.stringify(a) === JSON.stringify(b); }

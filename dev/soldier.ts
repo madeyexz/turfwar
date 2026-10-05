@@ -1,10 +1,10 @@
-// Development-only soldier pose sheet: /dev/soldier.html?cam=x,y,z&look=x,y,z&loadout=assault
+// Development-only soldier pose sheet: /dev/soldier.html?cam=x,y,z&look=x,y,z&loadout=assault (or &weapon=<id>)
 import * as THREE from 'three';
 import { loadAssets } from '../src/assets';
 import { THEMES } from '../src/render/materials';
 import { QUALITY, Renderer } from '../src/render/renderer';
 import { SoldierView, type SoldierPose } from '../src/render/soldier';
-import { LOADOUTS, type LoadoutId } from '../shared/weapons';
+import { LOADOUTS, WEAPONS, type LoadoutId, type WeaponId } from '../shared/weapons';
 
 const params = new URLSearchParams(location.search);
 const info = document.getElementById('info')!;
@@ -15,7 +15,8 @@ r.scene.fog = null;
 const ground = new THREE.Mesh(new THREE.PlaneGeometry(40, 40), new THREE.MeshStandardMaterial({ color: 0x9c8a74 }));
 ground.rotation.x = -Math.PI / 2; ground.receiveShadow = true; r.scene.add(ground);
 const loadout = (params.get('loadout') ?? 'assault') as LoadoutId;
-const [primary, secondary] = LOADOUTS[loadout].weapons;
+const forced = params.get('weapon') as WeaponId | null;
+const [primary, secondary] = forced && WEAPONS[forced] ? [forced, forced] : LOADOUTS[loadout].weapons;
 const base: SoldierPose = { x: 0, y: 0, z: 0, vx: 0, vz: 0, vy: 0, yaw: 0, pitch: 0, crouch: 0, grounded: true, sprint: false, ads: false, slide: false, alive: true, weapon: primary, reloading: 0, firing: false };
 const poses: [string, Partial<SoldierPose>, number][] = [
   ['idle', {}, 0], ['aim up', { pitch: 0.6 }, 0], ['jog', { vz: -5 }, 0], ['strafe', { vx: 5 }, 0], ['sprint', { vz: -8.6, sprint: true }, 0],
@@ -44,7 +45,7 @@ r.renderer.setAnimationLoop(() => {
     marks[0].position.copy(dv.debug.chest); marks[1].position.copy(dv.debug.grip); marks[2].position.copy(dv.debug.fore);
     dv.root.traverse(o => { if (o.name === 'hand_r') o.getWorldPosition(marks[3].position); if (o.name === 'hand_l') o.getWorldPosition(marks[4].position); });
   } else marks.forEach(m => m.visible = false);
-  r.render(t, new THREE.Vector3(), 300);
+  r.render(t);
   if (++frames === 40) (window as any).__ready = 1;
 });
 info.textContent = poses.map(p => p[0]).join('  ');

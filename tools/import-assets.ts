@@ -92,12 +92,6 @@ async function finish(doc: Document, file: string, size: number, compress = fals
   await finish(doc, 'props.glb', 1024);
 }
 
-// ---- Sentinel drone (animated) -----------------------------------------------------------
-{
-  const doc = await io.read(join(ESS, 'Enemy_EyeDrone.gltf'));
-  await finish(doc, 'drone.glb', 1024);
-}
-
 // ---- Soldier body ------------------------------------------------------------------------
 {
   // The pack references two textures under slightly different names; provide aliases.

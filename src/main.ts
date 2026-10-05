@@ -32,13 +32,13 @@ const maps = mapSummaries();
 menu.innerHTML = `
   <div class="left">
     <div class="tag">Lawbreaker // Frontline</div>
-    <h1>CHANGE THE<br>RULES <em>OF WAR</em></h1>
-    <p class="lede">Squad-based sci-fi infantry combat. Capture the outposts, hold the reactor — and when the fight turns, rewrite gravity, time and light with a sentence.</p>
+    <h1>HOLD THE<br>LINE <em>TAKE THE CITY</em></h1>
+    <p class="lede">Team infantry combat in the browser. Earn credits for every kill and capture, buy your gun, grab power weapons off the map, and take the flags — from castle walls and rail yards to rooftops and a 100-player city.</p>
     <label class="field">Callsign<input type="text" id="callsign" maxlength="16" autocomplete="off" spellcheck="false"></label>
     <div class="field"><label class="field">Mode</label><div class="choices" id="modes">
       <button class="choice" data-mode="offline"><b>Solo skirmish</b><small>Bots fill both teams in this tab (50v50 on Meridian). Works fully offline.</small></button>
       <button class="choice" data-mode="online"><b>Online match</b><small id="online-note">Real players via SpacetimeDB; bots fill empty slots.</small></button>
-      <button class="choice" data-mode="lab"><b>Law Lab</b><small>No bots, passive sentinels. Experiment with the laws in peace.</small></button>
+      <button class="choice" data-mode="lab"><b>Practice range</b><small>No bots. Try every gun and learn the maps.</small></button>
     </div></div>
     <div class="field"><label class="field">Battlefield</label><div class="choices" id="maps">${maps.map(m => `<button class="choice" data-map="${m.id}"><b>${m.name}</b><small>${m.description}</small></button>`).join('')}</div></div>
     <div class="field"><label class="field">Kit</label><div class="choices" id="loadouts">${Object.entries(LOADOUTS).map(([id, l]) => `<button class="choice" data-loadout="${id}"><b>${l.name}</b><small>${l.role}</small></button>`).join('')}</div></div>
@@ -62,10 +62,10 @@ menu.innerHTML = `
     <div class="controls">
       <span>WASD · Mouse</span><span>Move · look</span><span>LMB · RMB</span><span>Fire · aim down sights</span>
       <span>Shift · Space</span><span>Sprint · jump</span><span>C / Ctrl</span><span>Crouch (while sprinting: slide)</span>
-      <span>R · Q / wheel · G</span><span>Reload · swap weapon · grenade</span><span>/ · 1 2 3 4</span><span>Rewrite a law · law presets</span>
+      <span>R · Q / wheel · G</span><span>Reload · swap weapon · grenade</span><span>B · E</span><span>Buy menu · pick up weapon</span>
       <span>Tab · Esc</span><span>Scoreboard · release mouse</span>
     </div>
-    <div class="credits">Characters, weapons, drones and props: CC0 packs by Quaternius. Surface textures: CC0 Poly Haven. Font: Rajdhani (OFL). No proprietary game assets.</div>
+    <div class="credits">Characters, weapons and props: CC0 packs by Quaternius. Surface textures: CC0 Poly Haven. Font: Rajdhani (OFL). No proprietary game assets.</div>
   </div>
   <div></div>`;
 app.appendChild(menu);
@@ -247,8 +247,7 @@ async function boot() {
       renderer.camera.lookAt(0, 2, 0);
       renderer.camera.fov = 60; renderer.camera.updateProjectionMatrix();
       backdrop?.update(now / 1000);
-      backdrop?.reactor?.update(now / 1000);
-      renderer.render(now / 1000, new THREE.Vector3(), 300);
+      renderer.render(now / 1000);
     }
   };
   let benchLeft = -1;

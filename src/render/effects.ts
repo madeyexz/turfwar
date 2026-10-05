@@ -121,7 +121,7 @@ export class Effects {
     }
   }
 
-  /** Blue implosion when a drone is destroyed or a lawbreaker respawns. */
+  /** Team-coloured implosion when a soldier respawns (and a violet one for graviton blasts). */
   burst(at: THREE.Vector3, color = 0x8ff6ff) {
     this.flash(at, color, 25, 0.25, 14);
     for (let i = 0; i < 18; i++) {

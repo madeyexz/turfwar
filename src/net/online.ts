@@ -45,7 +45,7 @@ function soldierFrom(r: RosterRow, p: FramePose, time: number, reloadLeft: numbe
     yaw: p.yaw, pitch: p.pitch, alive: p.alive, health: p.health, shield: p.shield, weapon: p.weapon, ammo: [0, 0],
     reloadLeft, fireCooldown: 0, switchLeft: 0, grenades: r.grenades, respawnLeft: Math.max(0, r.respawnAt - time),
     protectLeft: r.protect ? 1 : 0, sinceHit: 99, lastAttacker: r.lastAttacker, kills: r.kills, deaths: r.deaths, score: r.score,
-    captures: r.captures, lawCooldown: Math.max(0, r.lawReadyAt - time), sprint: p.sprint, ads: p.ads, sinceShot, corrections: r.corrections,
+    captures: r.captures, sprint: p.sprint, ads: p.ads, sinceShot, corrections: r.corrections,
     idle: 0, moveSlack: 0, groundY: 0,
     weapons: [weaponOr(r.weapon0, kit[0]), weaponOr(r.weapon1, kit[1])], reserve: [r.reserve0, r.reserve1], money: r.money,
     bought: ['', ''], sinceSpawn: 0,
@@ -132,10 +132,8 @@ export class OnlineLink implements GameLink {
       void this.conn.reducers.join(this.joinArgs).catch(() => undefined).finally(() => { setTimeout(() => { this.rejoining = false; }, 2000); });
     }
     this.view = {
-      mapId: match.mapId, phase: match.phase as MatchState['phase'], phaseLeft: frame.phaseLeft, time: frame.time, worldTime: frame.worldTime,
-      tick: frame.tick, scores: [match.score0, match.score1], scoreTimer: 0, laws: JSON.parse(match.lawsJson), lawAuthor: match.lawAuthor,
-      lawText: match.lawText, lawLeft: frame.lawLeft, rewindLeft: frame.rewindLeft, soldiers, points, bodies, nextId: match.nextId,
-      droneTimer: 0, winner: match.winner as -1 | Team, config: JSON.parse(match.configJson),
+      mapId: match.mapId, phase: match.phase as MatchState['phase'], phaseLeft: frame.phaseLeft, time: frame.time,       tick: frame.tick, scores: [match.score0, match.score1], scoreTimer: 0, soldiers, points, bodies, nextId: match.nextId,
+      winner: match.winner as -1 | Team, config: JSON.parse(match.configJson),
       pickupLeft: this.frameMap === match.mapId ? frame.pickups : [],
     };
     this.dirty = false;
@@ -170,14 +168,6 @@ export class OnlineLink implements GameLink {
   reload() { void this.conn.reducers.reloadWeapon({}).catch(() => undefined); }
   switchWeapon(slot: 0 | 1) { void this.conn.reducers.switchSlot({ slot }).catch(() => undefined); }
   setLoadout(loadout: LoadoutId) { void this.conn.reducers.chooseLoadout({ loadout }).catch(() => undefined); }
-  async law(command: unknown, source: string, text: string) {
-    try {
-      await this.conn.reducers.rewriteLaw({ commandJson: JSON.stringify(command), source, text });
-      return { ok: true, message: '' };
-    } catch (error) {
-      return { ok: false, message: String((error as Error)?.message ?? error) || 'The server rejected that law.' };
-    }
-  }
   dispose() {
     void this.conn.reducers.leave({}).catch(() => undefined);
     setTimeout(() => { try { this.conn.disconnect(); } catch { /* already closed */ } }, 300);

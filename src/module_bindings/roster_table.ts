@@ -23,7 +23,6 @@ export default __t.row({
   score: __t.u32(),
   captures: __t.u32(),
   respawnAt: __t.f32().name("respawn_at"),
-  lawReadyAt: __t.f32().name("law_ready_at"),
   protect: __t.bool(),
   lastAttacker: __t.i32().name("last_attacker"),
   corrections: __t.u32(),

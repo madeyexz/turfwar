@@ -15,7 +15,6 @@ import LeaveReducer from "../leave_reducer";
 import PickupItemReducer from "../pickup_item_reducer";
 import ReloadWeaponReducer from "../reload_weapon_reducer";
 import ReportReducer from "../report_reducer";
-import RewriteLawReducer from "../rewrite_law_reducer";
 import SwitchSlotReducer from "../switch_slot_reducer";
 
 export type BuyParams = __Infer<typeof BuyReducer>;
@@ -27,6 +26,5 @@ export type LeaveParams = __Infer<typeof LeaveReducer>;
 export type PickupItemParams = __Infer<typeof PickupItemReducer>;
 export type ReloadWeaponParams = __Infer<typeof ReloadWeaponReducer>;
 export type ReportParams = __Infer<typeof ReportReducer>;
-export type RewriteLawParams = __Infer<typeof RewriteLawReducer>;
 export type SwitchSlotParams = __Infer<typeof SwitchSlotReducer>;
 

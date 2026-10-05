@@ -1,15 +1,12 @@
 import * as THREE from 'three';
 import { hitShape, raycastSoldier } from '../../shared/hitbox';
-import { parseLawCommand, type LawCommand } from '../../shared/laws';
-import { loadMap, reactorPoint } from '../../shared/maps/index';
-import { raySphere, type Vec3 } from '../../shared/math';
+import { loadMap } from '../../shared/maps/index';
+import type { Vec3 } from '../../shared/math';
 import type { MatchEvent, MatchState, Soldier } from '../../shared/match/state';
 import { ECONOMY, WEAPONS, pelletCone, pelletDirs, type HitZone, type LoadoutId } from '../../shared/weapons';
 import { PICKUP_REACH, canBuy } from '../../shared/match/economy';
-import { BODY_RADIUS } from '../../shared/world';
 import type { Assets } from '../assets';
 import { Audio } from '../audio';
-import { presets } from '../commands';
 import { BodiesView } from '../render/bodies';
 import { Effects } from '../render/effects';
 import { InterpBuffer } from '../render/interp';
@@ -21,7 +18,6 @@ import { SoldierView } from '../render/soldier';
 import { ViewModel } from '../render/viewmodel';
 import { BuyMenu } from '../ui/buymenu';
 import { Hud } from '../ui/hud';
-import { LawBar } from '../ui/lawbar';
 import { Input } from './input';
 import type { GameLink } from './link';
 import { LocalPlayer } from './player';
@@ -47,7 +43,6 @@ export class Game {
   private viewmodel: ViewModel;
   private remotes = new Map<number, Remote>();
   private hud: Hud;
-  private lawbar: LawBar;
   private buymenu: BuyMenu;
   private pickups: PickupsView;
   /** Game time of our last deployment (buy time counts from here). */
@@ -70,7 +65,6 @@ export class Game {
   private predictedHits: { at: number; target: number }[] = [];
   private lastLook = { x: 0, y: 0 };
   private deathCam = new THREE.Vector3();
-  private lawChanged?: string;
   private lastStepPhase = 0;
   private running = true;
   private myTeam = 0;
@@ -100,27 +94,18 @@ export class Game {
     this.hud = new Hud(container, def);
     this.hud.onLoadout = l => { this.link.setLoadout(l); this.audio.ui(); };
     this.hud.onMenu = () => this.onExit?.();
-    this.lawbar = new LawBar(container, (command, source, text) => this.applyLaw(command, source, text));
-    this.lawbar.onClose = () => { void this.input.lock(); };
     this.buymenu = new BuyMenu(container, item => { this.link.buy(item); this.audio.ui(); });
-    this.buymenu.onClose = () => { void this.input.lock(); };
-    this.input.canRelock = () => !this.lawbar.open && !this.buymenu.open;
+    // The key that closed the menu must not reopen it next frame.
+    this.buymenu.onClose = () => { this.input.clear(); void this.input.lock(); };
+    this.input.canRelock = () => !this.buymenu.open;
     if (me) this.player.spawnFrom(me);
-    this.refreshLaws();
     if (import.meta.env.DEV) Object.assign(window, { __game: this });
-  }
-
-  async applyLaw(command: LawCommand, source: string, text: string) {
-    const result = await this.link.law(parseLawCommand(command), source, text);
-    if (!result.ok) this.hud.toast(result.message);
-    return result;
   }
 
   stop(keepLink = false) {
     this.running = false;
     if (!keepLink) this.link.dispose();
     this.hud.dispose();
-    this.lawbar.root.remove();
     this.buymenu.root.remove();
     this.renderer.scene.remove(this.level.group, this.effects.group, this.bodies.group, this.pickups.group);
     for (const r of this.remotes.values()) { r.view.dispose(); r.view.gun.removeFromParent(); }
@@ -137,28 +122,26 @@ export class Game {
     // Solo pauses while the mouse is released (Esc) during a live round: the frame still renders,
     // but no time passes for the match, the player or the effects.
     const before = link.state(), self = before?.soldiers.find(s => s.id === link.myId());
-    if (link.mode === 'offline' && !this.input.locked && !this.lawbar.open && self?.alive && before?.phase !== 'ended') dt = 0;
+    if (link.mode === 'offline' && !this.input.locked && self?.alive && before?.phase !== 'ended') dt = 0;
     this.time += dt;
     link.update(dt);
     const state = link.state();
-    if (!state) { this.renderer.render(this.time, new THREE.Vector3(), 300); return; }
+    if (!state) { this.renderer.render(this.time); return; }
     if (state.mapId !== this.mapId && this.onMapChange) { this.onMapChange(state.mapId); return; }
     const myId = link.myId();
     const me = state.soldiers.find(s => s.id === myId);
-    const active = this.input.locked && !this.lawbar.open && !this.buymenu.open;
+    const active = this.input.locked && !this.buymenu.open;
     // Mouse released while alive in a live round (online: the match keeps going).
-    const released = !this.input.locked && !this.lawbar.open && !this.buymenu.open && !!me?.alive && state.phase !== 'ended';
+    const released = !this.input.locked && !this.buymenu.open && !!me?.alive && state.phase !== 'ended';
     this.hud.released(released, link.mode === 'offline');
 
     // ---- Hotkeys ----
     if (active) {
-      if (this.input.take('Slash')) { this.lawbar.show(); this.input.clear(); }
       if (this.input.take('KeyB') && me?.alive) { this.buymenu.show(); this.input.clear(); }
       if (this.input.take('KeyE') && me?.alive) {
         const i = this.pickups.nearestWeapon(this.player.m.x, this.player.m.y, this.player.m.z, PICKUP_REACH, state.pickupLeft);
         if (i >= 0) { link.pickup(i); this.audio.ui(); }
       }
-      for (let i = 0; i < 4; i++) if (this.input.take(`Digit${i + 1}`)) void this.applyLaw(presets[i].command, 'PRESET', presets[i].sentence);
     }
     this.hud.scoreboard(this.input.down('Tab'), state, myId);
 
@@ -248,8 +231,6 @@ export class Game {
     this.pickups.update(this.time, state.pickupLeft);
     this.effects.update(dt);
     this.level.update(this.time);
-    const b = state.points.find(p => p.id === reactorPoint(this.map.def));
-    if (this.level.reactor) { this.level.reactor.owner = b?.owner ?? -1; this.level.reactor.update(this.time); }
 
     // ---- Camera ----
     const cam = this.renderer.camera;
@@ -266,7 +247,7 @@ export class Game {
       const targetFov = base + (adsFov(w) - base) * this.player.ads + (this.player.sprinting ? 6 : 0) + (this.player.m.slideTime > 0 ? 4 : 0);
       cam.fov += (targetFov - cam.fov) * Math.min(1, dt * 14);
       cam.updateProjectionMatrix();
-      this.renderer.viewCamera.fov = 58 - this.player.ads * (w.id === 'lancer' ? 0 : 10);
+      this.renderer.viewCamera.fov = 58 - this.player.ads * (w.category === 'sniper' ? 0 : 10);
       this.renderer.viewCamera.updateProjectionMatrix();
       // update() also decides visibility: a full-zoom scope hides the weapon behind the HUD reticle.
       this.viewmodel.update(dt, this.player, look);
@@ -281,10 +262,10 @@ export class Game {
     }
     this.hud.scope(this.viewmodel.scopeVisible);
     const velocity = new THREE.Vector3(this.player.m.vx, this.player.m.vy, this.player.m.vz);
-    if (render) this.renderer.render(this.time, this.player.alive ? velocity : new THREE.Vector3(), state.laws.lightSpeed.c);
+    if (render) this.renderer.render(this.time);
 
     // ---- HUD ----
-    this.hud.frame(dt, this.player, state, me, cam, positions, state.rewindLeft > 0);
+    this.hud.frame(dt, this.player, state, me, cam, positions);
     this.hudTimer -= dt; this.mapTimer -= dt;
     if (this.hudTimer <= 0) {
       this.hudTimer = 0.1;
@@ -297,7 +278,6 @@ export class Game {
       const near = me?.alive ? this.pickups.nearestWeapon(this.player.m.x, this.player.m.y, this.player.m.z, PICKUP_REACH, state.pickupLeft) : -1;
       const item = near >= 0 ? this.map.def.pickups![near].item : undefined;
       this.hud.prompt(item && item in WEAPONS ? `<kbd>E</kbd> PICK UP ${WEAPONS[item as keyof typeof WEAPONS].name.toUpperCase()}` : '');
-      if (state.config.lawCooldown > 0 && me) this.refreshLaws(me.lawCooldown);
       this.hud.net(link.status());
     }
     if (this.mapTimer <= 0) { this.mapTimer = 0.1; this.hud.minimap(state, me, this.player.yaw, positions, new THREE.Vector3(this.player.m.x, 0, this.player.m.z)); }
@@ -342,7 +322,7 @@ export class Game {
     const muzzle = this.viewmodel.muzzleWorld(cam, this.renderer.viewCamera);
     this.effects.flash(muzzle, w.projectile ? 0xb48cff : 0xffc070, 4, 0.05, 7);
     if (w.projectile) {
-      // Charges are lawful bodies: the host launches one and it arrives with the next snapshot.
+      // The host launches the charge; it arrives with the next snapshot.
       this.link.fire({ weapon: this.player.slot, origin, dir, target: -1, zone: '', point: origin });
       return;
     }
@@ -356,9 +336,8 @@ export class Game {
     traces.forEach((t, i) => {
       const end = new THREE.Vector3(t.point.x, t.point.y, t.point.z);
       const tracer = w.pellets > 1 ? i % 3 === 0 : Math.random() < (w.auto ? 0.5 : 1);
-      if (tracer) this.effects.tracer(muzzle, end, 0xffe2a0, w.id === 'lancer' ? 2.5 : 1);
+      if (tracer) this.effects.tracer(muzzle, end, 0xffe2a0, w.category === 'sniper' ? 2.5 : 1);
       if (t.target >= 0) this.effects.hitSpark(end, (state.soldiers.find(s => s.id === t.target)?.shield ?? 0) > 0);
-      else if (t.drone) this.effects.hitSpark(end, true);
       else if (t.wall) this.effects.impact(end, new THREE.Vector3(t.wall.normal.x, t.wall.normal.y, t.wall.normal.z), t.wall.surface, i < 3, cam.position);
     });
     if (target >= 0) {
@@ -374,25 +353,19 @@ export class Game {
     }
   }
 
-  /** One ray against the world, enemy soldiers as rendered, and hostile drones. */
+  /** One ray against the world and enemy soldiers as rendered. */
   private trace(origin: Vec3, dir: Vec3, range: number, state: MatchState) {
     const wall = this.map.world.raycast(origin, dir, range, this.myTeam);
     let best = wall ? wall.t : range;
     let target = -1, zone: HitZone | '' = '';
-    let drone = false;
     for (const [id, r] of this.remotes) {
       const s = state.soldiers.find(x => x.id === id);
       if (!s || !s.alive || s.team === this.myTeam) continue;
       const hit = raycastSoldier(origin, dir, hitShape(r.pos, r.crouch, r.yaw));
       if (hit && hit.t < best) { best = hit.t; target = id; zone = hit.zone; }
     }
-    for (const d of this.bodies.drones()) {
-      if (d.team === this.myTeam) continue;
-      const t = raySphere(origin, dir, d.position, BODY_RADIUS.drone);
-      if (t >= 0 && t < best) { best = t; target = -1; zone = ''; drone = true; }
-    }
     const point = { x: origin.x + dir.x * best, y: origin.y + dir.y * best, z: origin.z + dir.z * best };
-    return { point, target, zone, drone, wall: target < 0 && !drone ? wall : null };
+    return { point, target, zone, wall: target < 0 ? wall : null };
   }
 
   private handleEvent(e: MatchEvent, state: MatchState, myId: number) {
@@ -410,7 +383,7 @@ export class Game {
         if (shooterDistance > SHOT_FX_RANGE && Math.hypot(e.to.x - cam.x, e.to.y - cam.y, e.to.z - cam.z) > SHOT_FX_RANGE) break;
         const from = r?.view.onScreen ? r.view.muzzleWorld() : new THREE.Vector3(e.from.x, e.from.y, e.from.z);
         // Cap remote gunshot voices per frame: each one is several WebAudio nodes.
-        if (!pellet && e.weapon !== 'bolt' && shooterDistance < SHOT_AUDIO_RANGE && this.shotVoices++ < 6) this.audio.gunshot(e.weapon, this.listener(), from);
+        if (!pellet && shooterDistance < SHOT_AUDIO_RANGE && this.shotVoices++ < 6) this.audio.gunshot(e.weapon, this.listener(), from);
         const to = new THREE.Vector3(e.to.x, e.to.y, e.to.z);
         if (e.from.x === e.to.x && e.from.y === e.to.y && e.from.z === e.to.z) break;
         if (!pellet || e.hit || Math.random() < 0.3) this.effects.tracer(from, to, find(e.shooter)?.team === 0 ? 0xa8dcff : 0xffb0a0, 1.2);
@@ -460,16 +433,6 @@ export class Game {
         break;
       }
       case 'neutralize': this.hud.toast(`${e.point} neutralized`); this.audio.tick(); break;
-      case 'law': {
-        const author = find(e.author);
-        this.lawChanged = e.command.kind;
-        this.refreshLaws();
-        this.hud.toast(`${e.source}${author && e.author !== myId ? ` · ${author.name}` : ''} · ${describeEvent(e)}`, 4500);
-        if (e.command.kind === 'rewind') this.audio.rewind(); else this.audio.law();
-        break;
-      }
-      case 'lawRevert': this.lawChanged = undefined; this.refreshLaws(); this.hud.toast('The laws snap back to normal.'); this.audio.law(); break;
-      case 'rewind': break;
       case 'explosion': {
         const at = new THREE.Vector3(e.x, e.y, e.z);
         if (e.weapon === 'graviton') { this.effects.explosion(at, 0.8); this.effects.burst(at, 0xb48cff); }
@@ -479,16 +442,9 @@ export class Game {
         if (d < 18) this.player.shake = Math.min(4, this.player.shake + (18 - d) * 0.25);
         break;
       }
-      case 'droneDown': {
-        const at = new THREE.Vector3(e.x, e.y, e.z);
-        this.effects.burst(at);
-        this.audio.explosion(this.listener(), at);
-        if (e.killer === myId) { this.hud.popScore('SENTINEL DOWN +50'); this.hud.hit('kill'); }
-        break;
-      }
       case 'phase': {
-        if (e.phase === 'live') this.hud.announce('OPERATION LIVE', 'Capture A · B · C', 'var(--accent)');
-        if (e.phase === 'warmup') { this.hud.announce('NEW ROUND', this.map.def.name); this.lawChanged = undefined; this.refreshLaws(); }
+        if (e.phase === 'live') this.hud.announce('OPERATION LIVE', `Capture ${this.map.def.points.map(p => p.id).join(' · ')}`, 'var(--accent)');
+        if (e.phase === 'warmup') this.hud.announce('NEW ROUND', this.map.def.name);
         break;
       }
       case 'join': if (e.id !== myId && !find(e.id)?.bot) this.hud.toast(`${e.name} joined ${e.team === 0 ? 'Aegis' : 'Crimson'}`); break;
@@ -500,22 +456,4 @@ export class Game {
       }
     }
   }
-
-  private refreshLaws(cooldown = 0) {
-    const state = this.link.state();
-    if (!state) return;
-    this.hud.laws(state.laws, cooldown, state.config.lawCooldown, this.lawChanged);
-    this.lawChanged = undefined;
-  }
 }
-
-function describeEvent(e: Extract<MatchEvent, { type: 'law' }>) {
-  const c = e.command;
-  switch (c.kind) {
-    case 'gravity': return c.gravity.mode === 'central' ? `Gravity now follows 1/r${c.gravity.exponent === 3 ? '³' : c.gravity.exponent === 2 ? '²' : '^' + c.gravity.exponent} (μ ${c.gravity.strength}).` : `Uniform gravity ${c.gravity.strength} m/s².`;
-    case 'time': return c.time.mode === 'playerMotion' ? 'Time now moves only when you move.' : `World time ×${c.time.scale}.`;
-    case 'lightSpeed': return `Light now crawls at ${c.lightSpeed.c} m/s.`;
-    case 'rewind': return `Rewinding ${c.rewind.seconds}s of world history.`;
-  }
-}
-

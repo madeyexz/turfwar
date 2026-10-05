@@ -2,6 +2,7 @@
 import * as THREE from 'three';
 import { loadAssets } from '../src/assets';
 import { LevelView } from '../src/render/level';
+import { PickupsView } from '../src/render/pickups';
 import { THEMES } from '../src/render/materials';
 import { QUALITY, Renderer } from '../src/render/renderer';
 import { loadMap } from '../shared/maps/index';
@@ -15,6 +16,8 @@ const r = new Renderer(document.body, QUALITY[(params.get('q') as 'medium') ?? '
 r.setTheme(theme, map.sun);
 const level = new LevelView(assets, map, theme);
 r.scene.add(level.group);
+const pickups = new PickupsView(assets, map.pickups);
+r.scene.add(pickups.group);
 // Overlay collision boxes (by surface, or 'all') to check that visuals match what bullets and bodies hit.
 const solids = params.get('solids')?.split(',');
 if (solids) for (const s of map.solids) if (solids.includes('all') || solids.includes(s.surface)) {
@@ -27,8 +30,9 @@ if (params.get('fov')) { r.camera.fov = Number(params.get('fov')); r.camera.upda
 let frames = 0; const start = performance.now();
 r.renderer.setAnimationLoop(() => {
   const t = (performance.now() - start) / 1000;
-  level.update(t); level.reactor?.update(t);
-  r.render(t, new THREE.Vector3(), 300);
+  level.update(t);
+  pickups.update(t, []);
+  r.render(t);
   if (++frames === 3) (window as any).__ready = 1;
   if (frames % 30 === 0) info.textContent = `${(frames / t).toFixed(1)} fps  calls ${r.renderer.info.render.calls} tris ${r.renderer.info.render.triangles}`;
 });

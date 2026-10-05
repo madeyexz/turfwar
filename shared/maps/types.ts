@@ -1,5 +1,4 @@
 import type { Heightfield, Ramp, Solid } from '../collision';
-import type { Laws } from '../laws';
 import type { Vec3 } from '../math';
 import type { WeaponId } from '../weapons';
 
@@ -39,7 +38,6 @@ export type Decor =
   | { kind: 'light'; x: number; y: number; z: number; color: number; intensity: number; distance: number }
   | { kind: 'rail'; x0: number; z0: number; x1: number; z1: number; y: number }
   | { kind: 'decal'; model: string; x: number; y: number; z: number; rotY: number; scale?: number }
-  | { kind: 'reactor'; x: number; y: number; z: number }
   | { kind: 'spawnPad'; team: 0 | 1; x: number; y: number; z: number; rotY: number }
   | { kind: 'banner'; team: 0 | 1; x: number; y: number; z: number; rotY: number }
   | { kind: 'tree'; x: number; y: number; z: number; scale: number; variant: number }
@@ -59,16 +57,11 @@ export interface MapDef {
   ramps: Ramp[];
   points: CapturePointDef[];
   spawns: SpawnDef[];
-  /** Center of the anomaly gravity field (the reactor). */
-  anomaly: Vec3;
   decor: Decor[];
-  laws: Laws;
   /** Sun direction and environment tint used by the renderer. */
   sun: Vec3;
   /** Weapon, ammo and armor pickups (mirrored like everything else on symmetric maps). */
   pickups?: PickupDef[];
-  /** The point with the reactor and its orbiting sentinels (defaults to B). */
-  reactor?: PointId;
   /** Soldiers per team this battlefield is built for (bots fill the gap); defaults to the mode's size. */
   teamSize?: number;
 }

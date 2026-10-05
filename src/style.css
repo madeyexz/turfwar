@@ -114,16 +114,6 @@ body.menu-open #hud, body.menu-open #hud * { visibility: hidden; }
 .capture .track { height: 5px; background: rgba(255, 255, 255, 0.1); margin-top: 5px; position: relative; }
 .capture .track i { position: absolute; top: 0; bottom: 0; left: 50%; }
 
-/* Laws */
-.laws { position: absolute; left: 22px; top: 222px; width: 232px; padding: 8px 10px; font-size: 12px; text-transform: none; letter-spacing: 0.01em; background: rgba(8, 16, 22, 0.45) !important; }
-.laws h4 { margin: 0 0 6px; font-size: 11px; letter-spacing: 0.14em; color: var(--accent); text-transform: uppercase; display: flex; justify-content: space-between; white-space: nowrap; }
-.law { display: grid; grid-template-columns: 18px 1fr; gap: 6px; padding: 4px 0; border-top: 1px solid rgba(255, 255, 255, 0.06); }
-.law .icon { color: var(--accent); font-size: 15px; }
-.law p { margin: 0; font-weight: 600; line-height: 1.15; }
-.law code { display: block; font-family: var(--font); color: var(--muted); font-size: 11px; }
-.law.changed { animation: lawFlash 1.6s ease-out; }
-.laws .hint { margin-top: 6px; display: flex; flex-wrap: wrap; gap: 4px 8px; color: var(--muted); font-size: 12px; text-transform: uppercase; letter-spacing: 0.08em; }
-.laws .cool { color: var(--amber); }
 
 /* Minimap */
 .minimap { position: absolute; left: 22px; top: 16px; width: 196px; height: 196px; padding: 0; border-radius: 4px; overflow: hidden; }
@@ -147,8 +137,6 @@ body.menu-open #hud, body.menu-open #hud * { visibility: hidden; }
 .scope::before { left: 50%; top: 17vh; bottom: 17vh; width: 1px; }
 .scope::after { top: 50%; left: calc(50% - 33vh); right: calc(50% - 33vh); height: 1px; }
 .scope i { position: absolute; left: 50%; top: 50%; width: 6px; height: 6px; margin: -3px; border-radius: 50%; background: var(--crimson); box-shadow: 0 0 6px var(--crimson); }
-body.rewinding #hud::after { content: ''; position: fixed; inset: 0; background: repeating-linear-gradient(0deg, rgba(127, 246, 255, 0.05) 0 2px, transparent 2px 5px); animation: scan 0.4s linear infinite; }
-.rewind-tag { position: absolute; top: 46%; left: 50%; transform: translateX(-50%); font-size: 22px; font-weight: 700; color: var(--accent); letter-spacing: 0.3em; text-shadow: 0 0 14px var(--accent); }
 
 /* Death & scoreboard */
 .released { position: absolute; left: 50%; top: 42%; transform: translate(-50%, -50%); padding: 14px 26px; text-align: center; display: flex; flex-direction: column; gap: 6px; }
@@ -221,26 +209,15 @@ body.rewinding #hud::after { content: ''; position: fixed; inset: 0; background:
 .bench-panel button { border: 1px solid var(--line); background: rgba(255, 255, 255, 0.05); padding: 6px 14px; font-weight: 700; letter-spacing: 0.1em; text-transform: uppercase; }
 .bench-panel button:first-child { border-color: var(--accent); color: var(--accent); }
 
-/* ---------- Law command bar ---------- */
-#lawbar { position: fixed; left: 50%; bottom: 120px; transform: translateX(-50%); width: min(720px, 92vw); z-index: 6; padding: 14px; background: var(--panel-solid); border: 1px solid var(--accent); box-shadow: 0 0 40px rgba(127, 246, 255, 0.18); }
-#lawbar form { display: flex; gap: 8px; align-items: center; }
-#lawbar .slash { color: var(--accent); font-size: 26px; font-weight: 700; }
-#lawbar input { flex: 1; background: transparent; border: none; border-bottom: 1px solid var(--line); font-size: 22px; font-weight: 600; padding: 4px 2px; outline: none; }
-#lawbar .examples { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; margin-top: 10px; }
-#lawbar .examples button { text-align: left; background: rgba(255, 255, 255, 0.04); border: 1px solid var(--line); padding: 5px 8px; font-weight: 600; font-size: 14px; }
-#lawbar .help { margin-top: 8px; font-size: 13px; color: var(--muted); font-weight: 600; letter-spacing: 0.04em; }
-#lawbar .help.err { color: var(--crimson); }
-
 @keyframes pulse { from { filter: brightness(1); } to { filter: brightness(1.8); } }
 @keyframes slideIn { from { transform: translateX(30px); opacity: 0; } to { transform: none; opacity: 1; } }
-@keyframes lawFlash { 0% { background: rgba(127, 246, 255, 0.35); } 100% { background: transparent; } }
 @keyframes announce { 0% { opacity: 0; transform: translate(-50%, -40%) scale(1.15); } 12% { opacity: 1; transform: translate(-50%, -50%) scale(1); } 80% { opacity: 1; } 100% { opacity: 0; } }
 @keyframes pop { 0% { opacity: 0; transform: translate(-50%, 10px); } 15% { opacity: 1; transform: translate(-50%, 0); } 100% { opacity: 0; transform: translate(-50%, -20px); } }
 @keyframes scan { from { background-position: 0 0; } to { background-position: 0 10px; } }
 
 @media (max-width: 900px) {
   #menu { grid-template-columns: 1fr; }
-  .laws, .minimap { display: none; }
+  .minimap { display: none; }
 }
 
 /* ---- Economy: credits, pickup prompt, buy menu ---- */

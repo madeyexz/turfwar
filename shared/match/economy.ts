@@ -3,7 +3,7 @@ import type { MapDef } from '../maps/types';
 import type { MatchState, Soldier } from './state';
 
 /**
- * Credits and gear: soldiers earn credits for kills, captures and sentinels, spend them in the buy
+ * Credits and gear: soldiers earn credits for kills and captures, spend them in the buy
  * menu on weapons that last until death, and swap weapons from pickups placed on the map. The same
  * rules run in Solo and on the server, so every purchase and pickup is validated there.
  */

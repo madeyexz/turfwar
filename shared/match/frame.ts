@@ -5,12 +5,12 @@ import { BODY_RADIUS, type Body, type BodyKind } from '../world';
 import type { MatchEvent, MatchState, PointState, Team } from './state';
 
 /**
- * Compact binary snapshot of everything that changes every tick: soldier poses and vitals, lawful
- * bodies, capture progress, the match clocks and this tick's shots. The server writes one frame
- * row per tick, so a hundred soldiers cost one small row update per client instead of hundreds of
- * row updates. Positions are quantized to 2 cm, velocities to 1 cm/s.
+ * Compact binary snapshot of everything that changes every tick: soldier poses and vitals,
+ * grenades and charges, capture progress, pickup timers, the match clock and this tick's shots.
+ * The server writes one frame row per tick, so a hundred soldiers cost one small row update per
+ * client instead of hundreds of row updates. Positions are quantized to 2 cm, velocities to 1 cm/s.
  */
-export const FRAME_VERSION = 2;
+export const FRAME_VERSION = 3;
 
 const POS = 50;          // units per metre (2 cm)
 const VEL = 100;         // units per m/s
@@ -19,7 +19,7 @@ const YAW = 65536 / (Math.PI * 2);
 
 const BODY_KINDS = Object.keys(BODY_RADIUS) as BodyKind[];
 const SURFACES: (Surface | undefined)[] = [undefined, 'metal', 'concrete', 'rock', 'dirt', 'glass', 'energy'];
-const SHOT_WEAPONS: (WeaponId | 'bolt')[] = [...Object.keys(WEAPONS) as WeaponId[], 'bolt'];
+const SHOT_WEAPONS = Object.keys(WEAPONS) as WeaponId[];
 
 export interface FramePose {
   id: number;
@@ -30,7 +30,7 @@ export interface FramePose {
   health: number; shield: number;
 }
 
-export interface FrameClock { tick: number; time: number; worldTime: number; phaseLeft: number; lawLeft: number; rewindLeft: number }
+export interface FrameClock { tick: number; time: number; phaseLeft: number }
 
 export interface DecodedFrame extends FrameClock {
   poses: FramePose[];
@@ -41,7 +41,7 @@ export interface DecodedFrame extends FrameClock {
   shots: Extract<MatchEvent, { type: 'shot' }>[];
 }
 
-const HEADER = 1 + 4 + 4 * 4 + 2 + 1 + 1 + 2 + 2 + 2;
+const HEADER = 1 + 4 + 4 * 2 + 1 + 1 + 2 + 2 + 2;
 const POSE = 22, BODY = 16, POINT = 5, SHOT = 16;
 const i16 = (v: number) => Math.max(-32768, Math.min(32767, Math.round(v)));
 const u8 = (v: number) => Math.max(0, Math.min(255, Math.round(v)));
@@ -55,8 +55,7 @@ export function encodeFrame(state: MatchState, shots: Extract<MatchEvent, { type
   let o = 0;
   v.setUint8(o, FRAME_VERSION); o += 1;
   v.setUint32(o, state.tick >>> 0, true); o += 4;
-  for (const f of [state.time, state.worldTime, state.phaseLeft, state.lawLeft]) { v.setFloat32(o, f, true); o += 4; }
-  v.setUint16(o, Math.min(65535, state.rewindLeft), true); o += 2;
+  for (const f of [state.time, state.phaseLeft]) { v.setFloat32(o, f, true); o += 4; }
   v.setUint8(o, points.length); o += 1;
   v.setUint8(o, pickups.length); o += 1;
   v.setUint16(o, soldiers.length, true); o += 2;
@@ -108,8 +107,7 @@ export function decodeFrame(bytes: Uint8Array): DecodedFrame | undefined {
   if (v.getUint8(o) !== FRAME_VERSION) return undefined;
   o += 1;
   const tick = v.getUint32(o, true); o += 4;
-  const time = v.getFloat32(o, true), worldTime = v.getFloat32(o + 4, true), phaseLeft = v.getFloat32(o + 8, true), lawLeft = v.getFloat32(o + 12, true); o += 16;
-  const rewindLeft = v.getUint16(o, true); o += 2;
+  const time = v.getFloat32(o, true), phaseLeft = v.getFloat32(o + 4, true); o += 8;
   const pointCount = v.getUint8(o); o += 1;
   const pickupCount = v.getUint8(o); o += 1;
   const soldierCount = v.getUint16(o, true), bodyCount = v.getUint16(o + 2, true), shotCount = v.getUint16(o + 4, true); o += 6;
@@ -150,7 +148,7 @@ export function decodeFrame(bytes: Uint8Array): DecodedFrame | undefined {
       to: { x: v.getInt16(o + 10, true) / POS, y: v.getInt16(o + 12, true) / POS, z: v.getInt16(o + 14, true) / POS },
     });
   }
-  return { tick, time, worldTime, phaseLeft, lawLeft, rewindLeft, poses, bodies, points, pickups, shots };
+  return { tick, time, phaseLeft, poses, bodies, points, pickups, shots };
 }
 
 /** Point states in map order (the frame carries them by index). */

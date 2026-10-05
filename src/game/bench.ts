@@ -1,5 +1,5 @@
 import { Vector2 } from 'three';
-import { loadMap, loadNav, reactorPoint } from '../../shared/maps/index';
+import { loadMap, loadNav } from '../../shared/maps/index';
 import { findPath, nearestNode } from '../../shared/match/nav';
 import { HEALTH } from '../../shared/weapons';
 import type { Renderer } from '../render/renderer';
@@ -90,11 +90,11 @@ export class Bench {
     if (!p.alive || st.phase === 'ended') return;
     const { def, world } = loadMap(g.mapId);
     if (!this.route.length) {
-      // Nearest objective first, then the reactor, the far objective and back to the reactor.
+      // Nearest objective first, then the middle one, the far objective and back to the middle.
       const byDistance = [...def.points].sort((a, b) => Math.hypot(a.x - p.m.x, a.z - p.m.z) - Math.hypot(b.x - p.m.x, b.z - p.m.z));
-      const reactor = def.points.find(pt => pt.id === reactorPoint(def)) ?? byDistance[1];
-      const ends = byDistance.filter(pt => pt !== reactor);
-      this.route = [ends[0], reactor, ends[ends.length - 1], reactor].map(pt => ({ x: pt.x, z: pt.z }));
+      const middle = [...def.points].sort((a, b) => Math.hypot(a.x, a.z) - Math.hypot(b.x, b.z))[0];
+      const ends = byDistance.filter(pt => pt !== middle);
+      this.route = [ends[0], middle, ends[ends.length - 1], middle].map(pt => ({ x: pt.x, z: pt.z }));
     }
 
     const eye = p.eye();

@@ -4,7 +4,7 @@ import { Audio, reverbImpulse } from './audio';
  * Menu theme: a 60-second A-minor loop sequenced entirely from the game's own sound effects.
  * Each effect is recorded once offline, then used as a sampler instrument (pitched by playback
  * rate): kicks are body hits, snares are gunshots, hats are dry fire, bass and lead are
- * hitmarkers, arpeggios are objective ticks, and the rewind sweep carries the end back to bar 1.
+ * hitmarkers, arpeggios are objective ticks, and a falling sweep carries the end back to bar 1.
  */
 const BPM = 128;
 const BEAT = 60 / BPM;
@@ -43,8 +43,8 @@ const KIT = {
   lost: { seconds: 0.6, play: (s: Audio) => s.capture(false), pitch: 392 },
   tick: { seconds: 0.1, play: (s: Audio) => s.tick(), pitch: 1200 },
   ui: { seconds: 0.1, play: (s: Audio) => s.ui() },
-  law: { seconds: 1, play: (s: Audio) => s.law() },
-  rewind: { seconds: 1.4, play: (s: Audio) => s.rewind() },
+  chime: { seconds: 1, play: (s: Audio) => s.chime() },
+  sweep: { seconds: 1.4, play: (s: Audio) => s.sweep() },
 } satisfies Record<string, { seconds: number; play: (s: Audio) => void; pitch?: number }>;
 type Voice = keyof typeof KIT;
 
@@ -150,7 +150,7 @@ function score() {
 
   // Risers into each section and impacts on the downbeat.
   for (const bar of [4, 16, 24]) {
-    add('law', at(bar - 1, 2.5), 0.9, { wet: 0.7 });
+    add('chime', at(bar - 1, 2.5), 0.9, { wet: 0.7 });
     add('slide', at(bar - 1, 2.2), 0.5, { wet: 0.5 });
     add('boom', at(bar), 0.8, { wet: 0.5 });
     add('crash', at(bar), 0.5, { wet: 0.6 });
@@ -159,8 +159,8 @@ function score() {
   add('magnum', at(28), 0.5, { wet: 0.7 });
   for (const bar of [12, 20, 28]) add('shatter', at(bar, 0.5), 0.6, { wet: 0.7, pan: 0.2 });
 
-  // The rewind sweep that drags the last bar back to the first.
-  add('rewind', at(31, 1.3), 1.1, { wet: 0.8 });
+  // The sweep that drags the last bar back to the first.
+  add('sweep', at(31, 1.3), 1.1, { wet: 0.8 });
   add('slide', at(31, 2.6), 0.4, { wet: 0.6 });
   return notes;
 }

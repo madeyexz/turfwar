@@ -147,6 +147,9 @@ class Client {
     if (self.alive && !this.alive) {
       this.m = createMoveState(self.x, self.y, self.z); this.yaw = self.yaw;
       this.ammo = WEAPONS[LOADOUTS.assault.weapons[0]].magazine; this.goalLeft = 0;
+      // Shop like a player: try a random gun each deployment (the server checks credits and buy time).
+      const ids = Object.keys(WEAPONS);
+      void this.conn.reducers.buy({ item: ids[Math.floor(Math.random() * ids.length)] }).catch(() => undefined);
     }
     this.alive = self.alive;
     if (!self.alive) return;

@@ -7,7 +7,6 @@ import { addProceduralGuns } from './render/procguns';
 export interface Assets {
   weapons: Map<string, THREE.Object3D>;
   props: Map<string, THREE.Object3D>;
-  drone: GLTF;
   soldier: GLTF;
   clips: Map<string, THREE.AnimationClip>;
   textures: Map<string, THREE.Texture>;
@@ -30,8 +29,8 @@ export async function loadAssets(onProgress: (fraction: number) => void): Promis
     if (kind === 'diff') tex.colorSpace = THREE.SRGBColorSpace;
     textures.set(`${set}_${kind}`, tex);
   }));
-  const [weapons, props, drone, soldier, anims] = await Promise.all([
-    gltf('weapons.glb'), gltf('props.glb'), gltf('drone.glb'), gltf('soldier.glb'), gltf('anims.glb'), ...texturePromises,
+  const [weapons, props, soldier, anims, imported] = await Promise.all([
+    gltf('weapons.glb'), gltf('props.glb'), gltf('soldier.glb'), gltf('anims.glb'), gltf('guns.glb'), ...texturePromises,
   ]) as GLTF[];
   const named = (g: GLTF) => {
     const map = new Map<string, THREE.Object3D>();
@@ -42,9 +41,10 @@ export async function loadAssets(onProgress: (fraction: number) => void): Promis
     return map;
   };
   const guns = named(weapons);
+  for (const [name, gun] of named(imported)) guns.set(name, gun);
   addProceduralGuns(guns);
   return {
-    weapons: guns, props: named(props), drone, soldier,
+    weapons: guns, props: named(props), soldier,
     clips: new Map(anims.animations.map(c => [c.name, c])),
     textures,
   };

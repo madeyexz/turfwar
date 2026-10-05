@@ -1,11 +1,9 @@
-import { defaultLaws } from '../laws';
-import { cloneData } from '../math';
 import { MapBuilder } from './builder';
 import type { MapDef } from './types';
 
 /**
  * Citadel Keep: a stone fortress on a grassy hill, in the spirit of compact browser arena
- * shooters. Curtain walls with rampart walks enclose the reactor courtyard (B) and its twin
+ * shooters. Curtain walls with rampart walks enclose the inner courtyard (B) and its twin
  * keeps; roofed galleries run under the north and south ramparts. A and C are the barbicans in
  * front of the west and east gatehouses, each behind a dry ditch with a bridge. Spawn camps sit at
  * the far edges of an open outer bailey of orchards, field walls and a watch post.
@@ -26,9 +24,9 @@ function merlons(b: MapBuilder, x0: number, z0: number, x1: number, z1: number, 
 export function citadelKeep(): MapDef {
   const b = new MapBuilder({
     id: 'citadel', name: 'Citadel Keep', region: 'VERDANT HIGHLANDS / HILLTOP FORTRESS',
-    description: 'Hilltop castle: rampart walks, twin keeps over the reactor courtyard, gatehouse barbicans and an open outer bailey.',
+    description: 'Hilltop castle: rampart walks, twin keeps over the inner courtyard, gatehouse barbicans and an open outer bailey.',
     theme: 'forest', halfX: 70, halfZ: 70, seed: 23, roll: 0.8, ridge: 12, teamSize: 8,
-    laws: cloneData(defaultLaws), sun: { x: -0.5, y: 0.66, z: 0.4 },
+    sun: { x: -0.5, y: 0.66, z: 0.4 },
   });
 
   // ---- Terrain: the castle hill, barbicans, ditches and spawn camps ----
@@ -45,10 +43,9 @@ export function citadelKeep(): MapDef {
 
   const y0 = P - 1.2, top = P + WALK;
 
-  // ---- Reactor courtyard (B) ----
+  // ---- Inner courtyard (B) ----
   b.box(0, P, 0, 8, 0.45, 8, 'concrete');
   b.box(0, P + 0.45, 0, 2.4, 2.2, 2.4, 'pillar');
-  b.raw({ kind: 'reactor', x: 0, y: P + 0.45, z: 0 });
   b.point('B', 'Keep Courtyard', 0, P + 0.45, 0, 9);
   b.point('A', 'West Barbican', -40, P, 0, 7.5);
   b.point('C', 'East Barbican', 40, P, 0, 7.5);
@@ -126,7 +123,7 @@ export function citadelKeep(): MapDef {
     b.solidProp('Prop_Crate_Large', -14, P, 13, 0.2, 1.9, 1.3, 1.9);
     b.solidProp('Prop_Chest', -9.6, P, 13.4, 0, 1.5, 0.75, 0.8);
 
-    // ---- Courtyard cover around the reactor ----
+    // ---- Courtyard cover ----
     b.box(-6.5, P, -3.2, 0.7, 1.15, 3.4, 'sandstone');
     b.box(-4.6, P, -6.4, 3.4, 1.15, 0.7, 'sandstone');
     b.box(5.8, P, -5.6, 2.4, 1.15, 0.7, 'sandstone');
@@ -198,7 +195,7 @@ export function citadelKeep(): MapDef {
 
     // ---- Pickups ----
     b.pickup(-23.4, top, -23.4, 'lancer', 45);           // exposed bastion top
-    b.pickup(-9, roof, -8, 'graviton', 45);              // keep roof over the reactor
+    b.pickup(-9, roof, -8, 'graviton', 45);              // keep roof over the courtyard
     b.pickup(-18, P, -22.4, 'scatter', 35);              // north gallery corridor
     b.pickup(-42, P, 8.5, 'ammo', 20);                   // barbican, off the point
     b.pickup(-16, 'ground', -36, 'armor', 40);           // north bailey flank

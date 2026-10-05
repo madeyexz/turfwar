@@ -1,15 +1,14 @@
 import { describe, expect, it } from 'vitest';
-import { defaultLaws } from '../laws';
-import { MAP_IDS, loadMap, loadNav, reactorPoint } from '../maps/index';
+import { MAP_IDS, loadMap, loadNav } from '../maps/index';
 import { rng, wrapAngle } from '../math';
 import { CollisionWorld } from '../collision';
 import { createMoveState, eyeHeight, stepMovement } from '../movement';
 import { hitShape } from '../hitbox';
 import { ECONOMY, GRENADE, LOADOUTS, WEAPONS, pelletCone, pelletDirs } from '../weapons';
 import { findPath, nearestNode } from './nav';
-import { addSoldier, applyLaw, balanceTeams, buyItem, createContext, createMatch, fireShot, pickUp, reload, reportState, teamSizeFor, tickMatch, TICK_RATE } from './sim';
+import { addSoldier, balanceTeams, buyItem, createContext, createMatch, fireShot, pickUp, reload, reportState, teamSizeFor, tickMatch, TICK_RATE } from './sim';
 import { OFFLINE_CONFIG, ONLINE_CONFIG, type MatchEvent, type MatchState, type Soldier } from './state';
-import { MOVE_SLACK, killSoldier, spawnSoldier, type SimContext } from './combat';
+import { MOVE_SLACK, eyeOf, killSoldier, spawnSoldier, type SimContext } from './combat';
 import { decodeFrame, encodeFrame } from './frame';
 
 function setup(config = OFFLINE_CONFIG, seed = 1) {
@@ -31,7 +30,6 @@ describe('maps and navigation', () => {
       const ids = def.points.map(p => p.id).sort();
       expect(ids).toEqual(['A', 'B', 'C', 'D', 'E'].slice(0, ids.length));
       expect([3, 5]).toContain(ids.length);
-      expect(ids).toContain(reactorPoint(def));
       for (const team of [0, 1]) {
         const sp = def.spawns.find(s => s.team === team)!;
         const start = nearestNode(nav, sp.x, sp.y, sp.z);
@@ -45,12 +43,10 @@ describe('maps and navigation', () => {
       const all = new Set(def.solids.map(key));
       for (const s of def.solids) expect(all.has(key({ minX: -s.maxX, maxX: -s.minX, minZ: -s.maxZ, maxZ: -s.minZ, minY: s.minY, maxY: s.maxY }))).toBe(true);
     });
-    it(`${id}: spawns are not inside geometry and the reactor floats over its point`, () => {
+    it(`${id}: spawns and pickups are clear of geometry`, () => {
       const { def, world } = loadMap(id);
       for (const sp of def.spawns) expect(world.overlapsSolid({ x: sp.x, y: sp.y, z: sp.z }, 0.35, 1.7)).toBe(false);
-      const b = def.points.find(p => p.id === reactorPoint(def))!;
-      expect(Math.hypot(def.anomaly.x - b.x, def.anomaly.z - b.z)).toBeLessThan(0.5);
-      expect(def.anomaly.y - b.y).toBeGreaterThan(2);
+      for (const p of def.pickups ?? []) expect(world.overlapsSolid({ x: p.x, y: p.y + 0.05, z: p.z }, 0.3, 1.2), `${p.item}@${p.x},${p.z}`).toBe(false);
     });
   }
 });
@@ -301,7 +297,7 @@ describe('new weapons', () => {
     expect(health(other.b)).toBe(150);
   });
 
-  it('graviton charges are lawful bodies: they fly, bend with gravity laws and detonate', () => {
+  it('graviton charges fly in an arc and detonate on contact or near an enemy', () => {
     const { state, ctx, a, b, events } = duel('grenadier', 16);
     expect(fireShot(state, ctx, a.id, aimAt(a, b))).toBe(true);
     expect(state.bodies.filter(x => x.kind === 'charge')).toHaveLength(1);
@@ -310,70 +306,14 @@ describe('new weapons', () => {
     expect(events.some(e => e.type === 'explosion' && e.weapon === 'graviton')).toBe(true);
     expect(health(b)).toBeLessThan(150 - 40);
 
-    // Sideways gravity bends the next charge away from the line it was fired along.
-    const bent = duel('grenadier', 16);
-    bent.state.laws.gravity = { mode: 'uniform', direction: { x: 0, y: 0, z: 1 }, strength: 30, exponent: 0 };
-    fireShot(bent.state, bent.ctx, bent.a.id, aimAt(bent.a, bent.b));
-    tick(bent.state, bent.ctx, 0.2);
-    const charge = bent.state.bodies.find(x => x.kind === 'charge')!;
-    expect(charge.z - bent.a.m.z).toBeGreaterThan(0.3);
-  });
-});
-
-describe('laws in a match', () => {
-  it('validates commands, enforces online cooldown and reverts after the law duration', () => {
-    const { state, ctx } = setup({ ...ONLINE_CONFIG, warmup: 0 });
-    const a = addSoldier(state, ctx, { name: 'A', team: 0, bot: false });
-    expect(applyLaw(state, ctx, a.id, { kind: 'gravity', gravity: { mode: 'central', strength: 80, exponent: 2, direction: { x: 0, y: -1, z: 0 }, code: 'x' } }, 'AI', '').ok).toBe(false);
-    expect(applyLaw(state, ctx, a.id, { kind: 'gravity', gravity: { ...defaultLaws.gravity, exponent: 3 } }, 'PRESET', '').ok).toBe(true);
-    expect(state.laws.gravity.exponent).toBe(3);
-    expect(applyLaw(state, ctx, a.id, { kind: 'lightSpeed', lightSpeed: { c: 10 } }, 'PRESET', '').ok).toBe(false);
-    tick(state, ctx, ONLINE_CONFIG.lawDuration + 0.5);
-    expect(state.laws.gravity.exponent).toBe(2);
-  });
-
-  it('inverse-cube gravity flings the sentinel drones out of the reactor', () => {
-    const { state, ctx } = setup();
-    const near = () => state.bodies.filter(b => b.kind === 'drone' && Math.hypot(b.x, b.z) < 12).length;
-    expect(near()).toBe(4);
-    applyLaw(state, ctx, -1, { kind: 'gravity', gravity: { ...defaultLaws.gravity, exponent: 3 } }, 'PRESET', '');
-    tick(state, ctx, 12);
-    expect(near()).toBeLessThan(2);
-  });
-
-  it('motion-driven time freezes bots and bodies while the lawbreaker stands still', () => {
-    const { state, ctx } = setup({ ...OFFLINE_CONFIG, teamSize: 3 });
-    const me = addSoldier(state, ctx, { name: 'Me', team: 0, bot: false });
-    balanceTeams(state, ctx);
-    tick(state, ctx, 4);
-    applyLaw(state, ctx, me.id, { kind: 'time', time: { mode: 'playerMotion', scale: 1 } }, 'PRESET', '');
-    const before = JSON.stringify([state.bodies, state.soldiers.filter(s => s.bot).map(s => s.m)]);
-    const worldTime = state.worldTime;
-    tick(state, ctx, 3);
-    expect(state.worldTime).toBe(worldTime);
-    expect(JSON.stringify([state.bodies, state.soldiers.filter(s => s.bot).map(s => s.m)])).toBe(before);
-    // Moving at half walking pace advances world time at half speed.
-    me.m.vx = 3;
-    tick(state, ctx, 2);
-    expect(state.worldTime - worldTime).toBeCloseTo(1, 1);
-  });
-
-  it('rewind restores bots, bodies and objectives but not the lawbreaker or scores', () => {
-    const { state, ctx } = setup({ ...OFFLINE_CONFIG, teamSize: 4, warmup: 0 }, 3);
-    const me = addSoldier(state, ctx, { name: 'Me', team: 0, bot: false });
-    balanceTeams(state, ctx);
-    tick(state, ctx, 20);
-    const saved = JSON.stringify({ bodies: state.bodies, bots: state.soldiers.filter(s => s.bot).map(s => [s.m.x, s.m.z, s.alive]), points: state.points.map(p => [p.progress, p.owner]) });
-    const savedTime = state.worldTime;
-    tick(state, ctx, 3);
-    place(me, -30, 30, ctx);
-    const scores = [...state.scores];
-    applyLaw(state, ctx, me.id, { kind: 'rewind', rewind: { seconds: 3 } }, 'PRESET', '');
-    for (let i = 0; i < 3 * TICK_RATE; i++) tickMatch(state, ctx, 1 / TICK_RATE);
-    expect(state.worldTime).toBeCloseTo(savedTime, 5);
-    expect(JSON.stringify({ bodies: state.bodies, bots: state.soldiers.filter(s => s.bot).map(s => [s.m.x, s.m.z, s.alive]), points: state.points.map(p => [p.progress, p.owner]) })).toBe(saved);
-    expect(me.m.x).toBe(-30);
-    expect(state.scores[0] + state.scores[1]).toBeGreaterThanOrEqual(scores[0] + scores[1]);
+    // Fired level, the next charge drops below its line of fire.
+    const arc = duel('grenadier', 40);
+    arc.a.pitch = 0;
+    const eye = eyeOf(arc.a);
+    fireShot(arc.state, arc.ctx, arc.a.id, { ...aimAt(arc.a, arc.b), dir: { x: 1, y: 0, z: 0 } });
+    tick(arc.state, arc.ctx, 0.3);
+    const charge = arc.state.bodies.find(x => x.kind === 'charge')!;
+    expect(charge.y).toBeLessThan(eye.y - 0.2);
   });
 });
 

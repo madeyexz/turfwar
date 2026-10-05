@@ -1,22 +1,20 @@
-import { defaultLaws } from '../laws';
-import { cloneData } from '../math';
 import { MapBuilder } from './builder';
 import type { MapDef } from './types';
 
 /**
- * Verdant Divide: a jungle uplink array. The reactor crowns a raised plateau reached by two
+ * Verdant Divide: a jungle uplink array. The uplink crowns a raised plateau reached by two
  * long ramps and a cliff path; A and C are forest-clearing bunkers. Dense trees break
  * sightlines on the flanks, while the plateau dominates the middle.
  */
 export function verdantDivide(): MapDef {
   const b = new MapBuilder({
     id: 'verdant', name: 'Verdant Divide', region: 'AMERISH-CLASS JUNGLE / UPLINK ARRAY',
-    description: 'A plateau reactor over dense jungle flanks and clearing bunkers.',
+    description: 'A plateau uplink over dense jungle flanks and clearing bunkers.',
     theme: 'forest', halfX: 86, halfZ: 58, seed: 31, roll: 1.6, ridge: 20,
-    laws: cloneData(defaultLaws), sun: { x: -0.3, y: 0.7, z: 0.45 },
+    sun: { x: -0.3, y: 0.7, z: 0.45 },
   });
 
-  b.pad(0, 0, 22, 22, 3.0, 9);                 // reactor plateau (blend forms ramps all round)
+  b.pad(0, 0, 22, 22, 3.0, 9);                 // uplink plateau (blend forms ramps all round)
   b.mirrored(() => {
     b.pad(-71, 0, 20, 26, 0.8, 7);             // warpgate
     b.pad(-38, -18, 18, 14, 0.3, 6);           // clearing bunker A
@@ -30,7 +28,6 @@ export function verdantDivide(): MapDef {
   // ---- Uplink plateau (B) ----
   const py = b.ground(0, 0);
   b.box(0, py, 0, 3, 1.4, 3, 'pillar');
-  b.raw({ kind: 'reactor', x: 0, y: py - 1.2, z: 0 });
   b.point('B', 'Uplink Plateau', 0, py, 0, 9);
   b.mirrored(() => {
     // Dish array pylons and low walls on the plateau rim.

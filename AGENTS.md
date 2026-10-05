@@ -1,6 +1,7 @@
 # Lawbreaker // Frontline
 
-Browser-first sci-fi infantry FPS with physics-rewriting commands. Read `README.md`
+Browser-first team FPS: credits, a buy menu, map pickups and flag fights from 8v8 arenas
+to a 100-soldier city. Read `README.md`
 for gameplay, architecture, asset attribution, known limits, and the demo script.
 Improve playable gunplay, map flow, animation, and multiplayer—not only the HUD.
 
@@ -11,40 +12,41 @@ Improve playable gunplay, map flow, animation, and multiplayer—not only the HU
 - **Shared TypeScript simulation**, used by Solo and the server. Rapier was removed
   in the rebuild; do not assume the original prototype's physics engine remains.
 - **SpacetimeDB 2.10.2** TypeScript module and client SDK for Online matches.
-- **Zod** for typed law-command validation; **Vitest** for tests.
-- **Vercel** serves the built frontend and `api/law.ts` Node serverless route.
-- GLB characters/weapons and animations from CC0 Quaternius packs; CC0 Poly Haven
+- **Vitest** for tests.
+- **Vercel** serves the built frontend (static; there are no serverless routes).
+- GLB characters/weapons and animations from CC0 Quaternius packs (buy-menu guns from the
+  CC0 Ultimate Gun Pack via `tools/import-guns.ts`); CC0 Poly Haven
   textures; Rajdhani font under OFL. Keep license files and attribution intact.
 
 ## Where code belongs
 
 - `shared/`: environment-independent simulation, collision, movement, hit volumes,
-  weapons, gravity/time/rewind, law schema, and map definitions. No browser APIs here.
-- `shared/match/`: match state, combat validation, bots, navigation, and simulation tick.
+  weapons and prices, thrown bodies, and map definitions (with pickups). No browser APIs here.
+- `shared/match/`: match state, combat validation, economy (credits, buying, pickups), bots,
+  navigation, the packed per-tick frame, and the simulation tick.
 - `src/game/`: client loop, player prediction/input, Solo link, settings, performance check.
 - `src/net/online.ts`: SpacetimeDB connection, replicated state, interpolation, and intents.
 - Other `src/` modules: rendering, soldier/viewmodel animation, effects, HUD, and audio.
 - `spacetimedb/src/index.ts`: tables, reducers, lifecycle, and scheduled match tick.
 - `src/module_bindings/`: generated client bindings; regenerate after module API changes.
-- `api/law.ts`: server-only natural language → typed JSON. Never execute model output.
 - `public/assets/`, `public/fonts/`: runtime assets and licenses.
 - `tools/`: asset conversion/fetch tools with their own dependencies; not runtime code.
 - `dev/`: development-only map, model, soldier, and first-person weapon preview pages.
 
 ## Gameplay and authority
 
-Modes are Solo skirmish (bots), Online, and Law Lab (sandbox). Five maps support
-A/B/C Domination; Meridian District is the 50v50 city (Online holds up to 100 soldiers). Physics laws cover gravity, motion-driven time, slow-light visuals,
-and rewind. Presets 1–4 and the four example sentences must work without an AI key.
+Modes are Solo skirmish (bots), Online, and a Practice range (no bots). Eight maps support
+Domination (three flags; Meridian District, the 50v50 city, has five). Online holds up to 100
+soldiers. Every map has weapon, ammo and armor pickups.
 
-Online damage, scores, bots, objectives, and laws are server-controlled. Human
+Online damage, scores, credits, purchases, pickups, bots and objectives are server-controlled. Human
 movement is client-predicted/reported and server-validated, not fully server-simulated.
 Keep client and module simulation/schema compatible. Do not weaken validation to
 hide synchronization failures. Test with separate client identities.
 
-Preserve law validation/clamping in the API and module. Human movement and timers
-ignore world-time changes; lawful bodies and bots do not. Online laws are temporary
-and cooldown-limited. See README for rewind boundaries and approximations.
+Player reducers only queue input; the scheduled tick applies it through the shared rules
+(buy time/spawn zone and credits for purchases, reach and availability for pickups). Keep
+that one-load-per-tick shape: per-reducer match loads do not scale to 100 soldiers.
 
 ## Local development
 
@@ -101,11 +103,6 @@ spacetime generate --lang typescript --out-dir src/module_bindings --module-path
 - Frontend: `https://lawbreaker.vercel.app`.
 - Maincloud database: **`3d-game-c4lhd`**, URI `wss://maincloud.spacetimedb.com`.
   Build-time public variables are `VITE_SPACETIMEDB_URI` and `VITE_SPACETIMEDB_DATABASE`.
-- Production AI is intentionally disabled. `OPENAI_API_KEY` is server-only and must
-  never be prefixed `VITE_`, committed, or printed. No-key API responses should be
-  intentional 503 JSON preset fallbacks, not runtime crashes.
-- Preserve Node ESM-compatible imports in the serverless route (for example the
-  `../shared/laws.js` specifier). Check the actual deployed API when changing it.
 - Updating an existing database does not invoke the `init` lifecycle. Preserve the
   guarded first-join initialization and avoid duplicate tick schedules.
 - Never reset Maincloud data. Authorized module releases must use `--delete-data=never`

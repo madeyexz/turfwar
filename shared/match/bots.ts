@@ -3,7 +3,6 @@ import { clamp, dirFromAngles, wrapAngle, type Vec3 } from '../math';
 import { MOVE, eyeHeight, stepMovement, type MoveInput } from '../movement';
 import { GRENADE, LOADOUTS, WEAPONS, type WeaponId } from '../weapons';
 import { eyeOf, feetOf, launchCharge, resolvePellets, resolveShot, spreadFor, throwGrenadeFrom, traceShot, weaponOf, type SimContext } from './combat';
-import { reactorPoint } from '../maps/index';
 import { findPath, nearestNode } from './nav';
 import type { BotBrain, MatchState, Soldier } from './state';
 
@@ -46,7 +45,6 @@ function chooseGoal(state: MatchState, ctx: SimContext, bot: Soldier, brain: Bot
     const def = ctx.map.points.find(d => d.id === p.id)!;
     const distance = Math.hypot(def.x - bot.m.x, def.z - bot.m.z);
     let score = (p.owner !== bot.team ? 1.1 : 0.25) + (p.contested ? 0.7 : 0) + (p.capturing !== -1 && p.capturing !== bot.team ? 0.9 : 0);
-    score += p.id === reactorPoint(ctx.map) ? 0.25 : 0;
     score -= distance / 140;
     // Spread the team out: discourage piling onto one point.
     const mates = state.soldiers.filter(s => s.bot && s.team === bot.team && s.id !== bot.id && s.brain?.goal === p.id).length;
@@ -113,19 +111,19 @@ export function updateBot(state: MatchState, ctx: SimContext, bot: Soldier, dt: 
         const scale = (1.25 - brain.skill) * (0.03 + ctx.random() * 0.05);
         brain.errYaw = (ctx.random() < 0.5 ? -1 : 1) * scale; brain.errPitch = (ctx.random() - 0.3) * scale;
       }
-      brain.lastSeen = state.worldTime; brain.seenX = seen.m.x; brain.seenY = seen.m.y; brain.seenZ = seen.m.z;
+      brain.lastSeen = state.time; brain.seenX = seen.m.x; brain.seenY = seen.m.y; brain.seenZ = seen.m.z;
       target = seen;
-    } else if (state.worldTime - brain.lastSeen > 2.2) {
+    } else if (state.time - brain.lastSeen > 2.2) {
       brain.target = -1; target = undefined;
     }
   }
-  const visible = !!target && state.worldTime - brain.lastSeen < 0.3;
+  const visible = !!target && state.time - brain.lastSeen < 0.3;
 
   // ---- Goals and navigation ------------------------------------------------------
   if (!brain.goal || brain.repath <= 0) {
     const goalPoint = state.points.find(p => p.id === brain.goal);
     if (!brain.goal || !goalPoint || (goalPoint.owner === bot.team && !goalPoint.contested && ctx.random() < 0.5)) chooseGoal(state, ctx, bot, brain);
-    if (target && !visible && state.worldTime - brain.lastSeen < 2.2) plan(ctx, bot, brain, brain.seenX, brain.seenY, brain.seenZ);
+    if (target && !visible && state.time - brain.lastSeen < 2.2) plan(ctx, bot, brain, brain.seenX, brain.seenY, brain.seenZ);
     else plan(ctx, bot, brain, brain.goalX, bot.m.y, brain.goalZ);
     brain.repath = 2.5 + ctx.random() * 2;
   }
@@ -158,7 +156,7 @@ export function updateBot(state: MatchState, ctx: SimContext, bot: Soldier, dt: 
     bot.yaw = wrapAngle(bot.yaw + clamp(wrapAngle(wantYaw - bot.yaw), -turn, turn));
     bot.pitch = clamp(bot.pitch + clamp(wantPitch - bot.pitch, -turn, turn), -1.3, 1.3);
     const aligned = Math.abs(wrapAngle(wantYaw - bot.yaw)) < 0.06 && Math.abs(wantPitch - bot.pitch) < 0.06;
-    wantAds = distance > 22 && w.id !== 'sidearm' && w.id !== 'stinger' && w.pellets === 1;
+    wantAds = distance > 22 && w.category !== 'pistol' && w.category !== 'shotgun';
 
     // Strafe and range-keeping while fighting.
     if (brain.strafeLeft <= 0) { brain.strafe = ctx.random() < 0.5 ? -1 : 1; brain.strafeLeft = 0.5 + ctx.random() * 0.9; }
@@ -207,7 +205,7 @@ export function updateBot(state: MatchState, ctx: SimContext, bot: Soldier, dt: 
     brain.burst = 0;
     if (bot.ammo[bot.weapon] < weaponOf(bot).magazine * 0.4 && bot.reloadLeft <= 0) bot.reloadLeft = w.reload;
     // Grenade the last known position of an enemy who ducked behind cover.
-    if (target && brain.grenadeCooldown <= 0 && bot.grenades > 0 && state.worldTime - brain.lastSeen < 2.5) {
+    if (target && brain.grenadeCooldown <= 0 && bot.grenades > 0 && state.time - brain.lastSeen < 2.5) {
       const d = Math.hypot(brain.seenX - bot.m.x, brain.seenZ - bot.m.z);
       if (d > 9 && d < 24 && ctx.random() < 0.35) {
         const eye = eyeOf(bot);

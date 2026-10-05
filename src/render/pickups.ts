@@ -20,9 +20,9 @@ export class PickupsView {
       const kind = def.item === 'ammo' ? 'ammo' : def.item === 'armor' ? 'armor' : 'weapon';
       const color = COLORS[kind];
       const ring = new THREE.Mesh(new THREE.TorusGeometry(0.55, 0.035, 6, 32), new THREE.MeshBasicMaterial({ color, transparent: true, opacity: 0.85 }));
-      ring.rotation.x = Math.PI / 2; ring.position.y = 0.04;
+      ring.rotation.x = Math.PI / 2; ring.position.y = 0.1;
       const disc = new THREE.Mesh(new THREE.CircleGeometry(0.55, 24), new THREE.MeshBasicMaterial({ color, transparent: true, opacity: 0.16, depthWrite: false }));
-      disc.rotation.x = -Math.PI / 2; disc.position.y = 0.03;
+      disc.rotation.x = -Math.PI / 2; disc.position.y = 0.09;
       root.add(ring, disc);
       let spin: THREE.Object3D;
       if (kind === 'weapon') {

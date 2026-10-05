@@ -1,5 +1,3 @@
-import { defaultLaws } from '../laws';
-import { cloneData } from '../math';
 import { MapBuilder, type Side } from './builder';
 import type { BlockStyle, MapDef } from './types';
 
@@ -10,14 +8,14 @@ import type { BlockStyle, MapDef } from './types';
  * parapet is fatal. Team 0 deploys on the west roof, team 1 on the east.
  *
  *   A Helipad     — north-west roof (33 m), wide open, a crashed gunship for cover
- *   B Reactor     — the central tower roof (36 m), the highest point
+ *   B Central     — the central tower roof (36 m), the highest point
  *   C Helipad     — A rotated 180° onto the south-east roof
  *
  * Roof grid (west half; the east half is its 180° rotation), x columns × z rows:
  *
  *            x −68..−46     x −40..−16      x −10..10
  *   z −50..−22   Water tower 27  A Helipad 33   Office 30
- *   z −14..14    Spawn 30        Penthouse 30   B Reactor 36 (shared)
+ *   z −14..14    Spawn 30        Penthouse 30   B Central 36 (shared)
  *   z  22..50    Billboard 24    Tank roof 26   (Office, mirrored)
  *
  * Coordinates: +X east, +Z south, metres.
@@ -40,7 +38,7 @@ const R = {
   tanks: roof(-40, -16, 22, 50, 26, 'concrete'),
   office: roof(-10, 10, -50, -22, 30, 'wall'),
 };
-/** The reactor tower (self-symmetric, placed outside the mirror). */
+/** The central tower (self-symmetric, placed outside the mirror). */
 const B = roof(-10, 10, -14, 14, 36, 'wallDark');
 
 /** Width of every bridge and stair flight over a gap (wide enough for two nav columns). */
@@ -51,7 +49,7 @@ export function skylineRooftops(): MapDef {
     id: 'skyline', name: 'Skyline Rooftops', region: 'BOREAL ARCOLOGY / UPPER CITY',
     description: '8v8 across frozen rooftops: bridges, a sky-bridge corridor and a penthouse. The streets are a hundred metres down.',
     theme: 'desert', halfX: HALF, halfZ: HALF, seed: 23, roll: 0, ridge: 0,
-    laws: cloneData(defaultLaws), sun: { x: 0.42, y: 0.55, z: -0.5 },
+    sun: { x: 0.42, y: 0.55, z: -0.5 },
     ground: () => STREET, teamSize: 8,
   });
   b.buildTerrain(4);
@@ -75,11 +73,11 @@ export function skylineRooftops(): MapDef {
     b.box(-48, 27, -36, 4, 6, SPAN, 'concrete');                   // landing
     bridge(b, -46, -40, -36, 33);                                  // → helipad (A)
     flight(b, -24, -18, SPAN, 8, 30, 33, 3);                       // penthouse ↑ helipad
-    flight(b, -25, 6, 10, SPAN, 30, 36, 0);                        // penthouse roof: stairs to the reactor bridge
+    flight(b, -25, 6, 10, SPAN, 30, 36, 0);                        // penthouse roof: stairs to the central bridge
     b.box(-18, 30, 6, 4, 6, SPAN, 'concrete');                     // landing
-    bridge(b, -16, -10, 6, 36);                                    // → reactor (B)
+    bridge(b, -16, -10, 6, 36);                                    // → central tower (B)
     flight(b, -13, -30, 6, SPAN, 30, 33, 2);                       // helipad ↓ office
-    flight(b, -4, -18, SPAN, 8, 30, 36, 1);                        // office ↑ reactor
+    flight(b, -4, -18, SPAN, 8, 30, 36, 1);                        // office ↑ central tower
     flight(b, -34, 18, SPAN, 8, 26, 30, 3);                        // tank roof ↑ penthouse
     flight(b, -43, 30, 6, SPAN, 24, 26, 0);                        // billboard roof ↑ tank roof
     flight(b, -13, 30, 6, SPAN, 26, 30, 0);                        // tank roof ↑ south office
@@ -173,19 +171,18 @@ export function skylineRooftops(): MapDef {
     b.pickup(-50, bb.y, 32, 'ammo', 20);
   });
 
-  // ---- B: the reactor tower, highest roof, airspace kept clear for the sentinels ----
+  // ---- B: the central tower, highest roof ----
   building(b, B, { n: [[-4, SPAN]], s: [[4, SPAN]], w: [[6, SPAN]], e: [[-6, SPAN]] });
   b.box(0, B.y, 0, 2.6, 2.4, 2.6, 'pillar');
-  b.raw({ kind: 'reactor', x: 0, y: B.y, z: 0 });
   for (const [sx, sz] of [[-1, -1], [1, -1], [-1, 1], [1, 1]] as const) {
-    b.box(sx * 7.5, B.y, sz * 11.6, 3.6, 1.15, 0.6, 'wallDark');  // corner cover, clear of the drone orbits
+    b.box(sx * 7.5, B.y, sz * 11.6, 3.6, 1.15, 0.6, 'wallDark');  // corner cover
     b.box(sx * 8.9, B.y, sz * 10.5, 0.6, 1.15, 3.6, 'wallDark');
   }
   b.light(0, B.y + 1.8, -12.5, 0x7ff6ff, 5, 12);
   b.light(0, B.y + 1.8, 12.5, 0x7ff6ff, 5, 12);
 
   b.point('A', 'North Helipad', -28, R.helipad.y, -36, 8);
-  b.point('B', 'Reactor Tower', 0, B.y, 0, 8);
+  b.point('B', 'Central Tower', 0, B.y, 0, 8);
   b.point('C', 'South Helipad', 28, R.helipad.y, 36, 8);
 
   return b.build();

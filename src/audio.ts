@@ -6,6 +6,40 @@ type V3 = { x: number; y: number; z: number };
  * Procedural sound design (no sample assets): layered gunshots with transient, body, sub
  * thump and reverb tail; spatialized remote fire, footsteps, reloads, explosions and UI cues.
  */
+/**
+ * Synthesized gunshot per weapon: `heavy` scales the shared crack/body/thump/tail, `layers` add the
+ * weapon's character as [oscillator, start Hz, end Hz, seconds, gain, delay?], and `tail` plays the
+ * action cycling after the shot.
+ */
+interface GunSound {
+  heavy: number;
+  layers?: [OscillatorType, number, number, number, number, number?][];
+  blast?: boolean;
+  tail?: 'pump' | 'bolt' | 'action';
+  launcher?: boolean;
+}
+const GUN_SOUNDS: Record<WeaponId, GunSound> = {
+  carbine: { heavy: 1, layers: [['sawtooth', 1400, 260, 0.07, 0.08]] },
+  lancer: { heavy: 1.6, layers: [['sawtooth', 1800, 260, 0.112, 0.08], ['sine', 3200, 600, 0.35, 0.12, 0.02]] },
+  sidearm: { heavy: 0.8 },
+  magnum: { heavy: 1.35 },
+  scatter: { heavy: 1.5, blast: true, tail: 'pump' },
+  stinger: { heavy: 0.7, layers: [['square', 2600, 900, 0.03, 0.05]] },
+  graviton: { heavy: 1, launcher: true },
+  hornet: { heavy: 0.75, layers: [['square', 3000, 1200, 0.02, 0.03]] },
+  warden: { heavy: 1.25, layers: [['sine', 220, 60, 0.18, 0.25]] },
+  wasp: { heavy: 0.65, layers: [['square', 2200, 800, 0.025, 0.05]] },
+  viper: { heavy: 0.8, layers: [['sawtooth', 1700, 500, 0.04, 0.05]] },
+  reaper: { heavy: 1.7, blast: true, layers: [['sine', 90, 35, 0.3, 0.5]] },
+  thunder: { heavy: 1.4, blast: true, tail: 'action' },
+  brawler: { heavy: 1.15, layers: [['sawtooth', 1100, 220, 0.08, 0.07]], tail: 'action' },
+  kestrel: { heavy: 0.95, layers: [['sawtooth', 1600, 400, 0.06, 0.07]] },
+  marksman: { heavy: 1.3, layers: [['sawtooth', 1500, 300, 0.09, 0.08], ['sine', 2600, 500, 0.2, 0.08, 0.015]], tail: 'action' },
+  swift: { heavy: 1.45, layers: [['sine', 3000, 700, 0.25, 0.1, 0.02]], tail: 'bolt' },
+  longbow: { heavy: 1.8, layers: [['sine', 2400, 400, 0.45, 0.14, 0.02], ['sine', 70, 30, 0.4, 0.5]], tail: 'bolt' },
+  hammer: { heavy: 1.1, layers: [['sawtooth', 900, 180, 0.09, 0.08]] },
+};
+
 export class Audio {
   private ctx?: BaseAudioContext;
   private master!: GainNode;
@@ -136,27 +170,33 @@ export class Audio {
     if (!this.ready) return;
     const t = this.now();
     const out = this.out(listener ? 0.75 : 0.55, listener, at, listener ? 0.5 : 0.28);
-    if (weapon === 'graviton') {
+    const sound = GUN_SOUNDS[weapon];
+    if (sound.launcher) {
       // Launcher: a hollow pneumatic thump with a falling gravitic warble instead of a crack.
       this.noiseBurst(out, t, 0.12, 'bandpass', 420, 1.2, 0.9);
       this.tone(out, t, 'sine', 240, 45, 0.32, 0.9);
       this.tone(out, t + 0.01, 'triangle', 1400, 180, 0.26, 0.18);
       return;
     }
-    const heavy = weapon === 'lancer' ? 1.6 : weapon === 'scatter' ? 1.5 : weapon === 'magnum' ? 1.35 : weapon === 'sidearm' ? 0.8 : weapon === 'stinger' ? 0.7 : 1;
-    // Transient crack, mid body, sub thump, mechanical tail and a faint energy zap.
+    const heavy = sound.heavy;
+    // Transient crack, mid body, sub thump and mechanical tail, then the weapon's own character.
     this.noiseBurst(out, t, 0.03, 'highpass', 2500, 0.7, 0.9 * heavy);
     this.noiseBurst(out, t, 0.11 * heavy, 'bandpass', 1100 / heavy, 0.9, 1.1);
     this.tone(out, t, 'sine', 130 * (1.2 - heavy * 0.25), 38, 0.14 * heavy, 0.95);
     this.noiseBurst(out, t + 0.01, 0.35 * heavy, 'lowpass', 900, 0.5, 0.35);
-    if (weapon === 'carbine' || weapon === 'lancer') this.tone(out, t, 'sawtooth', weapon === 'lancer' ? 1800 : 1400, 260, 0.07 * heavy, 0.08);
-    if (weapon === 'lancer') this.tone(out, t + 0.02, 'sine', 3200, 600, 0.35, 0.12);
-    if (weapon === 'stinger') this.tone(out, t, 'square', 2600, 900, 0.03, 0.05);
-    if (weapon === 'scatter') {
-      // Wide low blast, then the pump racking the next shell.
-      this.noiseBurst(out, t, 0.22, 'lowpass', 600, 0.6, 0.9);
+    for (const [type, f0, f1, dur, gain, delay = 0] of sound.layers ?? []) this.tone(out, t + delay, type, f0, f1, dur, gain);
+    // Shotguns: a wide low blast.
+    if (sound.blast) this.noiseBurst(out, t, 0.22, 'lowpass', 600, 0.6, 0.9);
+    if (sound.tail === 'pump') {
       this.noiseBurst(out, t + 0.36, 0.05, 'bandpass', 1800, 2, 0.35);
       this.noiseBurst(out, t + 0.5, 0.06, 'bandpass', 1300, 2, 0.4);
+    } else if (sound.tail === 'bolt') {
+      // Bolt lifted, drawn back and run home.
+      this.noiseBurst(out, t + 0.42, 0.04, 'bandpass', 2400, 3, 0.3);
+      this.noiseBurst(out, t + 0.55, 0.06, 'bandpass', 1500, 2, 0.35);
+      this.noiseBurst(out, t + 0.72, 0.05, 'bandpass', 1900, 2.5, 0.4);
+    } else if (sound.tail === 'action') {
+      this.noiseBurst(out, t + 0.07, 0.035, 'bandpass', 2200, 2.5, 0.25);
     }
   }
 
@@ -226,7 +266,8 @@ export class Audio {
 
   tick() { if (!this.ready) return; const t = this.now(); this.tone(this.out(0.15), t, 'square', 1200, 1200, 0.03, 0.08); }
 
-  law() {
+  /** Rising shimmer (menu theme). */
+  chime() {
     if (!this.ready) return;
     const t = this.now(), out = this.out(0.5, undefined, undefined, 0.8);
     this.tone(out, t, 'sine', 120, 1400, 0.7, 0.3, 0.05);
@@ -234,7 +275,8 @@ export class Audio {
     this.noiseBurst(out, t, 0.8, 'bandpass', 1600, 0.5, 0.3, 0.2);
   }
 
-  rewind() {
+  /** Falling sweep (menu theme). */
+  sweep() {
     if (!this.ready) return;
     const t = this.now(), out = this.out(0.45, undefined, undefined, 0.8);
     this.tone(out, t, 'sawtooth', 1600, 90, 1.2, 0.12, 0.3);

@@ -5,7 +5,7 @@ import { LocalPlayer } from '../src/game/player';
 import { THEMES } from '../src/render/materials';
 import { QUALITY, Renderer } from '../src/render/renderer';
 import { ViewModel } from '../src/render/viewmodel';
-import type { LoadoutId } from '../shared/weapons';
+import { WEAPONS, type LoadoutId, type WeaponId } from '../shared/weapons';
 
 const params = new URLSearchParams(location.search);
 const info = document.getElementById('info')!;
@@ -19,6 +19,9 @@ const p = new LocalPlayer();
 p.alive = true;
 p.loadout = (params.get('loadout') ?? 'assault') as LoadoutId;
 p.slot = Number(params.get('slot') ?? 0) as 0 | 1;
+// ?weapon=<id> previews any gun, not only the kits' guns.
+const only = params.get('weapon') as WeaponId | null;
+if (only && WEAPONS[only]) Object.defineProperty(p, 'weapon', { get: () => WEAPONS[only] });
 p.ads = Number(params.get('ads') ?? 0);
 p.sprinting = params.get('sprint') === '1';
 if (p.sprinting) { p.m.vx = 8; }
@@ -32,6 +35,6 @@ let frames = 0;
 r.renderer.setAnimationLoop(() => {
   vm.update(1 / 60, p, { x: 0, y: 0 });
   if (p.reloadLeft > 0) p.reloadLeft = 2 * (1 - reload);
-  r.render(frames / 60, new THREE.Vector3(), 300);
+  r.render(frames / 60);
   if (++frames === 40) (window as any).__ready = 1;
 });

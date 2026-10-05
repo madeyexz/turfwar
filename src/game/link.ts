@@ -28,7 +28,6 @@ export interface GameLink {
   buy(item: BuyItem): void;
   /** Take the weapon lying at map pickup `index` (E). */
   pickup(index: number): void;
-  law(command: unknown, source: string, text: string): Promise<{ ok: boolean; message: string }>;
   status(): string;
   dispose(): void;
 }

@@ -7,7 +7,6 @@ import { fbm } from '../../shared/maps/builder';
 import type { BlockStyle, MapDef } from '../../shared/maps/types';
 import { rng } from '../../shared/math';
 import { shieldMaterial, surfaceMaterial, terrainMaterial, type Theme } from './materials';
-import { ReactorView } from './reactor';
 
 const TEAM_COLORS = [new THREE.Color(0x3aa0ff), new THREE.Color(0xff4a3a)];
 
@@ -15,7 +14,6 @@ const TEAM_COLORS = [new THREE.Color(0x3aa0ff), new THREE.Color(0xff4a3a)];
 export class LevelView {
   readonly group = new THREE.Group();
   readonly shields: THREE.ShaderMaterial[] = [];
-  readonly reactor?: ReactorView;
   private parts = new Map<string, THREE.BufferGeometry[]>();
   private materials: Record<string, THREE.Material>;
   private animated: { object: THREE.Object3D; update: (t: number) => void }[] = [];
@@ -49,7 +47,6 @@ export class LevelView {
         case 'prop': this.prop(d.model, d.x, d.y, d.z, d.rotY, d.scale ?? 1); break;
         case 'light': this.light(d.x, d.y, d.z, d.color, d.intensity, d.distance); break;
         case 'rail': this.rail(d.x0, d.z0, d.x1, d.z1, d.y); break;
-        case 'reactor': (this as { reactor?: ReactorView }).reactor = new ReactorView(d.x, d.y, d.z); this.group.add(this.reactor!.group); break;
         case 'spawnPad': this.spawnPad(d.team, d.x, d.y, d.z, d.rotY); break;
         case 'tree': this.tree(d.x, d.y, d.z, d.scale, d.variant); break;
         case 'crystal': this.crystal(d.x, d.y, d.z, d.scale, d.rotY); break;
@@ -291,8 +288,8 @@ export class LevelView {
 
   /**
    * Decorative lights are emissive fixtures with a soft glow sprite, not real PointLights:
-   * every dynamic light costs every lit pixel, so real lights are reserved for the reactor
-   * and short-lived muzzle/explosion flashes.
+   * every dynamic light costs every lit pixel, so real lights are reserved for short-lived
+   * muzzle and explosion flashes.
    */
   private light(x: number, y: number, z: number, color: number, intensity: number, distance: number) {
     const c = new THREE.Color(color);

@@ -1,10 +1,8 @@
 import * as THREE from 'three';
-import type { Laws } from '../../shared/laws';
 import type { MapDef, PointId } from '../../shared/maps/types';
 import type { MatchState, Soldier, Team } from '../../shared/match/state';
 import { TEAM_SHORT } from '../../shared/match/state';
 import { HEALTH, LOADOUTS, WEAPONS, type LoadoutId } from '../../shared/weapons';
-import { describeLaws } from '../commands';
 import type { LocalPlayer } from '../game/player';
 
 const TEAM_CSS = ['var(--aegis)', 'var(--crimson)'];
@@ -48,7 +46,6 @@ export class Hud {
       <div class="reddot" data-k="reddot" hidden></div>
       <div class="hitmarker" data-k="hit"><i></i><i></i><i></i><i></i></div>
       <div class="damage-ring" data-k="dmg"></div>
-      <div class="laws panel" data-k="laws"></div>
       <div class="vitals panel">
         <div class="who"><span data-k="name">LAWBREAKER</span><span data-k="loadout"></span></div>
         <div class="meter shield"><span>Shield</span><div class="track"><i data-k="shieldBar"></i></div><b data-k="shield">50</b></div>
@@ -68,7 +65,6 @@ export class Hud {
       <div class="vignette" data-k="vignette"></div>
       <div class="flash" data-k="flash"></div>
       <div class="scope" data-k="scope" hidden><i></i></div>
-      <div class="rewind-tag" data-k="rewind" hidden>◀◀ REWINDING THE WORLD</div>
       <div class="death panel" data-k="death" hidden>
         <h3>Operative down</h3><p data-k="deathText"></p>
         <div class="loadouts">${Object.entries(LOADOUTS).map(([id, l]) => `<button data-loadout="${id}">${l.name}</button>`).join('')}</div>
@@ -101,7 +97,7 @@ export class Hud {
   }
 
   /** Per-frame cheap updates (crosshair, markers, overlays). */
-  frame(dt: number, p: LocalPlayer, state: MatchState, me: Soldier | undefined, camera: THREE.PerspectiveCamera, soldiers: Map<number, THREE.Vector3>, rewinding: boolean) {
+  frame(dt: number, p: LocalPlayer, state: MatchState, me: Soldier | undefined, camera: THREE.PerspectiveCamera, soldiers: Map<number, THREE.Vector3>) {
     // Crosshair spread in pixels from the cone angle.
     const spreadDeg = p.currentSpread();
     const px = Math.max(3, Math.tan(spreadDeg * Math.PI / 180) / Math.tan(camera.fov * Math.PI / 360) * innerHeight / 2);
@@ -111,6 +107,7 @@ export class Hud {
     (cross.children[2] as HTMLElement).style.transform = `translateX(${-px - 9}px)`;
     (cross.children[3] as HTMLElement).style.transform = `translateX(${px}px)`;
     cross.classList.toggle('ads', p.ads > 0.6);
+    // Only the carbine and graviton models carry a reflex sight; the rest use iron sights or a scope.
     this.el.reddot.hidden = !(p.ads > 0.85 && (p.weapon.id === 'carbine' || p.weapon.id === 'graviton'));
     cross.classList.toggle('hidden', p.sprinting || p.reloading);
     this.hitTimer -= dt;
@@ -118,8 +115,6 @@ export class Hud {
     const health = me?.health ?? 0;
     this.el.vignette.style.opacity = String(me?.alive ? Math.max(0, (45 - health) / 45) * 0.9 : 0);
     this.el.flash.style.opacity = String(Math.max(0, Number(this.el.flash.style.opacity || 0) - dt * 3));
-    this.el.rewind.hidden = !rewinding;
-    document.body.classList.toggle('rewinding', rewinding);
     for (let i = this.damageArcs.length - 1; i >= 0; i--) {
       const a = this.damageArcs[i];
       a.life -= dt;
@@ -261,13 +256,6 @@ export class Hud {
     }
   }
 
-  laws(laws: Laws, cooldown: number, cooldownLimit: number, changed?: string) {
-    const rows = describeLaws(laws);
-    const keys = ['gravity', 'time', 'lightSpeed', 'rewind'];
-    this.set('laws', `<h4><span>Laws of this world</span><span>/ rewrite</span></h4>${rows.map((l, i) => `<div class="law${changed === keys[i] ? ' changed' : ''}"><span class="icon">${l.icon}</span><div><p>${l.text}</p><code>${l.value}</code></div></div>`).join('')}
-      <div class="hint"><span><kbd>/</kbd> sentence</span><span><kbd>1</kbd> cube gravity</span><span><kbd>2</kbd> motion time</span><span><kbd>3</kbd> slow light</span><span><kbd>4</kbd> rewind</span>${cooldownLimit > 0 ? `<span class="cool" data-k="lawCool">${cooldown > 0 ? `recharging ${Math.ceil(cooldown)}s` : 'law engine ready'}</span>` : ''}</div>`, 'html');
-  }
-
   hit(kind: 'body' | 'head' | 'kill') {
     const e = this.el.hit;
     e.classList.remove('head', 'kill');
@@ -287,7 +275,7 @@ export class Hud {
   killfeed(killer: Soldier | undefined, victim: Soldier | undefined, weapon: string, head: boolean, mine: boolean) {
     const item = document.createElement('div');
     if (mine) item.className = 'me';
-    const name = (s?: Soldier) => s ? `<span class="t${s.team}">${escape(s.name)}</span>` : '<span>Sentinel</span>';
+    const name = (s?: Soldier) => s ? `<span class="t${s.team}">${escape(s.name)}</span>` : '<span>World</span>';
     const wpn = WEAPONS[weapon as keyof typeof WEAPONS]?.short ?? weapon.toUpperCase();
     item.innerHTML = `${killer && killer !== victim ? name(killer) : ''}<span class="wpn">${wpn}${head ? ' <span class="hs">◎</span>' : ''}</span>${name(victim)}`;
     this.el.feed.prepend(item);
@@ -367,11 +355,6 @@ export class Hud {
       if (s.team !== me.team && s.sinceShot > 2.5) continue;
       ctx.fillStyle = s.team === 0 ? '#4aa8ff' : '#ff5544';
       ctx.beginPath(); ctx.arc(pos.x * scale, pos.z * scale, 5, 0, Math.PI * 2); ctx.fill();
-    }
-    for (const b of state.bodies) {
-      if (b.kind !== 'drone') continue;
-      ctx.fillStyle = b.team === -1 ? '#c0ff7a' : b.team === 0 ? '#4aa8ff' : '#ff5544';
-      ctx.fillRect(b.x * scale - 3, b.z * scale - 3, 6, 6);
     }
     ctx.restore();
     // Player arrow (always up).

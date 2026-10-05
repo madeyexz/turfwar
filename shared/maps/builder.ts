@@ -1,5 +1,4 @@
 import { terrainHeight, type Heightfield, type Ramp, type Solid, type Surface } from '../collision';
-import type { Laws } from '../laws';
 import type { BlockStyle, CapturePointDef, Decor, MapDef, PickupDef, PointId, SpawnDef, ThemeId } from './types';
 
 // Deterministic value noise so the server and every client generate identical terrain.
@@ -29,12 +28,9 @@ export interface BuilderOptions {
   halfX: number; halfZ: number; seed: number;
   /** Amplitude of rolling ground inside the playable area and of the boundary ridges. */
   roll: number; ridge: number;
-  laws: Laws;
   sun: { x: number; y: number; z: number };
   /** Hand-authored base ground; replaces the mirrored noise and boundary ridges. */
   ground?: (x: number, z: number) => number;
-  /** Point holding the reactor (see MapDef.reactor); defaults to B. */
-  reactor?: PointId;
   /** Soldiers per team the layout is built for (see MapDef.teamSize). */
   teamSize?: number;
 }
@@ -248,7 +244,7 @@ export class MapBuilder {
     this.decor.push({ kind: 'tree', x: this.tx(x), y, z: this.tz(z), scale, variant });
   }
 
-  /** Glowing ice/anomaly crystal cluster with a solid core. */
+  /** Glowing ice crystal cluster with a solid core. */
   crystal(x: number, z: number, scale = 1, rotY = 0) {
     const y = this.ground(x, z);
     this.box(x, y, z, 1.4 * scale, 2.4 * scale, 1.4 * scale, 'invisible', 'glass');
@@ -262,17 +258,12 @@ export class MapBuilder {
 
   build(): MapDef {
     const o = this.o;
-    // The anomaly field is centred on the reactor core (5 m above its base).
-    const reactor = this.decor.find(d => d.kind === 'reactor') as { x: number; y: number; z: number } | undefined;
-    const point = this.points.find(p => p.id === (o.reactor ?? 'B'))!;
-    const anomaly = reactor ?? { x: point.x, y: point.y, z: point.z };
     return {
       id: o.id, name: o.name, region: o.region, description: o.description, theme: o.theme,
       bounds: { minX: -o.halfX, maxX: o.halfX, minZ: -o.halfZ, maxZ: o.halfZ },
       terrain: this.terrain, solids: this.solids, ramps: this.ramps, points: this.points, spawns: this.spawns,
-      anomaly: { x: anomaly.x, y: anomaly.y + 5, z: anomaly.z }, decor: this.decor, laws: o.laws, sun: o.sun,
+      decor: this.decor, sun: o.sun,
       ...(o.teamSize ? { teamSize: o.teamSize } : {}),
-      ...(o.reactor ? { reactor: o.reactor } : {}),
       ...(this.pickups.length ? { pickups: this.pickups } : {}),
     };
   }

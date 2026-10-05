@@ -16,6 +16,19 @@ const GUN_POINTS: Record<WeaponId, { model: string; grip: THREE.Vector3; fore: T
   scatter: { model: 'Gun_Scatter', grip: new THREE.Vector3(0.06, -0.03, 0), fore: new THREE.Vector3(-0.4, 0.02, 0), muzzle: new THREE.Vector3(-0.745, 0.095, 0), pistol: false },
   stinger: { model: 'Gun_Stinger', grip: new THREE.Vector3(0.02, -0.024, 0), fore: new THREE.Vector3(0.0, -0.05, 0.02), muzzle: new THREE.Vector3(-0.44, 0.105, 0), pistol: true },
   graviton: { model: 'Gun_Graviton', grip: new THREE.Vector3(0.08, -0.035, 0), fore: new THREE.Vector3(-0.25, -0.04, 0), muzzle: new THREE.Vector3(-0.68, 0.075, 0), pistol: false },
+  // Imported guns: origin at the grip (tools/import-guns.ts).
+  hornet: { model: 'Gun_Hornet', grip: new THREE.Vector3(0.005, 0, 0), fore: new THREE.Vector3(0.025, -0.06, 0.03), muzzle: new THREE.Vector3(-0.33, 0.2, 0), pistol: true },
+  warden: { model: 'Gun_Warden', grip: new THREE.Vector3(0.005, 0, 0), fore: new THREE.Vector3(0.025, -0.06, 0.03), muzzle: new THREE.Vector3(-0.45, 0.125, 0), pistol: true },
+  wasp: { model: 'Gun_Wasp', grip: new THREE.Vector3(0.005, 0, 0), fore: new THREE.Vector3(-0.21, -0.03, 0), muzzle: new THREE.Vector3(-0.45, 0.13, 0), pistol: false },
+  viper: { model: 'Gun_Viper', grip: new THREE.Vector3(0.005, 0, 0), fore: new THREE.Vector3(-0.3, 0.05, 0), muzzle: new THREE.Vector3(-0.46, 0.085, 0), pistol: false },
+  reaper: { model: 'Gun_Reaper', grip: new THREE.Vector3(0.005, 0, 0), fore: new THREE.Vector3(-0.45, 0.05, 0), muzzle: new THREE.Vector3(-0.69, 0.095, 0), pistol: false },
+  thunder: { model: 'Gun_Thunder', grip: new THREE.Vector3(0.005, 0, 0), fore: new THREE.Vector3(-0.53, -0.005, 0), muzzle: new THREE.Vector3(-0.82, 0.06, 0), pistol: false },
+  brawler: { model: 'Gun_Brawler', grip: new THREE.Vector3(0.005, 0, 0), fore: new THREE.Vector3(-0.38, 0.085, 0), muzzle: new THREE.Vector3(-0.76, 0.12, 0), pistol: false },
+  kestrel: { model: 'Gun_Kestrel', grip: new THREE.Vector3(0.005, 0, 0), fore: new THREE.Vector3(-0.52, 0.06, 0), muzzle: new THREE.Vector3(-0.67, 0.2, 0), pistol: false },
+  marksman: { model: 'Gun_Marksman', grip: new THREE.Vector3(0.005, 0, 0), fore: new THREE.Vector3(-0.4, 0.11, 0), muzzle: new THREE.Vector3(-0.74, 0.165, 0), pistol: false },
+  swift: { model: 'Gun_Swift', grip: new THREE.Vector3(0.005, 0, 0), fore: new THREE.Vector3(-0.5, 0.0, 0), muzzle: new THREE.Vector3(-1.21, 0.035, 0), pistol: false },
+  longbow: { model: 'Gun_Longbow', grip: new THREE.Vector3(0.005, 0, 0), fore: new THREE.Vector3(-0.55, 0.02, 0), muzzle: new THREE.Vector3(-1.26, 0.075, 0), pistol: false },
+  hammer: { model: 'Gun_Hammer', grip: new THREE.Vector3(0.005, 0, 0), fore: new THREE.Vector3(-0.45, 0.12, 0), muzzle: new THREE.Vector3(-0.67, 0.2, 0), pistol: false },
 };
 
 export const TEAM_ARMOR = [

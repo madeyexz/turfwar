@@ -1,4 +1,3 @@
-import type { LawCommand, Laws } from '../laws';
 import type { Vec3 } from '../math';
 import type { MoveState } from '../movement';
 import type { PointId } from '../maps/types';
@@ -67,7 +66,6 @@ export interface Soldier {
   deaths: number;
   score: number;
   captures: number;
-  lawCooldown: number;
   /** Replicated animation flags. */
   sprint: boolean;
   ads: boolean;
@@ -100,20 +98,16 @@ export interface MatchConfig {
   teamSize: number;
   scoreLimit: number;
   timeLimit: number;
-  /** Seconds between law rewrites per human (0 = unlimited). */
-  lawCooldown: number;
-  /** Seconds before a rewritten law reverts to the map default (0 = permanent). */
-  lawDuration: number;
   warmup: number;
   respawn: number;
   botSkill: number;
-  /** Law Lab: no bots, passive sentinels, no score limit — a sandbox for experimenting with laws. */
+  /** Practice range: no bots and no score limit — try weapons and routes in peace. */
   practice?: boolean;
 }
 
-export const OFFLINE_CONFIG: MatchConfig = { teamSize: 6, scoreLimit: 200, timeLimit: 600, lawCooldown: 0, lawDuration: 0, warmup: 3, respawn: 4, botSkill: 0.45 };
-export const PRACTICE_CONFIG: MatchConfig = { teamSize: 0, scoreLimit: 100000, timeLimit: 36000, lawCooldown: 0, lawDuration: 0, warmup: 1, respawn: 2, botSkill: 0.4, practice: true };
-export const ONLINE_CONFIG: MatchConfig = { teamSize: 6, scoreLimit: 200, timeLimit: 600, lawCooldown: 25, lawDuration: 30, warmup: 8, respawn: 5, botSkill: 0.55 };
+export const OFFLINE_CONFIG: MatchConfig = { teamSize: 6, scoreLimit: 200, timeLimit: 600, warmup: 3, respawn: 4, botSkill: 0.45 };
+export const PRACTICE_CONFIG: MatchConfig = { teamSize: 0, scoreLimit: 100000, timeLimit: 36000, warmup: 1, respawn: 2, botSkill: 0.4, practice: true };
+export const ONLINE_CONFIG: MatchConfig = { teamSize: 6, scoreLimit: 200, timeLimit: 600, warmup: 8, respawn: 5, botSkill: 0.55 };
 
 export interface MatchState {
   mapId: string;
@@ -121,53 +115,32 @@ export interface MatchState {
   phaseLeft: number;
   /** Wall-clock seconds since the match began. */
   time: number;
-  /** Lawful world seconds (stops when time is frozen, runs backwards during rewind). */
-  worldTime: number;
   tick: number;
   scores: [number, number];
   scoreTimer: number;
-  laws: Laws;
-  lawAuthor: number;
-  lawText: string;
-  /** Seconds until laws revert (-1 = permanent). */
-  lawLeft: number;
-  rewindLeft: number;
   soldiers: Soldier[];
   points: PointState[];
   bodies: Body[];
   /** Per map pickup: seconds until it is back (0 = lying there). */
   pickupLeft: number[];
   nextId: number;
-  droneTimer: number;
   winner: -1 | Team;
   config: MatchConfig;
 }
 
-/** Snapshot of everything lawful, used for bounded world rewind. */
-export interface WorldSnapshot {
-  worldTime: number;
-  bodies: Body[];
-  bots: { id: number; m: MoveState; yaw: number; pitch: number; alive: boolean; health: number; shield: number; ammo: [number, number]; reloadLeft: number; respawnLeft: number }[];
-  points: { id: PointId; progress: number; owner: -1 | Team }[];
-}
-
 export type MatchEvent =
-  | { type: 'shot'; shooter: number; weapon: WeaponId | 'bolt'; from: Vec3; to: Vec3; hit: 0 | 1 | 2; surface?: string }
+  | { type: 'shot'; shooter: number; weapon: WeaponId; from: Vec3; to: Vec3; hit: 0 | 1 | 2; surface?: string }
   | { type: 'damage'; target: number; attacker: number; amount: number; zone: string; x: number; y: number; z: number; shieldBroke: boolean }
   | { type: 'kill'; killer: number; victim: number; weapon: string; head: boolean }
   | { type: 'spawn'; id: number }
   | { type: 'capture'; point: PointId; team: Team }
   | { type: 'neutralize'; point: PointId; team: Team }
-  | { type: 'law'; author: number; command: LawCommand; text: string; source: string }
-  | { type: 'lawRevert' }
-  | { type: 'rewind'; seconds: number }
   | { type: 'explosion'; x: number; y: number; z: number; owner: number; radius?: number; weapon?: string }
-  | { type: 'droneDown'; x: number; y: number; z: number; killer: number }
   | { type: 'phase'; phase: Phase; winner: -1 | Team }
   | { type: 'join'; id: number; name: string; team: Team }
   | { type: 'leave'; id: number; name: string };
 
-/** Report a client sends about its own lawbreaker each network tick. */
+/** Report a client sends about its own soldier each network tick. */
 export interface ClientReport {
   x: number; y: number; z: number;
   vx: number; vy: number; vz: number;

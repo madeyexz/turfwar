@@ -8,7 +8,7 @@ import { ochreQuarter } from './ochre';
 import { railyard } from './railyard';
 import { skylineRooftops } from './skyline';
 import { verdantDivide } from './verdant';
-import type { MapDef, PointId } from './types';
+import type { MapDef } from './types';
 
 export const MAP_IDS = ['cinder', 'frostline', 'verdant', 'ochre', 'citadel', 'railyard', 'skyline', 'meridian'] as const;
 export type MapId = (typeof MAP_IDS)[number];
@@ -38,9 +38,6 @@ export function loadNav(id: string): NavGraph {
   loaded.nav ??= buildNav(loaded.def, loaded.world);
   return loaded.nav;
 }
-
-/** Id of the battlefield's reactor point: its holder owns the sentinels and recharges laws faster. */
-export const reactorPoint = (map: Pick<MapDef, 'reactor'>): PointId => map.reactor ?? 'B';
 
 export function mapSummaries() {
   return MAP_IDS.map(id => { const d = loadMap(id).def; return { id, name: d.name, region: d.region, description: d.description, theme: d.theme }; });

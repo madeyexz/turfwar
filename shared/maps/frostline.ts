@@ -1,19 +1,17 @@
-import { defaultLaws } from '../laws';
-import { cloneData } from '../math';
 import { MapBuilder } from './builder';
 import type { MapDef } from './types';
 
 /**
- * Frostline Reach: an arctic relay station. The reactor sits inside a walled courtyard with
+ * Frostline Reach: an arctic relay station. B sits inside a walled courtyard with
  * four gates and wall-top catwalks; a frozen trench gives a low flanking route to the north,
  * an ice ridge with crystal cover runs to the south. A and C are two-storey relay towers.
  */
 export function frostlineReach(): MapDef {
   const b = new MapBuilder({
     id: 'frostline', name: 'Frostline Reach', region: 'ESAMIR-CLASS TUNDRA / RELAY STATION',
-    description: 'Walled reactor courtyard, rooftop towers and a frozen flanking trench.',
+    description: 'Walled relay courtyard, rooftop towers and a frozen flanking trench.',
     theme: 'snow', halfX: 84, halfZ: 60, seed: 19, roll: 1.4, ridge: 18,
-    laws: cloneData(defaultLaws), sun: { x: 0.45, y: 0.5, z: -0.6 },
+    sun: { x: 0.45, y: 0.5, z: -0.6 },
   });
 
   b.pad(0, 0, 32, 32, 0.4, 5);                 // courtyard foundation
@@ -27,7 +25,7 @@ export function frostlineReach(): MapDef {
   });
   b.buildTerrain(2);
 
-  // ---- Reactor courtyard (B): 26 x 26 walls with four gates and wall-top catwalks ----
+  // ---- Relay courtyard (B): 26 x 26 walls with four gates and wall-top catwalks ----
   const cy = b.ground(0, 0);
   const H = 3.4, half = 13, gate = 5;
   b.mirrored(() => {
@@ -51,8 +49,7 @@ export function frostlineReach(): MapDef {
   });
   b.box(0, cy, 0, 4, 0.6, 4, 'concrete');
   b.box(0, cy + 0.6, 0, 2.4, 2.0, 2.4, 'pillar');
-  b.raw({ kind: 'reactor', x: 0, y: cy, z: 0 });
-  b.point('B', 'Reactor Courtyard', 0, cy, 0, 9);
+  b.point('B', 'Relay Courtyard', 0, cy, 0, 9);
 
   b.mirrored(() => {
     b.warpgate(-70, 0);

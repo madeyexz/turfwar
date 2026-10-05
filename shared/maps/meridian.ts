@@ -1,5 +1,3 @@
-import { defaultLaws } from '../laws';
-import { cloneData } from '../math';
 import { MapBuilder, fbm } from './builder';
 import type { BlockStyle, MapDef, PointId } from './types';
 
@@ -9,10 +7,10 @@ import type { BlockStyle, MapDef, PointId } from './types';
  *
  *   A Park        — wooded hills around a pavilion on the flag hill
  *   B Site        — a construction pit under an open steel frame and a tower crane
- *   C Meridian    — the reactor square, decked over the drained canal in the downtown core
+ *   C Meridian    — the central square, decked over the drained canal in the downtown core
  *   D, E          — B and A rotated 180° onto the far bank
  *
- * A dry canal splits the city north to south: the reactor deck and two road bridges cross it,
+ * A dry canal splits the city north to south: the square's deck and two road bridges cross it,
  * and stairs lead down to the canal bed, which runs under all of them. Elevated highways along
  * the north and south edges give Recon a long lane, with ramps at both ends and stairs midway.
  * A ruined block breaks the centre street between A and B, and twin towers mark the core.
@@ -42,18 +40,18 @@ const AREAS: Area[] = [
   area(-160, -10, -78, -66),     // north avenue → north bridge
   area(-160, -10, 66, 78),       // south avenue → south bridge
   area(-160, -104, -6, 6),       // centre street, base → ruins
-  area(-80, -34, -6, 6),         // centre street, ruins → reactor square
+  area(-80, -34, -6, 6),         // centre street, ruins → central square
   area(-128, -120, -130, 130),   // west cross street
   area(-104, -98, -104, -34),    // alley, north highway → ruins
   area(-96, -90, 20, 104),       // alley, ruins → south highway
   area(-70, -62, -130, -66),     // street, north edge → north avenue
   area(-70, -62, 6, 130),        // street, centre → south edge
-  area(-42, -34, -78, 78),       // downtown avenue beside the reactor square
+  area(-42, -34, -78, 78),       // downtown avenue beside the central square
   area(-150, -100, 16, 66),      // A: park
   area(-160, -150, 30, 42),      // park gate from the boulevard
   area(-104, -80, -34, 20),      // ruined block
   area(-90, -42, -66, -16),      // B: construction site
-  area(-34, -10, -30, 30),       // C: reactor square (west bank)
+  area(-34, -10, -30, 30),       // C: central square (west bank)
   area(-66, -38, 10, 34),        // lot: hotel
   area(-160, -128, -56, -28),    // lot: offices
 ];
@@ -87,10 +85,10 @@ const MIRROR: Record<PointId, PointId> = { A: 'E', B: 'D', C: 'C', D: 'B', E: 'A
 export function meridianDistrict(): MapDef {
   const b = new MapBuilder({
     id: 'meridian', name: 'Meridian District', region: 'INDAR-CLASS DESERT / CITY QUARTER',
-    description: '50v50 Conquest across a war-torn city: park, construction site, canal bridges, highways and a reactor square. Spawn on the flags you hold.',
+    description: '50v50 Conquest across a war-torn city: park, construction site, canal bridges, highways and a central square. Spawn on the flags you hold.',
     theme: 'desert', halfX: HALF_X, halfZ: HALF_Z, seed: 41, roll: 0, ridge: 0,
-    laws: cloneData(defaultLaws), sun: { x: -0.5, y: 0.66, z: 0.42 },
-    ground, teamSize: 50, reactor: 'C',
+    sun: { x: -0.5, y: 0.66, z: 0.42 },
+    ground, teamSize: 50,
   });
 
   // ---- Terrain shaping (before the heightfield is sampled) ----
@@ -109,10 +107,9 @@ export function meridianDistrict(): MapDef {
 
   b.mirrored(() => blockOut(b));
 
-  // ---- C: reactor square, decked over the canal (self-symmetric pieces outside the mirror) ----
+  // ---- C: central square, decked over the canal (self-symmetric pieces outside the mirror) ----
   b.box(0, -0.7, 0, 2 * (CANAL_X + 3), 0.7, 60, 'concrete');
   b.box(0, 0, 0, 2.6, 2.4, 2.6, 'pillar');
-  b.raw({ kind: 'reactor', x: 0, y: 0, z: 0 });
   b.point('C', 'Meridian Square', 0, 0, 0, 14);
 
   b.mirrored(() => {

@@ -1,8 +1,8 @@
 /**
- * Online law check against a LOCAL server: two separate identities join; one rewrites a law, the
- * other sees it replicate, and an immediate second rewrite is refused by the cooldown.
+ * Online economy check against a LOCAL server: one identity buys an affordable pistol (accepted),
+ * then a sniper it cannot afford (refused); a second identity sees the purchase in the roster.
  *
- *   bun scripts/lawcheck.ts ws://127.0.0.1:3100 lawload
+ *   bun scripts/econcheck.ts ws://127.0.0.1:3100 lawload
  */
 const uri = process.argv[2] ?? 'ws://127.0.0.1:3100';
 const db = process.argv[3] ?? 'lawload';
@@ -19,7 +19,6 @@ if (typeof DecompressionStream === 'undefined') {
   };
 }
 const { DbConnection } = await import('../src/module_bindings');
-const { presets } = await import('../src/commands');
 type Conn = InstanceType<typeof DbConnection>;
 
 const connect = (name: string) => new Promise<Conn>((resolve, reject) => {
@@ -32,22 +31,25 @@ const connect = (name: string) => new Promise<Conn>((resolve, reject) => {
     })
     .onConnectError((_c, e) => reject(e)).build();
 });
+const wait = (ms: number) => new Promise(r => setTimeout(r, ms));
+const mine = (c: Conn) => c.db.roster.id.find(c.db.player.identity.find(c.identity!)!.soldierId)!;
 
-const a = await connect('LawA');
-const b = await connect('LawB');
-const command = presets[0].command;
-await a.reducers.rewriteLaw({ commandJson: JSON.stringify(command), source: 'PRESET', text: 'inverse cube' });
-await new Promise(r => setTimeout(r, 300));
-const seen = b.db.match.id.find(0);
-let second = 'accepted';
-try { await a.reducers.rewriteLaw({ commandJson: JSON.stringify(command), source: 'PRESET', text: 'again' }); } catch (e) { second = String((e as Error).message ?? e); }
-let bogus = 'accepted';
-try { await b.reducers.rewriteLaw({ commandJson: JSON.stringify({ kind: 'gravity', gravity: { mode: 'central', exponent: 99, strength: 1e9, extra: 1 } }), source: 'PRESET', text: '' }); } catch (e) { bogus = String((e as Error).message ?? e); }
-const mine = a.db.player.identity.find(a.identity!);
-const roster = mine ? b.db.roster.id.find(mine.soldierId) : undefined;
+const a = await connect('BuyerA');
+const b = await connect('WatcherB');
+await wait(1500); // deployed (buy time is 15 s)
+const before = mine(a);
+await a.reducers.buy({ item: 'hornet' });
+await wait(500);
+const afterPistol = mine(a);
+await a.reducers.buy({ item: 'longbow' });
+await wait(500);
+const afterSniper = mine(a);
+const seenByB = b.db.roster.id.find(afterPistol.id);
 console.log(JSON.stringify({
-  otherClientSeesLawText: seen?.lawText, otherClientSeesExponent: JSON.parse(seen?.lawsJson ?? '{}').gravity?.exponent,
-  immediateSecondRewrite: second, invalidCommandFromOtherClient: bogus, authorLawReadyAt: roster?.lawReadyAt,
+  before: { money: before.money, weapons: [before.weapon0, before.weapon1] },
+  afterHornet: { money: afterPistol.money, weapons: [afterPistol.weapon0, afterPistol.weapon1] },
+  afterUnaffordableLongbow: { money: afterSniper.money, weapons: [afterSniper.weapon0, afterSniper.weapon1] },
+  otherClientSees: seenByB && [seenByB.weapon0, seenByB.weapon1, seenByB.money],
 }, null, 1));
 a.disconnect(); b.disconnect();
 process.exit(0);

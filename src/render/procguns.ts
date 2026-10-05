@@ -72,7 +72,7 @@ function stinger(weapons: Map<string, THREE.Object3D>) {
   return g;
 }
 
-/** G-0 Graviton: launcher whose violet coils fling charges that fall with the current laws. */
+/** G-0 Graviton: launcher whose violet coils lob arcing charges. */
 function graviton() {
   const g = new THREE.Group();
   g.name = 'Gun_Graviton';

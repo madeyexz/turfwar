@@ -1,5 +1,3 @@
-import { defaultLaws } from '../laws';
-import { cloneData } from '../math';
 import { MapBuilder } from './builder';
 import type { MapDef } from './types';
 
@@ -42,9 +40,9 @@ function flatcar(b: B, x0: number, x1: number, z: number) {
 export function railyard(): MapDef {
   const b = new MapBuilder({
     id: 'railyard', name: 'Railyard', region: 'DESERT TERMINUS / FREIGHT YARD',
-    description: 'Four tracks of boxcars, twin depots, footbridges and a turntable reactor.',
+    description: 'Four tracks of boxcars, twin depots, footbridges and a turntable plaza.',
     theme: 'desert', halfX: HALF_X, halfZ: HALF_Z, seed: 23, roll: 0, ridge: 0,
-    laws: cloneData(defaultLaws), sun: { x: 0.5, y: 0.66, z: -0.4 },
+    sun: { x: 0.5, y: 0.66, z: -0.4 },
     teamSize: 8,
     // Flat ballast inside the fences, rising into embankments past the bounds.
     ground: (x, z) => { const e = Math.max(Math.abs(x) - 72, Math.abs(z) - 52); return e > 0 ? Math.min(14, e * 1.2) : 0; },
@@ -54,11 +52,10 @@ export function railyard(): MapDef {
   // ---- B: the turntable ----
   b.box(0, 0, 0, 16, 0.3, 16, 'floor');
   b.box(0, 0.3, 0, 2.6, 2.4, 2.6, 'pillar');
-  b.raw({ kind: 'reactor', x: 0, y: 0.3, z: 0 });
   b.point('B', 'Turntable', 0, 0.3, 0, 9);
 
   b.mirrored(() => {
-    // Low L-shaped cover on the turntable corners (kept low: drones orbit above).
+    // Low L-shaped cover on the turntable corners.
     b.box(-6, 0.3, -3, 0.6, 1.2, 3.4, 'concrete');
     b.box(-3, 0.3, -6, 3.4, 1.2, 0.6, 'concrete');
     b.box(-6, 0.3, 3, 0.6, 1.2, 3.4, 'concrete');

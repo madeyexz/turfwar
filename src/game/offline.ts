@@ -1,6 +1,6 @@
 import { rng, type Vec3 } from '../../shared/math';
 import {
-  addSoldier, applyLaw, balanceTeams, buyItem, createContext, createMatch, fireShot, pickUp, reload, reportState, setLoadout, switchWeapon,
+  addSoldier, balanceTeams, buyItem, createContext, createMatch, fireShot, pickUp, reload, reportState, setLoadout, switchWeapon,
   throwGrenade, tickMatch, TICK_RATE, type SimContext,
 } from '../../shared/match/sim';
 import { OFFLINE_CONFIG, PRACTICE_CONFIG, type ClientReport, type MatchConfig, type MatchEvent, type MatchState, type ShotClaim, type Team } from '../../shared/match/state';
@@ -35,7 +35,7 @@ export class OfflineLink implements GameLink {
   version() { return this.ticks; }
   drainEvents() { const e = this.events; this.events = []; return e; }
   private practice = false;
-  status() { return this.practice ? 'LAW LAB · PRACTICE' : 'SOLO SKIRMISH'; }
+  status() { return this.practice ? 'PRACTICE RANGE' : 'SOLO SKIRMISH'; }
 
   update(dt: number) {
     this.sinceReport += dt;
@@ -59,6 +59,5 @@ export class OfflineLink implements GameLink {
   setLoadout(loadout: LoadoutId) { setLoadout(this.match, this.me, loadout); }
   buy(item: BuyItem) { buyItem(this.match, this.ctx, this.me, item); }
   pickup(index: number) { pickUp(this.match, this.ctx, this.me, index); }
-  async law(command: unknown, source: string, text: string) { return applyLaw(this.match, this.ctx, this.me, command, source, text); }
   dispose() { this.events = []; }
 }

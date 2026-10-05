@@ -32,10 +32,10 @@ export class BuyMenu {
       ${GROUPS.map(g => {
         const items = weapons.filter(w => w.category === g.category).sort((a, b) => a.price - b.price);
         return items.length ? `<div class="group"><b>${g.title}</b><div class="items">${items.map(w =>
-          card(w.id, w.name, `${w.pellets > 1 ? `${w.pellets}×` : ''}${w.damage} dmg · ${rpm(w)} rpm · ${w.magazine} rds`, w.price)).join('')}</div></div>` : '';
+          card(w.id, w.name, `${w.projectile ? `${w.projectile.damage} blast` : `${w.pellets > 1 ? `${w.pellets}×` : ''}${w.damage} dmg`} · ${rpm(w)} rpm · ${w.magazine} rds`, w.price)).join('')}</div></div>` : '';
       }).join('')}
-      <div class="group"><b>EQUIPMENT</b><div class="items">${card('grenade', 'Frag grenade', 'Obeys the laws of physics', ECONOMY.grenade)}</div></div>
-      <div class="hint">Credits: kills, captures and sentinels. Bought weapons last until you die and are rebought on respawn while affordable. <kbd>B</kbd> / <kbd>Esc</kbd> closes.</div>`;
+      <div class="group"><b>EQUIPMENT</b><div class="items">${card('grenade', 'Frag grenade', 'Bounces, then blows', ECONOMY.grenade)}</div></div>
+      <div class="hint">Credits: kills, headshots and captures. Bought weapons last until you die and are rebought on respawn while affordable. <kbd>B</kbd> / <kbd>Esc</kbd> closes.</div>`;
     parent.appendChild(this.root);
     this.money = this.root.querySelector('.money')!;
     this.status = this.root.querySelector('.status')!;
