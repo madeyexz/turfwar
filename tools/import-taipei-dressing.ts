@@ -259,3 +259,48 @@ export function extractSkyline(src: Src, area: { x0: number; z0: number; x1: num
   const roads = plan.roads.filter((r: any) => !r.pedestrian).map((r: any) => [r.axis, r.at, Math.max(r.from, -1e4), Math.min(r.to, 1e4), r2(r.halfWidth), r2(r.halfTotal), r.elevated ?? '']);
   return { buildings, landmarks, hills, ground: { x0: gx0, z0: gz0, spacing: G, n, heights }, roads, waterLevel: plan.waterLevel };
 }
+
+/**
+ * The hand-built Ximending district as the source draws it: its builder's own meshes (G the
+ * buildings, D the facade details such as AC units and window bars, I the interiors of the cinema
+ * and arcade, L the light pools) and the canvas atlas they map, painted by the source's own code.
+ * Needs a CJK font for the atlas text (TGTA_FONT, default macOS's STHeiti).
+ */
+export async function extractDistrict(src: Src, atlasScale = 1) {
+  const { content, Plan } = src;
+  const { createCanvas, GlobalFonts } = await import('@napi-rs/canvas');
+  const font = process.env.TGTA_FONT ?? '/System/Library/Fonts/STHeiti Medium.ttc';
+  for (const alias of ['PingFang TC', 'Noto Sans TC', 'Microsoft JhengHei', 'Heiti TC', 'Noto Sans CJK TC', 'system-ui', 'sans-serif']) GlobalFonts.registerFromPath(font, alias);
+  const g = globalThis as any;
+  const doc = g.document;
+  g.document = { ...doc, createElement: (tag: string) => (tag === 'canvas' ? createCanvas(1, 1) : doc.createElement(tag)) };
+  g.location ??= { search: '' };
+  const plan = new Plan();
+  const atlas = await content.__atlas(atlasScale, async () => {});
+  const statics = new Proxy({}, { get: () => () => {} });
+  const res = content.__ximenPack.residencyBounds;
+  const xi = new content.__Ximen(atlas, statics, false, plan.pois.filter((p: any) => p.x > res.minX && p.x < res.maxX && p.z > res.minZ && p.z < res.maxZ));
+  await content.__buildXimen(xi, async () => {});
+  g.document = doc;
+  // Visible categories only: proxies (0) and shadow casters (1) are the source's own helpers.
+  const meshes: Record<string, { pos: Float32Array; nrm: Float32Array; uv: Float32Array; col: Float32Array; fx: Float32Array; idx: Uint32Array }> = {};
+  for (const name of ['G', 'D', 'I', 'L']) {
+    const b = xi[name];
+    b.fillCat();
+    const tris: number[] = [];
+    for (let t = 0; t < b.ic / 3; t++) if (b.tcat[t] >= 2) tris.push(b.idx[t * 3], b.idx[t * 3 + 1], b.idx[t * 3 + 2]);
+    // Compact the vertices the kept triangles use.
+    const remap = new Int32Array(b.vc).fill(-1), order: number[] = [];
+    for (const v of tris) if (remap[v] < 0) { remap[v] = order.length; order.push(v); }
+    const n = order.length;
+    const pos = new Float32Array(n * 3), nrm = new Float32Array(n * 3), uv = new Float32Array(n * 2), col = new Float32Array(n * 4), fx = new Float32Array(n * 4);
+    order.forEach((v, i) => {
+      for (let k = 0; k < 3; k++) { pos[i * 3 + k] = b.pos[v * 3 + k]; nrm[i * 3 + k] = b.nrm[v * 4 + k] / 127; }
+      uv[i * 2] = b.uv[v * 2]; uv[i * 2 + 1] = b.uv[v * 2 + 1];
+      for (let k = 0; k < 4; k++) { col[i * 4 + k] = b.col[v * 4 + k] / 255; fx[i * 4 + k] = b.fx[v * 4 + k]; }
+    });
+    meshes[name] = { pos, nrm, uv, col, fx, idx: Uint32Array.from(tris, v => remap[v]) };
+  }
+  const canvas = atlas.texture.image;
+  return { meshes, atlas: await canvas.encode('webp', 82) as Buffer, atlasSize: [canvas.width, canvas.height], fxModes: content.__fx as Record<string, number> };
+}

@@ -20,7 +20,11 @@
  */
 import { mkdirSync, readFileSync, readdirSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
-import { MODEL_STRIDE, extractStreet, extractSkyline, extractModels } from './import-taipei-dressing';
+import { Document, NodeIO } from '@gltf-transform/core';
+import { ALL_EXTENSIONS } from '@gltf-transform/extensions';
+import { meshopt } from '@gltf-transform/functions';
+import { MeshoptEncoder } from 'meshoptimizer';
+import { MODEL_STRIDE, extractDistrict, extractModels, extractSkyline, extractStreet } from './import-taipei-dressing';
 
 const SRC = process.env.TGTA_SRC ?? '/tmp/tgta';
 export const WORK = join(import.meta.dir, '.taipei-work');
@@ -29,6 +33,8 @@ const STREET_OUT = join(import.meta.dir, '../shared/maps/taipei-street.ts');
 const FURNITURE_OUT = join(import.meta.dir, '../shared/maps/taipei-furniture.ts');
 const SKYLINE_OUT = join(import.meta.dir, '../shared/maps/taipei-skyline.ts');
 const MODELS_OUT = join(import.meta.dir, '../public/assets/taipei-props.json');
+const DISTRICT_OUT = join(import.meta.dir, '../public/assets/taipei-district.glb');
+const ATLAS_OUT = join(import.meta.dir, '../public/assets/taipei-atlas.webp');
 
 /** Source-world rectangle the map covers (x east, z south, metres), plus the backdrop margin around it. */
 export const AREA = { x0: -882, x1: -681, z0: -306, z1: -60 };
@@ -71,7 +77,7 @@ export async function loadSource() {
   // Internal (unexported) bindings the extraction needs; the names are the minifier's for this build.
   load(chunk('world'), 'world.js', ';export{Eg as __Lots,pg as __Specs,N_ as __Lot,Sy as __redHouse,Ls as __expressways,ro as __Streets,Oc as __streetGround,Rc as __hedges,'
     + 'Cu as __streetProps,Hu as __claimSlots,Zs as __structures,Sd as __guideSigns,Yu as __Signals,Ku as __season,Ru as __propClaims,zu as __occupied,W as __kerb,xu as __scooterColors,vl as __scooterGeo,Il as __scooterNearGeo,yl as __bikeGeo,El as __treeGeo,Al as __banyanGeo,Ml as __signalGeo,Dl as __plantVariants};');
-  load(chunk('content'), 'content.js', ';export{wh as __Ximen,Hh as __buildXimen,bh as __ximenBlocks,xh as __ximenSpots,Zm as __blades,$m as __boards,M_ as __ximenPack};');
+  load(chunk("content"), "content.js", ";export{wh as __Ximen,Hh as __buildXimen,bh as __ximenBlocks,xh as __ximenSpots,Zm as __blades,$m as __boards,M_ as __ximenPack,oh as __atlas,sh as __fx};");
   // The MRT exit placement lives in the actors chunk, whose top level needs a browser: lift out
   // just its entrance dimensions and placement search (qa) and run those.
   const actorsCode = readFileSync(join(SRC, chunk('actors')), 'utf8');
@@ -117,6 +123,7 @@ async function main() {
   const { engine, world, content, Plan, sources } = src;
   const plan = new Plan();
   writeDressing(src);
+  await writeDistrict(src);
 
   // ---- Street plan ------------------------------------------------------------------------
   const roads = plan.roads.filter((r: any) => { const [x0, x1, z0, z1] = plan.roadRect(r, r.halfTotal); return inside(x0, z0, x1, z1); })
@@ -389,6 +396,29 @@ ${flat('FAR_HEIGHTS', 'Row-major ground heights (z rows, x columns).', sky.groun
   console.log(`wrote ${STREET_OUT}: ${s.boxes.length / 8} boxes, ${s.glows.length / 8} lit boxes, ${s.cyls.length / 8} cylinders, ${s.plates.length} plates, ${s.marks.length / 9} marks, `
     + Object.entries(s.models).map(([k, v]) => `${v.length / MODEL_STRIDE} ${k}`).join(', ') + `, ${s.solids.length} colliders, ${s.scooterRuns.length} scooter rows, ${s.carBays.length} car bays`);
   console.log(`wrote ${SKYLINE_OUT}: ${sky.buildings.length / 6} buildings, ${sky.landmarks.length} landmarks; ${MODELS_OUT}`);
+}
+
+/**
+ * The district's meshes as a meshopt-compressed GLB (one mesh per source builder, in source-world
+ * coordinates, with the builder's light flags as the _FX attribute) and its atlas as WebP.
+ */
+async function writeDistrict(src: Awaited<ReturnType<typeof loadSource>>) {
+  const d = await extractDistrict(src);
+  const doc = new Document(), buffer = doc.createBuffer(), scene = doc.createScene('ximending');
+  for (const [name, m] of Object.entries(d.meshes)) {
+    const acc = (type: 'VEC2' | 'VEC3' | 'VEC4' | 'SCALAR', array: Float32Array | Uint32Array) => doc.createAccessor().setType(type).setArray(array).setBuffer(buffer);
+    const prim = doc.createPrimitive()
+      .setAttribute('POSITION', acc('VEC3', m.pos)).setAttribute('NORMAL', acc('VEC3', m.nrm))
+      .setAttribute('TEXCOORD_0', acc('VEC2', m.uv)).setAttribute('COLOR_0', acc('VEC4', m.col))
+      .setAttribute('_FX', acc('VEC4', m.fx)).setIndices(acc('SCALAR', m.idx));
+    scene.addChild(doc.createNode(name).setMesh(doc.createMesh(name).addPrimitive(prim)));
+  }
+  doc.getRoot().getAsset().extras = { source: '臺北狂飆 / TAIPEI RUSH (https://taipei-gta.vercel.app), used with its author\'s permission', fx: d.fxModes };
+  await doc.transform(meshopt({ encoder: MeshoptEncoder, level: 'medium' }));
+  const io = new NodeIO().registerExtensions(ALL_EXTENSIONS).registerDependencies({ 'meshopt.encoder': MeshoptEncoder });
+  await io.write(DISTRICT_OUT, doc);
+  writeFileSync(ATLAS_OUT, d.atlas);
+  console.log(`wrote ${DISTRICT_OUT}: ` + Object.entries(d.meshes).map(([k, m]) => `${k} ${m.idx.length / 3} tris`).join(', ') + `; ${ATLAS_OUT} ${d.atlasSize.join('×')}`);
 }
 
 /** Fetch index.html and the chunks it lists that the extraction runs (engine, world, content, runtime) into SRC. */
