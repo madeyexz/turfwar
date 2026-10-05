@@ -138,11 +138,17 @@ body.menu-open #hud, body.menu-open #hud * { visibility: hidden; }
 /* Full-screen overlays */
 .vignette { position: absolute; inset: 0; background: radial-gradient(ellipse at center, transparent 55%, rgba(170, 0, 0, 0.55)); opacity: 0; transition: opacity 0.2s; }
 .flash { position: absolute; inset: 0; background: radial-gradient(ellipse at center, transparent 40%, rgba(255, 50, 30, 0.22)); opacity: 0; }
-.scope { position: absolute; inset: 0; background: radial-gradient(circle at center, transparent 0 33vh, rgba(0, 0, 0, 0.94) 33.4vh); }
-.scope::before, .scope::after { content: ''; position: absolute; background: rgba(0, 0, 0, 0.85); }
-.scope::before { left: 50%; top: 17vh; bottom: 17vh; width: 1px; }
-.scope::after { top: 50%; left: calc(50% - 33vh); right: calc(50% - 33vh); height: 1px; }
-.scope i { position: absolute; left: 50%; top: 50%; width: 6px; height: 6px; margin: -3px; border-radius: 50%; background: var(--crimson); box-shadow: 0 0 6px var(--crimson); }
+.scope { --lens: 33.2vh; position: absolute; inset: 0; pointer-events: none;
+  /* Soft black surround, chromatic lens edge, then a slight tint that darkens toward the rim. */
+  background:
+    radial-gradient(circle at center, transparent 0 var(--lens), rgba(0, 0, 0, 0.82) calc(var(--lens) + 1vh), #000 calc(var(--lens) + 3.4vh)),
+    radial-gradient(circle at center, transparent calc(var(--lens) - 0.9vh), rgba(255, 96, 60, 0.26) calc(var(--lens) - 0.3vh), rgba(80, 150, 255, 0.24) calc(var(--lens) + 0.3vh), transparent calc(var(--lens) + 0.8vh)),
+    radial-gradient(circle at center, rgba(16, 34, 44, 0.04) 0, rgba(16, 34, 44, 0.12) calc(var(--lens) * 0.6), rgba(6, 14, 20, 0.6) var(--lens), transparent calc(var(--lens) + 0.2vh)); }
+.scope[data-kind='prism'] { --lens: 40vh; }
+.scope-reticle { position: absolute; left: 50%; top: 50%; width: calc(var(--lens) * 2); height: calc(var(--lens) * 2); transform: translate(-50%, -50%); shape-rendering: geometricPrecision; }
+.scope[data-kind='prism'] .scope-reticle.sniper, .scope:not([data-kind='prism']) .scope-reticle.prism { display: none; }
+.scope-mag { position: absolute; left: calc(50% + var(--lens) * 0.57); top: calc(50% + var(--lens) * 0.69); font-size: 15px; font-weight: 700; letter-spacing: 0.12em; color: rgba(225, 235, 240, 0.72); text-shadow: 0 0 4px rgba(0, 0, 0, 0.8); }
+.zoomtag { position: absolute; left: calc(50% + 30px); top: calc(50% + 24px); font-size: 12px; font-weight: 700; letter-spacing: 0.1em; color: rgba(255, 255, 255, 0.7); text-shadow: 0 0 3px rgba(0, 0, 0, 0.9); pointer-events: none; }
 
 /* Death & scoreboard */
 .released { position: absolute; left: 50%; top: 42%; transform: translate(-50%, -50%); padding: 14px 26px; text-align: center; display: flex; flex-direction: column; gap: 6px; }

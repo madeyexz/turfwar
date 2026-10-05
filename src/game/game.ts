@@ -21,7 +21,7 @@ import { Hud } from '../ui/hud';
 import { Input } from './input';
 import type { GameLink } from './link';
 import { LocalPlayer } from './player';
-import { adsFov, settings } from './settings';
+import { settings } from './settings';
 
 type Sample = { x: number; y: number; z: number; vx: number; vy: number; vz: number; yaw: number; pitch: number; crouch: number };
 /** Remote soldiers closer than this get full animation and shadows; up to LOD_MID, half rate. */
@@ -170,6 +170,7 @@ export class Game {
     if (result.reloadStarted) { link.reload(); this.audio.reload('out'); setTimeout(() => this.audio.reload('in'), this.player.weapon.reload * 650); setTimeout(() => this.audio.reload('charge'), this.player.weapon.reload * 880); }
     if (result.switched) link.switchWeapon(this.player.slot);
     if (result.dryFire) this.audio.dryFire();
+    if (result.zoomed) this.audio.ui();
     if (result.grenade) link.grenade(result.grenade.origin, result.grenade.dir);
     for (const shot of result.shots) this.shoot(shot.origin, shot.dir, shot.weapon.range, state);
 
@@ -244,7 +245,7 @@ export class Game {
       cam.rotation.set(this.player.pitch + this.player.punchPitch * 0.01, this.player.yaw + this.player.punchYaw, slideRoll, 'YXZ');
       const w = this.player.weapon;
       const base = settings.fov;
-      const targetFov = base + (adsFov(w) - base) * this.player.ads + (this.player.sprinting ? 6 : 0) + (this.player.m.slideTime > 0 ? 4 : 0);
+      const targetFov = base + (this.player.aimFov - base) * this.player.ads + (this.player.sprinting ? 6 : 0) + (this.player.m.slideTime > 0 ? 4 : 0);
       cam.fov += (targetFov - cam.fov) * Math.min(1, dt * 14);
       cam.updateProjectionMatrix();
       this.renderer.viewCamera.fov = 58 - this.player.ads * (w.category === 'sniper' ? 0 : 10);
@@ -260,7 +261,9 @@ export class Game {
       cam.fov += (settings.fov - cam.fov) * Math.min(1, dt * 5); cam.updateProjectionMatrix();
       this.viewmodel.root.visible = false;
     }
-    this.hud.scope(this.viewmodel.scopeVisible);
+    const mag = this.player.magnification;
+    this.hud.scope(this.viewmodel.scopeVisible, mag, this.viewmodel.overlay);
+    this.hud.zoomTag(this.player.alive && !this.viewmodel.overlay && this.player.ads > 0.85 && mag >= 1.5 ? mag : undefined);
     const velocity = new THREE.Vector3(this.player.m.vx, this.player.m.vy, this.player.m.vz);
     if (render) this.renderer.render(this.time);
 

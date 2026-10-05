@@ -61,7 +61,7 @@ export const WEAPONS: Record<WeaponId, WeaponDef> = {
     falloff: { near: 60, far: 160, minDamage: 0.8 }, range: 400,
     spread: { hip: 4.5, ads: 0.02, moving: 3, air: 6, bloomPerShot: 0, bloomMax: 0, recovery: 6 },
     recoil: { pitch: 3.4, yaw: 0.6, pattern: [0.3, -0.4, 0.2], recover: 5, viewPunch: 3.2 },
-    adsFov: 18, adsTime: 0.3, equipTime: 0.6, movePenalty: 0.88, pellets: 1,
+    adsFov: 23, adsTime: 0.3, equipTime: 0.6, movePenalty: 0.88, pellets: 1,
     price: 4200, category: 'sniper', botRange: 45,
   },
   sidearm: {
@@ -180,7 +180,7 @@ export const WEAPONS: Record<WeaponId, WeaponDef> = {
     falloff: { near: 28, far: 80, minDamage: 0.65 }, range: 260,
     spread: { hip: 2.6, ads: 0.12, moving: 1.5, air: 3.4, bloomPerShot: 0.24, bloomMax: 2.2, recovery: 10 },
     recoil: { pitch: 0.45, yaw: 0.16, pattern: [0.1, 0.2, -0.15, -0.25, 0.15, 0.25, -0.1, -0.2], recover: 10, viewPunch: 0.7 },
-    adsFov: 50, adsTime: 0.17, equipTime: 0.45, movePenalty: 0.99, pellets: 1,
+    adsFov: 44, adsTime: 0.17, equipTime: 0.45, movePenalty: 0.99, pellets: 1,
     price: 3100, category: 'rifle', botRange: 24,
   },
   marksman: {
@@ -189,7 +189,7 @@ export const WEAPONS: Record<WeaponId, WeaponDef> = {
     falloff: { near: 40, far: 120, minDamage: 0.75 }, range: 320,
     spread: { hip: 3.2, ads: 0.05, moving: 2.2, air: 4.5, bloomPerShot: 0.6, bloomMax: 2.0, recovery: 7 },
     recoil: { pitch: 1.8, yaw: 0.35, pattern: [0.25, -0.3, 0.2, -0.15], recover: 8, viewPunch: 1.8 },
-    adsFov: 40, adsTime: 0.22, equipTime: 0.5, movePenalty: 0.95, pellets: 1,
+    adsFov: 44, adsTime: 0.22, equipTime: 0.5, movePenalty: 0.95, pellets: 1,
     price: 3200, category: 'rifle', botRange: 35,
   },
   swift: {
@@ -198,7 +198,7 @@ export const WEAPONS: Record<WeaponId, WeaponDef> = {
     falloff: { near: 50, far: 150, minDamage: 0.8 }, range: 380,
     spread: { hip: 3.6, ads: 0.03, moving: 2.6, air: 5, bloomPerShot: 0, bloomMax: 0, recovery: 7 },
     recoil: { pitch: 2.8, yaw: 0.5, pattern: [0.3, -0.35, 0.2], recover: 6, viewPunch: 2.6 },
-    adsFov: 24, adsTime: 0.24, equipTime: 0.5, movePenalty: 0.95, pellets: 1,
+    adsFov: 30, adsTime: 0.24, equipTime: 0.5, movePenalty: 0.95, pellets: 1,
     price: 3000, category: 'sniper', botRange: 40,
   },
   longbow: {
@@ -207,7 +207,7 @@ export const WEAPONS: Record<WeaponId, WeaponDef> = {
     falloff: { near: 80, far: 220, minDamage: 0.85 }, range: 450,
     spread: { hip: 5.0, ads: 0.01, moving: 3.4, air: 7, bloomPerShot: 0, bloomMax: 0, recovery: 5 },
     recoil: { pitch: 4.2, yaw: 0.7, pattern: [0.35, -0.4, 0.25], recover: 4.5, viewPunch: 3.8 },
-    adsFov: 14, adsTime: 0.34, equipTime: 0.75, movePenalty: 0.85, pellets: 1,
+    adsFov: 18, adsTime: 0.34, equipTime: 0.75, movePenalty: 0.85, pellets: 1,
     price: 4750, category: 'sniper', botRange: 50,
   },
   hammer: {
@@ -216,7 +216,7 @@ export const WEAPONS: Record<WeaponId, WeaponDef> = {
     falloff: { near: 25, far: 70, minDamage: 0.6 }, range: 260,
     spread: { hip: 3.6, ads: 0.4, moving: 2.4, air: 4.5, bloomPerShot: 0.25, bloomMax: 3.4, recovery: 7 },
     recoil: { pitch: 0.7, yaw: 0.42, pattern: [0.2, -0.3, 0.35, -0.2, 0.1, -0.35, 0.3, 0.15], recover: 7, viewPunch: 1.0 },
-    adsFov: 52, adsTime: 0.32, equipTime: 0.8, movePenalty: 0.86, pellets: 1,
+    adsFov: 44, adsTime: 0.32, equipTime: 0.8, movePenalty: 0.86, pellets: 1,
     price: 4500, category: 'heavy', botRange: 25,
   },
 };

@@ -65,7 +65,8 @@ export class Hud {
       <div class="score-pop" data-k="pop"></div>
       <div class="vignette" data-k="vignette"></div>
       <div class="flash" data-k="flash"></div>
-      <div class="scope" data-k="scope" hidden><i></i></div>
+      <div class="scope" data-k="scope" hidden><svg class="scope-reticle sniper" viewBox="-100 -100 200 200" aria-hidden="true"><g fill="#050607"><rect x="-100" y="-1.3" width="68" height="2.6" rx="1.3"/><rect x="32" y="-1.3" width="68" height="2.6" rx="1.3"/><rect x="-1.3" y="32" width="2.6" height="68" rx="1.3"/><rect x="-1.3" y="-100" width="2.6" height="68" rx="1.3"/></g><g stroke="#050607" stroke-width="0.32"><line x1="-32" y1="0" x2="32" y2="0"/><line x1="0" y1="-32" x2="0" y2="32"/></g><g fill="#050607"><circle cx="-24" cy="0" r="0.75"/><circle cx="0" cy="-24" r="0.75"/><circle cx="-18" cy="0" r="0.75"/><circle cx="0" cy="-18" r="0.75"/><circle cx="-12" cy="0" r="0.75"/><circle cx="0" cy="-12" r="0.75"/><circle cx="-6" cy="0" r="0.75"/><circle cx="0" cy="-6" r="0.75"/><circle cx="6" cy="0" r="0.75"/><circle cx="0" cy="6" r="0.75"/><circle cx="12" cy="0" r="0.75"/><circle cx="0" cy="12" r="0.75"/><circle cx="18" cy="0" r="0.75"/><circle cx="0" cy="18" r="0.75"/><circle cx="24" cy="0" r="0.75"/><circle cx="0" cy="24" r="0.75"/></g><circle r="0.55" fill="#ff3a24"/></svg><svg class="scope-reticle prism" viewBox="-100 -100 200 200" aria-hidden="true"><g fill="none" stroke="#ffa21e" stroke-width="1.6" stroke-linejoin="round" filter="url(#glow)"><path d="M -7 7 L 0 -1 L 7 7"/></g><defs><filter id="glow" x="-50%" y="-50%" width="200%" height="200%"><feGaussianBlur stdDeviation="1.2" result="b"/><feMerge><feMergeNode in="b"/><feMergeNode in="SourceGraphic"/></feMerge></filter></defs><g stroke="#08090a" stroke-width="0.5"><line x1="0" y1="9" x2="0" y2="60"/><line x1="-6" y1="18" x2="6" y2="18"/><line x1="-4.5" y1="27" x2="4.5" y2="27"/><line x1="-3.2" y1="36" x2="3.2" y2="36"/><line x1="-2.2" y1="45" x2="2.2" y2="45"/><line x1="-100" y1="0" x2="-30" y2="0"/><line x1="30" y1="0" x2="100" y2="0"/></g></svg><span class="scope-mag" data-k="scopeMag"></span></div>
+      <div class="zoomtag" data-k="zoomtag" hidden></div>
       <div class="death panel" data-k="death" hidden>
         <h3>Operative down</h3><p data-k="deathText"></p>
         <div class="loadouts">${Object.entries(LOADOUTS).map(([id, l]) => `<button data-loadout="${id}">${l.name}</button>`).join('')}</div>
@@ -308,7 +309,18 @@ export class Hud {
     e.classList.remove('on'); void e.offsetWidth; e.classList.add('on');
   }
 
-  scope(on: boolean) { this.el.scope.hidden = !on; }
+  /** Full-screen eyepiece (sniper scope or 2× prism) with its magnification ("4×"). */
+  scope(on: boolean, magnification = 1, kind: 'sniper' | 'prism' = 'sniper') {
+    this.el.scope.hidden = !on;
+    if (this.el.scope.dataset.kind !== kind) this.el.scope.dataset.kind = kind;
+    if (on) this.set('scopeMag', `${Math.round(magnification * 2) / 2}×`);
+  }
+
+  /** Small magnification readout by the crosshair for magnified optics (e.g. "2.0×"), or hidden. */
+  zoomTag(magnification: number | undefined) {
+    this.el.zoomtag.hidden = magnification === undefined;
+    if (magnification !== undefined) this.set('zoomtag', `${magnification.toFixed(1)}×`);
+  }
   scoreboard(show: boolean, state: MatchState, myId: number) {
     this.el.board.hidden = !show;
     if (!show) return;

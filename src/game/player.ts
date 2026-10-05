@@ -6,6 +6,9 @@ import { GRENADE, WEAPONS, pelletCone, type LoadoutId, type WeaponDef, type Weap
 import type { Input } from './input';
 import { adsFov, settings } from './settings';
 
+/** Snipers have a second, stronger scope magnification. */
+const hasSecondZoom = (w: WeaponDef) => w.category === 'sniper';
+
 const STEP = 1 / 120;
 const DEG = Math.PI / 180;
 
@@ -13,6 +16,8 @@ export interface FrameResult {
   shots: { origin: Vec3; dir: Vec3; weapon: WeaponDef }[];
   grenade?: { origin: Vec3; dir: Vec3 };
   reloadStarted: boolean;
+  /** The scope stepped to its other magnification this frame. */
+  zoomed?: boolean;
   switched: boolean;
   dryFire: boolean;
   move: MoveEvents;
@@ -62,6 +67,17 @@ export class LocalPlayer {
   shake = 0;
   bobPhase = 0;
   sensitivity = 0.0022;
+  /** Scoped snipers: 0 = first magnification, 1 = second (wheel or Z while aiming). */
+  zoomLevel: 0 | 1 = 0;
+
+  /** Field of view while fully aimed: the weapon's zoom, doubled in magnification at the second scope level. */
+  get aimFov() {
+    const first = adsFov(this.weapon);
+    if (!this.zoomLevel || !hasSecondZoom(this.weapon)) return first;
+    return 2 * Math.atan(Math.tan(first * DEG / 2) / 2) / DEG;
+  }
+  /** Magnification of the current aim relative to the base field of view (1 at the hip). */
+  get magnification() { return Math.tan(settings.fov * DEG / 2) / Math.tan(this.aimFov * DEG / 2); }
 
   get weapon(): WeaponDef { return WEAPONS[this.weapons[this.slot]]; }
   get reloading() { return this.reloadLeft > 0; }
@@ -110,7 +126,7 @@ export class LocalPlayer {
     // ---- Look ----
     if (can) {
       const look = input!.consumeLook();
-      const zoom = adsFov(this.weapon) / settings.fov;
+      const zoom = this.aimFov / settings.fov;
       const sens = this.sensitivity * input!.sensitivity * (1 - this.ads * (1 - zoom * 1.05));
       this.yaw -= look.x * sens;
       this.pitch = clamp(this.pitch - look.y * sens, -1.48, 1.48);
@@ -156,10 +172,15 @@ export class LocalPlayer {
     this.sprintRecover = this.sprinting ? 0.14 : Math.max(0, this.sprintRecover - dt);
     const adsTarget = moveInput.ads && !this.sprinting && this.alive ? 1 : 0;
     this.ads = clamp(this.ads + Math.sign(adsTarget - this.ads) * dt / w.adsTime, 0, 1);
+    if (this.ads < 0.3) this.zoomLevel = 0;
 
     // ---- Weapon actions ----
     if (can) {
-      if ((input!.take('KeyQ') || input!.consumeWheel() !== 0) && this.throwLeft <= 0) this.swap(result);
+      // While scoped, the wheel (or Z) steps the scope's magnification instead of swapping weapons.
+      const wheel = input!.consumeWheel(), zoomKey = input!.take('KeyZ');
+      const scoped = this.ads > 0.6 && hasSecondZoom(this.weapon);
+      if (scoped && (wheel !== 0 || zoomKey)) { this.zoomLevel = this.zoomLevel ? 0 : 1; result.zoomed = true; }
+      else if ((input!.take('KeyQ') || wheel !== 0) && this.throwLeft <= 0) this.swap(result);
       if (input!.take('KeyR')) this.startReload(result);
       if (input!.take('KeyG') && this.grenades > 0 && this.throwLeft <= 0 && this.reloadLeft <= 0) { this.throwLeft = 0.32; this.grenades--; }
     }
@@ -237,7 +258,7 @@ export class LocalPlayer {
 
   private swap(result: FrameResult) {
     this.slot = this.slot === 0 ? 1 : 0;
-    this.reloadLeft = 0; this.switchLeft = this.weapon.equipTime; this.bloom = 0; this.ads = 0;
+    this.reloadLeft = 0; this.switchLeft = this.weapon.equipTime; this.bloom = 0; this.ads = 0; this.zoomLevel = 0;
     result.switched = true;
   }
 

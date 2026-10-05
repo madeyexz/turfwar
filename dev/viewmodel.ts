@@ -28,7 +28,17 @@ if (p.sprinting) { p.m.vx = 8; }
 const reload = Number(params.get('reload') ?? 0);
 if (reload) { p.reloadTotal = 2; p.reloadLeft = 2 * (1 - reload); }
 const vm = new ViewModel(assets, Number(params.get('team') ?? 0));
-// Sight line through the mounted optic (model space), for checking ADS alignment.
+// ?inspect: a close 3/4 product shot of the weapon's mounted optic (the shared model, as soldiers and pickups show it).
+const inspect = only && params.has('inspect') ? assets.weapons.get(WEAPONS[only].model)!.clone() : undefined;
+if (inspect) {
+  r.scene.add(inspect);
+  inspect.position.set(0, 1.5, -1);
+  inspect.updateMatrixWorld(true);
+  const optic = inspect.children.find(c => c.name.startsWith('Optic_')) ?? inspect;
+  const box = new THREE.Box3().setFromObject(optic), centre = box.getCenter(new THREE.Vector3()), size = box.getSize(new THREE.Vector3()).length();
+  r.camera.position.copy(centre).add(new THREE.Vector3(size * 0.9, size * 0.45, size * 0.75));
+  r.camera.lookAt(centre); r.camera.fov = 35; r.camera.updateProjectionMatrix();
+}
 if (only) info.textContent = `sight line ${assets.weapons.get(WEAPONS[only].model)!.userData.sightLine?.toFixed(3) ?? 'rig'}`;
 // ?center marks the screen centre, where the optic window must sit when aiming.
 if (params.has('center')) {
@@ -36,7 +46,7 @@ if (params.has('center')) {
   dot.style.cssText = 'position:fixed;left:50%;top:50%;width:6px;height:6px;margin:-3px;border-radius:50%;background:#0f0;box-shadow:0 0 0 1px #000;z-index:9';
   document.body.appendChild(dot);
 }
-r.viewCamera.add(vm.root);
+if (!inspect) r.viewCamera.add(vm.root);
 (window as any).__vm = vm;
 r.viewCamera.fov = 58 - p.ads * 10; r.viewCamera.updateProjectionMatrix();
 let frames = 0;

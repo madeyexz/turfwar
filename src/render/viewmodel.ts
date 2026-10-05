@@ -3,16 +3,17 @@ import type { Assets } from '../assets';
 import { WEAPONS, type WeaponId } from '../../shared/weapons';
 import type { LocalPlayer } from '../game/player';
 import { curlFingers, orientHand, restorePose, solveArm, type Bones } from './rig';
+import { overlayFor } from './optics';
 import { createArms } from './soldier';
 
 /** Per-weapon attachment points in the model's native space (barrel along -X, up +Y). */
 interface Rig {
   model: string; grip: THREE.Vector3; fore: THREE.Vector3; sight: number; muzzle: THREE.Vector3; mag: THREE.Vector3;
-  magModel?: string; hip: THREE.Vector3; adsZ: number; scope?: boolean; pistol?: boolean;
+  magModel?: string; hip: THREE.Vector3; adsZ: number; pistol?: boolean;
 }
 const RIGS: Record<WeaponId, Rig> = {
   carbine: { model: 'Gun_Rifle', grip: new THREE.Vector3(0.02, -0.04, 0), fore: new THREE.Vector3(-0.33, 0.0, 0), sight: 0.292, muzzle: new THREE.Vector3(-0.76, 0.121, 0), mag: new THREE.Vector3(-0.15, 0.06, 0.03), magModel: 'Gun_SMG_Ammo', hip: new THREE.Vector3(0.14, -0.32, -0.36), adsZ: -0.36 },
-  lancer: { model: 'Gun_Sniper', grip: new THREE.Vector3(0.044, -0.048, 0), fore: new THREE.Vector3(-0.47, 0.012, 0), sight: 0.19, muzzle: new THREE.Vector3(-1.28, 0.077, 0), mag: new THREE.Vector3(-0.22, -0.06, 0), magModel: 'Gun_Sniper_Ammo', hip: new THREE.Vector3(0.14, -0.32, -0.38), adsZ: -0.4, scope: true },
+  lancer: { model: 'Gun_Sniper', grip: new THREE.Vector3(0.044, -0.048, 0), fore: new THREE.Vector3(-0.47, 0.012, 0), sight: 0.19, muzzle: new THREE.Vector3(-1.28, 0.077, 0), mag: new THREE.Vector3(-0.22, -0.06, 0), magModel: 'Gun_Sniper_Ammo', hip: new THREE.Vector3(0.14, -0.32, -0.38), adsZ: -0.4 },
   sidearm: { model: 'Gun_Pistol', grip: new THREE.Vector3(0.02, -0.024, 0), fore: new THREE.Vector3(0.025, -0.05, 0.03), sight: 0.192, muzzle: new THREE.Vector3(-0.37, 0.11, 0), mag: new THREE.Vector3(0.03, -0.09, 0), hip: new THREE.Vector3(0.13, -0.17, -0.4), adsZ: -0.38, pistol: true },
   magnum: { model: 'Gun_Revolver', grip: new THREE.Vector3(0.011, -0.024, 0), fore: new THREE.Vector3(0.02, -0.05, 0.03), sight: 0.17, muzzle: new THREE.Vector3(-0.45, 0.081, 0), mag: new THREE.Vector3(-0.08, 0.07, 0), hip: new THREE.Vector3(0.13, -0.17, -0.4), adsZ: -0.4, pistol: true },
   scatter: { model: 'Gun_Scatter', grip: new THREE.Vector3(0.06, -0.03, 0), fore: new THREE.Vector3(-0.4, 0.02, 0), sight: 0.182, muzzle: new THREE.Vector3(-0.745, 0.095, 0), mag: new THREE.Vector3(-0.3, 0.03, 0), hip: new THREE.Vector3(0.15, -0.31, -0.36), adsZ: -0.38 },
@@ -28,8 +29,8 @@ const RIGS: Record<WeaponId, Rig> = {
   brawler: { model: 'Gun_Brawler', grip: new THREE.Vector3(0.005, 0, 0), fore: new THREE.Vector3(-0.38, 0.085, 0), sight: 0.16, muzzle: new THREE.Vector3(-0.76, 0.12, 0), mag: new THREE.Vector3(-0.24, -0.05, 0), magModel: 'Gun_SMG_Ammo', hip: new THREE.Vector3(0.14, -0.32, -0.36), adsZ: -0.36 },
   kestrel: { model: 'Gun_Kestrel', grip: new THREE.Vector3(0.005, 0, 0), fore: new THREE.Vector3(-0.52, 0.06, 0), sight: 0.268, muzzle: new THREE.Vector3(-0.67, 0.2, 0), mag: new THREE.Vector3(0.15, 0.0, 0), magModel: 'Gun_SMG_Ammo', hip: new THREE.Vector3(0.14, -0.32, -0.36), adsZ: -0.36 },
   marksman: { model: 'Gun_Marksman', grip: new THREE.Vector3(0.005, 0, 0), fore: new THREE.Vector3(-0.4, 0.11, 0), sight: 0.225, muzzle: new THREE.Vector3(-0.74, 0.165, 0), mag: new THREE.Vector3(-0.17, -0.05, 0), magModel: 'Gun_SMG_Ammo', hip: new THREE.Vector3(0.14, -0.32, -0.36), adsZ: -0.36 },
-  swift: { model: 'Gun_Swift', grip: new THREE.Vector3(0.005, 0, 0), fore: new THREE.Vector3(-0.5, 0.0, 0), sight: 0.087, muzzle: new THREE.Vector3(-1.21, 0.035, 0), mag: new THREE.Vector3(-0.18, -0.04, 0), magModel: 'Gun_Sniper_Ammo', hip: new THREE.Vector3(0.14, -0.32, -0.38), adsZ: -0.4, scope: true },
-  longbow: { model: 'Gun_Longbow', grip: new THREE.Vector3(0.005, 0, 0), fore: new THREE.Vector3(-0.55, 0.02, 0), sight: 0.137, muzzle: new THREE.Vector3(-1.26, 0.075, 0), mag: new THREE.Vector3(-0.25, 0.0, 0), magModel: 'Gun_Sniper_Ammo', hip: new THREE.Vector3(0.14, -0.32, -0.38), adsZ: -0.4, scope: true },
+  swift: { model: 'Gun_Swift', grip: new THREE.Vector3(0.005, 0, 0), fore: new THREE.Vector3(-0.5, 0.0, 0), sight: 0.087, muzzle: new THREE.Vector3(-1.21, 0.035, 0), mag: new THREE.Vector3(-0.18, -0.04, 0), magModel: 'Gun_Sniper_Ammo', hip: new THREE.Vector3(0.14, -0.32, -0.38), adsZ: -0.4 },
+  longbow: { model: 'Gun_Longbow', grip: new THREE.Vector3(0.005, 0, 0), fore: new THREE.Vector3(-0.55, 0.02, 0), sight: 0.137, muzzle: new THREE.Vector3(-1.26, 0.075, 0), mag: new THREE.Vector3(-0.25, 0.0, 0), magModel: 'Gun_Sniper_Ammo', hip: new THREE.Vector3(0.14, -0.32, -0.38), adsZ: -0.4 },
   hammer: { model: 'Gun_Hammer', grip: new THREE.Vector3(0.005, 0, 0), fore: new THREE.Vector3(-0.45, 0.12, 0), sight: 0.27, muzzle: new THREE.Vector3(-0.67, 0.2, 0), mag: new THREE.Vector3(0.25, -0.05, 0), magModel: 'Gun_SMG_Ammo', hip: new THREE.Vector3(0.14, -0.32, -0.36), adsZ: -0.36 },
 };
 
@@ -78,6 +79,8 @@ export class ViewModel {
   private time = 0;
   private equipT = 1;
   scopeVisible = false;
+  /** Eyepiece overlay of the weapon in hand (sniper scope / 2× prism); the 3D model hides behind it. */
+  get overlay() { return overlayFor(this.current); }
 
   constructor(assets: Assets, team: number) {
     this.root.add(this.rig);
@@ -230,9 +233,9 @@ export class ViewModel {
     if (this.grenade.visible) lh.getWorldPosition(this.grenade.position).add(new THREE.Vector3(0.02, 0.03, -0.06));
 
     this.flashLeft -= dt;
-    this.flash.visible = this.flashLeft > 0 && !(rig.scope && p.ads > 0.95);
+    this.flash.visible = this.flashLeft > 0 && !(this.overlay && p.ads > 0.95);
     // Scoped rifles hide the model at full zoom; the HUD draws the reticle.
-    this.scopeVisible = !!rig.scope && p.ads > 0.92;
+    this.scopeVisible = !!this.overlay && p.ads > 0.92;
     this.root.visible = !this.scopeVisible;
   }
 }
