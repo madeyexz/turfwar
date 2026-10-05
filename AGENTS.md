@@ -1,7 +1,7 @@
 # Lawbreaker // Frontline
 
-Browser-first team FPS: credits, a buy menu, map pickups and flag fights from 8v8 arenas
-to a 100-soldier city. Read `README.md`
+Browser-first round-based team FPS modelled on BeGone (nplay): Elimination and Sabotage,
+cash and a store, attachments, Duel to Mega (12v12) servers. Read `README.md`
 for gameplay, architecture, asset attribution, known limits, and the demo script.
 Improve playable gunplay, map flow, animation, and multiplayer—not only the HUD.
 
@@ -14,15 +14,15 @@ Improve playable gunplay, map flow, animation, and multiplayer—not only the HU
 - **SpacetimeDB 2.10.2** TypeScript module and client SDK for Online matches.
 - **Vitest** for tests.
 - **Vercel** serves the built frontend (static; there are no serverless routes).
-- GLB characters/weapons and animations from CC0 Quaternius packs (buy-menu guns from the
+- GLB characters/weapons and animations from CC0 Quaternius packs (store guns from the
   CC0 Ultimate Gun Pack via `tools/import-guns.ts`); CC0 Poly Haven
   textures; Rajdhani font under OFL. Keep license files and attribution intact.
 
 ## Where code belongs
 
 - `shared/`: environment-independent simulation, collision, movement, hit volumes,
-  weapons and prices, thrown bodies, and map definitions (with pickups). No browser APIs here.
-- `shared/match/`: match state, combat validation, economy (credits, buying, pickups), bots,
+  weapons, attachments and prices, thrown bodies, and map definitions (with ammo crates and bomb sites). No browser APIs here.
+- `shared/match/`: match state, combat validation, economy (cash, store, crates), rounds and the bomb, bots,
   navigation, the packed per-tick frame, and the simulation tick.
 - `src/game/`: client loop, player prediction/input, Solo link, settings, performance check.
 - `src/net/online.ts`: SpacetimeDB connection, replicated state, interpolation, and intents.

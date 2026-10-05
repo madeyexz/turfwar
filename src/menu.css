@@ -1,6 +1,6 @@
 /* ---------- Deploy screen ----------
  * Left: a scrolling panel of choices with the Deploy bar pinned to its foot.
- * Right: the live battlefield backdrop, a showcase of the selected map and the map strip.
+ * Right: the live battlefield backdrop, a showcase of the selected server and the server browser.
  */
 #menu {
   position: fixed; inset: 0; z-index: 5;
@@ -26,6 +26,7 @@
 #menu input[type='text'] { width: 100%; background: rgba(255, 255, 255, 0.05); border: 1px solid var(--line); border-radius: 3px; padding: 9px 12px; font-size: 18px; font-weight: 600; letter-spacing: 0.04em; outline: none; transition: border-color 0.15s; }
 #menu input[type='text']:focus { border-color: var(--accent); }
 #menu .row { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; }
+#menu:not(.mode-offline) .row { grid-template-columns: 1fr; }
 
 /* Choice cards */
 #menu .choices { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; }
@@ -40,15 +41,32 @@
 #menu .choice small { color: var(--muted); font-size: 13px; font-weight: 500; line-height: 1.2; }
 #menu .choice[aria-pressed='true'] { border-color: var(--accent); background: rgba(127, 246, 255, 0.09); box-shadow: inset 3px 0 0 var(--accent); }
 #menu .choice:disabled { opacity: 0.4; cursor: not-allowed; }
-#menu .kits .choice small { letter-spacing: 0.06em; }
+#menu .choices.sizes { grid-template-columns: repeat(3, 1fr); }
+#menu .sizes .choice { padding: 7px 9px; }
+#menu .sizes .choice b { font-size: 14px; }
+#menu .sizes .choice small { font-size: 12px; letter-spacing: 0.04em; }
+#menu .mtag { color: var(--accent); letter-spacing: 0.02em; }
 /* Segmented controls: one line of short labels. */
-#menu .choices.segmented { grid-template-columns: repeat(3, 1fr); gap: 0; border: 1px solid var(--line); border-radius: 3px; overflow: hidden; }
+#menu .choices.segmented { grid-template-columns: repeat(var(--n, 3), 1fr); gap: 0; border: 1px solid var(--line); border-radius: 3px; overflow: hidden; }
 #menu .segmented .choice { border: none; border-radius: 0; padding: 8px 4px; align-items: center; background: transparent; }
 #menu .segmented .choice + .choice { border-left: 1px solid var(--line); }
 #menu .segmented .choice b { font-size: 13px; }
 #menu .segmented .choice[aria-pressed='true'] { box-shadow: inset 0 -2px 0 var(--accent); }
-#menu .aegis { color: var(--aegis); }
-#menu .crimson { color: var(--crimson); }
+#menu .swat { color: var(--aegis); }
+#menu .militia { color: var(--crimson); }
+#menu .crosshairs .choice { flex-direction: row; justify-content: center; gap: 6px; }
+#menu .crosshairs svg { width: 18px; height: 18px; stroke: currentColor; stroke-width: 2; fill: currentColor; color: var(--accent); flex: none; }
+#menu .crosshairs .choice b { text-transform: capitalize; }
+
+/* Which fields each way of playing shows. */
+#menu:not(.mode-offline) .solo-only, #menu:not(.mode-online) .online-only, #menu:not(.mode-lab) .lab-only { display: none; }
+#menu .note { margin: 0; color: #c3d1d5; font-size: 14px; line-height: 1.4; font-weight: 500; }
+#menu .server-card { border: 1px solid var(--line); border-radius: 3px; background: rgba(255, 255, 255, 0.035); padding: 12px 14px; }
+#menu .server-name { display: flex; align-items: center; gap: 9px; font-size: 18px; letter-spacing: 0.06em; }
+#menu .live { width: 8px; height: 8px; border-radius: 50%; background: #5df29a; box-shadow: 0 0 10px #5df29a; }
+#menu .server-card dl { display: grid; grid-template-columns: auto 1fr; gap: 3px 12px; margin: 10px 0 0; font-size: 13px; font-weight: 600; }
+#menu .server-card dt { color: var(--muted); letter-spacing: 0.14em; text-transform: uppercase; font-size: 11px; padding-top: 2px; }
+#menu .server-card dd { margin: 0; color: var(--ink); }
 
 /* Settings drawer */
 #menu .settings { border-top: 1px solid rgba(190, 236, 244, 0.1); padding-top: 14px; }
@@ -57,7 +75,8 @@
 #menu .settings summary::before { content: '+'; display: inline-block; width: 16px; color: var(--accent); }
 #menu .settings[open] summary::before { content: '–'; }
 #menu .settings summary:hover { color: var(--ink); }
-#menu .settings[open] { display: flex; flex-direction: column; gap: 16px; }
+#menu .settings[open] summary { margin-bottom: 16px; }
+#menu .settings-body { display: flex; flex-direction: column; gap: 16px; }
 #menu .sliders { display: grid; gap: 12px; }
 #menu input[type='range'] { width: 100%; accent-color: var(--accent); margin: 0; }
 #menu .controls { display: grid; grid-template-columns: auto 1fr; gap: 4px 14px; margin: 0; font-size: 14px; font-weight: 600; }
@@ -86,24 +105,34 @@
 #menu .showcase h2 { margin: 6px 0 0; font-size: clamp(34px, 3.4vw, 48px); line-height: 1; letter-spacing: 0.05em; text-transform: uppercase; }
 #menu .showcase .meta { margin-top: 8px; display: inline-block; padding: 3px 10px; font-size: 13px; font-weight: 700; letter-spacing: 0.14em; text-transform: uppercase; border: 1px solid var(--line); border-radius: 999px; background: rgba(4, 9, 12, 0.55); }
 #menu .showcase .about { margin: 12px 0 0; font-size: 16px; line-height: 1.4; color: #d3dee1; font-weight: 500; }
-#menu .showcase .online-only { display: none; margin: 10px 0 0; font-size: 13px; color: var(--amber); font-weight: 600; letter-spacing: 0.04em; }
-#menu.mode-online .showcase .online-only { display: block; }
 
-#menu .maps { display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 8px; }
-#menu .map {
-  position: relative; display: flex; flex-direction: column; gap: 4px; padding: 12px 12px 11px 14px; text-align: left;
-  border: 1px solid var(--line); border-radius: 4px; background: rgba(6, 12, 16, 0.72); backdrop-filter: blur(6px);
-  transition: border-color 0.15s, background 0.15s, transform 0.15s;
+/* Server browser: BeGone-style list of servers (one per map here); the selected row is what Start plays. */
+#menu .browser { border: 1px solid var(--line); border-radius: 4px; background: rgba(6, 12, 16, 0.78); backdrop-filter: blur(6px); max-width: 760px; width: 100%; align-self: flex-end; overflow: hidden; }
+#menu .browser-head { display: flex; justify-content: space-between; align-items: baseline; padding: 10px 14px 8px; border-bottom: 1px solid rgba(190, 236, 244, 0.1); }
+#menu .browser-head b { font-size: 13px; letter-spacing: 0.24em; text-transform: uppercase; color: var(--accent); }
+#menu .browser-head span { font-size: 12px; color: var(--muted); font-weight: 600; letter-spacing: 0.1em; text-transform: uppercase; }
+#menu .browser-cols, #menu .server { display: grid; grid-template-columns: minmax(0, 1fr) 150px 80px 56px; gap: 12px; align-items: center; }
+#menu .browser-cols { padding: 6px 14px; font-size: 11px; font-weight: 700; letter-spacing: 0.2em; color: var(--muted); text-transform: uppercase; background: rgba(255, 255, 255, 0.03); }
+#menu .browser-cols span:nth-child(n + 3), #menu .server span:nth-child(n + 3) { text-align: right; }
+#menu .browser-rows { max-height: min(46vh, 400px); overflow-y: auto; scrollbar-width: thin; scrollbar-color: rgba(190, 236, 244, 0.2) transparent; }
+#menu .server {
+  position: relative; width: 100%; padding: 6px 14px 6px 17px; text-align: left; border: none; border-top: 1px solid rgba(190, 236, 244, 0.06);
+  background: transparent; font-size: 14px; font-weight: 600; transition: background 0.12s;
 }
-#menu .map::before { content: ''; position: absolute; left: 0; top: 10px; bottom: 10px; width: 3px; border-radius: 2px; background: var(--swatch, var(--muted)); opacity: 0.8; }
-#menu .map[data-theme='desert'] { --swatch: #d9a75e; }
-#menu .map[data-theme='snow'] { --swatch: #cfe8f2; }
-#menu .map[data-theme='forest'] { --swatch: #7fc56b; }
-#menu .map:hover { border-color: rgba(127, 246, 255, 0.5); transform: translateY(-2px); }
-#menu .map b { font-size: 15px; letter-spacing: 0.07em; text-transform: uppercase; line-height: 1.1; }
-#menu .map small { font-size: 12px; color: var(--muted); font-weight: 600; letter-spacing: 0.1em; text-transform: uppercase; }
-#menu .map[aria-pressed='true'] { border-color: var(--accent); background: rgba(14, 34, 40, 0.82); box-shadow: 0 0 0 1px var(--accent), 0 0 24px rgba(127, 246, 255, 0.18); }
-#menu.mode-online .maps { opacity: 0.55; }
+#menu .server[hidden] { display: none; }
+#menu .server::before { content: ''; position: absolute; left: 0; top: 7px; bottom: 7px; width: 3px; border-radius: 2px; background: var(--swatch, var(--muted)); opacity: 0.8; }
+#menu .server[data-theme='desert'] { --swatch: #d9a75e; }
+#menu .server[data-theme='snow'] { --swatch: #cfe8f2; }
+#menu .server[data-theme='forest'] { --swatch: #7fc56b; }
+#menu .server.online-row { --swatch: #5df29a; }
+#menu .server:hover { background: rgba(127, 246, 255, 0.06); }
+#menu .server[aria-pressed='true'] { background: rgba(127, 246, 255, 0.12); box-shadow: inset 0 0 0 1px rgba(127, 246, 255, 0.55); }
+#menu .server .srv { display: flex; flex-direction: column; min-width: 0; }
+#menu .server .srv b { font-size: 15px; letter-spacing: 0.07em; text-transform: uppercase; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+#menu .server .srv small { font-size: 12px; color: var(--muted); letter-spacing: 0.08em; text-transform: uppercase; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+#menu .server .mode { color: var(--ink); letter-spacing: 0.04em; }
+#menu .server .players { font-variant-numeric: tabular-nums; }
+#menu .server .ping { color: #5df29a; font-size: 12px; letter-spacing: 0.1em; text-transform: uppercase; }
 
 /* ---- Narrow screens: one scrolling column ---- */
 @media (max-width: 900px) {
@@ -113,5 +142,8 @@
   #menu .brand, #menu .form, #menu .launch { padding-left: 16px; padding-right: 16px; }
   #menu .stage { padding: 0 16px 24px; gap: 16px; }
   #menu .showcase { align-self: stretch; text-align: left; max-width: none; }
+  #menu .browser { align-self: stretch; }
+  #menu .browser-cols, #menu .server { grid-template-columns: minmax(0, 1fr) 110px 60px; }
+  #menu .browser-cols span:nth-child(4), #menu .server .ping { display: none; }
   #menu .launch { position: sticky; bottom: 0; }
 }

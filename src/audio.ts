@@ -5,33 +5,21 @@ type V3 = { x: number; y: number; z: number };
 /**
  * Sound design: recorded CC0 gunshots (public/assets/sfx, see tools/fetch-sounds.ts) played per
  * weapon with its own rate, gain and filtering, plus procedural mechanical tails, footsteps,
- * reloads, explosions and UI cues, all spatialized for remote sources.
+ * reloads, the knife, explosions, the bomb and round cues, all spatialized for remote sources.
  */
 /**
  * Recorded shot per weapon: sample file, playback rate (pitch and length), gain and optional
- * filters, so guns that share a recording still differ. `layers` keep a synthesized energy
- * character on the sci-fi guns. Weapons without a sample (the graviton launcher) are synthesized.
+ * filters. Every firearm has its own recording; the knife has none (a synthesized swish).
  */
 interface GunSample { file: string; rate: number; gain: number; lowpass?: number; highpass?: number; layers?: GunSound['layers'] }
 const GUN_SAMPLES: Partial<Record<WeaponId, GunSample>> = {
-  sidearm: { file: 'pistol-9mm', rate: 1, gain: 0.85 },
-  hornet: { file: 'pistol-380', rate: 1.06, gain: 0.8, highpass: 180 },
-  warden: { file: 'pistol-45', rate: 0.9, gain: 1 },
-  magnum: { file: 'revolver-38', rate: 0.84, gain: 1 },
-  stinger: { file: 'smg-9mm', rate: 1.14, gain: 0.7, highpass: 320 },
-  wasp: { file: 'smg-9mm', rate: 1, gain: 0.78 },
-  viper: { file: 'smg-tokarev', rate: 0.95, gain: 0.82 },
-  scatter: { file: 'shotgun-pump', rate: 1, gain: 1 },
-  thunder: { file: 'shotgun-m12', rate: 1.05, gain: 0.95 },
-  reaper: { file: 'shotgun-break', rate: 0.92, gain: 1.05, lowpass: 7000 },
-  carbine: { file: 'rifle-556', rate: 1, gain: 0.85, layers: [['sawtooth', 1400, 260, 0.07, 0.05]] },
-  kestrel: { file: 'rifle-556', rate: 1.08, gain: 0.8, highpass: 200 },
-  brawler: { file: 'rifle-762', rate: 1, gain: 0.9 },
-  hammer: { file: 'rifle-762', rate: 0.86, gain: 0.95, lowpass: 5200 },
-  marksman: { file: 'rifle-sks', rate: 1, gain: 0.95 },
-  swift: { file: 'sniper-300', rate: 1, gain: 1 },
-  longbow: { file: 'sniper-mosin', rate: 0.94, gain: 1.1 },
-  lancer: { file: 'sniper-3006', rate: 1.05, gain: 0.95, layers: [['sine', 3200, 600, 0.35, 0.1, 0.02]] },
+  m9a1: { file: 'pistol-9mm', rate: 1, gain: 0.85 },
+  mp7: { file: 'smg-tokarev', rate: 1.12, gain: 0.74, highpass: 260 },
+  mp5: { file: 'smg-9mm', rate: 1, gain: 0.8 },
+  m4a1: { file: 'rifle-556', rate: 1, gain: 0.88 },
+  m249: { file: 'rifle-762', rate: 0.94, gain: 0.95, lowpass: 9000 },
+  m1014: { file: 'shotgun-pump', rate: 1, gain: 1 },
+  m110: { file: 'sniper-3006', rate: 1.02, gain: 1 },
 };
 
 /** A decoded recording and where its shot starts (skips encoder padding and silence). */
@@ -40,36 +28,27 @@ interface Sample { buffer: AudioBuffer; onset: number }
 /**
  * Synthesized gunshot per weapon (the fallback until samples load, and the menu theme's voice): `heavy` scales the shared crack/body/thump/tail, `layers` add the
  * weapon's character as [oscillator, start Hz, end Hz, seconds, gain, delay?], and `tail` plays the
- * action cycling after the shot.
+ * action cycling after the shot. `melee` is the knife: a swish, no shot.
  */
 interface GunSound {
   heavy: number;
   layers?: [OscillatorType, number, number, number, number, number?][];
   blast?: boolean;
   tail?: 'pump' | 'bolt' | 'action';
-  launcher?: boolean;
+  melee?: boolean;
 }
 const GUN_SOUNDS: Record<WeaponId, GunSound> = {
-  carbine: { heavy: 1, layers: [['sawtooth', 1400, 260, 0.07, 0.08]] },
-  lancer: { heavy: 1.6, layers: [['sawtooth', 1800, 260, 0.112, 0.08], ['sine', 3200, 600, 0.35, 0.12, 0.02]] },
-  sidearm: { heavy: 0.8 },
-  magnum: { heavy: 1.35 },
-  scatter: { heavy: 1.5, blast: true, tail: 'pump' },
-  stinger: { heavy: 0.7, layers: [['square', 2600, 900, 0.03, 0.05]] },
-  graviton: { heavy: 1, launcher: true },
-  hornet: { heavy: 0.75, layers: [['square', 3000, 1200, 0.02, 0.03]] },
-  warden: { heavy: 1.25, layers: [['sine', 220, 60, 0.18, 0.25]] },
-  wasp: { heavy: 0.65, layers: [['square', 2200, 800, 0.025, 0.05]] },
-  viper: { heavy: 0.8, layers: [['sawtooth', 1700, 500, 0.04, 0.05]] },
-  reaper: { heavy: 1.7, blast: true, layers: [['sine', 90, 35, 0.3, 0.5]] },
-  thunder: { heavy: 1.4, blast: true, tail: 'action' },
-  brawler: { heavy: 1.15, layers: [['sawtooth', 1100, 220, 0.08, 0.07]], tail: 'action' },
-  kestrel: { heavy: 0.95, layers: [['sawtooth', 1600, 400, 0.06, 0.07]] },
-  marksman: { heavy: 1.3, layers: [['sawtooth', 1500, 300, 0.09, 0.08], ['sine', 2600, 500, 0.2, 0.08, 0.015]], tail: 'action' },
-  swift: { heavy: 1.45, layers: [['sine', 3000, 700, 0.25, 0.1, 0.02]], tail: 'bolt' },
-  longbow: { heavy: 1.8, layers: [['sine', 2400, 400, 0.45, 0.14, 0.02], ['sine', 70, 30, 0.4, 0.5]], tail: 'bolt' },
-  hammer: { heavy: 1.1, layers: [['sawtooth', 900, 180, 0.09, 0.08]] },
+  knife: { heavy: 0, melee: true },
+  m9a1: { heavy: 0.8 },
+  mp7: { heavy: 0.65, layers: [['square', 2600, 900, 0.03, 0.05]] },
+  mp5: { heavy: 0.72, layers: [['square', 2200, 800, 0.025, 0.05]] },
+  m4a1: { heavy: 1, layers: [['sawtooth', 1400, 260, 0.07, 0.06]] },
+  m249: { heavy: 1.15, layers: [['sawtooth', 1100, 220, 0.08, 0.07]] },
+  m1014: { heavy: 1.5, blast: true, tail: 'action' },
+  m110: { heavy: 1.45, layers: [['sawtooth', 1500, 300, 0.09, 0.08], ['sine', 2600, 500, 0.2, 0.08, 0.015]], tail: 'action' },
 };
+
+type Listener = { pos: V3; yaw: number };
 
 export class Audio {
   private ctx?: BaseAudioContext;
@@ -165,11 +144,14 @@ export class Audio {
 
   setMuted(muted: boolean) { this.muted = muted; if (this.master) this.master.gain.value = muted ? 0 : this.volume; this.setMusicVolume(this.musicVolume); }
 
+  /** Sound-effect volume (0–1); the menu music has its own. */
+  setVolume(volume: number) { this.volume = volume; if (this.master && !this.muted) this.master.gain.value = volume; }
+
   private get ready() { return !!this.ctx && !this.muted; }
   private now() { return this.clock ?? this.ctx!.currentTime; }
 
   /** Output chain: optional stereo pan + distance attenuation + reverb send. */
-  private out(gain: number, listener?: { pos: V3; yaw: number }, at?: V3, wet = 0.35) {
+  private out(gain: number, listener?: Listener, at?: V3, wet = 0.35) {
     const ctx = this.ctx!;
     const g = ctx.createGain(); g.gain.value = gain;
     let node: AudioNode = g;
@@ -212,20 +194,25 @@ export class Audio {
     o.connect(g).connect(dest); o.start(t); o.stop(t + dur + 0.05);
   }
 
-  gunshot(weapon: WeaponId, listener?: { pos: V3; yaw: number }, at?: V3) {
+  /**
+   * One shot of `weapon` (the knife swishes). `suppressed` (Suppressor attachment) trades the
+   * crack for a muffled, quieter thump with a sharp mechanical snap and little room echo.
+   */
+  gunshot(weapon: WeaponId, listener?: Listener, at?: V3, suppressed = false) {
     if (!this.ready) return;
-    const t = this.now();
+    const t = this.now(), sound = GUN_SOUNDS[weapon];
+    if (sound.melee) { this.swish(t, listener, at); return; }
     const recorded = GUN_SAMPLES[weapon], sample = recorded && this.samples.get(recorded.file);
-    if (recorded && sample) { this.playShot(recorded, sample, GUN_SOUNDS[weapon], t, listener, at); return; }
-    const out = this.out(listener ? 0.75 : 0.55, listener, at, listener ? 0.5 : 0.28);
-    const sound = GUN_SOUNDS[weapon];
-    if (sound.launcher) {
-      // Launcher: a hollow pneumatic thump with a falling gravitic warble instead of a crack.
-      this.noiseBurst(out, t, 0.12, 'bandpass', 420, 1.2, 0.9);
-      this.tone(out, t, 'sine', 240, 45, 0.32, 0.9);
-      this.tone(out, t + 0.01, 'triangle', 1400, 180, 0.26, 0.18);
+    if (recorded && sample) { this.playShot(recorded, sample, sound, t, listener, at, suppressed); return; }
+    if (suppressed) {
+      const out = this.out(listener ? 0.5 : 0.4, listener, at, 0.12);
+      this.noiseBurst(out, t, 0.025, 'highpass', 3200, 0.8, 0.5);
+      this.noiseBurst(out, t, 0.08 * Math.max(0.8, sound.heavy), 'bandpass', 700, 1.1, 0.8);
+      this.tone(out, t, 'sine', 160, 50, 0.08, 0.5);
+      this.actionTail(out, sound.tail ?? 'action', t);
       return;
     }
+    const out = this.out(listener ? 0.75 : 0.55, listener, at, listener ? 0.5 : 0.28);
     const heavy = sound.heavy;
     // Transient crack, mid body, sub thump and mechanical tail, then the weapon's own character.
     this.noiseBurst(out, t, 0.03, 'highpass', 2500, 0.7, 0.9 * heavy);
@@ -238,22 +225,47 @@ export class Audio {
     this.actionTail(out, sound.tail, t);
   }
 
-  /** A recorded shot, pitched and filtered per weapon, muffled with distance, then its action cycling. */
-  private playShot(g: GunSample, sample: Sample, sound: GunSound, t: number, listener?: { pos: V3; yaw: number }, at?: V3) {
+  /** A recorded shot, pitched and filtered per weapon, muffled with distance (and by a suppressor), then its action cycling. */
+  private playShot(g: GunSample, sample: Sample, sound: GunSound, t: number, listener: Listener | undefined, at: V3 | undefined, suppressed: boolean) {
     const ctx = this.ctx!;
-    const out = this.out((listener ? 0.7 : 0.5) * g.gain, listener, at, listener ? 0.45 : 0.22);
+    const out = this.out((listener ? 0.7 : 0.5) * g.gain * (suppressed ? 0.34 : 1), listener, at, suppressed ? 0.1 : listener ? 0.45 : 0.22);
     const src = ctx.createBufferSource();
     src.buffer = sample.buffer;
-    src.playbackRate.value = g.rate * (1 + (Math.random() - 0.5) * 0.05);
+    src.playbackRate.value = g.rate * (suppressed ? 1.12 : 1) * (1 + (Math.random() - 0.5) * 0.05);
     let node: AudioNode = src;
     const distance = listener && at ? Math.hypot(at.x - listener.pos.x, at.y - listener.pos.y, at.z - listener.pos.z) : 0;
-    const lowpass = Math.min(g.lowpass ?? 20000, 20000 / (1 + distance * 0.04));
+    const lowpass = Math.min(suppressed ? 1500 : g.lowpass ?? 20000, 20000 / (1 + distance * 0.04));
     if (lowpass < 19000) { const f = ctx.createBiquadFilter(); f.type = 'lowpass'; f.frequency.value = lowpass; node = node.connect(f); }
-    if (g.highpass) { const f = ctx.createBiquadFilter(); f.type = 'highpass'; f.frequency.value = g.highpass; node = node.connect(f); }
+    const highpass = suppressed ? Math.max(g.highpass ?? 0, 240) : g.highpass;
+    if (highpass) { const f = ctx.createBiquadFilter(); f.type = 'highpass'; f.frequency.value = highpass; node = node.connect(f); }
     node.connect(out);
     src.start(t, sample.onset);
-    for (const [type, f0, f1, dur, gain, delay = 0] of g.layers ?? []) this.tone(out, t + delay, type, f0, f1, dur, gain);
+    if (suppressed) {
+      // The crack is gone; what is left is the action slamming and gas spitting from the can.
+      const snap = this.out(listener ? 0.45 : 0.35, listener, at, 0.05);
+      this.noiseBurst(snap, t, 0.022, 'highpass', 3600, 0.8, 0.6);
+      this.noiseBurst(snap, t + 0.004, 0.03, 'bandpass', 2000, 3, 0.35);
+    } else for (const [type, f0, f1, dur, gain, delay = 0] of g.layers ?? []) this.tone(out, t + delay, type, f0, f1, dur, gain);
     this.actionTail(out, sound.tail, t);
+  }
+
+  /** Knife slash through the air. */
+  private swish(t: number, listener?: Listener, at?: V3) {
+    const out = this.out(listener ? 0.4 : 0.32, listener, at, 0.08);
+    const f = this.noiseBurst(out, t, 0.18, 'bandpass', 900, 2.2, 0.8, 0.04);
+    f.frequency.setValueAtTime(700, t); f.frequency.exponentialRampToValueAtTime(3400, t + 0.16);
+  }
+
+  /** Knife: the swing, and on a hit a blunt stab into the target. */
+  knife(hit: boolean, listener?: Listener, at?: V3) {
+    if (!this.ready) return;
+    const t = this.now();
+    this.swish(t, listener, at);
+    if (!hit) return;
+    const out = this.out(listener ? 0.55 : 0.45, listener, at, 0.06);
+    this.tone(out, t + 0.06, 'sine', 140, 55, 0.12, 0.8);
+    this.noiseBurst(out, t + 0.06, 0.07, 'lowpass', 900, 1, 0.7);
+    this.noiseBurst(out, t + 0.07, 0.05, 'bandpass', 2600, 4, 0.25);
   }
 
   /** Mechanical cycling after the shot: pump, bolt or a short action clack. */
@@ -271,7 +283,7 @@ export class Audio {
     }
   }
 
-  boltShot(listener: { pos: V3; yaw: number }, at: V3) {
+  boltShot(listener: Listener, at: V3) {
     if (!this.ready) return;
     const t = this.now(), out = this.out(0.5, listener, at, 0.4);
     this.tone(out, t, 'square', 900, 140, 0.18, 0.18);
@@ -296,20 +308,90 @@ export class Audio {
     if (kill) { this.tone(out, t + 0.05, 'sine', 880, 870, 0.18, 0.3); this.tone(out, t + 0.12, 'sine', 1320, 1310, 0.22, 0.25); }
   }
 
-  damage(shield: boolean) {
+  /** Taking a hit. (The old shield argument is ignored: BeGone soldiers have health only.) */
+  damage(_shield?: boolean) {
     if (!this.ready) return;
     const t = this.now(), out = this.out(0.5, undefined, undefined, 0.1);
-    if (shield) { this.tone(out, t, 'sine', 700, 380, 0.12, 0.25); this.noiseBurst(out, t, 0.08, 'highpass', 5000, 1, 0.2); }
-    else { this.tone(out, t, 'sine', 90, 50, 0.18, 0.7); this.noiseBurst(out, t, 0.1, 'lowpass', 600, 1, 0.5); }
+    this.tone(out, t, 'sine', 90, 50, 0.18, 0.7); this.noiseBurst(out, t, 0.1, 'lowpass', 600, 1, 0.5);
   }
 
-  shieldBreak() {
+  /** @deprecated No shields any more; silent until callers drop it. */
+  shieldBreak() { /* no shields */ }
+
+  /** Low health (below 25): one lub-dub. Call about once a second; nearby players hear it too. */
+  heartbeat(listener?: Listener, at?: V3) {
     if (!this.ready) return;
-    const t = this.now(), out = this.out(0.45);
-    for (let i = 0; i < 4; i++) this.tone(out, t + i * 0.02, 'triangle', 2400 - i * 300, 600, 0.25, 0.12);
+    const t = this.now(), out = this.out(listener ? 0.5 : 0.55, listener, at, 0.04);
+    this.tone(out, t, 'sine', 62, 38, 0.16, 0.9, 0.012);
+    this.noiseBurst(out, t, 0.06, 'lowpass', 160, 0.7, 0.4);
+    this.tone(out, t + 0.24, 'sine', 54, 34, 0.14, 0.6, 0.012);
   }
 
-  explosion(listener: { pos: V3; yaw: number }, at: V3) {
+  /** The armed bomb's beep (callers beep faster as the clock runs down). */
+  bombBeep(listener?: Listener, at?: V3) {
+    if (!this.ready) return;
+    const t = this.now(), out = this.out(listener ? 0.5 : 0.3, listener, at, 0.25);
+    this.tone(out, t, 'square', 2100, 2100, 0.07, 0.12);
+    this.tone(out, t, 'sine', 4200, 4200, 0.05, 0.08);
+  }
+
+  /** Bomb armed: a rising three-step alarm. */
+  bombArmed() {
+    if (!this.ready) return;
+    const t = this.now(), out = this.out(0.4, undefined, undefined, 0.35);
+    [880, 1175, 1568].forEach((f, i) => { this.tone(out, t + i * 0.13, 'square', f, f, 0.11, 0.12); this.tone(out, t + i * 0.13, 'sine', f * 2, f * 2, 0.1, 0.06); });
+    this.tone(out, t + 0.42, 'sawtooth', 600, 1800, 0.5, 0.08, 0.05);
+  }
+
+  /** Bomb disarmed: the charge powers down with a clean click. */
+  bombDisarmed() {
+    if (!this.ready) return;
+    const t = this.now(), out = this.out(0.4, undefined, undefined, 0.3);
+    this.noiseBurst(out, t, 0.03, 'bandpass', 2600, 4, 0.7);
+    this.tone(out, t + 0.03, 'sine', 1600, 140, 0.7, 0.3, 0.01);
+    this.tone(out, t + 0.03, 'triangle', 800, 80, 0.6, 0.12, 0.01);
+  }
+
+  /** Round start (freeze time over): a short two-tone go signal. */
+  roundStart() {
+    if (!this.ready) return;
+    const t = this.now(), out = this.out(0.35, undefined, undefined, 0.45);
+    this.tone(out, t, 'triangle', 587, 587, 0.16, 0.22);
+    this.tone(out, t + 0.16, 'triangle', 880, 880, 0.32, 0.26);
+    this.tone(out, t + 0.16, 'sine', 1760, 1760, 0.3, 0.07);
+  }
+
+  /** Round over: a rising fanfare when won, a falling line when lost, two flat notes for a draw (undefined). */
+  roundEnd(won: boolean | undefined) {
+    if (!this.ready) return;
+    const t = this.now(), out = this.out(0.35, undefined, undefined, 0.5);
+    const notes = won === undefined ? [494, 494] : won ? [523, 659, 784, 1046] : [392, 349, 311];
+    notes.forEach((f, i) => this.tone(out, t + i * (won === undefined ? 0.18 : 0.09), 'triangle', f, f, 0.35, 0.25));
+  }
+
+  /** @deprecated Domination capture cue; silent until callers drop it. */
+  capture(_ours: boolean) { /* no capture points */ }
+
+  /** Cash award or purchase: a register ka-ching. */
+  cash() {
+    if (!this.ready) return;
+    const t = this.now(), out = this.out(0.28, undefined, undefined, 0.2);
+    this.noiseBurst(out, t, 0.03, 'bandpass', 3000, 3, 0.4);
+    this.tone(out, t + 0.03, 'triangle', 2637, 2637, 0.16, 0.22);
+    this.tone(out, t + 0.09, 'triangle', 3520, 3520, 0.3, 0.2);
+    this.noiseBurst(out, t + 0.09, 0.25, 'highpass', 7000, 1, 0.12, 0.01);
+  }
+
+  /** Binoculars (Z) raised or lowered: a lens click and a short focus whirr. */
+  binoculars() {
+    if (!this.ready) return;
+    const t = this.now(), out = this.out(0.25, undefined, undefined, 0.05);
+    this.noiseBurst(out, t, 0.025, 'bandpass', 2200, 5, 0.7);
+    this.tone(out, t + 0.03, 'sawtooth', 180, 260, 0.14, 0.05, 0.02);
+    this.noiseBurst(out, t + 0.16, 0.02, 'bandpass', 3000, 5, 0.4);
+  }
+
+  explosion(listener: Listener, at: V3) {
     if (!this.ready) return;
     const t = this.now(), out = this.out(1.4, listener, at, 0.6);
     this.noiseBurst(out, t, 1.4, 'lowpass', 500, 0.7, 1.2, 0.004);
@@ -317,7 +399,7 @@ export class Audio {
     this.tone(out, t, 'sine', 70, 28, 0.9, 1.1);
   }
 
-  footstep(listener: { pos: V3; yaw: number } | undefined, at: V3 | undefined, sprint: boolean) {
+  footstep(listener: Listener | undefined, at: V3 | undefined, sprint: boolean) {
     if (!this.ready) return;
     const t = this.now(), out = this.out(listener ? 0.35 : 0.18, listener, at, 0.1);
     this.noiseBurst(out, t, 0.07, 'bandpass', 380 + Math.random() * 140, 1.2, sprint ? 0.9 : 0.6);
@@ -327,13 +409,6 @@ export class Audio {
   jump() { if (!this.ready) return; const t = this.now(); this.noiseBurst(this.out(0.2), t, 0.1, 'bandpass', 500, 1, 0.5); }
   land(strength: number) { if (!this.ready) return; const t = this.now(); this.noiseBurst(this.out(0.3), t, 0.12, 'lowpass', 400, 1, Math.min(1.2, strength * 0.1)); }
   slide() { if (!this.ready) return; const t = this.now(); this.noiseBurst(this.out(0.25), t, 0.6, 'bandpass', 900, 0.6, 0.6, 0.03); }
-
-  capture(ours: boolean) {
-    if (!this.ready) return;
-    const t = this.now(), out = this.out(0.35, undefined, undefined, 0.5);
-    const notes = ours ? [523, 659, 784, 1046] : [392, 349, 311];
-    notes.forEach((f, i) => this.tone(out, t + i * 0.09, 'triangle', f, f, 0.35, 0.25));
-  }
 
   tick() { if (!this.ready) return; const t = this.now(); this.tone(this.out(0.15), t, 'square', 1200, 1200, 0.03, 0.08); }
 

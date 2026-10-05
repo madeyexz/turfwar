@@ -1,10 +1,10 @@
 # Lawbreaker // Frontline
 
-A browser-first, keyboard-and-mouse team shooter in the spirit of fast browser FPS games like
-Combat Online and Battlefield-style flag fights. Earn credits for kills and captures, buy your gun
-from a 19-weapon arsenal, grab power weapons lying on the map, and take the flags across eight
-original battlefields — from a castle and a freight yard to rooftops and a 100-soldier city —
-against bots or real players through SpacetimeDB.
+A browser-first, keyboard-and-mouse team shooter faithful to **BeGone** (nPlay's browser FPS):
+SWAT against Militia in short rounds with one life each, cash for every kill, a store in your
+base with five primaries, two secondaries, a grenade and BeGone's attachments, and two modes,
+**Elimination** and **Sabotage**. Play solo on your own server with bots, on the live server
+through SpacetimeDB, or alone on the practice range, across eight original maps.
 
 Built with Vite, TypeScript, Three.js and SpacetimeDB. Bun is the package manager and script
 runner (`bun` / `bunx`, never npm/npx).
@@ -13,78 +13,133 @@ runner (`bun` / `bunx`, never npm/npx).
 
 | Area | Implemented |
 | --- | --- |
-| Modes | **Solo skirmish** (bots fill both teams: 6v6, or 50v50 on Meridian District; three difficulties), **Online match** (SpacetimeDB-authoritative, up to 100 soldiers; humans replace bots; maps rotate between rounds, skipping maps too small for the humans present), **Practice range** (no bots: try every gun and learn the maps). |
-| Objective | Domination: capture A, B and C — five flags A–E on Meridian — (8 s solo capture, faster with more teammates, frozen while contested). Owned points tick team score; kills add score; first to 200 or most after 10 min wins, then a new round starts. |
-| Battlefields | **Cinder Basin** (desert outpost: central plaza, comm bunkers, ridge watchtower, cargo yard), **Frostline Reach** (arctic relay: walled relay courtyard with gates and wall-top catwalks, rooftop towers, frozen trench with a bridge, crystal ridge), **Verdant Divide** (jungle uplink: uplink plateau, clearing bunkers, creek bed, tree cover). **Ochre Quarter** (desert old town: an original homage to the classic two-site layout of CS:GO's Dust II — Long with its doors, corner and pit, Mid with the crate and doors, Catwalk up to Short, roofed Tunnels — built from our own geometry and CC0 assets). **Meridian District** (400 × 280 m war-torn city for 50v50 Conquest: five points A–E — a wooded park on hills, a construction pit under a steel frame, and the central square at C decked over a drained canal, mirrored onto the far bank; three canal crossings with a walkable canal bed beneath them, elevated highways along both edges for long Recon lanes, a ruined block, enterable two-storey buildings with roof terraces, and a landmark tower over the core; every point has forward spawns for both teams that open while that team holds it uncontested and no enemy is within 25 m). **Citadel Keep** (8v8 hilltop castle: rampart walks over the gates, gatehouse barbicans with dry ditches, twin keeps over the inner courtyard, roofed galleries under the walls), **Railyard** (8v8 freight yard: four tracks of boxcars and tankers, engine sheds at A and C, two-storey depots with mezzanines, a footbridge and a turntable plaza at B) and **Skyline Rooftops** (8v8 rooftops 24–36 m above a city: steel bridges, a glazed sky-bridge, stairwells, a penthouse and an office floor — the street below is fatal). The first three lanes-and-flanks layouts are rotationally symmetric for fairness (tested), as are Meridian, Citadel, Railyard and Skyline; Ochre Quarter keeps its source's attacker/defender asymmetry on purpose (team 0 attacks from the south, A and C are the defenders' sites, B is Mid). Team spawns are protected by one-way energy shields. |
-| Gunplay | Hitscan weapons with fire rate, magazines, timed reloads, hip/ADS/moving/air spread, per-shot bloom, recoil climb with partial recovery, view punch, damage falloff and head/leg multipliers. Kits: **Assault** (VX-7 pulse carbine + P-12 sidearm), **Recon** (L-90 scoped rail rifle + R-6 magnum), **Breacher** (S-8 pump scattergun firing a fixed 9-pellet pattern + K-9 full-auto machine pistol) and **Grenadier** (G-0 graviton launcher + P-12). Buy-menu arsenal (models from Quaternius' CC0 Ultimate Gun Pack): pistols **P-9 Hornet** and **D-50 Warden**; SMGs **M-5 Wasp** and **V-10 Viper**; shotguns **Twin-12 Reaper** (sawed-off double barrel) and **A-12 Thunder** (semi-auto); rifles **AR-4 Brawler** (hard-hitting, hard to hold), **BX-3 Kestrel** (accurate bullpup) and **DM-4 Marksman** (semi-auto DMR); snipers **S-3 Swift** and **B-50 Longbow** (bolt-action, one-shot headshots); LMG **H-70 Hammer** (100 rounds). Graviton charges and grenades (G) are physical bodies that arc under gravity; charges detonate on contact or near an enemy. The procedurally built S-8, K-9 and G-0 models live in `src/render/procguns.ts`. |
-| Economy | Credits ($800 to start, max $16,000): $300 a kill (+$100 headshot) and $300 a capture. **B** opens the buy menu — every gun by category with its price, plus grenades — during the first 15 s after deploying or anywhere near your team's spawn. Bought weapons fill their slot (pistols secondary, everything else primary) with spare magazines, last until death and are rebought automatically on respawn while affordable. Reloads draw from spare ammo. Purchases are validated by the host. |
-| Pickups | Every map places weapons, ammo crates and armor cells: **E** swaps in a lying weapon, ammo and armor are collected by walking over them, and each item respawns 20–45 s after being taken. Power weapons (rail rifle, graviton) sit in exposed spots. Bots buy guns when they deploy and grab better weapons they pass. |
-| Movement | Shared deterministic controller: walk, sprint (with sprint-to-fire delay), crouch, slide (crouch while sprinting), jump with coyote time, step-up, ramps/stairs, team shields. |
-| Feel | First-person rigged arms (cut from the soldier rig) posed by IK onto CC0 weapon models; procedural sway, figure-eight bob, kick, sprint carry, ADS with red-dot reticle, scope overlay, reload choreography with a magazine in hand, equip and grenade throw; muzzle flash, tracers, impact sparks and dust, bullet marks, explosions; hit markers, headshot/kill confirms, damage-direction arcs, kill feed, recorded CC0 gunshots per weapon (distance-muffled and panned), procedural reloads, footsteps and cues; a looping 60-second menu theme sequenced from those same effects. |
-| Characters | CC0 rigged base body with an armored suit: helmet with glowing visor, plates, pack, pauldrons, bracers and boots as one rigid-skinned geometry (three draw calls per soldier). CC0 animation library retargeted by bone name: idle/walk/jog/sprint/crouch/jump/slide/death blend by speed, legs twist for strafing, cycles reverse when backpedalling, bladed rifle stance, aim pitch through the spine, two-bone arm IK onto the weapon, posed hands, hit flinches. |
-| Bots | Navigation grid generated from each map (multi-level: roofs, catwalks, stairs), A* paths, objective selection that spreads the team, perception with field of view and line of sight, reaction delays, imperfect lead, aim error that settles, strafing and range keeping, burst fire, crouching, reloading and grenades at last-known positions. |
-| Settings | Deploy screen: graphics preset (Low / Medium / High), mouse sensitivity, field of view (vertical, with the 16:9 horizontal equivalent), and a 30-second performance check. Saved per browser. |
-| HUD | Score/objective bar, capture progress, world markers, teammate name tags, rotating minimap (enemies appear when they fire), vitals with regenerating shield, ammo with spare rounds, credits, buy-zone hint, pickup prompt, death screen with kit choice, scoreboard (Tab), end-of-round screen, buy menu. |
+| Lobby | A BeGone-style server browser. **Solo**: pick the game mode, the map (a server row per map; Sabotage lists only maps with bomb sites), the server size, bot difficulty (Recruit / Veteran / Elite) and a team (SWAT, Militia or auto). **Online**: the configured SpacetimeDB server, whose map and mode are set by the server; join on either team. **Practice range**: any map, no bots, no round limit, the whole store free. Options: graphics preset, crosshair style, mouse sensitivity, field of view, effects and music volume, and the controls list. |
+| Teams | **SWAT** (team 0, navy tactical kit) and **Militia** (team 1, desert and olive irregulars). In Sabotage Militia attacks and SWAT defends. No friendly fire. |
+| Rounds | 4 s freeze at round start (buy, no moving), the round, a 5 s round-over pause; first team to **10 round wins** takes the match, then 10 s on the result screen and a new match. Nobody respawns inside a round; everyone respawns at the next round start. Dead players spectate their killer immediately (RMB cycles players); their chat is hidden from the living. |
+| Elimination `[E]` | 120 s rounds. Kill the whole other team. If time runs out with both teams alive the round is a draw: it replays and nobody scores. When the last two players trade kills the team that killed last wins. |
+| Sabotage `[S]` | 90 s rounds (120 s on single-site maps). Militia holds **E** for 5 s at site A or B to arm the bomb (no moving, shooting or aiming while arming; crouching is allowed). Arming sets the clock to 40 s and the other site goes inert; from then SWAT can only win by disarming (E for 5 s) — killing every Militia no longer ends the round — and the bomb going off wins it for Militia. Before arming: all SWAT dead → Militia win; all Militia dead or time out → SWAT win. No draws. |
+| Server sizes | Duel 1v1 · Team Duel 2v2 · Mini 4v4 · Medium 6v6 · Large 8v8 · Mega 12v12. Bots fill every slot without a human. The Online server is Medium (6v6). |
+| Player | 100 health, no armor or regeneration within a round, fall damage, head/body/limb damage per weapon. Below 25 health the screen desaturates and a heartbeat plays that nearby players hear too. Stamina 100: sprinting drains 18/s (5 to start), a jump costs 20, it regenerates 18/s (24 crouched); at 30 or less you cannot sprint. Each weapon sets your move speed. |
+| Economy | See the table below. **B** opens the store inside your own base during the first 20 s of a round (freeze time included); dead players can buy for their next spawn. Weapons you own swap free during that window. Attachments can be bought anywhere, at any time. Weapons and attachments last the whole match and reset with a new one. Ammo crates on every map refill about half a magazine of the held weapon's reserve per use (E): the first use in a round costs $300, later ones are free. |
+| Gunplay | Hitscan with BeGone's per-weapon numbers: fire rate, magazine and reserve, reload and equip times, hip/zoomed accuracy and recoil, zoom and move speed. RMB is "Accuracy": hold to zoom through the fitted optic (iron sights 3.5×). The knife hits for 33 anywhere at about 2 m. The M1014 fires 14 pellets. The M67 has a 2.1 s fuse and 22 m radius. **Z** raises binoculars (10× zoom, no weapon). |
+| Feel | First-person arms posed by IK onto CC0 gun models with optics that follow the fitted attachment (irons, reflex, holographic, ACOG, x4, x6), suppressor, laser and flashlight visuals; procedural sway, bob, kick, sprint carry, reloads and equips; muzzle flash, tracers (hidden when suppressed), impacts, explosions; hit markers, cash popups, damage arrows, kill feed, round banners; recorded CC0 gunshots per weapon (distance-muffled and panned, muffled when suppressed), knife, bomb, round and cash cues, footsteps and a 60-second menu theme sequenced from the game's own effects. |
+| Characters | CC0 rigged soldiers in two team outfits, CC0 animation library retargeted by bone name: idle/walk/jog/sprint/crouch/jump/death blend by speed, strafing leg twist, aim pitch, two-bone arm IK onto the weapon, a knife stab, hit flinches. |
+| Bots | Navigation grid per map (roofs, catwalks, stairs), A* paths, field of view and line of sight, reaction delays, aim error that settles, strafing, bursts, reloads and grenades. They shop at round start (the best primary they can afford, sometimes an optic and a grenade). In Sabotage Militia bots head for a site and arm it, SWAT bots spread over the sites, and everyone converges on an armed bomb. |
+| HUD | Score bar with the round clock, round score and an avatar per soldier (alive or dead, teammates' health), health and stamina, cash, weapon with its attachments, ammo and reserve, grenade, bomb status and arming progress, minimap with sites and crates, kill feed, chat (Enter all, T team), scoreboard (Tab), crosshair that widens with sustained fire, jumping and sprinting in four styles (classic, dot, circle, T), match result. |
+| Profiles | Online, each identity keeps career stats (kills, deaths, assists, headshots, rounds and matches played and won) in a public `profile` table. |
+
+### Economy (BeGone's cash awards)
+
+| Award | Cash |
+| --- | --- |
+| New match (starting money) | $1,000 |
+| Kill · knife kill · grenade kill | $500 · $600 · $900 |
+| First kill of the round · first blood (first damage) · last enemy alive | +$300 each |
+| Multi-kill (kills under 4 s apart) | +$300 × kills in the chain |
+| Kill streak | +$100 × (streak ÷ 5) on every 5th kill |
+| Headshot | +$100 per headshot bullet (at most 3 per opponent per round) |
+| Assist (damaged the victim in its last 3 s) · trade (both kill each other) | $200 · +$100 |
+| Arm or disarm the bomb | $500 |
+| Round won (each player) · survived · last man standing | $500 · $200 · $300 |
+| Loss bonus (4th loss in a row onward) | $500 per loss |
+| Loyalty (every 5 rounds on the same server) | $1,000 |
+| Maximum | $16,000 |
+
+### Weapons
+
+| Slot (key) | Weapon | Price | Damage head / body / limb | Notes |
+| --- | --- | --- | --- | --- |
+| Melee (1) | Knife | free | 33 / 33 / 33 | Always carried; 2 swings/s; fastest movement |
+| Secondary (2) | M9A1 | default | 29 / 22 / 15 | Semi-auto, 12 + 36 |
+| Secondary (2) | MP7 | $1,800 | 18 / 12 / 8 | Automatic, 13 rounds/s, 20 + 60 |
+| Primary (3) | MP5 | default | 30 / 18 / 12 | Automatic, 12 rounds/s, 32 + 96 |
+| Primary (3) | M4A1 | $3,400 | 33 / 21 / 15 | Automatic, 9 rounds/s, 30 + 90 |
+| Primary (3) | M1014 | $2,800 | 24 / 10 / 8 per pellet | Semi-auto shotgun, 14 pellets, 6 + 18 |
+| Primary (3) | M110 | $4,000 | 90 / 40 / 30 | Semi-auto marksman rifle, 6 + 18 |
+| Primary (3) | M249 | $3,800 | 43 / 33 / 21 | Automatic, 86 + 86, slowest movement |
+| Tactical (4 / G) | M67 grenade | $1,000 | 70 (falloff) | One carried, not restocked; High Explosive mod $1,500 (+45 body damage, smaller radius) |
+
+### Attachments (one per category per weapon; kept for the match)
+
+| Category | Attachment | Price | Fits |
+| --- | --- | --- | --- |
+| Optic | Iron Sight · Reflex · Holographic · ACOG | free · $800 · $1,000 · $1,100 | All firearms (no ACOG on the M9A1) |
+| Optic | Zoom x4 · Zoom x6 | $600 · $1,200 | M9A1 only · M110 only |
+| Tactical | Ammo Counter · Laser Sight · Flashlight | $200 · $800 · $600 | All firearms |
+| Tactical | Suppressor | $1,100 (MP7 $1,000, M9A1 $600) | All firearms: less recoil and damage, no tracer or muzzle flash, quieter |
+| Mod | Extended Clip · Recoil Pad | $900 · $1,200 | All firearms |
+| Ammo | Explosive · Incendiary | $1,600 · $1,400 | All firearms: more damage, smaller magazine, more recoil |
+
+### Maps
+
+**Cinder Basin** (desert outpost), **Frostline Reach** (arctic relay courtyard), **Verdant Divide**
+(jungle uplink plateau), **Ochre Quarter** (desert old town: an original homage to the classic
+two-site layout of CS:GO's Dust II, built from our own geometry and CC0 assets), **Citadel Keep**
+(hilltop castle), **Railyard** (freight yard), **Skyline Rooftops** (rooftops high above a city; the
+street is fatal) and **Meridian District** (a large war-torn city quarter). Every map has bomb sites
+for Sabotage (two on Ochre Quarter and Meridian District, one elsewhere), ammo crates, and team bases
+with spawn barriers only their own team can pass.
 
 ## Controls
 
 | Input | Action |
 | --- | --- |
 | WASD · mouse | Move · look |
-| LMB · RMB | Fire · aim down sights |
-| Shift · Space | Sprint · jump |
-| C or Ctrl | Crouch (while sprinting: slide) |
-| R · Q / wheel · G | Reload · swap weapon · throw grenade |
-| B · E | Buy menu · pick up the weapon at your feet |
-| Tab · Esc | Scoreboard · release the mouse (pauses solo; click to resume, `M` for the deploy screen) |
+| LMB · RMB | Fire · accuracy (zoom) |
+| Shift · Space | Sprint · jump (both cost stamina) |
+| C or Ctrl | Crouch |
+| 1 · 2 · 3 | Knife · secondary · primary |
+| 4 or G | M67 grenade |
+| Q or wheel | Cycle weapons |
+| R · E | Reload · use (arm or disarm the bomb, ammo crate) |
+| Z · B | Binoculars · store |
+| Enter · T | Chat · team chat |
+| Tab · F | Scoreboard · fullscreen |
+| V | Camera view (reserved) |
+| Esc · M | Release the mouse (pauses solo; click to resume) · back to the lobby |
 
 ## Multiplayer architecture
 
 `spacetimedb/src/index.ts` runs the **same** `shared/match` simulation as solo play, server-side:
 
-- Built for 100 soldiers per match. Player reducers only **queue** input: `report` overwrites the
-  soldier's row in a private `inbox` (elapsed time accumulates for the movement budget) and `fire`,
-  `grenade`, `reload_weapon`, `switch_slot`, `choose_loadout`, `buy` and `pickup_item` append to a
-  private `command` queue. The 30 Hz scheduled `tick` loads the match **once**, applies every queued
-  report and command in arrival order through the shared validation, runs bots, thrown bodies,
-  pickups, objectives, scoring,
-  respawns, round resets and map rotation, and saves. With no humans connected the tick idles.
-- What clients subscribe to: `match` (slow fields only: phase, scores, map; rewritten only when
-  they change), `roster` (name, team, kit, weapons, spare ammo, credits, alive, score line, respawn
-  time; rewritten only on events), `player` (identity → soldier), the event table `match_event`
-  (damage, kills, captures) and one `frame` row rewritten every tick: a packed binary snapshot
-  (`shared/match/frame.ts`) of every soldier's pose and vitals (22 bytes each, 2 cm positions),
-  grenades and charges, capture progress, pickup timers, the clock and that tick's shots. `soldier`, `point` and `body` keep full-precision
-  server state and are not subscribed to; per-tick bookkeeping lives in a private `clock` row.
-  Private `bot_brain` is unchanged. All original tables and columns remain — including the
-  physics-law era's `history` table and law columns, now unused and written neutral — so an existing
-  database migrates in place; leftover sentinel drones and bolts are dropped on the first save.
+- One match per database. When a match ends the module moves to the next map in the rotation and
+  alternates Elimination and Sabotage (Sabotage only where the map has bomb sites). Bots fill every
+  slot not taken by a human.
+- Player reducers only **queue** input: `report` overwrites the soldier's row in a private `inbox`
+  (elapsed time accumulates for the movement budget) and `fire`, `grenade`, `reload_weapon`,
+  `switch_slot`, `buy`, `buy_attachment` and `use_crate` append to a private `command` queue;
+  `say` posts chat. The 30 Hz scheduled `tick` loads the match **once**, applies every queued report
+  and command in arrival order through the shared validation (buy window and base for weapons, cash,
+  attachment fit, crate reach), runs bots, grenades, the round clock, the bomb, cash awards and map
+  rotation, and saves. With no humans connected the tick idles.
+- What clients subscribe to: `match` (slow fields only: phase, scores, map, configuration; rewritten
+  only when they change), `roster` (name, team, weapons, owned guns and attachments, reserves, cash,
+  score line; rewritten only on events), `player` (identity → soldier), `profile` (career stats), the
+  event table `match_event` (damage, kills, rounds, bomb, cash awards, chat) and one `frame` row
+  rewritten every tick: a packed binary snapshot (`shared/match/frame.ts`) of every soldier's pose and
+  vitals, grenades, the round clock and bomb, and that tick's shots. `soldier` and `body` keep
+  full-precision server state and are not subscribed to; per-tick bookkeeping lives in a private
+  `clock` row. Older tables and columns (`point`, `history`, the law columns) remain, unused and
+  written neutral, so an existing database migrates in place.
 - Clients send their own movement (`report`, 20 Hz) and shots (`fire`) with an optional claimed hit.
-  Movement spends a distance budget measured against server time (refills at 14 m/s, capped at
-  6 m ≈ 0.7 s of sprinting), so reports that bunch up after a network stall pass but sending reports
-  faster never buys distance; rising higher above the last floor than a jump plus a ledge step-up,
-  or staying airborne for 2.5 s (longer than any fall on these maps), drops the soldier back down;
-  bounds, solid geometry and enemy shields are enforced. Tests drive the real movement controller
-  (sprints, slide-hops, jumps, a ledge step-up) through jittered, bunched delivery and expect zero
-  corrections. Each shot
-  claim is checked for alive shooter, weapon, magazine, fire rate (a client's fire clock may run at
-  most 250 ms ahead, so slow weapons get no instant follow-up), origin near the shooter, range, line
-  of sight through static geometry, a claimed point within a speed-scaled tolerance of the target's
-  hit volumes, and no friendly fire. Damage, kills, scores, credits, purchases and pickups are
+  Movement spends a distance budget measured against server time, so bunched reports after a network
+  stall pass but sending reports faster never buys distance; climbing higher than a jump plus a ledge
+  step-up or staying airborne too long drops the soldier back down; bounds, solid geometry and the
+  other team's base barriers are enforced, and nobody moves during freeze time. Each shot claim is
+  checked for alive shooter, weapon, magazine, fire rate, origin near the shooter, range, line of
+  sight through static geometry, a claimed point within a speed-scaled tolerance of the target's hit
+  volumes, and no friendly fire. Damage, kills, rounds, the bomb, cash, purchases and crates are
   authoritative. Bot shots are simulated entirely on the server.
-- Client-side: own movement is predicted with the shared controller; remote soldiers and bodies are
-  interpolated ~100 ms behind from the frame; a rejected position snaps the client back; dropped
-  (idle) clients rejoin automatically. Online play was verified with two separate browser clients (different
-  identities): they see each other move and fight through server validation — one client killed the other, both kill feeds showed it and the
-  victim's death screen named the killer.
+- Client-side: own movement is predicted with the shared controller; remote soldiers and grenades
+  are interpolated ~100 ms behind from the frame; a rejected position snaps the client back; dropped
+  (idle) clients rejoin automatically.
 - Load test (local only): `bun scripts/loadtest.ts --uri ws://127.0.0.1:3100 --db <name> --clients 100`
   runs headless clients that move with the shared controller, fire validated shots and report the
   server tick rate, bytes per client, report round trips and corrections; it refuses non-local URIs.
-  `bun scripts/simbench.ts meridian` times the simulation alone. On an M3 Pro with a local server, 100 clients
-  on Meridian measured 30 ticks/s, ~84 KB/s per client (~8 MB/s total egress), report round trips
-  of 6 / 9 / 12 ms (p50/p95/p99) and zero corrections; the previous one-load-per-reducer design
-  measured ~517 KB/s per client and 51 / 147 / 225 ms. These are single-machine numbers, not a
-  production load test: Maincloud capacity, real network latency and egress cost are unmeasured.
+  `bun scripts/simbench.ts meridian` times the simulation alone. Measured before the BeGone
+  conversion (Domination, 100 clients on Meridian, M3 Pro, local server): 30 ticks/s, ~84 KB/s per
+  client, report round trips of 6 / 9 / 12 ms (p50/p95/p99) and zero corrections. These are
+  single-machine numbers, not a production load test.
 - Trust model and limits: movement is client-reported (validated, not simulated), hit detection is
   shooter-favoured within tolerances (no full lag compensation), and one match per database.
 
@@ -94,7 +149,7 @@ runner (`bun` / `bunx`, never npm/npx).
 bun install --frozen-lockfile
 bun install --cwd spacetimedb --frozen-lockfile
 bun run dev            # Vite dev server (solo and the practice range work immediately, offline after load)
-bun run test           # Vitest (not `bun test`): physics, movement, collision, maps, bots, validation, economy, weapons
+bun run test           # Vitest (not `bun test`): rounds, bomb, economy, weapons, movement, collision, maps, bots, validation
 bun run build          # type-check + production build
 bun run typecheck:module
 ```
@@ -111,12 +166,18 @@ game and the match server. After changing the module, regenerate client bindings
 `spacetime generate --lang typescript --out-dir src/module_bindings --module-path spacetimedb`.
 In Amp orbs, `.amp/services.yaml` declares both services (`amp orb services ensure`).
 
-Testing the arsenal: the practice range always buys for free, anywhere; add `&freebuy` to the URL for a free-buy
-Solo skirmish; for a **local** Online database, set `"freeBuy":true` in the match's `configJson` with
+Lobby URL flags: `?mode=offline|online|lab`, `&game=elimination|sabotage`,
+`&size=duel|teamduel|mini|medium|large|mega`, `&map=<id>`, `&team=0|1|auto`, `&skill=0.25…0.75`,
+`&name=…`, `&autostart=1`. Choices are remembered per browser under `lawbreaker.*` in localStorage
+(`lawbreaker.crosshair` holds the crosshair style the HUD draws).
+
+Testing the store: the practice range always buys for free, anywhere; add `&freebuy` to the URL for a
+free-buy Solo match; for a **local** Online database, set `"freeBuy":true` in the match's
+`configJson` with
 `spacetime sql <db> "UPDATE match SET configJson = '…' WHERE id = 0" --server http://127.0.0.1:3000`
 (owner-only; never on Maincloud).
 
-Development pages (dev server only): `/dev/level.html?map=verdant` (battlefield preview),
+Development pages (dev server only): `/dev/level.html?map=verdant` (map preview),
 `/dev/soldier.html` (animation/IK pose sheet), `/dev/viewmodel.html?ads=1` (first-person weapon),
 `/dev/viewer.html?model=/assets/props.glb` (asset viewer). Dev-only URL flags `debuginput`,
 `fixeddt` and `capture` make automated runs deterministic on software renderers.
@@ -147,27 +208,30 @@ Verify the production URL and two separate Online clients after each release.
 
 ## Assets and licenses
 
-No proprietary game assets are used. Everything is original code or CC0/OFL:
+No proprietary game assets are used: the weapon and mode names follow BeGone, but every model,
+texture, sound and line of code here is original or CC0/OFL.
 
-- Characters, animations, weapons, props and modular kit pieces/trim sheets: free “Standard”
+- Characters, animations, props and modular kit pieces/trim sheets: free “Standard”
   editions of Quaternius' *Universal Base Characters*, *Universal Animation Library 1 & 2*,
   *Sci-Fi Essentials Kit* and *Modular Sci-Fi MegaKit* — CC0 1.0 (https://quaternius.com).
   Converted by `tools/import-assets.ts` (textures resized to WebP, animation tracks pruned and
   meshopt-compressed); see `public/assets/LICENSE.txt`.
-- Buy-menu guns: twelve models from Quaternius' *Ultimate Gun Pack* — CC0 1.0
+- Weapons: models from Quaternius' *Ultimate Gun Pack* (a bayonet for the knife) — CC0 1.0
   (https://opengameart.org/content/low-poly-guns-pack). Converted from OBJ by `tools/import-guns.ts`
   (`bun tools/import-guns.ts`, with the pack extracted under `GUN_SRC`; `--preview <dir>` renders
-  measured side views for placing grips, sights and muzzles) into `public/assets/guns.glb` (~270 KB).
-- Gunshots: fifteen single-shot recordings from *The Free Firearm Sound Library* by Ben Jaszczak,
+  measured side views for placing grips, sights and muzzles) into `public/assets/guns.glb`.
+- Gunshots: single-shot recordings from *The Free Firearm Sound Library* by Ben Jaszczak,
   Brian Nelson, Kevin Heras and Matthew Nanney — CC0 1.0
   (https://opengameart.org/content/the-free-firearm-sound-library). Trimmed, normalized and encoded to
   mono 64 kb/s MP3 by `tools/fetch-sounds.ts` into `public/assets/sfx` (~150 KB); see
-  `public/assets/sfx/LICENSE.txt`. Each weapon plays its recording at its own rate, gain and filtering.
+  `public/assets/sfx/LICENSE.txt`. Each firearm has its own recording (M9A1: Walther PPQ, MP7: PPSh,
+  MP5: Carl Gustav M45, M4A1: AR-15, M249: AK-47, M1014: Benelli Nova, M110: Tikka .30-06), played at
+  its own rate, gain and filtering, and muffled when suppressed.
 - Terrain and surface textures: Poly Haven, CC0 1.0, fetched by `tools/fetch-textures.ts`; see
   `public/assets/tex/LICENSE.txt`.
 - Font: Rajdhani by Indian Type Foundry, SIL Open Font License 1.1 (`public/fonts/OFL.txt`).
-- Sky, planets, terrain, architecture, armor, effects and the remaining audio (mechanical tails, reloads,
-  footsteps, explosions, UI, the graviton launcher) are procedural.
+- Sky, terrain, architecture, effects and the remaining audio (knife, mechanical tails, reloads,
+  footsteps, explosions, heartbeat, bomb, round and cash cues, UI) are procedural.
 - Engine/libraries: Three.js (MIT), Vite (MIT). The `spacetimedb` npm package declares ISC
   but ships the SpacetimeDB Business Source License 1.1 text; the SpacetimeDB server/CLI is BSL 1.1.
   Review those terms before any commercial self-hosting.
@@ -178,79 +242,75 @@ committed.
 ## Performance
 
 Targets 60 fps on an M-series MacBook at the default *medium* preset (DPR ≤ 1, 2048 shadow map,
-half-resolution bloom). Budgets: merged static geometry per material, one draw call set per soldier
-(body + 3-part armor + weapon), at most three dynamic point lights (pooled muzzle/explosion flashes),
-pooled effects. A typical firefight frame is ~150–420 draw calls and ~0.5 M triangles. Remote soldiers use a
-crowd level of detail: off-screen soldiers are hidden and not animated; on screen, full animation and
-shadows within 30 m, half-rate animation to 70 m, quarter rate beyond (positions update every frame).
-Remote gunfire beyond 110 m is not drawn, gunshot audio is limited to 85 m and six voices per frame,
-and at most eight teammate name tags show. Measured with the built-in check on an M3 Pro (Chrome,
-medium, 1200×942): Solo 50v50 on Meridian ran 59.9 fps average with 0.2% of frames over 16.7 ms
-and ~9 ms main-thread time (before the crowd LOD: 50 fps and 19 ms).
+half-resolution bloom). Budgets: merged static geometry per material, one draw call set per soldier,
+at most three dynamic point lights (pooled muzzle/explosion flashes), pooled effects. Remote soldiers
+use a crowd level of detail: off-screen soldiers are hidden and not animated; on screen, full
+animation and shadows within 30 m, half-rate animation to 70 m, quarter rate beyond. Remote gunfire
+beyond 110 m is not drawn and gunshot audio is limited to 85 m and six voices per frame. The largest
+BeGone server (Mega, 24 soldiers) is far lighter than the 100-soldier matches this engine was
+measured with (Solo 50v50 on Meridian: 59.9 fps average on an M3 Pro, Chrome, medium).
 
-**Measure it yourself:** click *Run the 30-second performance check* on the deploy screen (or open
-`/?bench`, optionally `&map=frostline&quality=high`). A scripted soldier runs the objective route
-and fights through a solo skirmish for 30 s after a warm-up, then a panel reports average fps,
-1% low, frame-time median/p95/p99, frames slower than 60 Hz, main-thread time per frame, hitches
-over 100 ms, shader compiles during the run, draw calls, triangles, resolution and the GPU string,
-with a verdict (met = average ≥ 58 fps and p95 ≤ 18.2 ms) and a *Copy results* button (JSON).
-Browsers cap frames at the display refresh rate, so 120 Hz screens can exceed 60. The deploy screen
-also has Low / Medium / High graphics presets (`?quality=` works too).
+**Measure it yourself:** click *Run the 30-second performance check* in the lobby options (or open
+`/?bench`, optionally `&map=frostline&quality=high&size=mega`). A scripted soldier patrols the map and
+fights through a solo Elimination match (Large 8v8 unless `size` says otherwise) for 30 s after a
+warm-up, then a panel reports average fps, 1% low, frame-time median/p95/p99, frames slower than
+60 Hz, main-thread time per frame, hitches over 100 ms, shader compiles during the run, draw calls,
+triangles, resolution and the GPU string, with a verdict (met = average ≥ 58 fps and p95 ≤ 18.2 ms)
+and a *Copy results* button (JSON). Browsers cap frames at the display refresh rate, so 120 Hz
+screens can exceed 60. The lobby also has Low / Medium / High graphics presets (`?quality=` works too).
 
 ## Known limitations and what remains
 
+- One match per database: the Online lobby shows the one configured server, whose map and mode the
+  module rotates; there is no multi-server browser, custom servers, clans, vote kick or matchmaking.
 - No full lag compensation or server-side rewind for hit validation; very high latency can make
-  moving targets harder to hit or let claims fail validation.
+  moving targets harder to hit or let claims fail validation. Latency spikes and movement
+  corrections have been observed.
 - Movement is client-reported (validated). A determined cheater could still play within the
-  limits the server allows (up to ~1.6× sprint speed sustained, short 6 m bursts, aim assistance).
-- One match per database; no lobbies, parties, persistent progression or matchmaking.
-- Every client receives every soldier's pose (no distance-based interest management), so bandwidth
-  grows linearly with soldiers per match (~84 KB/s per client at 100). Every tick also writes the
+  limits the server allows.
+- Every client receives every soldier's pose (no interest management), and every tick writes the
   full soldier set to the database's durable log.
-- Bots are deliberately simple at this scale: they look for enemies every 0.2–0.35 s and line-of-
-  sight test only the four most pressing candidates.
+- Third-person camera (V), key rebinding and the toggle/hold options for crouch and accuracy are not
+  implemented.
 - First-person and third-person animation is code-driven on CC0 clips; there are no authored
-  rifle-specific reload/hit animations, and fingers are posed procedurally.
-- Gunshots are recorded (CC0) but reloads, bolt/pump actions, footsteps and impacts are still synthesized.
-- No dropped weapons on death, no attachments, and no per-player loadout persistence between sessions.
+  weapon-specific reload animations, and fingers are posed procedurally.
+- Reloads, actions, footsteps and impacts are synthesized; only gunshots are recorded.
 - Mobile/touch is not supported. Not tested on Safari/Firefox in this environment.
 
 ## 60-second demo script — one continuous shot
 
-1. **0–6 s** — Deploy screen: choose *Solo skirmish*, *Citadel Keep*, *Assault*, *Veteran*. Click
-   **Deploy**.
-2. **6–16 s** — Press **B**: the buy menu lists every gun by category with its price. You start
-   with $800 — buy the **P-9 Hornet** pistol ($400) and close it.
-3. **16–30 s** — Sprint out of the spawn camp (Shift), slide behind cover at the gatehouse (C
-   while sprinting), ADS (RMB) and win a firefight: hit markers, a kill confirm, +$300 in the
-   corner.
-4. **30–40 s** — Climb the bastion stairs to the exposed **L-90 rail rifle** pickup and press **E**
-   to swap it in; pick a target across the courtyard.
-5. **40–50 s** — Walk over an ammo crate (spare rounds refill) and an armor cell (vitals restore).
-6. **50–60 s** — Capture B in the courtyard; die, respawn, and watch your last purchase being
-   rebought automatically.
+1. **0–6 s** — Lobby: choose *Solo*, **[S] Sabotage**, server size *Mini 4v4*, the *Ochre Quarter*
+   row in the server browser, team *Militia*. Click **Start match**.
+2. **6–16 s** — Freeze time: press **B** in your base. You start with $1,000 and the MP5 and M9A1;
+   open *Attachments* and fit a **Reflex sight** to the MP5 ($800). Close the store.
+3. **16–35 s** — Sprint toward site A (Shift; watch stamina), hold RMB to zoom through the reflex and
+   win a firefight: hit markers, a kill, "+$500 KILL" and "+$300 FIRST KILL" popups.
+4. **35–45 s** — Reach site A and hold **E** for 5 s: the bomb arms, the clock drops to 40 s and the
+   bomb beeps. Defend it.
+5. **45–60 s** — The bomb goes off or SWAT disarms it: the round banner, round-end cash, and the
+   next round's freeze. Press **Tab** for the scoreboard.
 
-For the online version, open the game in two browsers and choose *Online match* in both: the
-second player sees the first player's new gun in their hands and the pickup vanish when taken.
+For the online version, open the game in two browsers (separate identities) and choose *Online* in
+both: each sees the other move, fight, buy and arm, all validated by the server.
 
 ## Project layout
 
 ```
 shared/        Pure TypeScript shared by browser, tests and the SpacetimeDB module
   collision.ts   AABB/ramp/heightfield world, raycasts, cylinder resolution
-  movement.ts    Infantry controller        hitbox.ts  hit volumes      weapons.ts  tuning
-  world.ts       Grenades and graviton charges under gravity
-  maps/          Builder + eight battlefields (Cinder, Frostline, Verdant, Ochre, Citadel, Railyard,
-                 Skyline, Meridian), pickups and forward spawns
-  match/         State, simulation tick, combat validation, economy, bots, navigation, packed frame
-src/           Browser client: game loop, prediction, rendering, view model, soldiers, HUD, audio, net
+  movement.ts    Infantry controller        hitbox.ts  hit volumes      weapons.ts  roster + attachments
+  world.ts       Grenades under gravity
+  maps/          Builder + eight maps (Cinder, Frostline, Verdant, Ochre, Citadel, Railyard,
+                 Skyline, Meridian) with bomb sites and ammo crates
+  match/         State, rounds and bomb, combat validation, economy, bots, navigation, packed frame
+src/           Browser client: lobby, game loop, prediction, rendering, view model, soldiers, HUD, store, audio, net
 spacetimedb/   SpacetimeDB module (tables, scheduled tick, validated reducers)
 scripts/       Local load test and simulation benchmark
-tools/         Reproducible CC0 asset import and texture fetch scripts
+tools/         Reproducible CC0 asset import, sound and texture fetch scripts
 dev/           Development preview pages
 ```
 
 ## References
 
-[SpacetimeDB](https://spacetimedb.com/docs/) · [Three.js](https://threejs.org) ·
-[Quaternius](https://quaternius.com) · [Poly Haven](https://polyhaven.com)
+[BeGone wiki](https://begone.fandom.com) (rules and numbers) · [SpacetimeDB](https://spacetimedb.com/docs/) ·
+[Three.js](https://threejs.org) · [Quaternius](https://quaternius.com) · [Poly Haven](https://polyhaven.com)

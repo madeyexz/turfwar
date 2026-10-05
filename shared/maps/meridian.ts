@@ -84,7 +84,7 @@ function ground(x: number, z: number) {
 export function meridianDistrict(): MapDef {
   const b = new MapBuilder({
     id: 'meridian', name: 'Meridian District', region: 'INDAR-CLASS DESERT / CITY QUARTER',
-    description: 'Conquest across a war-torn city: park, construction site, canal bridges, highways and a central square. Spawn on the flags you hold.',
+    description: 'A war-torn city for Mega servers: park, construction site, canal bridges, highways and a central square.',
     theme: 'desert', halfX: HALF_X, halfZ: HALF_Z, seed: 41, roll: 0, ridge: 0,
     sabotage: { sites: ['A', 'B'], attackerSpawn: 1 },
     sun: { x: -0.5, y: 0.66, z: 0.42 },

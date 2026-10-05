@@ -47,7 +47,7 @@ const SPAN = 5;
 export function skylineRooftops(): MapDef {
   const b = new MapBuilder({
     id: 'skyline', name: 'Skyline Rooftops', region: 'BOREAL ARCOLOGY / UPPER CITY',
-    description: '8v8 across frozen rooftops: bridges, a sky-bridge corridor and a penthouse. The streets are a hundred metres down.',
+    description: 'Frozen rooftops: bridges, a sky-bridge corridor and a penthouse. The streets are a hundred metres down.',
     theme: 'desert', halfX: HALF, halfZ: HALF, seed: 23, roll: 0, ridge: 0,
     sabotage: { sites: ['B'], attackerSpawn: 1 },
     sun: { x: 0.42, y: 0.55, z: -0.5 },
