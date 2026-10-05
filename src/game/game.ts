@@ -17,10 +17,11 @@ import { InterpBuffer } from '../render/interp';
 import { LevelView } from '../render/level';
 import { CratesView } from '../render/pickups';
 import { THEMES } from '../render/materials';
-import type { Renderer } from '../render/renderer';
+import { QUALITY, type Renderer } from '../render/renderer';
 import { SoldierView } from '../render/soldier';
 import { ViewModel } from '../render/viewmodel';
 import { BuyMenu } from '../ui/buymenu';
+import { SettingsMenu } from '../ui/settingsmenu';
 import { Hud } from '../ui/hud';
 import { Input } from './input';
 import type { GameLink } from './link';
@@ -63,6 +64,8 @@ export class Game {
   private fpsTime = 0;
   private wasAlive = false;
   private hudReady = false;
+  private menu: SettingsMenu;
+  private menuAt = 0;
   /** The match-end screen has buttons: free the mouse once when it appears. */
   private endShown = false;
   private corrections = 0;
@@ -138,7 +141,16 @@ export class Game {
     }, assets);
     // The key that closed the menu must not reopen it next frame.
     this.buymenu.onClose = () => { this.input.clear(); void this.input.lock(); };
-    this.input.canRelock = () => !this.buymenu.open && !this.hud.chatting && this.link.state()?.phase !== 'ended';
+    this.menu = new SettingsMenu(container, {
+      resume: () => { this.menu.hide(); this.input.clear(); void this.input.lock(); },
+      leave: () => this.onExit?.(),
+      sensitivity: v => { this.input.sensitivity = v; },
+      crosshair: style => { this.hud.crosshairStyle = style; },
+      quality: q => renderer.applyQuality(QUALITY[q]),
+      volume: v => audio.setVolume(v),
+    });
+    // With the menu up, resuming goes through its button (or Esc / P), not a stray click on the view.
+    this.input.canRelock = () => !this.buymenu.open && !this.hud.chatting && !this.menu.open && this.link.state()?.phase !== 'ended';
     if (me) this.player.spawnFrom(me);
     const room = link.roomInfo?.();
     if (room?.code) this.hud.toast(`Private room ${room.code} · ${room.size} — friends join with this code`, 12000);
@@ -151,6 +163,7 @@ export class Game {
     this.hud.dispose();
     this.buymenu.dispose?.();
     this.buymenu.root.remove();
+    this.menu.dispose();
     this.renderer.scene.remove(this.level.group, this.effects.group, this.bodies.group, this.crates.group, this.sites.group);
     for (const r of this.remotes.values()) { r.view.dispose(); r.view.gun.removeFromParent(); }
     this.viewmodel.root.removeFromParent();
@@ -179,12 +192,19 @@ export class Game {
     if (state.phase !== 'ended') this.endShown = false;
     const sabotage = modeOf(state, this.map.def) === 'sabotage';
     const active = this.input.locked && !this.buymenu.open && !this.hud.chatting;
-    const released = !this.input.locked && !this.buymenu.open && !this.hud.chatting && !!me?.alive && state.phase !== 'ended';
-    this.hud.released(released, link.mode === 'offline');
+    // Esc (the browser frees the mouse) or P opens the in-game menu; Esc / P again (or Resume) closes it.
+    const released = !this.input.locked && !this.buymenu.open && !this.hud.chatting && state.phase !== 'ended';
+    this.hud.released(false, false);
+    if (this.input.locked) this.menu.hide();
+    else if (released && !this.menu.open) { this.menu.show(link.mode === 'offline'); this.menuAt = performance.now(); }
+    if (this.menu.open && performance.now() - this.menuAt > 250 && (this.input.take('Escape') || this.input.take('KeyP'))) {
+      this.menu.hide(); this.input.clear(); void this.input.lock();
+    }
     const side = me ? sideOf(state, this.map.def, me.team) : 0;
     const buyWindow = !!me && state.phase === 'live' && canBuyWeapons(state, this.map.def, me, side);
 
     // ---- Hotkeys ----
+    if (active && this.input.take('KeyP')) document.exitPointerLock?.();
     if (active) {
       // The store is open anywhere: weapons only sell in base during buy time, attachments always.
       if (this.input.take('KeyB') && me) { this.buymenu.show(this.player.weapons[this.player.slot === 2 ? 0 : this.player.slot]); this.input.clear(); }
