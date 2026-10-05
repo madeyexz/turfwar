@@ -20,10 +20,15 @@
  */
 import { mkdirSync, readFileSync, readdirSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
+import { MODEL_STRIDE, extractStreet, extractSkyline, extractModels } from './import-taipei-dressing';
 
 const SRC = process.env.TGTA_SRC ?? '/tmp/tgta';
 export const WORK = join(import.meta.dir, '.taipei-work');
 const OUT = join(import.meta.dir, '../shared/maps/taipei-data.ts');
+const STREET_OUT = join(import.meta.dir, '../shared/maps/taipei-street.ts');
+const FURNITURE_OUT = join(import.meta.dir, '../shared/maps/taipei-furniture.ts');
+const SKYLINE_OUT = join(import.meta.dir, '../shared/maps/taipei-skyline.ts');
+const MODELS_OUT = join(import.meta.dir, '../public/assets/taipei-props.json');
 
 /** Source-world rectangle the map covers (x east, z south, metres), plus the backdrop margin around it. */
 export const AREA = { x0: -882, x1: -681, z0: -306, z1: -60 };
@@ -44,7 +49,8 @@ export async function loadSource() {
     if (!f) throw new Error(`missing ${prefix}-*.js in ${SRC}`);
     return f;
   };
-  const real: Record<string, string> = { [chunk('rolldown-runtime')]: 'runtime.js', [chunk('engine')]: 'engine.js' };
+  // three.js runs for real too, so the source's own prop models (scooters, bikes, trees) build into geometry.
+  const real: Record<string, string> = { [chunk('rolldown-runtime')]: 'runtime.js', [chunk('engine')]: 'engine.js', [chunk('three')]: 'three.js' };
   const deps = new Map<string, Set<string>>();
   const sources: Record<string, string> = {};
   const load = (file: string, out: string, extra = '') => {
@@ -60,14 +66,29 @@ export async function loadSource() {
     writeFileSync(join(WORK, out), code + extra);
   };
   writeFileSync(join(WORK, 'runtime.js'), readFileSync(join(SRC, chunk('rolldown-runtime'))));
+  load(chunk('three'), 'three.js');
   load(chunk('engine'), 'engine.js');
   // Internal (unexported) bindings the extraction needs; the names are the minifier's for this build.
-  load(chunk('world'), 'world.js', ';export{Eg as __Lots,pg as __Specs,N_ as __Lot,Sy as __redHouse,Ls as __expressways,ro as __Streets,Oc as __streetGround,Rc as __hedges};');
+  load(chunk('world'), 'world.js', ';export{Eg as __Lots,pg as __Specs,N_ as __Lot,Sy as __redHouse,Ls as __expressways,ro as __Streets,Oc as __streetGround,Rc as __hedges,'
+    + 'Cu as __streetProps,Hu as __claimSlots,Zs as __structures,Sd as __guideSigns,Yu as __Signals,Ku as __season,Ru as __propClaims,zu as __occupied,W as __kerb,xu as __scooterColors,vl as __scooterGeo,Il as __scooterNearGeo,yl as __bikeGeo,El as __treeGeo,Al as __banyanGeo,Ml as __signalGeo,Dl as __plantVariants};');
   load(chunk('content'), 'content.js', ';export{wh as __Ximen,Hh as __buildXimen,bh as __ximenBlocks,xh as __ximenSpots,Zm as __blades,$m as __boards,M_ as __ximenPack};');
+  // The MRT exit placement lives in the actors chunk, whose top level needs a browser: lift out
+  // just its entrance dimensions and placement search (qa) and run those.
+  const actorsCode = readFileSync(join(SRC, chunk('actors')), 'utf8');
+  const exitDims = /Ra=(\{width:[^}]*\})/.exec(actorsCode)?.[1];
+  const qa = /function qa\(.*?(?=function Ja\()/s.exec(actorsCode)?.[0];
+  if (!exitDims || !qa) throw new Error('MRT exit placement not found in the actors chunk');
+  writeFileSync(join(WORK, 'actors.js'), `const Ra=${exitDims};${qa};export{qa as __placeExit,Ra as __exitDims};`);
+  // The game chunk's mergeGeometries (export `at`), which the prop models need, done for real.
+  const merge = `(geos)=>{const list=geos.map(g=>g.index?g.toNonIndexed():g),out=list[0].clone();out.setIndex(null);`
+    + `for(const k of Object.keys(list[0].attributes)){const a0=list[0].attributes[k],arr=new a0.array.constructor(list.reduce((s,g)=>s+g.attributes[k].array.length,0));`
+    + `let o=0;for(const g of list){arr.set(g.attributes[k].array,o);o+=g.attributes[k].array.length;}out.setAttribute(k,new a0.constructor(arr,a0.itemSize,a0.normalized));}return out;}`;
+  const overrides: Record<string, Record<string, string>> = { game: { at: merge } };
   for (const [dep, names] of deps) {
     const lines = ['const P=()=>new Proxy(function(){},{get:(t,k)=>k===Symbol.toPrimitive?()=>0:k===Symbol.iterator?undefined:k==="prototype"?{}:P(),apply:()=>P(),construct:()=>P(),set:()=>true});'];
+    const own = overrides[dep.split('-')[0]] ?? {};
     let i = 0;
-    for (const n of names) lines.push(`const s${i}=P();export{s${i++} as ${n}};`);
+    for (const n of names) lines.push(`const s${i}=${own[n] ?? 'P()'};export{s${i++} as ${n}};`);
     writeFileSync(join(WORK, 'stub-' + dep), lines.join('\n'));
   }
   const g = globalThis as any;
@@ -78,7 +99,8 @@ export async function loadSource() {
   const engine = await import(join(WORK, 'engine.js'));
   const world = await import(join(WORK, 'world.js'));
   const content = await import(join(WORK, 'content.js'));
-  return { engine, world, content, Plan: engine.v, sources };
+  const actors = await import(join(WORK, 'actors.js'));
+  return { engine, world, content, actors, Plan: engine.v, sources };
 }
 
 const r2 = (v: number) => Math.round(v * 100) / 100;
@@ -91,8 +113,10 @@ interface Frame { px: number; pz: number; tx: number; tz: number; nx: number; nz
 const along = (f: Frame, t: number, out = 0) => [f.px + f.tx * t + f.nx * out, f.pz + f.tz * t + f.nz * out];
 
 async function main() {
-  const { engine, world, content, Plan, sources } = await loadSource();
+  const src = await loadSource();
+  const { engine, world, content, Plan, sources } = src;
   const plan = new Plan();
+  writeDressing(src);
 
   // ---- Street plan ------------------------------------------------------------------------
   const roads = plan.roads.filter((r: any) => { const [x0, x1, z0, z1] = plan.roadRect(r, r.halfTotal); return inside(x0, z0, x1, z1); })
@@ -278,13 +302,102 @@ ${rows('POIS', 'Convenience stores, tea shops, breakfast shops, claw machines an
   console.log(`wrote ${OUT}: ${roads.length} roads, ${solids.length} district boxes, ${shells.length} shells, ${signs.length} signs, ${shops.length} shops, ${lotRows.length} lots, ${redHouse.length} Red House colliders, ${pois.length} POIs, ${billboards.length} billboards`);
 }
 
+/** Number list as TS source, `stride` values to a line. */
+const flat = (name: string, doc: string, stride: number, list: number[], type = 'number[]') => {
+  const lines: string[] = [];
+  for (let i = 0; i < list.length; i += stride) lines.push('  ' + list.slice(i, i + stride).join(',') + ',');
+  return `/** ${doc} */\nexport const ${name}: ${type} = [\n${lines.join('\n')}\n];\n`;
+};
+
+/** Street dressing (shared: the map builds colliders from it), skyline (client only) and prop models (a runtime asset). */
+function writeDressing(src: Awaited<ReturnType<typeof loadSource>>) {
+  const keep = { x0: AREA.x0 - MARGIN, z0: AREA.z0 - MARGIN, x1: AREA.x1 + MARGIN, z1: AREA.z1 + MARGIN };
+  const s = extractStreet(src, keep, AREA);
+  const models = Object.entries(s.models).map(([k, v]) => {
+    const lines: string[] = [];
+    for (let i = 0; i < v.length; i += MODEL_STRIDE) lines.push('    ' + v.slice(i, i + MODEL_STRIDE).join(',') + ',');
+    return `  ${JSON.stringify(k)}: [\n${lines.join('\n')}\n  ],`;
+  });
+  const json = (v: unknown) => JSON.stringify(v);
+  writeFileSync(STREET_OUT, `// Generated by tools/import-taipei.ts from 臺北狂飆 / TAIPEI RUSH (https://taipei-gta.vercel.app),
+// used with its author's permission. Do not edit by hand: re-run the tool instead.
+// The look of the source's street dressing around Ximending (client only: the renderer loads it on
+// demand; its colliders are in taipei-furniture.ts). Source-world coordinates (metres, +x east,
+// +z south). Boxes stand on y (their bottom) and turn by heading (three.js rotation.y = -heading).
+
+${flat('STREET_BOXES', 'Painted boxes: x, y, z, w, h, d, heading, colour.', 8, s.boxes)}
+${flat('STREET_GLOWS', 'Lit boxes (lamp heads, LED bars): x, y, z, w, h, d, heading, light colour.', 8, s.glows)}
+${flat('STREET_CYLS', 'Poles, arms and posts: x0, y0, z0, x1, y1, z1, radius, colour.', 8, s.cyls)}
+type Plate = [x: number, y: number, z: number, w: number, h: number, heading: number, art: string];
+/** Sign plates (centred, both faces): traffic signs, bus and YouBike boards, street-name plates, ads. */
+export const STREET_PLATES: Plate[] = [
+${s.plates.map(p => '  ' + json(p)).join(',\n')},
+];
+${flat('STREET_MARKS', 'Ground paint: x, y, z, direction x, direction z, half length, half width, kind (0 paint, 1 tree pit, 2 manhole cover), colour.', 9, s.marks)}
+/** Model instances (x, y, z, heading, scale, roll, colour, extra) of the source meshes in public/assets/taipei-props.json. */
+export const STREET_MODELS: Record<string, number[]> = {
+${models.join('\n')}
+};
+`);
+  writeFileSync(FURNITURE_OUT, `// Generated by tools/import-taipei.ts from 臺北狂飆 / TAIPEI RUSH (https://taipei-gta.vercel.app),
+// used with its author's permission. Do not edit by hand: re-run the tool instead.
+// What of the source's street dressing blocks movement and bullets, and where its cars park and
+// its Ximen MRT exit opens. Source-world coordinates (metres, +x east, +z south).
+
+type Box = [x0: number, z0: number, x1: number, z1: number, y0: number, y1: number, tag: string];
+/** The colliders the source gives this dressing inside the playable area (tag: pole, prop, tree, wall). */
+export const STREET_SOLIDS: Box[] = [
+${s.solids.map(p => '  ' + json(p)).join(',\n')},
+];
+/** Rows of parked scooters inside the playable area, one collider each: x0, z0, x1, z1. */
+export const SCOOTER_ROWS: number[][] = [
+${s.scooterRuns.map(p => '  ' + json(p)).join(',\n')},
+];
+/** Numbered car bays of the side streets (where the source parks its traffic): x, z, heading. */
+export const CAR_BAYS: number[][] = [
+${s.carBays.map(p => '  ' + json(p)).join(',\n')},
+];
+/** Ximen station exit ${s.exit.exit}: its mouth (x, z, heading), housing centre and half sizes, and the source's entrance dimensions. */
+export const MRT_EXIT = ${json(s.exit)};
+`);
+  const sky = extractSkyline(src, AREA, MARGIN, 1300);
+  writeFileSync(SKYLINE_OUT, `// Generated by tools/import-taipei.ts from 臺北狂飆 / TAIPEI RUSH (https://taipei-gta.vercel.app),
+// used with its author's permission. Do not edit by hand: re-run the tool instead.
+// The source city past the map's backdrop (client only: the renderer loads it on demand).
+// Source-world coordinates: metres, +x east, +z south.
+
+${flat('FAR_BUILDINGS', 'Generic city buildings out to 1.3 km: x0, z0, x1, z1, roof height, facade tint.', 6, sky.buildings)}
+type Landmark = [id: string, zh: string, en: string, x: number, z: number, w: number, d: number, kind: string];
+/** Every named site of the source plan (Taipei 101, the Presidential Office, the North Gate, …). */
+export const FAR_LANDMARKS: Landmark[] = [
+${sky.landmarks.map((l: unknown) => '  ' + json(l)).join(',\n')},
+];
+type Hill = [x: number, z: number, height: number, radius: number, zh: string, en: string];
+/** The hills the source raises around the city (Yangmingshan, Mt. Guanyin, Elephant Mountain, …). */
+export const FAR_HILLS: Hill[] = [
+${sky.hills.map((l: unknown) => '  ' + json(l)).join(',\n')},
+];
+type Road = [axis: 'x' | 'z', at: number, from: number, to: number, halfWidth: number, halfTotal: number, elevated: string];
+/** Traffic roads of the whole plan. */
+export const FAR_ROADS: Road[] = [
+${sky.roads.map((l: unknown) => '  ' + json(l)).join(',\n')},
+];
+/** Ground heights on a ${sky.ground.spacing} m grid from (x0, z0), n × n samples (water -3 m), and the water level. */
+export const FAR_GROUND = { x0: ${sky.ground.x0}, z0: ${sky.ground.z0}, spacing: ${sky.ground.spacing}, n: ${sky.ground.n}, waterLevel: ${sky.waterLevel} };
+${flat('FAR_HEIGHTS', 'Row-major ground heights (z rows, x columns).', sky.ground.n, sky.ground.heights)}`);
+  writeFileSync(MODELS_OUT, JSON.stringify({ source: '臺北狂飆 / TAIPEI RUSH (https://taipei-gta.vercel.app), used with its author\'s permission', models: extractModels(src) }));
+  console.log(`wrote ${STREET_OUT}: ${s.boxes.length / 8} boxes, ${s.glows.length / 8} lit boxes, ${s.cyls.length / 8} cylinders, ${s.plates.length} plates, ${s.marks.length / 9} marks, `
+    + Object.entries(s.models).map(([k, v]) => `${v.length / MODEL_STRIDE} ${k}`).join(', ') + `, ${s.solids.length} colliders, ${s.scooterRuns.length} scooter rows, ${s.carBays.length} car bays`);
+  console.log(`wrote ${SKYLINE_OUT}: ${sky.buildings.length / 6} buildings, ${sky.landmarks.length} landmarks; ${MODELS_OUT}`);
+}
+
 /** Fetch index.html and the chunks it lists that the extraction runs (engine, world, content, runtime) into SRC. */
 async function download() {
   const base = 'https://taipei-gta.vercel.app/';
   mkdirSync(SRC, { recursive: true });
   const index = await (await fetch(base)).text();
   writeFileSync(join(SRC, 'index.html'), index);
-  const wanted = /^assets\/(engine|world|content|rolldown-runtime)-[\w-]+\.js$/;
+  const wanted = /^assets\/(engine|world|content|actors|three|rolldown-runtime)-[\w-]+\.js$/;
   for (const path of new Set(index.match(/assets\/[\w.-]+\.js/g) ?? [])) {
     if (!wanted.test(path)) continue;
     const res = await fetch(base + path);
