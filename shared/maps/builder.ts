@@ -166,6 +166,13 @@ export class MapBuilder {
     this.decor.push({ kind: 'cylinder', x: this.tx(x), y, z: this.tz(z), radius, height: length, axis, style, ...(color === undefined ? {} : { color }) });
   }
 
+  /** Sphere centred at height y, with an inscribed box as its collision. */
+  ball(x: number, y: number, z: number, radius: number, style: BlockStyle, color?: number) {
+    const side = radius * 1.5;
+    this.box(x, y - side / 2, z, side, side, side, 'invisible', surfaceFor(style));
+    this.decor.push({ kind: 'ball', x: this.tx(x), y, z: this.tz(z), radius, style, ...(color === undefined ? {} : { color }) });
+  }
+
   /** Still water filling a w×d basin at height y (decorative; dig the basin with a terrain pad). */
   water(x: number, y: number, z: number, w: number, d: number) {
     this.decor.push({ kind: 'water', x: this.tx(x), y, z: this.tz(z), w, d });

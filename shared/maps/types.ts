@@ -45,6 +45,8 @@ export type Decor =
   | { kind: 'block'; solid: number; style: BlockStyle; color?: number }
   /** Cylinder resting on y, upright or lying along x/z (silos, tanks, pipes); collision comes from boxes placed with it. */
   | { kind: 'cylinder'; x: number; y: number; z: number; radius: number; height: number; axis: 'x' | 'y' | 'z'; style: BlockStyle; color?: number }
+  /** Sphere centred at y (statues); collision comes from a box placed with it. */
+  | { kind: 'ball'; x: number; y: number; z: number; radius: number; style: BlockStyle; color?: number }
   /** Still water surface (decorative: bullets and soldiers pass through). */
   | { kind: 'water'; x: number; y: number; z: number; w: number; d: number }
   | { kind: 'ramp'; ramp: number; style: RampStyle }
