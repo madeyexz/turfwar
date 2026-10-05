@@ -109,6 +109,22 @@ JavaScript; its header explains how. Approximations: the octagonal Red House is 
 drum with a stepped roof, medians follow the junction gaps by rule, and the source's MRT exits,
 street furniture, traffic, pedestrians and generic facade signs are not carried over.
 
+**Taipei 101 · Xinyi** (big map, 24v24) is the Xinyi district (信義) around Taipei 101 from the same
+game, used with the same permission. `tools/import-xinyi.ts` runs that game's city code headless and
+writes `shared/maps/xinyi-data.ts`: the street plan (Xinyi, Songren, Heping, Songzhi and Keelung Rds),
+the basin's hills, every section of Taipei 101 as the source lofts it (the tapering base, the eight
+stacked segments with their lit bands, crown and spire, the ruyi and coin ornaments), the 101 plaza
+and podium mall shell, the Xinyi Plaza Malls (信義新天地) and their signs, the Xinyi Skywalk (信義空橋)
+with its stairs and piers, the 101 west plaza, Four Four South Village (四四南村) and the city lots.
+The source keeps the tower and mall closed; this map opens the podium mall as the centre of the fight:
+**A** is the mall atrium, a sunken B1 food court under a ground-floor and a 2F gallery with a bridge
+across the void, shops on both sides, stairs between all three floors and a B1 passage out to a new
+sunken garden; **B** is the west plaza under the skywalk's spur to the tower, with an MRT exit
+pavilion; landmarks C–E are the skywalk, the sunken garden and the village. SWAT deploys in front of
+the Xinyi Plaza Malls, Militia on Songzhi Rd; Elephant Mountain's foot (象山) rises along the east edge
+(eased toward the edge of the terrain grid). The lots get curtain walls, mullion fins, crowns, lit
+canopies and rooftop plant. About 270 × 290 m; the tower itself is scenery (only its base collides).
+
 Every map has ammo crates (one more stands in each base) and open team bases. Sabotage lists only the
 maps with bomb sites.
 
@@ -120,6 +136,7 @@ Maps can park drivable vehicles (`MapDef.vehicles`, placed with the builder's `v
 | --- | --- |
 | **Taipei** (`shared/maps/taipei-vehicles.ts`) | Two cars by each base (yellow taxis and city sedans on Civic Blvd and Zhongxiao W. Rd) and two more on Huanhe and Zhonghua Rds; rows of scooters on the sidewalks by both bases and in Xining S. Rd and Hanzhong St; a helicopter on a painted pad on Zhonghua Rd, about as far from either base |
 | **Meridian District** | On each base boulevard: two cars, two scooters and a helicopter |
+| **Taipei 101 · Xinyi** (`shared/maps/xinyi-vehicles.ts`) | Two cars by each base (Xinyi Rd in front of the malls; Heping Rd by Songzhi Rd) and one on Songren Rd; scooters on the malls' frontage, on Songzhi Rd and by the 101 west plaza; a helicopter on a painted pad in Xinyi Rd's eastbound lanes past Songren Rd |
 
 | Vehicle | Seats | Top speed | Body | Notes |
 | --- | --- | --- | --- | --- |
@@ -324,6 +341,11 @@ texture, sound and line of code here is original or CC0/OFL.
   — its streets, buildings, signs and landmarks — used with the author's permission and extracted by
   `tools/import-taipei.ts` into `shared/maps/taipei-data.ts`. Its shop names are that game's own parody
   brands. Facade windows, shopfronts and sign artwork are drawn procedurally in `src/render/level.ts`.
+- Taipei 101 · Xinyi map layout: the Xinyi district of the same game — Taipei 101's sections and
+  ornaments, its plaza and mall, the Xinyi Plaza Malls, the Xinyi Skywalk, Four Four South Village, the
+  streets, hills and lots — used with the author's permission and extracted by `tools/import-xinyi.ts`
+  into `shared/maps/xinyi-data.ts`. Its mall and shop names are that game's own parodies. The mall's
+  interior, the sunken garden and the curtain-wall detailing are this project's own.
 - Sky, terrain, architecture, effects and the remaining audio (knife, casings, footsteps,
   explosions, heartbeat, bomb, round and cash cues, UI, and the fallback weapon voices used before
   the recordings load) are procedural.
@@ -398,13 +420,14 @@ shared/        Pure TypeScript shared by browser, tests and the SpacetimeDB modu
   world.ts       Grenades under gravity
   maps/          Builder + BeGone's six maps (Crane, Tower, Warehouse, Pipeline, Courtyard,
                  Timbertown) and eight originals (Cinder, Frostline, Verdant, Ochre, Citadel,
-                 Railyard, Skyline, Meridian), plus Taipei (taipei-data.ts, generated from 臺北狂飆),
+                 Railyard, Skyline, Meridian), plus Taipei and Taipei 101 · Xinyi (taipei-data.ts and
+                 xinyi-data.ts, generated from 臺北狂飆),
                  with ladders, bomb sites and ammo crates
   match/         State, rounds and bomb, combat validation, economy, bots, navigation, packed frame
 src/           Browser client: lobby, game loop, prediction, rendering, view model, soldiers, HUD, store, audio, net
 spacetimedb/   SpacetimeDB module (tables, scheduled tick, validated reducers)
 scripts/       Local load test and simulation benchmark
-tools/         Reproducible CC0 asset import, sound and texture fetch scripts, and the Taipei map import
+tools/         Reproducible CC0 asset import, sound and texture fetch scripts, and the Taipei and Xinyi map imports
 dev/           Development preview pages
 ```
 
