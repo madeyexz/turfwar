@@ -21,7 +21,7 @@ Improve playable gunplay, map flow, animation, and multiplayer—not only the HU
 ## Where code belongs
 
 - `shared/`: environment-independent simulation, collision, movement, hit volumes,
-  weapons, attachments and prices, thrown bodies, and map definitions (with ammo crates, bomb sites and ladders). No browser APIs here.
+  weapons, attachments and prices, thrown bodies, drivable vehicles, and map definitions (with ammo crates, bomb sites, ladders and vehicle spots). No browser APIs here.
 - `shared/match/`: match state, combat validation, economy (cash, store, crates), rounds and the bomb, bots,
   navigation, the packed per-tick frame, and the simulation tick.
 - `src/game/`: client loop, player prediction/input, Solo link, settings, performance check.

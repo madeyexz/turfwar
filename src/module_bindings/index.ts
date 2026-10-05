@@ -37,6 +37,8 @@ import {
 import BuyReducer from "./buy_reducer";
 import BuyAttachmentReducer from "./buy_attachment_reducer";
 import CreateRoomReducer from "./create_room_reducer";
+import EnterVehicleReducer from "./enter_vehicle_reducer";
+import ExitVehicleReducer from "./exit_vehicle_reducer";
 import FireReducer from "./fire_reducer";
 import GrenadeReducer from "./grenade_reducer";
 import JoinReducer from "./join_reducer";
@@ -49,6 +51,7 @@ import ReportReducer from "./report_reducer";
 import SayReducer from "./say_reducer";
 import SwitchSlotReducer from "./switch_slot_reducer";
 import UseCrateReducer from "./use_crate_reducer";
+import VehicleReportReducer from "./vehicle_report_reducer";
 
 // Import all procedure arg schemas
 
@@ -173,6 +176,8 @@ const reducersSchema = __reducers(
   __reducerSchema("buy", BuyReducer),
   __reducerSchema("buy_attachment", BuyAttachmentReducer),
   __reducerSchema("create_room", CreateRoomReducer),
+  __reducerSchema("enter_vehicle", EnterVehicleReducer),
+  __reducerSchema("exit_vehicle", ExitVehicleReducer),
   __reducerSchema("fire", FireReducer),
   __reducerSchema("grenade", GrenadeReducer),
   __reducerSchema("join", JoinReducer),
@@ -185,6 +190,7 @@ const reducersSchema = __reducers(
   __reducerSchema("say", SayReducer),
   __reducerSchema("switch_slot", SwitchSlotReducer),
   __reducerSchema("use_crate", UseCrateReducer),
+  __reducerSchema("vehicle_report", VehicleReportReducer),
 );
 
 /** The schema information for all procedures in this module. This is defined the same way as the procedures would have been defined in the server. */

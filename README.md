@@ -27,6 +27,7 @@ runner (`bun` / `bunx`, never npm/npx).
 | Characters | CC0 rigged soldiers in two team outfits, CC0 animation library retargeted by bone name: idle/walk/jog/sprint/crouch/jump/death blend by speed, strafing leg twist, aim pitch, two-bone arm IK onto the weapon, a knife stab, hit flinches. |
 | Bots | Navigation grid per map (roofs, catwalks, stairs), A* paths, field of view and line of sight, reaction delays, aim error that settles, strafing, bursts, reloads and grenades. They shop at round start (the best primary they can afford, sometimes an optic and a grenade). In Sabotage Militia bots head for a site and arm it, SWAT bots spread over the sites, and everyone converges on an armed bomb. |
 | HUD | Score bar with the round clock, round score and an avatar per soldier (alive or dead, teammates' health), health and stamina, cash, weapon with its attachments, ammo and reserve, grenade, bomb status and arming progress, minimap with sites and crates, kill feed, chat (Enter all, T team), scoreboard (Tab), crosshair that widens with sustained fire, jumping and sprinting in four styles (classic, dot, circle, T), match result. |
+| Vehicles | Cars and taxis, Taiwanese scooters and a light helicopter on Taipei and Meridian District (see [Vehicles](#vehicles)): E to get in or out, arcade driving and flying, chase camera, run-overs, body damage and wrecks; parked back at their spots every round. |
 | Profiles | Online, each identity keeps career stats (kills, deaths, assists, headshots, rounds and matches played and won) in a public `profile` table. |
 
 ### Economy (BeGone's cash awards)
@@ -111,6 +112,29 @@ street furniture, traffic, pedestrians and generic facade signs are not carried 
 Every map has ammo crates (one more stands in each base) and open team bases. Sabotage lists only the
 maps with bomb sites.
 
+### Vehicles
+
+Maps can park drivable vehicles (`MapDef.vehicles`, placed with the builder's `vehicle(...)`):
+
+| Map | Vehicles |
+| --- | --- |
+| **Taipei** (`shared/maps/taipei-vehicles.ts`) | Two cars by each base (yellow taxis and city sedans on Civic Blvd and Zhongxiao W. Rd) and two more on Huanhe and Zhonghua Rds; rows of scooters on the sidewalks by both bases and in Xining S. Rd and Hanzhong St; a helicopter on a painted pad on Zhonghua Rd, about as far from either base |
+| **Meridian District** | On each base boulevard: two cars, two scooters and a helicopter |
+
+| Vehicle | Seats | Top speed | Body | Notes |
+| --- | --- | --- | --- | --- |
+| Car / taxi | Driver + passenger | 94 km/h | 520 | Crew is inside: shots and blasts hit the body. Runs enemies over |
+| Scooter | Rider + pillion | 76 km/h | 160 | Riders are exposed and can be shot off it. Leans into turns |
+| Helicopter | Pilot + passenger | 122 km/h, climbs 9 m/s | 800 | Rotor spins up for 1.6 s before it lifts; hovers when idle; ceiling 160 m; no bailing out above 40 m |
+
+Drivers cannot shoot or throw; passengers can. A body reduced to 0 wrecks: it explodes (7 m blast),
+kills its crew and stays as a charred hulk until the round ends. Crashes (speed lost against walls,
+hard landings, a pilotless helicopter falling) damage the body. A driven car or scooter faster than
+6 m/s hurts enemies it touches. No friendly fire on a crewed vehicle; an empty one is fair game.
+Vehicles are not obstacles for soldiers or each other, the rotor does not collide, and bots ignore
+vehicles. Models are built procedurally (`src/render/vehicles.ts`); engines, the scooter's buzz and
+the rotor chop are synthesized.
+
 ## Controls
 
 | Input | Action |
@@ -122,12 +146,14 @@ maps with bomb sites.
 | 1 · 2 · 3 | Knife · secondary · primary |
 | 4 or G | M67 grenade |
 | Q or wheel | Cycle weapons |
-| R · E | Reload · use (arm or disarm the bomb, ammo crate) |
+| R · E | Reload · use (arm or disarm the bomb, ammo crate, get in or out of a vehicle) |
 | On a ladder: toward it · away · Space | Climb up · climb down · let go (walk off its top to climb down) |
 | Z · B | Binoculars · store |
 | Enter · T | Chat · team chat |
 | Tab · F | Scoreboard · fullscreen |
-| V | Camera view (reserved) |
+| In a car or on a scooter: W · S · A · D · Space | Throttle · brake and reverse · steer · handbrake |
+| In the helicopter: W · S · A · D · Space · C or Ctrl · mouse | Forward · back · strafe · climb · descend · turn |
+| V | Vehicle camera: chase view or the driver's seat |
 | Esc · M | Release the mouse (pauses solo; click to resume) · back to the lobby |
 
 ## Multiplayer architecture
@@ -146,8 +172,9 @@ maps with bomb sites.
   `roster`, `frame` and `match_event` rows.
 - Player reducers only **queue** input: `report` overwrites the soldier's row in a private `inbox`
   (elapsed time accumulates for the movement budget) and `fire`, `grenade`, `reload_weapon`,
-  `switch_slot`, `buy`, `buy_attachment` and `use_crate` append to a private `command` queue;
-  `say` posts chat. The 30 Hz scheduled `tick` loads the match **once**, applies every queued report
+  `switch_slot`, `buy`, `buy_attachment`, `use_crate`, `enter_vehicle` and `exit_vehicle` append to a
+  private `command` queue; the driver's `vehicle_report` overwrites its row in a private
+  `vehicle_inbox`; `say` posts chat. The 30 Hz scheduled `tick` loads the match **once**, applies every queued report
   and command in arrival order through the shared validation (buy window and base for weapons, cash,
   attachment fit, crate reach), runs bots, grenades, the round clock, the bomb, cash awards and map
   rotation, and saves. With no humans connected the tick idles.
@@ -156,7 +183,8 @@ maps with bomb sites.
   score line; rewritten only on events), `player` (identity → soldier), `profile` (career stats), the
   event table `match_event` (damage, kills, rounds, bomb, cash awards, chat) and one `frame` row
   rewritten every tick: a packed binary snapshot (`shared/match/frame.ts`) of every soldier's pose and
-  vitals, grenades, the round clock and bomb, and that tick's shots. `soldier` and `body` keep
+  vitals, grenades, vehicles (pose, body health, crew, wrecks), the round clock and bomb, and that
+  tick's shots. `soldier`, `body` and `vehicle` (per room, keyed by room and map spot) keep
   full-precision server state and are not subscribed to; per-tick bookkeeping lives in a private
   `clock` row. Older tables and columns (`point`, `history`, the law columns) remain, unused and
   written neutral, so an existing database migrates in place.
@@ -170,6 +198,18 @@ maps with bomb sites.
   sight through static geometry, a claimed point within a speed-scaled tolerance of the target's hit
   volumes, and no friendly fire. Damage, kills, rounds, the bomb, cash, purchases and crates are
   authoritative. Bot shots are simulated entirely on the server.
+- Vehicles follow the same pattern: the driver's client predicts its vehicle with the shared physics
+  (`shared/vehicles.ts`) and reports it at 20 Hz; the server accepts it only for the vehicle's own
+  driver, within a distance budget from the kind's top speed against server time, in bounds, clear of
+  solid geometry, on the floor for cars and scooters, under the ceiling for the helicopter (which
+  cannot lift before its rotor has spun up on the server), and not moving during freeze time; a
+  rejected report is a correction and the client snaps to the server's pose. Getting in and out
+  (reach, free seats, teammates only as passengers, a clear spot beside the vehicle), driverless
+  vehicles, crashes, run-overs, body damage and wrecks are server-side. Shot claims on a vehicle use
+  target `-2 - index` and are checked against its hit box like soldier claims.
+  `bun scripts/vehiclecheck.ts ws://127.0.0.1:<port> <db>` (local only) drives a car and flies the
+  helicopter with two identities and expects zero corrections, the other client seeing both move,
+  and a rejected teleport.
 - Client-side: own movement is predicted with the shared controller; remote soldiers and grenades
   are interpolated ~100 ms behind from the frame; a rejected position snaps the client back; dropped
   (idle) clients rejoin automatically.

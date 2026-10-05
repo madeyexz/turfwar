@@ -4,6 +4,7 @@ import {
 } from './taipei-data';
 import { mrtExit, parkedCars, streetFurniture, type Keep, type Shift } from './taipei-decor';
 import { INTERIOR_BUILDINGS, interiors } from './taipei-interiors';
+import { TAIPEI_VEHICLES, parkTaipeiVehicles } from './taipei-vehicles';
 import type { BlockStyle, Decor, MapDef, SignStyle } from './types';
 
 /**
@@ -279,10 +280,20 @@ export function taipei(): MapDef {
   b.point('E', 'Emei St Stage 峨眉街', X(-757), KERB, Z(-207), 6);
   for (const [x, z] of [[-826, -253], [-757, -238], [-813, -207], [-770, -110], [-860.5, -206], [-715.5, -230]]) b.ammoCrate(X(x), floorAt(x, z), Z(z));
 
-  // ---- Dressing (taipei-decor.ts), kept clear of the spawns and crates ----------------------
+  // ---- Drivable vehicles (shared/maps/taipei-vehicles.ts) ----------------------------------
+  parkTaipeiVehicles(b, X, Z, floorAt);
+
+  // ---- Dressing (taipei-decor.ts), kept clear of the spawns, crates and vehicle spots -------
   const shift: Shift = { X, Z, ox: OX, oz: OZ };
-  const keep: Keep = [...b.spawns.map(p => [p.x, p.z, 1.4] as [number, number, number]), ...b.pickups.map(p => [p.x, p.z, 1.6] as [number, number, number])];
+  const vehicleRoom = { car: 3.4, scooter: 1.6, heli: 9 } as Record<string, number>;
+  const keep: Keep = [
+    ...b.spawns.map(p => [p.x, p.z, 1.4] as [number, number, number]),
+    ...b.pickups.map(p => [p.x, p.z, 1.6] as [number, number, number]),
+    ...TAIPEI_VEHICLES.map(([kind, x, z]) => [X(x), Z(z), vehicleRoom[kind] ?? 3.4] as [number, number, number]),
+  ];
   const cuts = interiors(b, shift);
+  // Nothing of the street dressing (look or collider) stands where a vehicle parks.
+  for (const [kind, x, z] of TAIPEI_VEHICLES) { const r = vehicleRoom[kind] ?? 3.4; cuts.push(X(x) - r, 0.05, Z(z) - r, X(x) + r, 3, Z(z) + r); }
   streetFurniture(b, shift, keep, cuts);
   parkedCars(b, shift, keep);
   mrtExit(b, shift, KERB);
