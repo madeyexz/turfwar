@@ -131,6 +131,17 @@ body.menu-open #hud, body.menu-open #hud * { visibility: hidden; }
 .announce b { display: block; font-size: 46px; letter-spacing: 0.12em; text-shadow: 0 0 22px rgba(0, 0, 0, 0.85); }
 .announce small { font-size: 16px; letter-spacing: 0.3em; color: var(--ink); text-shadow: 0 1px 4px #000; }
 .announce.on { animation: announce 3s ease-out forwards; }
+.vehicle { position: absolute; left: 50%; bottom: 22px; transform: translateX(-50%); width: 340px; padding: 8px 14px 9px; background: var(--panel); border: 1px solid var(--line); }
+.vehicle .vrow { display: flex; align-items: baseline; gap: 14px; }
+.vehicle .vrow > b { flex: 1; font-size: 18px; letter-spacing: 0.14em; }
+.vehicle .vread b { font-size: 24px; font-variant-numeric: tabular-nums; }
+.vehicle .vread small { margin-left: 4px; font-size: 11px; letter-spacing: 0.12em; color: var(--muted); }
+.vehicle .vread[hidden] { display: none; }
+.vehicle .track { height: 6px; margin-top: 5px; background: rgba(255, 255, 255, 0.1); }
+.vehicle .track i { display: block; height: 100%; background: var(--accent); transition: width 0.15s; }
+.vehicle .track i.low { background: var(--crimson); }
+.vehicle .vkeys { display: block; margin-top: 6px; font-size: 11px; letter-spacing: 0.1em; color: var(--muted); }
+.vehicle .vkeys kbd { display: inline-block; min-width: 14px; padding: 0 4px; margin: 0 3px 0 0; border: 1px solid var(--line); color: var(--ink); font-family: inherit; }
 .buyhint { position: absolute; left: 50%; bottom: 128px; transform: translateX(-50%); font-size: 14px; font-weight: 700; letter-spacing: 0.14em; text-shadow: 0 1px 3px #000; }
 .spectate { position: absolute; left: 50%; bottom: 84px; transform: translateX(-50%); display: flex; align-items: baseline; gap: 12px; padding: 6px 18px; background: var(--panel); border: 1px solid var(--line); white-space: nowrap; }
 .spectate b { font-size: 22px; text-transform: none; letter-spacing: 0.02em; }

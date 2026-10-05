@@ -3,13 +3,15 @@ import { hitShape, raycastSoldier } from '../../shared/hitbox';
 import { loadMap } from '../../shared/maps/index';
 import { wrapAngle, type Vec3 } from '../../shared/math';
 import { eyeHeight } from '../../shared/movement';
-import { ATTACKERS, TEAM_NAMES, type MatchEvent, type MatchState, type Soldier } from '../../shared/match/state';
+import { ATTACKERS, TEAM_NAMES, vehicleTarget, type MatchEvent, type MatchState, type Soldier } from '../../shared/match/state';
+import { VEHICLES, raycastVehicle, seatPosition, speedOf, type Vehicle } from '../../shared/vehicles';
+import { seatFor } from '../../shared/match/vehicles';
 import { WEAPONS, pelletCone, pelletDirs, weaponStats, type HitZone, type WeaponId } from '../../shared/weapons';
 import { CASH, CRATE_REACH, canBuyWeapons, inBase } from '../../shared/match/economy';
-import { sideOf } from '../../shared/match/combat';
+import { seatOf, shieldedIds, sideOf } from '../../shared/match/combat';
 import { BOMB_REACH, modeOf } from '../../shared/match/sim';
 import type { Assets } from '../assets';
-import { Audio } from '../audio';
+import { Audio, type EngineVoice } from '../audio';
 import { BodiesView } from '../render/bodies';
 import { BombSitesView } from '../render/bombsite';
 import { Effects } from '../render/effects';
@@ -20,11 +22,13 @@ import { THEMES } from '../render/materials';
 import { QUALITY, type Renderer } from '../render/renderer';
 import { SoldierView } from '../render/soldier';
 import { ViewModel } from '../render/viewmodel';
+import { VehiclesView, vehicleName } from '../render/vehicles';
 import { BuyMenu } from '../ui/buymenu';
 import { SettingsMenu } from '../ui/settingsmenu';
 import { Hud } from '../ui/hud';
 import { Input } from './input';
 import type { GameLink } from './link';
+import { Driving } from './driving';
 import { LocalPlayer } from './player';
 import { isMagnified, settings } from './settings';
 
@@ -88,6 +92,18 @@ export class Game {
   /** View model with the other team's arms, built the first time we watch an enemy. */
   private otherViewmodel?: ViewModel;
   private lastStepPhase = 0;
+  /** Cars, scooters and the helicopter. */
+  private vehicles = new VehiclesView();
+  /** The vehicle we drive (prediction, controls and chase camera). */
+  readonly driving = new Driving();
+  /** Our seat according to the host: vehicle index and seat (0 drives). */
+  private seated?: { index: number; seat: 0 | 1 };
+  /** Vehicle within reach that E would get us into (-1 none). */
+  private nearVehicle = -1;
+  /** Ourselves, seen from the chase camera on a scooter. */
+  private selfView?: SoldierView;
+  /** Running engines and rotors we can hear. */
+  private engines = new Map<number, EngineVoice>();
 
   /** Rebuild a view model only when the weapon or its attachments change. */
   private showWeapon(vm: ViewModel, p: LocalPlayer) {
@@ -124,7 +140,7 @@ export class Game {
     renderer.scene.add(this.bodies.group);
     this.crates = new CratesView(assets, def.pickups);
     this.sites = new BombSitesView(def);
-    renderer.scene.add(this.crates.group, this.sites.group);
+    renderer.scene.add(this.crates.group, this.sites.group, this.vehicles.group);
     this.input = new Input(renderer.renderer.domElement);
     this.input.sensitivity = settings.sensitivity;
     const me = link.state()?.soldiers.find(s => s.id === link.myId());
@@ -164,7 +180,11 @@ export class Game {
     this.buymenu.dispose?.();
     this.buymenu.root.remove();
     this.menu.dispose();
-    this.renderer.scene.remove(this.level.group, this.effects.group, this.bodies.group, this.crates.group, this.sites.group);
+    this.renderer.scene.remove(this.level.group, this.effects.group, this.bodies.group, this.crates.group, this.sites.group, this.vehicles.group);
+    this.vehicles.dispose();
+    for (const e of this.engines.values()) e.stop();
+    this.engines.clear();
+    if (this.selfView) { this.selfView.dispose(); this.selfView.root.removeFromParent(); this.selfView.gun.removeFromParent(); }
     for (const r of this.remotes.values()) { r.view.dispose(); r.view.gun.removeFromParent(); }
     this.viewmodel.root.removeFromParent();
     this.viewmodel.torch.removeFromParent(); this.viewmodel.torch.target.removeFromParent();
@@ -202,6 +222,9 @@ export class Game {
     }
     const side = me ? sideOf(state, this.map.def, me.team) : 0;
     const buyWindow = !!me && state.phase === 'live' && canBuyWeapons(state, this.map.def, me, side);
+    const site = sabotage && me?.alive ? this.siteHere(state) : -1;
+    const myJob = state.bomb.armed ? me?.team !== ATTACKERS && site === state.bomb.site : me?.team === ATTACKERS && site >= 0;
+    this.nearVehicle = me?.alive && !this.seated && !(myJob && site >= 0) ? this.vehicleNear(state, me) : -1;
 
     // ---- Hotkeys ----
     if (active && this.input.take('KeyP')) document.exitPointerLock?.();
@@ -211,13 +234,26 @@ export class Game {
       const chat = this.input.take('Enter') ? false : this.input.take('KeyT') ? true : undefined;
       if (chat !== undefined) { this.input.clear(); this.hud.openChat(chat, text => this.link.say(text, chat)); }
       if (this.input.take('KeyE') && me?.alive) {
+        // E: out of the vehicle we sit in, into the one in reach, else the ammo crate.
         const i = this.crates.nearest(this.player.m.x, this.player.m.y, this.player.m.z, CRATE_REACH);
-        if (i >= 0) { link.useCrate(i); this.audio.ui(); }
+        if (this.seated) { link.exitVehicle(); this.audio.door(); }
+        else if (this.nearVehicle >= 0) { link.enterVehicle(this.nearVehicle); this.audio.door(); }
+        else if (i >= 0) { link.useCrate(i); this.audio.ui(); }
       }
     }
     this.hud.scoreboard(this.input.down('Tab'), state, myId);
 
     // ---- Server reconciliation ----
+    // Vehicles: the host decides who sits where. Taking the wheel starts prediction from its pose;
+    // leaving a seat puts us where the host stood us (beside the vehicle).
+    const seat = me?.alive ? seatOf(state, myId) : undefined;
+    const wasSeated = this.seated;
+    this.seated = seat ? { index: seat.vehicle.id, seat: seat.seat } : undefined;
+    if (this.driving.active && (seat?.seat !== 0 || seat.vehicle.id !== this.driving.v!.id)) this.driving.end();
+    if (seat?.seat === 0 && !this.driving.active) { this.driving.begin(seat.vehicle); this.player.binoculars = false; }
+    if (wasSeated && !seat && me?.alive && this.wasAlive) this.player.correct(me);
+    this.player.riding = !!seat;
+    this.hud.driving = this.driving.active;
     if (me) {
       this.myTeam = me.team;
       if (me.alive && !this.wasAlive) { this.player.spawnFrom(me); this.spectating = -1; this.shownWeapon = ''; }
@@ -227,24 +263,38 @@ export class Game {
         this.deathCam.set(this.player.m.x, this.player.m.y + 1.6, this.player.m.z);
         this.spectating = me.lastAttacker;
       }
-      if (me.corrections !== this.corrections) { if (this.wasAlive && me.alive) this.player.correct(me); this.corrections = me.corrections; }
+      if (me.corrections !== this.corrections) {
+        if (this.wasAlive && me.alive) { if (this.driving.active && seat) this.driving.snap(seat.vehicle); else if (!seat) this.player.correct(me); }
+        this.corrections = me.corrections;
+      }
       this.wasAlive = me.alive;
     }
     if (this.player.alive) this.showWeapon(this.viewmodel, this.player);
 
     // ---- Bomb: hold E still on a site ----
-    const site = sabotage && me?.alive ? this.siteHere(state) : -1;
-    const myJob = state.bomb.armed ? me?.team !== ATTACKERS && site === state.bomb.site : me?.team === ATTACKERS && site >= 0;
-    this.player.using = active && myJob && state.roundPhase === 'live' && this.input.down('KeyE');
+    this.player.using = active && myJob && !seat && state.roundPhase === 'live' && this.input.down('KeyE');
     this.player.frozen = state.phase === 'live' && state.roundPhase === 'freeze' && !state.config.practice;
 
     // ---- Local player ----
     const look = active ? { x: this.input.lookX, y: this.input.lookY } : { x: 0, y: 0 };
-    const result = this.player.update(dt, active ? this.input : undefined, this.map.world, active && state.phase !== 'ended', this.player.frozen || state.roundPhase === 'over');
+    if (this.driving.active) {
+      // At the wheel: the controls fly the vehicle; we ride in the driver's seat (no walking, no weapon).
+      const e = this.driving.update(dt, active && state.phase !== 'ended' ? this.input : undefined, this.map.world, this.player.frozen);
+      if (e.impact > 5) this.audio.crash(e.impact);
+      const v = this.driving.renderPose()!;
+      this.player.seat(seatPosition(v, 0), VEHICLES[v.kind].sit, v);
+    } else if (seat) {
+      // Passenger: carried on the seat of the vehicle as rendered; look and shoot as usual.
+      const p = this.vehicles.pose(seat.vehicle.id);
+      if (p) this.player.seat(seatPosition({ ...p, kind: seat.vehicle.kind }, seat.seat), VEHICLES[seat.vehicle.kind].sit, { vx: p.vx, vy: 0, vz: p.vz });
+    }
+    const result = this.driving.active
+      ? this.player.update(dt, undefined, this.map.world, false, true)
+      : this.player.update(dt, active ? this.input : undefined, this.map.world, active && state.phase !== 'ended', this.player.frozen || state.roundPhase === 'over');
     if (result.move.jumped) this.audio.jump();
     if (result.move.landed > 4) this.audio.land(result.move.landed);
     if (result.move.slideStarted) this.audio.slide();
-    if (this.player.m.grounded && this.player.speed() > 1 && Math.floor(this.player.bobPhase / Math.PI) !== this.lastStepPhase) {
+    if (!this.player.riding && this.player.m.grounded && this.player.speed() > 1 && Math.floor(this.player.bobPhase / Math.PI) !== this.lastStepPhase) {
       this.lastStepPhase = Math.floor(this.player.bobPhase / Math.PI);
       this.audio.footstep(undefined, undefined, this.player.sprinting);
     }
@@ -262,7 +312,8 @@ export class Game {
     this.reportTimer -= dt;
     if (this.reportTimer <= 0 && me?.alive) {
       this.reportTimer = link.mode === 'online' ? 1 / 20 : 1 / 30;
-      link.report(this.player.report());
+      const driven = this.driving.report();
+      if (driven) link.vehicleReport(driven); else link.report(this.player.report());
     }
 
     // ---- Events ----
@@ -277,8 +328,13 @@ export class Game {
       this.lastVersion = link.version();
       this.syncRemotes(state, myId, now);
       this.bodies.sync(state.bodies, now);
+      this.vehicles.sync(state.vehicles, now);
     }
     const renderTime = now - link.interpDelay - 0.02;
+    const driven = this.driving.renderPose();
+    this.vehicles.update(dt, renderTime, driven ? { id: driven.id, pose: driven } : undefined);
+    const rides = new Map<number, { v: Vehicle; seat: number }>();
+    for (const v of state.vehicles) { if (v.driver >= 0) rides.set(v.driver, { v, seat: 0 }); if (v.passenger >= 0) rides.set(v.passenger, { v, seat: 1 }); }
     const positions = new Map<number, THREE.Vector3>();
     const byId = new Map(state.soldiers.map(s => [s.id, s]));
     // Crowd LOD: the view frustum (from last frame's camera) and distance decide how much work each remote gets.
@@ -286,8 +342,15 @@ export class Game {
     frustum.setFromProjectionMatrix(projScreen.multiplyMatrices(cam0.projectionMatrix, cam0.matrixWorldInverse));
     for (const [id, r] of this.remotes) {
       const s = byId.get(id);
-      const sample = r.buffer.sample(renderTime, ['yaw']);
+      let sample = r.buffer.sample(renderTime, ['yaw']);
       if (!s || !sample) continue;
+      // Riders sit on their seat of the vehicle as rendered; car and helicopter crews are hidden inside.
+      const ride = rides.get(id), hiddenInside = !!ride && !VEHICLES[ride.v.kind].exposed;
+      const vp = ride ? this.vehicles.pose(ride.v.id) : undefined;
+      if (ride && vp) {
+        const p = seatPosition({ ...vp, kind: ride.v.kind }, ride.seat);
+        sample = { ...sample, x: p.x, y: p.y, z: p.z, vx: 0, vy: 0, vz: 0, yaw: ride.seat === 0 ? vp.yaw : sample.yaw, crouch: VEHICLES[ride.v.kind].sit };
+      }
       r.pos.set(sample.x, sample.y, sample.z); r.crouch = sample.crouch; r.yaw = sample.yaw; r.pitch = sample.pitch;
       positions.set(id, r.pos);
       lodSphere.center.set(sample.x, sample.y + 1, sample.z);
@@ -302,9 +365,9 @@ export class Game {
       // Hide a soldier the camera is inside (crowded bases, spectating): clipping through a body looks broken.
       const cp = this.renderer.camera.position;
       const inside = Math.hypot(r.pos.x - cp.x, r.pos.z - cp.z) < 0.75 && cp.y > r.pos.y - 0.3 && cp.y < r.pos.y + 2.2;
-      r.view.root.visible = !inside && r.view.onScreen;
-      if (inside) r.view.gun.visible = false;
-      if (s.alive && s.m.grounded && r.last) {
+      r.view.root.visible = !inside && !hiddenInside && r.view.onScreen;
+      if (inside || hiddenInside) r.view.gun.visible = false;
+      if (s.alive && s.m.grounded && !ride && r.last) {
         r.stepDist += r.last.distanceTo(r.pos);
         if (r.stepDist > (s.sprint ? 2.6 : 2.0)) {
           r.stepDist = 0;
@@ -321,7 +384,17 @@ export class Game {
 
     // ---- Camera ----
     const cam = this.renderer.camera;
-    if (this.player.alive) {
+    this.updateSelfView(dt);
+    if (this.player.alive && this.driving.active) {
+      // Chase camera (or the driver's seat with V); no weapon in hand.
+      this.driving.placeCamera(cam, this.map.world);
+      const v = this.driving.v!;
+      const targetFov = settings.fov + Math.min(14, speedOf(v) * 0.35);
+      cam.fov += (targetFov - cam.fov) * Math.min(1, dt * 4);
+      cam.updateProjectionMatrix();
+      for (const vm of [this.viewmodel, this.otherViewmodel]) if (vm) { vm.root.visible = false; vm.torch.intensity = 0; }
+      this.hud.spectate(undefined, 0);
+    } else if (this.player.alive) {
       const eye = this.player.eye();
       const shake = this.player.shake;
       cam.position.set(eye.x + (Math.random() - 0.5) * shake * 0.05, eye.y + (Math.random() - 0.5) * shake * 0.05, eye.z);
@@ -345,9 +418,10 @@ export class Game {
     const mag = this.player.magnification;
     const watching = !this.player.alive && this.spectating >= 0 && this.watched.alive;
     const vm = watching ? this.viewmodelFor(this.watched.team) : this.viewmodel;
-    this.hud.scope((this.player.alive || watching) && vm.scopeVisible, watching ? this.watched.magnification : mag, vm.overlay);
+    this.hud.scope((this.player.alive || watching) && !this.driving.active && vm.scopeVisible, watching ? this.watched.magnification : mag, vm.overlay);
     this.hud.binoculars(this.player.alive && this.player.binoculars && this.player.ads > 0.5, mag);
     this.hud.zoomTag(this.player.alive && !this.player.binoculars && !this.viewmodel.overlay && this.player.ads > 0.85 && mag >= 1.5 ? mag : undefined);
+    this.updateEngines(state);
     if (render) this.renderer.render(this.time);
 
     // ---- HUD ----
@@ -372,6 +446,7 @@ export class Game {
       const showBuy = !!me && buyWindow && (free || !me.alive || inBase(me, this.map.def, side)) && !this.buymenu.open;
       this.hud.buyHint(showBuy ? (free ? 'B STORE' : `B STORE · ${Math.ceil(buyLeft)}s`) : undefined);
       this.hud.prompt(this.promptText(state, me, site, myJob));
+      this.hud.vehicle(this.vehicleInfo(state));
       const bomb = state.bomb;
       const mine = bomb.by === myId && bomb.progress > 0;
       this.hud.progress(mine ? (bomb.armed ? 'DISARMING' : 'ARMING') : undefined, bomb.progress);
@@ -382,6 +457,74 @@ export class Game {
     this.fpsFrames++; this.fpsTime += dt;
     if (this.fpsTime > 1) { this.hud.fps(`${Math.round(this.fpsFrames / this.fpsTime)} FPS · ${this.renderer.renderer.info.render.calls} calls`); this.fpsFrames = 0; this.fpsTime = 0; }
     this.input.endFrame();
+  }
+
+  /** The vehicle E would get us into: the closest one in reach with a seat for us, or -1. */
+  private vehicleNear(state: MatchState, me: Soldier) {
+    const at = { ...me, m: this.player.m };
+    let best = -1, bestD = Infinity;
+    for (const v of state.vehicles) {
+      if (seatFor(state, at, v) === undefined) continue;
+      const d = Math.hypot(v.x - this.player.m.x, v.z - this.player.m.z);
+      if (d < bestD) { bestD = d; best = v.id; }
+    }
+    return best;
+  }
+
+  /** HUD vehicle panel: name, speed, altitude above the floor (helicopter), body health, controls. */
+  private vehicleInfo(state: MatchState) {
+    const seated = this.seated;
+    const host = seated ? state.vehicles[seated.index] : undefined;
+    if (!seated || !host) return undefined;
+    const v = this.driving.v ?? host, spec = VEHICLES[v.kind];
+    const k = (key: string) => `<kbd>${key}</kbd>`;
+    const keys = seated.seat === 1 ? `PASSENGER · ${k('E')}EXIT`
+      : v.kind === 'heli' ? `${k('W')}${k('A')}${k('S')}${k('D')}FLY · MOUSE TURN · ${k('SPACE')}UP · ${k('C')}DOWN · ${k('V')}VIEW · ${k('E')}EXIT`
+      : `${k('W')}${k('S')}DRIVE · ${k('A')}${k('D')}STEER · ${k('SPACE')}BRAKE · ${k('V')}VIEW · ${k('E')}EXIT`;
+    const floor = this.map.world.groundHeight(v.x, v.z, v.y + 0.1, 0.5);
+    return { name: vehicleName(v), speed: speedOf(v), altitude: v.kind === 'heli' ? v.y - floor : undefined, health: host.health, max: spec.health, keys };
+  }
+
+  /** On a scooter the chase camera sees us riding: a third-person body on the seat. */
+  private updateSelfView(dt: number) {
+    const v = this.driving.renderPose();
+    const show = !!v && v.kind === 'scooter' && !this.driving.firstPerson && this.player.alive;
+    if (!show) { if (this.selfView) { this.selfView.root.visible = false; this.selfView.gun.visible = false; } return; }
+    if (!this.selfView || this.selfView.team !== this.myTeam) {
+      if (this.selfView) { this.selfView.dispose(); this.selfView.root.removeFromParent(); this.selfView.gun.removeFromParent(); }
+      this.selfView = new SoldierView(this.assets, this.myTeam);
+      this.renderer.scene.add(this.selfView.root, this.selfView.gun);
+    }
+    const p = seatPosition(v!, 0), held = this.player.slot === 2 ? 'knife' : this.player.weapons[this.player.slot];
+    this.selfView.root.visible = true;
+    this.selfView.update(dt, {
+      x: p.x, y: p.y, z: p.z, vx: 0, vy: 0, vz: 0, yaw: v!.yaw, pitch: 0, crouch: VEHICLES.scooter.sit, grounded: true, sprint: false, ads: false,
+      slide: false, alive: true, weapon: held, attachments: this.player.attachments[held], reloading: 0, firing: false,
+    });
+  }
+
+  /** Engines and rotors: ours at full level, others placed in the world (the nearest few). */
+  private updateEngines(state: MatchState) {
+    const cam = this.renderer.camera.position;
+    const listener = this.listener();
+    const running = new Set<number>();
+    const candidates = state.vehicles
+      .filter(v => !v.wrecked && (v.driver >= 0 || v.rotor > 0.05))
+      .map(v => ({ v, pose: this.driving.v?.id === v.id ? this.driving.v : this.vehicles.pose(v.id) }))
+      .filter(c => c.pose && Math.hypot(c.pose.x - cam.x, c.pose.y - cam.y, c.pose.z - cam.z) < (c.v.kind === 'heli' ? 160 : 70))
+      .sort((a, b) => Math.hypot(a.pose!.x - cam.x, a.pose!.z - cam.z) - Math.hypot(b.pose!.x - cam.x, b.pose!.z - cam.z))
+      .slice(0, 4);
+    for (const { v, pose } of candidates) {
+      let voice = this.engines.get(v.id);
+      if (!voice) { voice = this.audio.engine(v.kind); if (!voice) continue; this.engines.set(v.id, voice); }
+      running.add(v.id);
+      const spec = VEHICLES[v.kind], p = pose!;
+      const speed = Math.hypot(p.vx, p.vz) / spec.maxSpeed;
+      const rpm = v.kind === 'heli' ? p.rotor * (0.55 + 0.45 * Math.min(1, speed)) : 0.12 + 0.88 * Math.min(1, speed);
+      const mine = this.seated?.index === v.id;
+      voice.set(rpm, mine ? undefined : listener, mine ? undefined : { x: p.x, y: p.y + 1, z: p.z });
+    }
+    for (const [id, voice] of this.engines) if (!running.has(id)) { voice.stop(); this.engines.delete(id); }
   }
 
   /** Index of the bomb site the player stands on (within reach of its centre), or -1. */
@@ -395,6 +538,11 @@ export class Game {
   }
 
   private promptText(state: MatchState, me: Soldier | undefined, site: number, myJob: boolean) {
+    const near = state.vehicles[this.nearVehicle];
+    if (me?.alive && near && !this.seated) {
+      const name = vehicleName(near);
+      return near.driver >= 0 ? `<kbd>E</kbd> RIDE ALONG · ${name}` : `<kbd>E</kbd> ${VEHICLES[near.kind].verb} ${near.kind === 'car' ? `THE ${name}` : name}`;
+    }
     if (!me?.alive || state.roundPhase !== 'live') return '';
     if (site >= 0 && myJob) return `HOLD <kbd>E</kbd> TO ${state.bomb.armed ? 'DISARM THE BOMB' : `ARM THE BOMB AT ${this.map.def.sabotage!.sites[site]}`}`;
     if (this.crates.nearest(this.player.m.x, this.player.m.y, this.player.m.z, CRATE_REACH) >= 0 && this.player.slot !== 2) {
@@ -488,20 +636,20 @@ export class Game {
     const traces = (w.pellets > 1 ? pelletDirs(dir, pelletCone(w, this.player.ads > 0.5), w.pellets) : [dir]).map(d => this.trace(origin, d, range, state));
     // Claim the soldier most pellets hit; the host re-traces a pellet pattern from that claim.
     const counts = new Map<number, number>();
-    for (const t of traces) if (t.target >= 0) counts.set(t.target, (counts.get(t.target) ?? 0) + 1);
+    for (const t of traces) if (t.target !== -1) counts.set(t.target, (counts.get(t.target) ?? 0) + 1);
     const target = [...counts.entries()].sort((a, b) => b[1] - a[1])[0]?.[0] ?? -1;
     const claimed = traces.find(t => t.target === target) ?? traces[0];
     this.link.fire({ weapon: this.player.slot, origin, dir, target: claimed.target, zone: claimed.zone, point: claimed.point });
-    if (melee) this.audio.knife(target >= 0);
+    if (melee) this.audio.knife(target !== -1);
     traces.forEach((t, i) => {
       const end = new THREE.Vector3(t.point.x, t.point.y, t.point.z);
-      if (melee) { if (t.target >= 0) this.effects.hitSpark(end, false); return; }
+      if (melee) { if (t.target !== -1) this.effects.hitSpark(end, false); return; }
       const tracer = !w.suppressed && (w.pellets > 1 ? i % 3 === 0 : Math.random() < (w.auto ? 0.5 : 1));
       if (tracer) this.effects.tracer(muzzle, end, 0xffe2a0, w.class === 'sniper' ? 1.8 : 1, w.velocity);
-      if (t.target >= 0) this.effects.hitSpark(end, false);
+      if (t.target !== -1) this.effects.hitSpark(end, false);
       else if (t.wall) this.effects.impact(end, new THREE.Vector3(t.wall.normal.x, t.wall.normal.y, t.wall.normal.z), t.wall.surface, i < 3, cam.position);
     });
-    if (target >= 0 && this.link.mode === 'online') {
+    if (target !== -1 && this.link.mode === 'online') {
       // Waiting a round trip for the marker feels laggy: show it now; the server's damage event is then absorbed.
       const head = traces.some(t => t.target === target && t.zone === 'head');
       this.hud.hit(head ? 'head' : 'body');
@@ -515,14 +663,22 @@ export class Game {
     const wall = this.map.world.raycast(origin, dir, range, this.myTeam);
     let best = wall ? wall.t : range;
     let target = -1, zone: HitZone | '' = '';
+    // Vehicle bodies as rendered (claimed as vehicleTarget(i)); crews inside them are behind the body.
+    for (const v of state.vehicles) {
+      if (v.id === this.seated?.index) continue;
+      const pose = this.vehicles.pose(v.id);
+      const t = pose ? raycastVehicle(origin, dir, { ...pose, kind: v.kind }) : -1;
+      if (t >= 0 && t < best) { best = t; target = vehicleTarget(v.id); zone = 'body'; }
+    }
+    const shielded = shieldedIds(state);
     for (const [id, r] of this.remotes) {
       const s = state.soldiers.find(x => x.id === id);
-      if (!s || !s.alive || s.team === this.myTeam) continue;
+      if (!s || !s.alive || s.team === this.myTeam || shielded.has(id)) continue;
       const hit = raycastSoldier(origin, dir, hitShape(r.pos, r.crouch, r.yaw));
       if (hit && hit.t < best) { best = hit.t; target = id; zone = hit.zone; }
     }
     const point = { x: origin.x + dir.x * best, y: origin.y + dir.y * best, z: origin.z + dir.z * best };
-    return { point, target, zone, wall: target < 0 ? wall : null };
+    return { point, target, zone, wall: target === -1 ? wall : null };
   }
 
   private handleEvent(e: MatchEvent, state: MatchState, myId: number) {
@@ -602,12 +758,23 @@ export class Game {
         if (e.action === 'disarmed') { this.audio.bombDisarmed(); this.hud.announce('BOMB DISARMED', `Site ${letter}`, 'var(--aegis)'); }
         break;
       }
+      case 'vehicle': {
+        if (e.action === 'hit' && e.id === myId && this.seated?.index !== e.vehicle) {
+          const now = performance.now();
+          this.predictedHits = this.predictedHits.filter(h => now - h.at < 1000);
+          const shown = this.predictedHits.findIndex(h => h.target === vehicleTarget(e.vehicle));
+          if (shown >= 0) this.predictedHits.splice(shown, 1); else { this.hud.hit('body'); this.audio.hitmarker(false, false); }
+        }
+        if (e.action === 'hit' && this.seated?.index === e.vehicle && e.id !== myId) this.player.shake = Math.min(2, this.player.shake + 0.3);
+        if (e.action === 'wreck' && e.id === myId) this.hud.hit('kill');
+        break;
+      }
       case 'explosion': {
         const at = new THREE.Vector3(e.x, e.y, e.z);
-        this.effects.explosion(at, e.weapon === 'bomb' ? 2.5 : 1);
+        this.effects.explosion(at, e.weapon === 'bomb' ? 2.5 : e.weapon === 'vehicle' ? 1.8 : 1);
         this.audio.explosion(this.listener(), at);
         const d = at.distanceTo(this.renderer.camera.position);
-        const reach = e.weapon === 'bomb' ? 40 : 18;
+        const reach = e.weapon === 'bomb' ? 40 : e.weapon === 'vehicle' ? 28 : 18;
         if (d < reach) this.player.shake = Math.min(4, this.player.shake + (reach - d) * 0.25);
         break;
       }

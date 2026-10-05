@@ -1,6 +1,7 @@
 import type { Vec3 } from '../math';
 import type { MoveState } from '../movement';
 import type { Attachments, Slot, WeaponId } from '../weapons';
+import type { Vehicle } from '../vehicles';
 import type { Body } from '../world';
 
 export type Team = 0 | 1;
@@ -183,6 +184,8 @@ export interface MatchState {
   bomb: BombState;
   soldiers: Soldier[];
   bodies: Body[];
+  /** Drivable vehicles, one per map spot (index = id), rebuilt at every round start. */
+  vehicles: Vehicle[];
   nextId: number;
   winner: -1 | Team;
   config: MatchConfig;
@@ -202,7 +205,9 @@ export type MatchEvent =
   | { type: 'reward'; id: number; amount: number; reason: string }
   | { type: 'chat'; id: number; name: string; team: Team; text: string; teamOnly: boolean }
   | { type: 'join'; id: number; name: string; team: Team }
-  | { type: 'leave'; id: number; name: string };
+  | { type: 'leave'; id: number; name: string }
+  /** A soldier got in or out of vehicle `vehicle` (seat 0 drives), a hit on its body, or its wreck. */
+  | { type: 'vehicle'; action: 'enter' | 'exit' | 'hit' | 'wreck'; vehicle: number; id: number; seat?: number; amount?: number };
 
 /** Report a client sends about its own soldier each network tick. */
 export interface ClientReport {
@@ -219,6 +224,21 @@ export interface ClientReport {
   /** Holding the use key (arming/disarming). */
   use?: boolean;
 }
+
+/** The driver's client reports its vehicle like its own movement (validated the same way). */
+export interface VehicleReport {
+  vehicle: number;
+  x: number; y: number; z: number;
+  vx: number; vy: number; vz: number;
+  yaw: number; pitch: number; roll: number;
+}
+
+/**
+ * Shot claims name a soldier by id; a claim on vehicle i uses target `vehicleTarget(i)` (-2 - i),
+ * so the reducer's arguments stay the same.
+ */
+export const vehicleTarget = (index: number) => -2 - index;
+export const targetVehicle = (target: number) => (target <= -2 ? -2 - target : -1);
 
 /** A shot fired by a client, with an optional claimed hit for server validation. */
 export interface ShotClaim {

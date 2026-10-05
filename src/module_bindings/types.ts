@@ -253,3 +253,48 @@ export const TickSchedule = __t.object("TickSchedule", {
 });
 export type TickSchedule = __Infer<typeof TickSchedule>;
 
+export const Vehicle = __t.object("Vehicle", {
+  key: __t.u32(),
+  room: __t.u8(),
+  id: __t.u8(),
+  kind: __t.string(),
+  x: __t.f32(),
+  y: __t.f32(),
+  z: __t.f32(),
+  vx: __t.f32(),
+  vy: __t.f32(),
+  vz: __t.f32(),
+  yaw: __t.f32(),
+  pitch: __t.f32(),
+  roll: __t.f32(),
+  steer: __t.f32(),
+  rotor: __t.f32(),
+  grounded: __t.bool(),
+  health: __t.f32(),
+  driver: __t.i32(),
+  passenger: __t.i32(),
+  wrecked: __t.bool(),
+  slack: __t.f32(),
+  lastAttacker: __t.i32(),
+  lastRun: __t.f64(),
+});
+export type Vehicle = __Infer<typeof Vehicle>;
+
+export const VehicleInbox = __t.object("VehicleInbox", {
+  soldierId: __t.u32(),
+  vehicle: __t.u8(),
+  lastMicros: __t.u64(),
+  elapsed: __t.f32(),
+  pending: __t.bool(),
+  x: __t.f32(),
+  y: __t.f32(),
+  z: __t.f32(),
+  vx: __t.f32(),
+  vy: __t.f32(),
+  vz: __t.f32(),
+  yaw: __t.f32(),
+  pitch: __t.f32(),
+  roll: __t.f32(),
+});
+export type VehicleInbox = __Infer<typeof VehicleInbox>;
+
