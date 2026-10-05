@@ -1,4 +1,6 @@
 import * as THREE from 'three';
+import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader.js';
+import { MeshoptDecoder } from 'three/examples/jsm/libs/meshopt_decoder.module.js';
 import { mergeGeometries } from 'three/examples/jsm/utils/BufferGeometryUtils.js';
 import type { Decor } from '../../shared/maps/types';
 import { rng } from '../../shared/math';
@@ -19,7 +21,9 @@ export interface StreetData {
   marks: number[];
   models: Record<string, number[]>;
 }
-interface DressingSet { street?: StreetData; skyline?: SkylineData }
+/** A district mesh from the source game (GLB in source coordinates) and the atlas it maps. */
+interface DistrictData { mesh: string; atlas: string }
+interface DressingSet { street?: StreetData; skyline?: SkylineData; district?: DistrictData }
 
 const SETS: Record<string, () => Promise<DressingSet>> = {
   taipei: async () => {
@@ -27,6 +31,7 @@ const SETS: Record<string, () => Promise<DressingSet>> = {
     return {
       street: { boxes: s.STREET_BOXES, glows: s.STREET_GLOWS, cyls: s.STREET_CYLS, plates: s.STREET_PLATES, marks: s.STREET_MARKS, models: s.STREET_MODELS },
       skyline: { buildings: k.FAR_BUILDINGS, landmarks: k.FAR_LANDMARKS, hills: k.FAR_HILLS, roads: k.FAR_ROADS, ground: k.FAR_GROUND, heights: k.FAR_HEIGHTS },
+      district: { mesh: 'taipei-district.glb', atlas: 'taipei-atlas.webp' },
     };
   },
 };
@@ -44,12 +49,95 @@ export async function addDressing(group: THREE.Group, decor: Decor[]) {
   for (const d of sets) {
     const set = await SETS[d.set]?.();
     if (!set) { console.warn('unknown dressing set', d.set); continue; }
-    if (set.street) group.add(streetGroup(set.street, d.x, d.z, models));
+    const cut = cutTest(d.cut ?? []);
+    if (set.district) group.add(await districtGroup(set.district, d.x, d.z, cut));
+    if (set.street) group.add(streetGroup(cutStreet(set.street, d.x, d.z, cut), d.x, d.z, models));
     if (set.skyline) group.add(buildSkyline(set.skyline, d.x, d.z));
   }
   const byModel = new Map<string, number[]>();
   for (const d of instances) byModel.set(d.model, [...(byModel.get(d.model) ?? []), ...d.data]);
   for (const [model, data] of byModel) for (const m of instanced(model, data, 0, 0, models)) group.add(m);
+}
+
+/** Point test against cut boxes (minX, minY, minZ, maxX, maxY, maxZ, map coordinates). */
+type Cut = (x: number, y: number, z: number) => boolean;
+function cutTest(c: number[]): Cut {
+  return (x, y, z) => {
+    for (let i = 0; i < c.length; i += 6) if (x > c[i] && x < c[i + 3] && y > c[i + 1] && y < c[i + 4] && z > c[i + 2] && z < c[i + 5]) return true;
+    return false;
+  };
+}
+
+/** The street set without what stands in the cut boxes. */
+function cutStreet(s: StreetData, ox: number, oz: number, cut: Cut): StreetData {
+  const keep = (list: number[], stride: number, at: (r: number[]) => [number, number, number]) => {
+    const out: number[] = [];
+    for (let i = 0; i < list.length; i += stride) { const r = list.slice(i, i + stride), [x, y, z] = at(r); if (!cut(x - ox, y, z - oz)) out.push(...r); }
+    return out;
+  };
+  const p3 = (r: number[]): [number, number, number] => [r[0], r[1] + 0.1, r[2]];
+  return {
+    boxes: keep(s.boxes, 8, p3), glows: keep(s.glows, 8, p3),
+    cyls: keep(s.cyls, 8, r => [(r[0] + r[3]) / 2, Math.min(r[1], r[4]) + 0.1, (r[2] + r[5]) / 2]),
+    plates: s.plates.filter(p => !cut(p[0] - ox, p[1], p[2] - oz)),
+    marks: keep(s.marks, 9, r => [r[0], r[1] + 0.05, r[2]]),
+    models: Object.fromEntries(Object.entries(s.models).map(([k, v]) => [k, keep(v, STRIDE, p3)])),
+  };
+}
+
+// ---- District -----------------------------------------------------------------------------
+
+/**
+ * The source's own district meshes over its own atlas. Its light flags (_fx: amount, mode, the
+ * atlas offset of a night version, extra) light windows, neon and screens: the night version (or
+ * the texel itself) is added as emission. The light pools (L) are additive glows on the ground.
+ */
+async function districtGroup(d: DistrictData, ox: number, oz: number, cut: Cut) {
+  const base = import.meta.env.BASE_URL + 'assets/';
+  const [gltf, atlas] = await Promise.all([
+    new GLTFLoader().setMeshoptDecoder(MeshoptDecoder).loadAsync(base + d.mesh),
+    new THREE.TextureLoader().loadAsync(base + d.atlas),
+  ]);
+  atlas.colorSpace = THREE.SRGBColorSpace; atlas.anisotropy = 8;
+  const solid = new THREE.MeshStandardMaterial({ map: atlas, vertexColors: true, roughness: 0.8, metalness: 0.05 });
+  solid.onBeforeCompile = s => {
+    s.vertexShader = s.vertexShader
+      .replace('#include <common>', '#include <common>\nattribute vec4 _fx;\nvarying vec4 vFx;')
+      .replace('#include <uv_vertex>', '#include <uv_vertex>\nvFx = _fx;');
+    s.fragmentShader = s.fragmentShader
+      .replace('#include <common>', '#include <common>\nvarying vec4 vFx;')
+      .replace('#include <emissivemap_fragment>', `#include <emissivemap_fragment>
+        if (vFx.x > 0.0) totalEmissiveRadiance += texture2D(map, vMapUv + vec2(vFx.z, 0.0)).rgb * vColor.rgb * min(vFx.x, 2.0) * 0.9;`);
+  };
+  solid.customProgramCacheKey = () => 'taipei-district';
+  const glow = new THREE.MeshBasicMaterial({ map: atlas, vertexColors: true, transparent: true, opacity: 0.4, depthWrite: false, blending: THREE.AdditiveBlending, toneMapped: false });
+  const group = new THREE.Group();
+  group.name = 'dressing:district';
+  gltf.scene.traverse(o => {
+    const mesh = o as THREE.Mesh;
+    if (!mesh.isMesh) return;
+    const pools = mesh.parent?.name === 'L' || mesh.name === 'L';
+    mesh.material = pools ? glow : solid;
+    dropCut(mesh.geometry, ox, oz, cut);
+    mesh.castShadow = !pools; mesh.receiveShadow = !pools;
+    mesh.name = `district:${mesh.name}`;
+  });
+  gltf.scene.position.set(-ox, 0, -oz);
+  group.add(gltf.scene);
+  return group;
+}
+
+/** Drop the triangles whose centre lies in a cut box. */
+function dropCut(g: THREE.BufferGeometry, ox: number, oz: number, cut: Cut) {
+  const index = g.getIndex(), p = g.getAttribute('position');
+  if (!index) return;
+  const kept: number[] = [];
+  for (let i = 0; i < index.count; i += 3) {
+    const a = index.getX(i), b = index.getX(i + 1), c = index.getX(i + 2);
+    const x = (p.getX(a) + p.getX(b) + p.getX(c)) / 3 - ox, y = (p.getY(a) + p.getY(b) + p.getY(c)) / 3, z = (p.getZ(a) + p.getZ(b) + p.getZ(c)) / 3 - oz;
+    if (!cut(x, y, z)) kept.push(a, b, c);
+  }
+  if (kept.length < index.count) g.setIndex(kept);
 }
 
 // ---- Primitives ----------------------------------------------------------------------------

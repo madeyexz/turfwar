@@ -1,8 +1,9 @@
 import { MapBuilder } from './builder';
 import {
-  AREA, BILLBOARDS, BRANDS, EXPRESSWAY, HEDGES, LOTS, POIS, RED_HOUSE, ROADS, START, XIMEN_SHELLS, XIMEN_SHOPS, XIMEN_SIGNS, XIMEN_SOLIDS,
+  AREA, BRANDS, EXPRESSWAY, HEDGES, LOTS, POIS, RED_HOUSE, ROADS, START, XIMEN_SHOPS, XIMEN_SOLIDS,
 } from './taipei-data';
 import { mrtExit, parkedCars, streetFurniture, type Keep, type Shift } from './taipei-decor';
+import { INTERIOR_BUILDINGS, interiors } from './taipei-interiors';
 import type { BlockStyle, Decor, MapDef, SignStyle } from './types';
 
 /**
@@ -174,25 +175,17 @@ function expressway(b: B) {
   e.piers.forEach((x, i) => boxAt(b, x - 1.1, e.z - 1.25, x + 1.1, e.z + 1.25, 0, e.pierTop[i], 'concrete', 0xb8b8b2));
 }
 
-/** Facade colour of the district building the point (x, z) belongs to. */
-function shellColor(x: number, z: number) {
-  const s = XIMEN_SHELLS.find(([x0, z0, x1, z1]) => x >= x0 - 0.05 && x <= x1 + 0.05 && z >= z0 - 0.05 && z <= z1 + 0.05);
-  return s ? s[5] : 0xc8c4bc;
-}
-
-/** The Ximending district's own collision boxes, styled by what they are. */
+/**
+ * The Ximending district's own collision boxes. The district is drawn by the source's own meshes
+ * (the 'taipei' dressing set: facades, signs, shopfronts, the cinema and arcade interiors), so its
+ * boxes only collide, each with the surface it stands for.
+ */
 function ximending(b: B) {
   for (const [x0, z0, x1, z1, y0, y1, tag] of XIMEN_SOLIDS) {
-    const cx = (x0 + x1) / 2, cz = (z0 + z1) / 2, h = y1 - y0;
-    switch (tag) {
-      case 'building': boxAt(b, x0, z0, x1, z1, y0, y1, 'facade', shellColor(cx, cz)); break;
-      case 'wall': boxAt(b, x0, z0, x1, z1, y0, y1, 'plaster', shellColor(cx, cz)); break;
-      case 'pillar': boxAt(b, x0, z0, x1, z1, y0, y1, 'concrete', 0x4a4458); break;
-      case 'pole': boxAt(b, x0, z0, x1, z1, y0, y1, 'steel', h > 8 ? 0xb8141a : 0x7a7a7c); break;
-      case 'floor': boxAt(b, x0, z0, x1, z1, 0, y1, 'slab'); break;
-      // Claw machines and game cabinets stand tall; counters, seats and tables are low.
-      default: boxAt(b, x0, z0, x1, z1, y0, y1, h > 2 ? 'steel' : 'wood', h > 2 ? 0xd85aa8 : 0x8a6a4a);
-    }
+    // Buildings with enterable ground floors are built by taipei-interiors.ts.
+    if (tag === 'building' && INTERIOR_BUILDINGS.some(r => r[0] === x0 && r[1] === z0 && r[2] === x1 && r[3] === z1 && r[4] === y1)) continue;
+    const surface = tag === 'pole' ? 'metal' : tag === 'prop' ? (y1 - y0 > 2 ? 'metal' : 'concrete') : 'concrete';
+    b.box(X((x0 + x1) / 2), tag === 'floor' ? 0 : y0, Z((z0 + z1) / 2), x1 - x0, y1 - (tag === 'floor' ? 0 : y0), z1 - z0, 'invisible', surface);
   }
 }
 
@@ -235,40 +228,18 @@ function sign(b: B, style: SignStyle, x: number, y0: number, y1: number, z: numb
   b.raw(d);
 }
 
-/** Every sign the district hangs, the shopfronts it opened, and the chain stores of the plan. */
+/** Shop signboards of the plan's chain stores outside the district (whose own storefronts are in its meshes). */
 function signage(b: B) {
-  for (const [kind, x, z, y0, y1, facing, w, text, sub, bg, fg] of XIMEN_SIGNS) {
-    if (kind === 'billboard') {
-      const art = BILLBOARDS[Number(text.replace('bill', ''))] ?? ['', '#202020', '#ffffff'];
-      const lines = art[0].split(' / ');
-      sign(b, 'billboard', x, y0, y1, z, facing, w, lines[0], art[1], contrast(art[1]), lines.slice(1).join(' · '));
-    } else if (kind === 'screen') sign(b, 'screen', x, y0, y1, z, facing, w, '', '#101826', '#5ad8ff');
-    else if (kind === 'marquee') sign(b, 'marquee', x, y0, y1, z, facing, w, '', fg || '#14161c', '#ffd890');
-    else sign(b, kind === 'blade' ? 'blade' : 'board', x, y0, y1, z, facing, w, text, bg || '#202020', fg || '#ffffff', sub);
-  }
-  // Shopfront signboards over the ground floor: district storefronts first, then the plan's other stores.
-  const fronts: [number, number, number, number, string][] = XIMEN_SHOPS.map(([x, z, f, w, name]) => [x, z, f, w, name]);
   for (const [kind, brand, x, z, f, w] of POIS) {
-    if (kind === 'claw' || fronts.some(s => Math.hypot(s[0] - x, s[1] - z) < 3)) continue;
+    if (kind === 'claw' || XIMEN_SHOPS.some(s => Math.hypot(s[0] - x, s[1] - z) < 3)) continue;
     if (x < AREA.x0 - BACKDROP || x > AREA.x1 + BACKDROP) continue;
-    fronts.push([x + Math.sin(f) * 0.6, z - Math.cos(f) * 0.6, f, w, brand]);
-  }
-  for (const [x, z, f, w, name] of fronts) {
-    const colors = BRANDS[name] ?? ['#c8141a', '#ffffff'];
-    sign(b, 'board', x, 3.2, 4.1, z, f, Math.min(w, 9) - 0.4, name, colors[0], colors[0] === '#ffffff' || colors[0] === '#f7f3e8' ? colors[1] : colors[1] ?? '#ffffff');
+    const colors = BRANDS[brand] ?? ['#c8141a', '#ffffff'];
+    sign(b, 'board', x + Math.sin(f) * 0.6, 3.2, 4.1, z - Math.cos(f) * 0.6, f, Math.min(w, 9) - 0.4, brand, colors[0], colors[1] ?? '#ffffff');
   }
 }
 
-function contrast(bg: string) {
-  const v = parseInt(bg.slice(1), 16), l = ((v >> 16) & 255) * 0.3 + ((v >> 8) & 255) * 0.59 + (v & 255) * 0.11;
-  return l > 150 ? '#1a1a1a' : '#ffffff';
-}
-
-/** The Ximen gateway (西門町牌樓) over Hanzhong St at Zhongxiao W. Rd: its arch sign between the posts. */
+/** The Red House's name board on its gate (the Ximen gateway's arch sign is in the district meshes). */
 function gateway(b: B) {
-  const [px0, px1] = XIMEN_SOLIDS.filter(s => s[6] === 'pole' && s[5] > 8).map(s => (s[0] + s[2]) / 2).sort((p, q) => p - q);
-  const z = -176.6;
-  for (const f of [0, Math.PI]) sign(b, 'gate', (px0 + px1) / 2, 6.6, 8.6, z + (f ? 0.12 : -0.12), f, px1 - px0 + 1.2, '西門町', '#c8141e', '#fff4f0', 'XIMENDING · 徒步區 WALKING ZONE');
   sign(b, 'board', -725.7, 6.1, 7.1, -90, Math.PI / 2, 8, '西門紅樓', '#5a1a14', '#ffd890', 'THE RED HOUSE');
 }
 
@@ -311,7 +282,8 @@ export function taipei(): MapDef {
   // ---- Dressing (taipei-decor.ts), kept clear of the spawns and crates ----------------------
   const shift: Shift = { X, Z, ox: OX, oz: OZ };
   const keep: Keep = [...b.spawns.map(p => [p.x, p.z, 1.4] as [number, number, number]), ...b.pickups.map(p => [p.x, p.z, 1.6] as [number, number, number])];
-  streetFurniture(b, shift, keep);
+  const cuts = interiors(b, shift);
+  streetFurniture(b, shift, keep, cuts);
   parkedCars(b, shift, keep);
   mrtExit(b, shift, KERB);
 

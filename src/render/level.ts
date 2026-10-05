@@ -55,6 +55,7 @@ export class LevelView {
       mast: new THREE.MeshStandardMaterial({ color: 0x5b636a, roughness: 0.6, metalness: 0.5, vertexColors: true }),
       glow: new THREE.MeshStandardMaterial({ color: 0x0a1416, emissive: 0x7ff6ff, emissiveIntensity: 2.4 }),
       glowWarm: new THREE.MeshStandardMaterial({ color: 0x160e06, emissive: 0xffb45a, emissiveIntensity: 2.2 }),
+      lightPanel: new THREE.MeshBasicMaterial({ color: new THREE.Color(0xfff4e0).multiplyScalar(1.6), toneMapped: false }),
       glass: new THREE.MeshStandardMaterial({ color: 0x6fa8c8, roughness: 0.05, metalness: 0.9, transparent: true, opacity: 0.35 }),
       panel: trimMaterial(assets, 'T_Trim_02_BaseColor', 0xd4dade),
       panelDark: trimMaterial(assets, 'T_Trim_01_BaseColor', 0xa8b0b6),
@@ -145,7 +146,7 @@ export class LevelView {
       const geometry = mergeGeometries(list, false);
       if (!geometry) continue;
       const mesh = new THREE.Mesh(geometry, this.materials[name]);
-      mesh.castShadow = name !== 'glow' && name !== 'glowWarm' && name !== 'glass' && name !== 'water' && name !== 'marking';
+      mesh.castShadow = name !== 'glow' && name !== 'glowWarm' && name !== 'glass' && name !== 'water' && name !== 'marking' && name !== 'lightPanel';
       mesh.receiveShadow = true;
       mesh.name = `level:${name}`;
       this.group.add(mesh);
@@ -274,6 +275,7 @@ export class LevelView {
         return;
       }
       case 'glass': this.add('glass', boxGeo(cx, cy, cz, w, h, d)); return;
+      case 'light': this.add('lightPanel', boxGeo(cx, cy, cz, w, h, d)); return;
       case 'invisible': return;
       default: {
         // Armored wall: trim-sheet panelling (CC0 MegaKit textures), concrete foot, cap band,

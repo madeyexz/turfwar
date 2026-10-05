@@ -35,6 +35,7 @@ export type BlockStyle =
   | 'asphalt'     // road surface
   | 'tile'        // polished shop / station floor tiles
   | 'mosaic'      // small white facade tiles of Taipei walk-ups, tinted per block
+  | 'light'       // a lit ceiling panel (decorative)
   | 'invisible';
 
 /** Stairs and plain ramps are walkways; 'roof' draws a corrugated pitched-roof plane. */
@@ -84,7 +85,7 @@ export type Decor =
    * A dressing set the renderer loads on demand (src/render/dressing.ts): street furniture and the
    * skyline past the map, in its own coordinates less (x, z). Purely visual; its colliders are solids.
    */
-  | { kind: 'dressing'; set: string; x: number; z: number }
+  | { kind: 'dressing'; set: string; x: number; z: number; cut?: number[] }
   /**
    * Instances of a renderer model (parked cars and taxis, …): rows of x, y, z, heading, scale, roll,
    * colour, extra. Decorative; colliders come from boxes placed with them.
