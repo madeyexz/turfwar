@@ -1,5 +1,5 @@
 import * as THREE from 'three';
-import { mergeGeometries } from 'three/examples/jsm/utils/BufferGeometryUtils.js';
+import { mergeGeometries, mergeVertices } from 'three/examples/jsm/utils/BufferGeometryUtils.js';
 import { RoundedBoxGeometry } from 'three/examples/jsm/geometries/RoundedBoxGeometry.js';
 import type { Assets } from '../assets';
 import { terrainHeight, type Ramp, type Solid } from '../../shared/collision';
@@ -58,7 +58,7 @@ export class LevelView {
       roof: surfaceMaterial(assets, 'corrugated', { metalness: 0.45, roughness: 0.6 }),
       cobble: surfaceMaterial(assets, 'cobble'),
       paint: surfaceMaterial(assets, 'metalplate', { metalness: 0.35, normalScale: 0.5 }),
-      hedge: new THREE.MeshStandardMaterial({ color: 0xffffff, roughness: 0.9, flatShading: true, vertexColors: true }),
+      hedge: surfaceMaterial(assets, 'moss', { color: 0x8fbf6a, normalScale: 1.6 }),
       water: new THREE.MeshStandardMaterial({ color: 0x1e3c48, roughness: 0.06, metalness: 0.55, transparent: true, opacity: 0.84, depthWrite: false }),
     };
     this.buildTerrain();
@@ -67,6 +67,7 @@ export class LevelView {
         case 'block': this.block(map.solids[d.solid], d.style, d.solid, d.color); break;
         case 'cylinder': this.cylinder(d.x, d.y, d.z, d.radius, d.height, d.axis, d.style, d.color); break;
         case 'water': this.add('water', boxGeo(d.x, d.y - 0.01, d.z, d.w, 0.02, d.d)); break;
+        case 'ball': this.ball(d.x, d.y, d.z, d.radius, d.style, d.color); break;
         case 'ramp': this.ramp(map.ramps[d.ramp], d.style); break;
         case 'prop': this.prop(d.model, d.x, d.y, d.z, d.rotY, d.scale ?? 1); break;
         case 'light': this.light(d.x, d.y, d.z, d.color, d.intensity, d.distance); break;
@@ -292,6 +293,15 @@ export class LevelView {
     else { if (axis === 'x') g.rotateZ(Math.PI / 2); else g.rotateX(Math.PI / 2); g.translate(0, radius, 0); }
     g.translate(x, y, z);
     tint(g, color ?? look.color, y, axis === 'y' ? length : radius * 2, look.ao);
+    this.add(look.material, g);
+  }
+
+  private ball(x: number, y: number, z: number, radius: number, style: BlockStyle, color?: number) {
+    const look = LOOKS[style as keyof typeof LOOKS] ?? LOOKS.steel;
+    const g = new THREE.IcosahedronGeometry(radius, 3);
+    g.translate(x, y, z);
+    worldUV(g, look.uv);
+    tint(g, color ?? look.color, y - radius, radius * 2, look.ao);
     this.add(look.material, g);
   }
 
@@ -553,26 +563,32 @@ function rockBlockGeometry(seed: number) {
   return ng;
 }
 
-/** Clipped hedge filling its collision box: a lumpy rounded block in mottled greens. */
+/**
+ * Clipped hedge: a finely divided block whose faces are pushed in by up to 12 cm of noise (the
+ * collision box is its outer envelope), mapped with leaf litter and mottled in greens.
+ */
 function hedgeGeometry(cx: number, y: number, cz: number, w: number, h: number, d: number, seed: number) {
-  const g = new RoundedBoxGeometry(w, h, d, 4, Math.min(0.25, w / 4, d / 4, h / 4));
+  const cell = 0.3;
+  const g = new THREE.BoxGeometry(w, h, d, Math.ceil(w / cell), Math.ceil(h / cell), Math.ceil(d / cell));
   const p = g.getAttribute('position') as THREE.BufferAttribute;
-  const v = new THREE.Vector3();
+  // Every copy of a shared corner moves identically (the shift depends only on position), so faces stay closed.
   for (let i = 0; i < p.count; i++) {
-    v.fromBufferAttribute(p, i);
-    const k = 1 - Math.abs(fbm(v.x * 3 + seed, v.z * 3 + v.y * 2, seed, 2)) * 0.06;
-    p.setXYZ(i, cx + v.x * k, y + h / 2 + v.y * k, cz + v.z * k);
+    const x = p.getX(i), yy = p.getY(i), z = p.getZ(i);
+    const inset = 0.02 + 0.1 * (0.5 + 0.5 * fbm((cx + x) * 1.7 + yy * 1.3, (cz + z) * 1.7 - yy, seed, 3));
+    const on = (v: number, half: number) => (Math.abs(Math.abs(v) - half) < 1e-4 ? Math.sign(v) : 0);
+    p.setXYZ(i, cx + x - on(x, w / 2) * inset, y + h / 2 + yy - (on(yy, h / 2) > 0 ? inset : 0), cz + z - on(z, d / 2) * inset);
   }
-  const ng = nonIndexed(g);
-  ng.computeVertexNormals();
-  const r = rng(seed * 31 + 7), q = ng.getAttribute('position') as THREE.BufferAttribute, c = new Float32Array(q.count * 3);
-  const greens = [0x2c4a24, 0x35562a, 0x3f6230, 0x2a4228];
-  for (let i = 0; i < q.count; i += 3) {
-    const col = new THREE.Color(greens[Math.floor(r() * greens.length)]).multiplyScalar(0.8 + r() * 0.4 + (q.getY(i) - y) / h * 0.25);
-    for (let j = 0; j < 3; j++) c.set([col.r, col.g, col.b], (i + j) * 3);
+  const merged = mergeVertices(g.deleteAttribute('normal').deleteAttribute('uv'));
+  merged.computeVertexNormals();
+  worldUV(merged, 1.4);
+  const r = rng(seed * 31 + 7), q = merged.getAttribute('position') as THREE.BufferAttribute, c = new Float32Array(q.count * 3);
+  const col = new THREE.Color();
+  for (let i = 0; i < q.count; i++) {
+    col.setHSL(0.27 + r() * 0.04, 0.45, 0.38 + r() * 0.12 + (q.getY(i) - y) / h * 0.1);
+    c.set([col.r, col.g, col.b], i * 3);
   }
-  ng.setAttribute('color', new THREE.BufferAttribute(c, 3));
-  return ng;
+  merged.setAttribute('color', new THREE.BufferAttribute(c, 3));
+  return merged;
 }
 
 /** Box spanning two points (thickness x height cross-section). */
