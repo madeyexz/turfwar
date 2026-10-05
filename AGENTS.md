@@ -98,16 +98,21 @@ spacetime generate --lang typescript --out-dir src/module_bindings --module-path
 ## Git, environments, and release safety
 
 - Source of truth: `https://github.com/madeyexz/lawbreaker` (private).
-- Shared development/default and Vercel production branch: **`main`**.
+- Branches: **`main` = production** (Vercel production, Maincloud `3d-game-c4lhd`); **`dev` =
+  development** (every push is a Vercel preview wired to Maincloud `lawbreaker-dev`). Branch features
+  off `dev` and merge back by PR. A release is a PR `dev` → `main` plus publishing the module to the
+  production database (see below); nothing reaches `main` otherwise.
 - GitHub-backed Amp project: `https://ampcode.com/@ianhsiao/lawbreaker`.
 - Mac development checkout: `/Users/ianhsiao/Developer/lawbreaker-release`.
 - Mac and orbs are separate clones. Check `git status`, fetch/pull before work, and
   preserve uncommitted changes. Files are not automatically mirrored between machines.
 - Pushing `main` triggers Vercel production deployment. Do not push or
   publish merely to test; obtain authorization for releases and shared-state changes.
-- Frontend: `https://lawbreaker.vercel.app`.
-- Maincloud database: **`3d-game-c4lhd`**, URI `wss://maincloud.spacetimedb.com`.
-  Build-time public variables are `VITE_SPACETIMEDB_URI` and `VITE_SPACETIMEDB_DATABASE`.
+- Frontend: `https://lawbreaker.vercel.app` (production); `dev` previews are listed by `vercel ls`.
+- Maincloud databases, URI `wss://maincloud.spacetimedb.com`: production **`3d-game-c4lhd`**,
+  development **`lawbreaker-dev`** (publish `dev`'s module there freely; still never reset it while
+  people test). Build-time public variables are `VITE_SPACETIMEDB_URI` and
+  `VITE_SPACETIMEDB_DATABASE` (Vercel: Production → prod database; Preview for branch `dev` → dev database).
 - Updating an existing database does not invoke the `init` lifecycle. Preserve the
   guarded first-join initialization and avoid duplicate tick schedules.
 - Never reset Maincloud data. Authorized module releases must use `--delete-data=never`
