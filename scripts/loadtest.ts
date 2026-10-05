@@ -23,17 +23,19 @@ const db = args.get('db') ?? 'lawload';
 const clients = Number(args.get('clients') ?? 100);
 const procs = Number(args.get('procs') ?? 4);
 const seconds = Number(args.get('seconds') ?? 60);
+/** Room size (soldiers per team): clients Quick Play into rooms of this size. */
+const size = Number(args.get('size') ?? 6);
 const worker = args.get('worker');
 if (!/^wss?:\/\/(127\.0\.0\.1|localhost)(:\d+)?\/?$/.test(uri)) throw new Error(`Refusing non-local server ${uri}`);
 
-interface Result { clients: number; joined: number; bytes: number; messages: number; rtts: number[]; corrections: number; shots: number; kills: number; ticks: number[]; seconds: number }
+interface Result { clients: number; joined: number; rooms: number[]; bytes: number; messages: number; rtts: number[]; corrections: number; shots: number; kills: number; ticks: number[]; seconds: number }
 
 if (worker === undefined) {
   // ---- Parent: fan out over processes so the test client never becomes the bottleneck ----
   const per = Math.ceil(clients / procs);
   const runs = Array.from({ length: procs }, (_, p) => new Promise<Result>((resolve, reject) => {
     const n = Math.min(per, clients - p * per);
-    const child = spawn('bun', [import.meta.path, '--uri', uri, '--db', db, '--seconds', String(seconds), '--worker', String(p), '--clients', String(n)], { stdio: ['ignore', 'pipe', 'inherit'] });
+    const child = spawn('bun', [import.meta.path, '--uri', uri, '--db', db, '--seconds', String(seconds), '--size', String(size), '--worker', String(p), '--clients', String(n)], { stdio: ['ignore', 'pipe', 'inherit'] });
     let out = '';
     child.stdout.on('data', d => { out += d; });
     child.on('exit', code => {
@@ -49,7 +51,7 @@ if (worker === undefined) {
   const ticks = results[0].ticks;
   const tickRate = ticks.length > 2 ? (ticks[ticks.length - 1] - ticks[1]) / (ticks.length - 2) : 0;
   console.log(JSON.stringify({
-    clients, joined,
+    clients, joined, size: `${size}v${size}`, rooms: new Set(results.flatMap(r => r.rooms)).size,
     serverTicksPerSecond: +tickRate.toFixed(1),
     tickRateMinMax: ticks.length > 2 ? [Math.min(...ticks.slice(2).map((t, i) => t - ticks[i + 1])), Math.max(...ticks.slice(2).map((t, i) => t - ticks[i + 1]))] : [],
     kBytesPerClientPerSecond: +(bytes / Math.max(1, joined) / seconds / 1024).toFixed(1),
@@ -101,6 +103,7 @@ type Conn = InstanceType<typeof DbConnection>;
 const rtts: number[] = [];
 let shots = 0, kills = 0, corrections = 0;
 const ticks: number[] = [];
+const rooms = new Set<number>();
 
 class Client {
   conn!: Conn;
@@ -121,13 +124,13 @@ class Client {
         .onConnect((conn) => {
           this.conn = conn;
           conn.subscriptionBuilder().onApplied(async () => {
-            const view = readWorld(conn, -1);
-            await conn.reducers.join({ name: `Load${worker}-${this.index}`, team: -1 });
+            await conn.reducers.quickJoin({ name: `Load${worker}-${this.index}`, team: -1, size });
             const wait = () => {
-              const v = readWorld(conn, -1);
-              if (v.myId >= 0) { this.me = v.myId; clearTimeout(timer); resolve(); } else setTimeout(wait, 100);
+              const mine = conn.db.player.identity.find(conn.identity!);
+              if (!mine) { setTimeout(wait, 100); return; }
+              conn.subscriptionBuilder().onApplied(() => { this.me = mine.soldierId; rooms.add(mine.room); clearTimeout(timer); resolve(); }).subscribe(readWorld.roomQueries(mine.room));
             };
-            void view; wait();
+            wait();
           }).subscribe(readWorld.queries(conn));
         })
         .onConnectError((_c, e) => { clearTimeout(timer); reject(e); })
@@ -222,7 +225,7 @@ await new Promise(r => setTimeout(r, seconds * 1000));
 measuring = false;
 clearInterval(loop); clearInterval(sampler);
 if (live[0]) kills = readWorld(live[0].conn, live[0].me).totalKills;
-const result: Result = { clients, joined, bytes, messages, rtts, corrections, shots, kills, ticks, seconds: (performance.now() - start) / 1000 };
+const result: Result = { clients, joined, rooms: [...rooms], bytes, messages, rtts, corrections, shots, kills, ticks, seconds: (performance.now() - start) / 1000 };
 for (const c of live) { try { c.conn.disconnect(); } catch { /* closing */ } }
 console.log(JSON.stringify(result));
 process.exit(0);

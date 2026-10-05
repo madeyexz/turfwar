@@ -307,7 +307,7 @@ async function start() {
   let link: GameLink;
   try {
     link = mode === 'online'
-      ? await connectOnline(name, teamChoice, s => { status.textContent = s; })
+      ? await connectOnline(name, teamChoice, params.get('room') ? { kind: 'code', code: params.get('room')! } : { kind: 'quick', size: sizeOf(size).perTeam === 1 ? 1 : 6 }, s => { status.textContent = s; })
       : mode === 'lab'
         ? new OfflineLink(mapId, name, teamChoice, {}, true)
         : new OfflineLink(mapId, name, teamChoice, { ...(gameMode === 'sabotage' ? SABOTAGE : ELIMINATION), teamSize: sizeOf(size).perTeam, botSkill, freeBuy: params.has('freebuy') });

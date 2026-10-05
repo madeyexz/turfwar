@@ -12,6 +12,7 @@ import {
 
 export default __t.row({
   id: __t.u32().primaryKey(),
+  room: __t.u8(),
   name: __t.string(),
   team: __t.u8(),
   bot: __t.bool(),

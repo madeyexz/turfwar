@@ -33,6 +33,8 @@ export interface BuilderOptions {
   ground?: (x: number, z: number) => number;
   /** Sabotage bomb sites and the attacking base (see MapDef.sabotage). */
   sabotage?: MapDef['sabotage'];
+  /** Hosts 24v24 (see MapDef.big). */
+  big?: boolean;
 }
 
 /**
@@ -264,6 +266,7 @@ export class MapBuilder {
       terrain: this.terrain, solids: this.solids, ramps: this.ramps, points: this.points, spawns: this.spawns,
       decor: this.decor, sun: o.sun,
       ...(o.sabotage ? { sabotage: o.sabotage } : {}),
+      ...(o.big ? { big: true } : {}),
       ...(this.pickups.length ? { pickups: this.pickups } : {}),
     };
   }

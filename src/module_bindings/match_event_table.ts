@@ -13,4 +13,5 @@ import {
 export default __t.row({
   seq: __t.u32(),
   json: __t.string(),
+  room: __t.u8(),
 });

@@ -225,9 +225,13 @@ export class Game {
       this.lastStepPhase = Math.floor(this.player.bobPhase / Math.PI);
       this.audio.footstep(undefined, undefined, this.player.sprinting);
     }
-    if (result.reloadStarted) { link.reload(); this.audio.reload('out'); setTimeout(() => this.audio.reload('in'), this.player.weapon.reload * 650); setTimeout(() => this.audio.reload('charge'), this.player.weapon.reload * 880); }
-    if (result.switched) link.switchWeapon(this.player.slot);
-    if (result.dryFire) this.audio.dryFire();
+    if (result.reloadStarted) {
+      const id = this.player.weapon.id, t = this.player.weapon.reload;
+      link.reload(); this.audio.reload('out', id);
+      setTimeout(() => this.audio.reload('in', id), t * 650); setTimeout(() => this.audio.reload('charge', id), t * 880);
+    }
+    if (result.switched) { link.switchWeapon(this.player.slot); this.audio.equip(this.player.weapon.id); }
+    if (result.dryFire) this.audio.dryFire(this.player.weapon.id);
     if (result.zoomed) this.player.binoculars ? this.audio.binoculars() : this.audio.ui();
     if (result.grenade) link.grenade(result.grenade.origin, result.grenade.dir);
     for (const shot of result.shots) this.shoot(shot.origin, shot.dir, shot.weapon.range, state);

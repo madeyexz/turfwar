@@ -11,7 +11,9 @@ const cache = new WeakMap<object, { data: Uint8Array; decoded: ReturnType<typeof
 
 export function readWorld(conn: AnyConn, _me: number): WorldView {
   const db = conn.db;
-  const frameRow = db.frame.id.find(0);
+  const mine = conn.identity ? db.player.identity.find(conn.identity) : undefined;
+  const room = mine?.room ?? 0;
+  const frameRow = db.frame.id.find(room);
   let decoded = undefined as ReturnType<typeof decodeFrame>;
   if (frameRow) {
     const hit = cache.get(conn);
@@ -19,15 +21,17 @@ export function readWorld(conn: AnyConn, _me: number): WorldView {
     else { decoded = decodeFrame(frameRow.data); cache.set(conn, { data: frameRow.data, decoded }); }
   }
   const poses = new Map((decoded?.poses ?? []).map(p => [p.id, p]));
-  const mine = conn.identity ? db.player.identity.find(conn.identity) : undefined;
   const soldiers = new Map<number, SoldierView>();
   let totalKills = 0;
   for (const r of db.roster.iter()) {
+    if (r.room !== room) continue;
     totalKills += r.kills;
     const p = poses.get(r.id);
     if (!p) continue;
     soldiers.set(r.id, { id: r.id, team: r.team, alive: p.alive, x: p.x, y: p.y, z: p.z, yaw: p.yaw, crouch: p.crouch, corrections: r.corrections });
   }
-  return { tick: decoded?.tick ?? 0, mapId: frameRow?.mapId ?? db.match.id.find(0)?.mapId ?? 'meridian', myId: mine?.soldierId ?? -1, soldiers, totalKills };
+  return { tick: decoded?.tick ?? 0, mapId: frameRow?.mapId ?? db.match.id.find(room)?.mapId ?? 'cinder', myId: mine?.soldierId ?? -1, soldiers, totalKills };
 }
-readWorld.queries = (_conn: AnyConn) => ['SELECT * FROM match', 'SELECT * FROM roster', 'SELECT * FROM frame', 'SELECT * FROM player', 'SELECT * FROM match_event'];
+/** Rooms and players; then, once in a room, only that room's rows (as the game client does). */
+readWorld.queries = (_conn: AnyConn) => ['SELECT * FROM match', 'SELECT * FROM player'];
+readWorld.roomQueries = (room: number) => [`SELECT * FROM roster WHERE room = ${room}`, `SELECT * FROM frame WHERE id = ${room}`, `SELECT * FROM match_event WHERE room = ${room}`];

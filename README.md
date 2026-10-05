@@ -220,18 +220,26 @@ texture, sound and line of code here is original or CC0/OFL.
   (https://opengameart.org/content/low-poly-guns-pack). Converted from OBJ by `tools/import-guns.ts`
   (`bun tools/import-guns.ts`, with the pack extracted under `GUN_SRC`; `--preview <dir>` renders
   measured side views for placing grips, sights and muzzles) into `public/assets/guns.glb`.
-- Gunshots: single-shot recordings from *The Free Firearm Sound Library* by Ben Jaszczak,
-  Brian Nelson, Kevin Heras and Matthew Nanney — CC0 1.0
-  (https://opengameart.org/content/the-free-firearm-sound-library). Trimmed, normalized and encoded to
-  mono 64 kb/s MP3 by `tools/fetch-sounds.ts` into `public/assets/sfx` (~150 KB); see
-  `public/assets/sfx/LICENSE.txt`. Each firearm has its own recording (M9A1: Walther PPQ, MP7: PPSh,
-  MP5: Carl Gustav M45, M4A1: AR-15, M249: AK-47, M1014: Benelli Nova, M110: Tikka .30-06), played at
-  its own rate, gain and filtering, and muffled when suppressed.
+- Gunshots: recordings from *The Free Firearm Sound Library* by Ben Jaszczak, Brian Nelson,
+  Kevin Heras and Matthew Nanney — CC0 1.0
+  (https://opengameart.org/content/the-free-firearm-sound-library). Each firearm plays two to four
+  separate near-distance takes round-robin (M9A1: Walther PPQ, MP7: PPSh, MP5: Carl Gustav M45,
+  M4A1: AR-15, M249: AK-47, M1014: Benelli Nova and Winchester Model 12, M110: Tikka T3 and
+  Springfield 1917 .30-06), with a mid-distance take per class as the distant layer.
+- Reload and handling foley, all CC0 1.0 on OpenGameArt: SpringySpringo's *Gun Reload Sounds*,
+  BMacZero's *Gun Reload Sound Effects*, zer0_sol's *Handgun Reload Sound Effect* and *Shotgun
+  Reload Sound Effects*, and LFA's *Equipment Clicks III*.
+- `tools/fetch-sounds.ts` downloads both, cuts the takes, trims, limits, normalizes and encodes
+  them to mono MP3 in `public/assets/sfx` (~570 KB); see `public/assets/sfx/LICENSE.txt`. In game
+  (`src/audio.ts`) each shot layers the recording with a synthesized crack and low thump, the
+  recorded action, an outdoor tail and casing bounces; remote shots are delayed by distance and
+  crossfade to the distant take, and suppressed shots are muffled.
 - Terrain and surface textures: Poly Haven, CC0 1.0, fetched by `tools/fetch-textures.ts`; see
   `public/assets/tex/LICENSE.txt`.
 - Font: Rajdhani by Indian Type Foundry, SIL Open Font License 1.1 (`public/fonts/OFL.txt`).
-- Sky, terrain, architecture, effects and the remaining audio (knife, mechanical tails, reloads,
-  footsteps, explosions, heartbeat, bomb, round and cash cues, UI) are procedural.
+- Sky, terrain, architecture, effects and the remaining audio (knife, casings, footsteps,
+  explosions, heartbeat, bomb, round and cash cues, UI, and the fallback weapon voices used before
+  the recordings load) are procedural.
 - Engine/libraries: Three.js (MIT), Vite (MIT). The `spacetimedb` npm package declares ISC
   but ships the SpacetimeDB Business Source License 1.1 text; the SpacetimeDB server/CLI is BSL 1.1.
   Review those terms before any commercial self-hosting.

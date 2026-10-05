@@ -136,6 +136,8 @@ export interface MatchConfig {
   practice?: boolean;
   /** Testing: everything in the store is free and buying works anywhere, any time. */
   freeBuy?: boolean;
+  /** No bots fill empty slots (private rooms can turn them off). */
+  noBots?: boolean;
 }
 
 /** BeGone's GameSettings.json: 4 s round start, 5 s round over, 10 s match over, first to 10. */

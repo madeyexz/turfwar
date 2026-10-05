@@ -87,6 +87,7 @@ export function meridianDistrict(): MapDef {
     description: 'A war-torn city for Mega servers: park, construction site, canal bridges, highways and a central square.',
     theme: 'desert', halfX: HALF_X, halfZ: HALF_Z, seed: 41, roll: 0, ridge: 0,
     sabotage: { sites: ['A', 'B'], attackerSpawn: 1 },
+    big: true,
     sun: { x: -0.5, y: 0.66, z: 0.42 },
     ground,
   });

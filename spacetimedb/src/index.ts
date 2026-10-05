@@ -1,6 +1,7 @@
 import { ScheduleAt, type Identity } from 'spacetimedb';
 import { schema, table, t, SenderError, type ReducerCtx, type InferSchema } from 'spacetimedb/server';
-import { MAP_IDS, loadMap, loadNav } from '../../shared/maps/index';
+import { loadMap, loadNav } from '../../shared/maps/index';
+import { cleanCode, isRoomSize, mapsFor, roomCode } from '../../shared/match/rooms';
 import type { SimContext } from '../../shared/match/combat';
 import { encodeFrame } from '../../shared/match/frame';
 import {
@@ -8,7 +9,7 @@ import {
   switchWeapon, throwGrenade, tickMatch, useAmmoCrate, TICK_RATE,
 } from '../../shared/match/sim';
 import {
-  ONLINE_CONFIG, type BombState, type BotBrain, type MatchEvent, type MatchState, type Mode, type RoundStats, type Soldier, type Team,
+  ONLINE_CONFIG, type BombState, type BotBrain, type MatchConfig, type MatchEvent, type MatchState, type Mode, type RoundStats, type Soldier, type Team,
 } from '../../shared/match/state';
 import { ATTACHMENTS, DEFAULT_WEAPONS, STAMINA, WEAPONS, normalizeAttachments, type AttachmentId, type Attachments, type Slot, type WeaponId } from '../../shared/weapons';
 import { newRoundStats, type BuyItem } from '../../shared/match/economy';
@@ -16,13 +17,18 @@ import { BODY_RADIUS, type Body } from '../../shared/world';
 
 /**
  * Authoritative multiplayer: the same shared match simulation the offline client runs, executed
- * here on a 30 Hz scheduled reducer. Player reducers only queue their input (a cheap private-row
+ * here on a 30 Hz scheduled reducer per room. One database holds many rooms: Quick Play fills
+ * public rooms of a size (1v1, 6v6, 24v24), private rooms are joined with a four-letter code. A room
+ * exists (and ticks) only while humans are in it. Player reducers only queue their input (a cheap private-row
  * write); the tick loads the match once, applies every queued report and command through the
  * shared validation rules, simulates, and publishes one packed `frame` row plus the slow-changing
  * `roster` rows. That keeps a 100-soldier match to one load/save per tick and one small row
  * update per client per tick.
  */
-const START_MAP = 'cinder';
+/** Highest room id (rooms are u8 keys of the match, clock and frame tables). */
+const MAX_ROOMS = 250;
+/** Soldier and body ids are global (frames carry them as u16): wrap well before that. */
+const MAX_ID = 60_000;
 /** Chat lines one player may send per 10 seconds. */
 const CHAT_BURST = 5;
 /** Queued commands one soldier may have applied per tick; anything beyond is spam. */
@@ -42,9 +48,11 @@ const matchTable = table({ name: 'match', public: true }, {
   lawsJson: t.string(), lawAuthor: t.i32(), lawText: t.string(), lawLeft: t.f64(), rewindLeft: t.u32(),
   nextId: t.u32(), droneTimer: t.f64(), winner: t.i8(), configJson: t.string(),
   historyHead: t.u32(), historyLength: t.u32(), lastTickMicros: t.u64(), humans: t.u32(),
+  /** Private room code ('' = public Quick Play room). The row id is the room id. */
+  code: t.string().default(''),
 });
 
-/** Per-tick server bookkeeping, kept out of the public match row so it is not broadcast 30×/s. */
+/** Per-tick server bookkeeping per room (id = room), kept out of the public match row so it is not broadcast 30×/s. */
 const clockTable = table({ name: 'clock' }, {
   id: t.u8().primaryKey(),
   phaseLeft: t.f64(), time: t.f64(), tick: t.u32(), nextId: t.u32(), lastTickMicros: t.u64(),
@@ -66,11 +74,12 @@ const soldierTable = table({ name: 'soldier', public: true }, {
   money: t.u32().default(800), bought0: t.string().default(''), bought1: t.string().default(''), sinceSpawn: t.f32().default(99),
   /** Owned weapons, attachments, stamina, assists, per-round cash bookkeeping (JSON). */
   gearJson: t.string().default(''),
+  room: t.u8().default(0),
 });
 
 /** What other players need about a soldier, rewritten only when it changes (not every tick). */
 const rosterTable = table({ name: 'roster', public: true }, {
-  id: t.u32().primaryKey(), name: t.string(), team: t.u8(), bot: t.bool(), alive: t.bool(),
+  id: t.u32().primaryKey(), room: t.u8().index('btree'), name: t.string(), team: t.u8(), bot: t.bool(), alive: t.bool(),
   grenades: t.u8(), grenadeHE: t.bool(), kills: t.u32(), deaths: t.u32(), assists: t.u32(), score: t.u32(),
   lastAttacker: t.i32(), corrections: t.u32(),
   weapon0: t.string(), weapon1: t.string(), reserve0: t.u16(), reserve1: t.u16(), money: t.u32(),
@@ -78,7 +87,7 @@ const rosterTable = table({ name: 'roster', public: true }, {
   gearJson: t.string(),
 });
 
-/** One row, rewritten every tick: the packed binary snapshot from shared/match/frame.ts. */
+/** One row per room (id = room), rewritten every tick: the packed binary snapshot from shared/match/frame.ts. */
 const frameTable = table({ name: 'frame', public: true }, { id: t.u8().primaryKey(), mapId: t.string(), data: t.byteArray() });
 
 const brainTable = table({ name: 'bot_brain' }, { id: t.u32().primaryKey(), json: t.string() });
@@ -90,12 +99,14 @@ const pointTable = table({ name: 'point', public: true }, {
 const bodyTable = table({ name: 'body', public: true }, {
   id: t.u32().primaryKey(), kind: t.string(), x: t.f32(), y: t.f32(), z: t.f32(), vx: t.f32(), vy: t.f32(), vz: t.f32(),
   age: t.f32(), owner: t.i32(), team: t.i8(), hp: t.f32(), timer: t.f32(),
+  room: t.u8().default(0),
 });
 
 const playerTable = table({ name: 'player', public: true }, {
   identity: t.identity().primaryKey(), soldierId: t.u32(), lastReportMicros: t.u64(),
   /** Chat rate limit: start of the current 10 s window and lines sent in it. */
   chatWindowMicros: t.u64().default(0n), chatCount: t.u32().default(0),
+  room: t.u8().default(0),
 });
 
 /** Latest movement report per soldier, applied (and marked consumed) by the next tick. */
@@ -111,7 +122,10 @@ const commandTable = table({ name: 'command' }, { id: t.u64().primaryKey().autoI
 /** Legacy: the world-rewind ring from the physics-law era. Unused; kept so existing databases migrate in place. */
 const historyTable = table({ name: 'history' }, { slot: t.u32().primaryKey(), json: t.string() });
 
-const eventTable = table({ name: 'match_event', public: true, event: true }, { seq: t.u32(), json: t.string() });
+const eventTable = table({ name: 'match_event', public: true, event: true }, { seq: t.u32(), json: t.string(), room: t.u8().default(0) });
+
+/** Global id allocator for soldiers and bodies (ids must be unique across rooms). */
+const counterTable = table({ name: 'counter' }, { id: t.u8().primaryKey(), nextId: t.u32() });
 
 /** Career stats per identity (BeGone profile): the public leaderboard reads this. */
 const profileTable = table({ name: 'profile', public: true }, {
@@ -120,12 +134,12 @@ const profileTable = table({ name: 'profile', public: true }, {
   roundsWon: t.u32(), roundsPlayed: t.u32(), matchesWon: t.u32(), matchesPlayed: t.u32(),
 });
 
-const tickTable = table({ name: 'tick_schedule' }, { scheduledId: t.u64().primaryKey().autoInc(), scheduledAt: t.scheduleAt() });
+const tickTable = table({ name: 'tick_schedule' }, { scheduledId: t.u64().primaryKey().autoInc(), scheduledAt: t.scheduleAt(), room: t.u8().default(0) });
 
 const spacetimedb = schema({
   match: matchTable, clock: clockTable, soldier: soldierTable, roster: rosterTable, frame: frameTable, botBrain: brainTable,
   point: pointTable, body: bodyTable, player: playerTable, inbox: inboxTable, command: commandTable, history: historyTable,
-  matchEvent: eventTable, tickSchedule: tickTable, profile: profileTable,
+  matchEvent: eventTable, tickSchedule: tickTable, profile: profileTable, counter: counterTable,
 });
 export default spacetimedb;
 
@@ -176,7 +190,7 @@ function soldierFromRow(r: SoldierRow, brain?: BotBrain): Soldier {
 
 const weaponOr = (id: string, fallback: WeaponId): WeaponId => (id in WEAPONS && id !== 'knife' ? id as WeaponId : fallback);
 const u = (v: number, max = 0xffffffff) => Math.max(0, Math.min(max, Math.round(v)));
-function soldierToRow(s: Soldier): SoldierRow {
+function soldierToRow(s: Soldier, room: number): SoldierRow {
   const m = s.m;
   const gear: Gear = {
     owned: s.owned, attachments: s.attachments, grenadeHE: s.grenadeHE, stamina: Math.round(s.stamina * 10) / 10,
@@ -194,13 +208,13 @@ function soldierToRow(s: Soldier): SoldierRow {
     score: u(s.score), captures: 0, lawCooldown: 0, sprint: s.sprint, ads: s.ads, sinceShot: Math.min(s.sinceShot, 999),
     corrections: u(s.corrections), idle: Math.min(s.idle, 9999), moveSlack: s.moveSlack, groundY: s.groundY,
     weapon0: s.weapons[0], weapon1: s.weapons[1], reserve0: u(s.reserve[0], 65535), reserve1: u(s.reserve[1], 65535),
-    money: u(s.money), bought0: '', bought1: '', sinceSpawn: 0, gearJson: JSON.stringify(gear),
+    money: u(s.money), bought0: '', bought1: '', sinceSpawn: 0, gearJson: JSON.stringify(gear), room,
   };
 }
 
-function rosterRow(s: Soldier): RosterRow {
+function rosterRow(s: Soldier, room: number): RosterRow {
   return {
-    id: s.id, name: s.name, team: s.team, bot: s.bot, alive: s.alive, grenades: u(s.grenades, 255), grenadeHE: s.grenadeHE,
+    id: s.id, room, name: s.name, team: s.team, bot: s.bot, alive: s.alive, grenades: u(s.grenades, 255), grenadeHE: s.grenadeHE,
     kills: u(s.kills), deaths: u(s.deaths), assists: u(s.assists), score: u(s.score), lastAttacker: s.lastAttacker, corrections: u(s.corrections),
     weapon0: s.weapons[0], weapon1: s.weapons[1], reserve0: u(s.reserve[0], 65535), reserve1: u(s.reserve[1], 65535), money: u(s.money),
     gearJson: JSON.stringify({ owned: s.owned, attachments: s.attachments }),
@@ -208,45 +222,51 @@ function rosterRow(s: Soldier): RosterRow {
 }
 const rosterKey = (r: RosterRow) => JSON.stringify(r);
 
-const bodyToRow = (b: Body): BodyRow => ({ id: b.id, kind: b.kind, x: b.x, y: b.y, z: b.z, vx: b.vx, vy: b.vy, vz: b.vz, age: Math.min(b.age, 9999), owner: b.owner, team: b.team, hp: b.hp, timer: b.timer });
+const bodyToRow = (b: Body, room: number): BodyRow => ({ id: b.id, kind: b.kind, x: b.x, y: b.y, z: b.z, vx: b.vx, vy: b.vy, vz: b.vz, age: Math.min(b.age, 9999), owner: b.owner, team: b.team, hp: b.hp, timer: b.timer, room });
 const bodyFromRow = (r: BodyRow): Body => ({ id: r.id, kind: r.kind as Body['kind'], x: r.x, y: r.y, z: r.z, vx: r.vx, vy: r.vy, vz: r.vz, age: r.age, owner: r.owner, team: r.team, hp: r.hp, timer: r.timer });
 
 /** The broadcast part of the match row: only these fields trigger a row update. */
-const slowKey = (r: MatchRow) => JSON.stringify([r.mapId, r.phase, r.score0, r.score1, r.winner, r.configJson, r.humans]);
+const slowKey = (r: MatchRow) => JSON.stringify([r.mapId, r.phase, r.score0, r.score1, r.winner, r.configJson, r.humans, r.code]);
 
 interface Loaded {
+  room: number;
   state: MatchState; row: MatchRow; clock: ClockRow; clockExists: boolean;
   soldierKeys: Map<number, string>; rosterKeys: Map<number, string>; bodyKeys: Map<number, string>; brainKeys: Map<number, string>;
 }
 
-function load(ctx: Ctx): Loaded {
-  const row = ctx.db.match.id.find(0);
-  if (!row) throw new SenderError('Match not initialized');
+function load(ctx: Ctx, room: number): Loaded {
+  const row = ctx.db.match.id.find(room);
+  if (!row) throw new SenderError('No such room');
   // Databases from before the clock table carry these fields in the match row.
-  const existing = ctx.db.clock.id.find(0);
+  const existing = ctx.db.clock.id.find(room);
   const clock: ClockRow = existing ?? {
-    id: 0, phaseLeft: row.phaseLeft, time: row.time, tick: row.tick, nextId: row.nextId, lastTickMicros: row.lastTickMicros, roundJson: '',
+    id: room, phaseLeft: row.phaseLeft, time: row.time, tick: row.tick, nextId: row.nextId, lastTickMicros: row.lastTickMicros, roundJson: '',
   };
-  const brains = new Map<number, BotBrain>();
   const brainKeys = new Map<number, string>();
-  for (const b of ctx.db.botBrain.iter()) { brains.set(b.id, JSON.parse(b.json)); brainKeys.set(b.id, b.json); }
   const soldierKeys = new Map<number, string>(), rosterKeys = new Map<number, string>(), bodyKeys = new Map<number, string>();
   const soldiers: Soldier[] = [];
-  for (const r of ctx.db.soldier.iter()) { soldiers.push(soldierFromRow(r, brains.get(r.id))); soldierKeys.set(r.id, JSON.stringify(r)); }
+  for (const r of ctx.db.soldier.iter()) {
+    if (r.room !== room) continue;
+    const b = r.bot ? ctx.db.botBrain.id.find(r.id) : undefined;
+    if (b) brainKeys.set(b.id, b.json);
+    soldiers.push(soldierFromRow(r, b ? JSON.parse(b.json) : undefined)); soldierKeys.set(r.id, JSON.stringify(r));
+  }
   soldiers.sort((a, b) => a.id - b.id);
-  for (const r of ctx.db.roster.iter()) rosterKeys.set(r.id, rosterKey(r));
+  for (const r of ctx.db.roster.room.filter(room)) rosterKeys.set(r.id, rosterKey(r));
   const bodies: Body[] = [];
   for (const r of ctx.db.body.iter()) {
+    if (r.room !== room) continue;
     bodyKeys.set(r.id, JSON.stringify(r));
     // Drones, charges, bolts and shards from before the rebuild are dropped on save.
     if (r.kind in BODY_RADIUS) bodies.push(bodyFromRow(r));
   }
   bodies.sort((a, b) => a.id - b.id);
   const round: Partial<RoundRow> = clock.roundJson ? JSON.parse(clock.roundJson) : {};
-  // A database from before rounds (Domination) restarts in warm-up with the BeGone rules.
-  const legacy = !clock.roundJson;
+  // A match from before rounds (Domination) restarts in warm-up with the BeGone rules; a room
+  // opened just now has no clock yet and keeps its own settings.
+  const legacy = existing ? !existing.roundJson : row.tick > 0;
   const state: MatchState = {
-    mapId: legacy ? START_MAP : row.mapId, phase: legacy ? 'warmup' : row.phase as MatchState['phase'], phaseLeft: legacy ? ONLINE_CONFIG.warmup : clock.phaseLeft,
+    mapId: row.mapId, phase: legacy ? 'warmup' : row.phase as MatchState['phase'], phaseLeft: legacy ? ONLINE_CONFIG.warmup : clock.phaseLeft,
     time: clock.time, tick: clock.tick,
     scores: legacy ? [0, 0] : [row.score0, row.score1], soldiers, bodies, nextId: clock.nextId,
     winner: legacy ? -1 : row.winner as -1 | Team, config: legacy ? { ...ONLINE_CONFIG } : { ...ONLINE_CONFIG, ...JSON.parse(row.configJson) },
@@ -254,11 +274,11 @@ function load(ctx: Ctx): Loaded {
     lossStreak: round.lossStreak ?? [0, 0], firstKill: round.firstKill ?? false, firstBlood: round.firstBlood ?? false,
     lastKillTeam: round.lastKillTeam ?? -1, bomb: round.bomb ?? { site: -1, armed: false, progress: 0, by: -1 },
   };
-  return { state, row, clock: { ...clock }, clockExists: !!existing, soldierKeys, rosterKeys, bodyKeys, brainKeys };
+  return { room, state, row, clock: { ...clock }, clockExists: !!existing, soldierKeys, rosterKeys, bodyKeys, brainKeys };
 }
 
 function save(ctx: Ctx, loaded: Loaded, events: MatchEvent[], frame: boolean) {
-  const { state, row, clock } = loaded;
+  const { state, row, clock, room } = loaded;
   const round: RoundRow = {
     round: state.round, roundPhase: state.roundPhase, roundClock: state.roundClock, roundWinner: state.roundWinner, lossStreak: state.lossStreak,
     firstKill: state.firstKill, firstBlood: state.firstBlood, lastKillTeam: state.lastKillTeam, bomb: state.bomb,
@@ -277,12 +297,12 @@ function save(ctx: Ctx, loaded: Loaded, events: MatchEvent[], frame: boolean) {
   const seen = new Set<number>();
   for (const s of state.soldiers) {
     seen.add(s.id);
-    const nextRow = soldierToRow(s);
+    const nextRow = soldierToRow(s, room);
     const key = JSON.stringify(nextRow);
     const prev = loaded.soldierKeys.get(s.id);
     if (prev === undefined) ctx.db.soldier.insert(nextRow);
     else if (prev !== key) ctx.db.soldier.id.update(nextRow);
-    const roster = rosterRow(s);
+    const roster = rosterRow(s, room);
     const before = loaded.rosterKeys.get(s.id);
     if (before === undefined) ctx.db.roster.insert(roster);
     else if (before !== rosterKey(roster)) ctx.db.roster.id.update(roster);
@@ -299,7 +319,7 @@ function save(ctx: Ctx, loaded: Loaded, events: MatchEvent[], frame: boolean) {
   const bodySeen = new Set<number>();
   for (const b of state.bodies) {
     bodySeen.add(b.id);
-    const nextBody = bodyToRow(b);
+    const nextBody = bodyToRow(b, room);
     const prev = loaded.bodyKeys.get(b.id);
     if (prev === undefined) ctx.db.body.insert(nextBody);
     else if (prev !== JSON.stringify(nextBody)) ctx.db.body.id.update(nextBody);
@@ -308,22 +328,43 @@ function save(ctx: Ctx, loaded: Loaded, events: MatchEvent[], frame: boolean) {
   // Shots ride in the packed frame; everything else is a (rarer) JSON event.
   const shots = frame ? events.filter((e): e is Extract<MatchEvent, { type: 'shot' }> => e.type === 'shot') : [];
   let seq = 0;
-  for (const e of events) if (!frame || e.type !== 'shot') ctx.db.matchEvent.insert({ seq: seq++, json: JSON.stringify(e) });
+  for (const e of events) if (!frame || e.type !== 'shot') ctx.db.matchEvent.insert({ seq: seq++, json: JSON.stringify(e), room });
   if (frame) {
     const data = encodeFrame(state, shots);
-    if (ctx.db.frame.id.find(0)) ctx.db.frame.id.update({ id: 0, mapId: state.mapId, data });
-    else ctx.db.frame.insert({ id: 0, mapId: state.mapId, data });
+    if (ctx.db.frame.id.find(room)) ctx.db.frame.id.update({ id: room, mapId: state.mapId, data });
+    else ctx.db.frame.insert({ id: room, mapId: state.mapId, data });
   }
 }
 
-/** Load the match, run `fn` against the shared rules, and persist the result atomically. */
-function withMatch<T>(ctx: Ctx, fn: (state: MatchState, sim: SimContext, loaded: Loaded) => T, frame = false): T {
-  const loaded = load(ctx);
+/** Next free global id, shared by every room (soldiers and bodies). */
+function takeIds(ctx: Ctx) {
+  const row = ctx.db.counter.id.find(0);
+  let next = row?.nextId ?? 1;
+  if (!row) {
+    // First use: start above every id already in use (older databases numbered per match).
+    for (const r of ctx.db.soldier.iter()) next = Math.max(next, r.id + 1);
+    for (const r of ctx.db.body.iter()) next = Math.max(next, r.id + 1);
+    for (const r of ctx.db.clock.iter()) next = Math.max(next, r.nextId);
+  }
+  if (next > MAX_ID) next = 1;
+  return next;
+}
+function storeIds(ctx: Ctx, next: number) {
+  // Wrapping around: skip ids still held by long-lived soldiers or bodies.
+  while (ctx.db.soldier.id.find(next) || ctx.db.body.id.find(next)) next++;
+  if (ctx.db.counter.id.find(0)) ctx.db.counter.id.update({ id: 0, nextId: next }); else ctx.db.counter.insert({ id: 0, nextId: next });
+}
+
+/** Load a room's match, run `fn` against the shared rules, and persist the result atomically. */
+function withMatch<T>(ctx: Ctx, room: number, fn: (state: MatchState, sim: SimContext, loaded: Loaded) => T, frame = false): T {
+  const loaded = load(ctx, room);
+  loaded.state.nextId = takeIds(ctx);
   const events: MatchEvent[] = [];
   const { def, world } = loadMap(loaded.state.mapId);
   const sim: SimContext = { map: def, world, nav: loadNav(loaded.state.mapId), random: () => ctx.random(), emit: e => events.push(e) };
   const result = fn(loaded.state, sim, loaded);
   save(ctx, loaded, events, frame);
+  storeIds(ctx, loaded.state.nextId);
   recordStats(ctx, loaded.state, events);
   return result;
 }
@@ -375,45 +416,111 @@ function mySoldier(ctx: Ctx) {
 
 const micros = (ctx: Ctx) => ctx.timestamp.microsSinceUnixEpoch;
 
-/** Next match: the next map in the rotation, alternating Sabotage (where the map has bomb sites) and Elimination. */
-function nextMatch(current: string, mode: Mode): { mapId: string; mode: Mode } {
-  const start = MAP_IDS.indexOf(current as (typeof MAP_IDS)[number]);
-  const mapId = MAP_IDS[(start + 1) % MAP_IDS.length];
+/** Next public match: the next map this room size plays, alternating Sabotage (where the map has bomb sites) and Elimination. */
+function nextMatch(current: string, mode: Mode, perTeam: number): { mapId: string; mode: Mode } {
+  const maps = mapsFor(perTeam);
+  const mapId = maps[(maps.indexOf(current) + 1) % maps.length] ?? current;
   const wantSabotage = mode === 'elimination' && !!loadMap(mapId).def.sabotage?.sites.length;
   return { mapId, mode: wantSabotage ? 'sabotage' : 'elimination' };
 }
 
-// ---- Lifecycle ----------------------------------------------------------------------------
+// ---- Rooms --------------------------------------------------------------------------------
 
-function initializeMatch(ctx: Ctx) {
-  if (ctx.db.match.id.find(0)) return;
-  const state = createMatch(START_MAP, { ...ONLINE_CONFIG });
+const TICK_EVERY = () => ScheduleAt.interval(BigInt(Math.round(1_000_000 / TICK_RATE)));
+
+/** Open a room (lowest free id) with its match, clock and tick schedule. */
+function openRoom(ctx: Ctx, mapId: string, config: MatchConfig, code: string) {
+  let room = -1;
+  for (let id = 0; id <= MAX_ROOMS && room < 0; id++) if (!ctx.db.match.id.find(id)) room = id;
+  if (room < 0) throw new SenderError('Every room is busy, try again shortly');
+  const state = createMatch(mapId, config);
   ctx.db.match.insert({
     // The law columns are legacy (kept for in-place migration) and stay neutral.
-    id: 0, mapId: state.mapId, phase: state.phase, phaseLeft: state.phaseLeft, time: 0, worldTime: 0, tick: 0, score0: 0, score1: 0,
-    scoreTimer: 0, lawsJson: '{}', lawAuthor: -1, lawText: '', lawLeft: -1, rewindLeft: 0, nextId: state.nextId,
-    droneTimer: 0, winner: -1, configJson: JSON.stringify(state.config), historyHead: 0, historyLength: 0,
-    lastTickMicros: micros(ctx), humans: 0,
+    id: room, mapId, phase: state.phase, phaseLeft: state.phaseLeft, time: 0, worldTime: 0, tick: 0, score0: 0, score1: 0,
+    scoreTimer: 0, lawsJson: '{}', lawAuthor: -1, lawText: '', lawLeft: -1, rewindLeft: 0, nextId: 0,
+    droneTimer: 0, winner: -1, configJson: JSON.stringify(config), historyHead: 0, historyLength: 0,
+    lastTickMicros: micros(ctx), humans: 0, code,
   });
-  for (const b of state.bodies) ctx.db.body.insert(bodyToRow(b));
-  withMatch(ctx, (s, sim) => balanceTeams(s, sim));
-  ctx.db.tickSchedule.insert({ scheduledId: 0n, scheduledAt: ScheduleAt.interval(BigInt(Math.round(1_000_000 / TICK_RATE))) });
+  for (const t of [...ctx.db.tickSchedule.iter()]) if (t.room === room) ctx.db.tickSchedule.scheduledId.delete(t.scheduledId);
+  ctx.db.tickSchedule.insert({ scheduledId: 0n, scheduledAt: TICK_EVERY(), room });
+  return room;
 }
 
-export const init = spacetimedb.init(initializeMatch);
+/** Close a room: its match, soldiers, bodies, frame and tick all go. */
+function closeRoom(ctx: Ctx, room: number) {
+  for (const t of [...ctx.db.tickSchedule.iter()]) if (t.room === room) ctx.db.tickSchedule.scheduledId.delete(t.scheduledId);
+  for (const r of [...ctx.db.soldier.iter()]) {
+    if (r.room !== room) continue;
+    ctx.db.soldier.id.delete(r.id); ctx.db.botBrain.id.delete(r.id); ctx.db.inbox.soldierId.delete(r.id);
+  }
+  for (const r of [...ctx.db.roster.room.filter(room)]) ctx.db.roster.id.delete(r.id);
+  for (const r of [...ctx.db.body.iter()]) if (r.room === room) ctx.db.body.id.delete(r.id);
+  ctx.db.frame.id.delete(room); ctx.db.clock.id.delete(room); ctx.db.match.id.delete(room);
+}
+
+const humansIn = (ctx: Ctx, room: number) => { let n = 0; for (const r of ctx.db.soldier.iter()) if (r.room === room && !r.bot) n++; return n; };
+const configOf = (row: MatchRow): MatchConfig => ({ ...ONLINE_CONFIG, ...JSON.parse(row.configJson) });
+
+/** Take a player out of their room; an emptied room closes. */
+function leaveRoom(ctx: Ctx, player: { soldierId: number; room: number }) {
+  if (!ctx.db.match.id.find(player.room)) return;
+  withMatch(ctx, player.room, (state, sim) => { removeSoldier(state, sim, player.soldierId); balanceTeams(state, sim); });
+  if (humansIn(ctx, player.room) === 0) closeRoom(ctx, player.room);
+}
+
+/** Put the caller into `room` (leaving any other room first). */
+function enterRoom(ctx: Ctx, room: number, name: string, team: number) {
+  const clean = name.replace(/[^\p{L}\p{N} _\-.]/gu, '').trim().slice(0, 16) || 'Operator';
+  const existing = ctx.db.player.identity.find(ctx.sender);
+  if (existing && existing.room === room && ctx.db.soldier.id.find(existing.soldierId)) return;
+  if (existing && ctx.db.soldier.id.find(existing.soldierId)) leaveRoom(ctx, existing);
+  const row = ctx.db.match.id.find(room)!;
+  if (humansIn(ctx, room) >= configOf(row).teamSize * 2) throw new SenderError('That room is full');
+  withMatch(ctx, room, (state, sim) => {
+    const soldier = addSoldier(state, sim, { name: clean, bot: false, team: team === 0 || team === 1 ? team : undefined });
+    balanceTeams(state, sim);
+    const player = { identity: ctx.sender, soldierId: soldier.id, lastReportMicros: micros(ctx), room };
+    if (existing) ctx.db.player.identity.update({ ...existing, ...player });
+    else ctx.db.player.insert({ ...player, chatWindowMicros: 0n, chatCount: 0 });
+  });
+}
+
+/** Quick Play: the fullest public room of this size with a free slot, or a new one. */
+function quickPlay(ctx: Ctx, name: string, perTeam: number, team: number) {
+  if (!isRoomSize(perTeam)) throw new SenderError('Unknown room size');
+  const mine = ctx.db.player.identity.find(ctx.sender);
+  let best = -1, bestHumans = -1;
+  for (const row of ctx.db.match.iter()) {
+    if (row.code !== '' || configOf(row).teamSize !== perTeam) continue;
+    const humans = humansIn(ctx, row.id) - (mine?.room === row.id ? 1 : 0);
+    if (humans < perTeam * 2 && humans > bestHumans) { best = row.id; bestHumans = humans; }
+  }
+  if (best < 0) {
+    const maps = mapsFor(perTeam);
+    const mapId = maps[Math.floor(ctx.random() * maps.length)];
+    const mode: Mode = loadMap(mapId).def.sabotage?.sites.length && ctx.random() < 0.5 ? 'sabotage' : 'elimination';
+    best = openRoom(ctx, mapId, { ...ONLINE_CONFIG, mode, teamSize: perTeam }, '');
+  }
+  enterRoom(ctx, best, name, team);
+}
+
+// ---- Lifecycle ----------------------------------------------------------------------------
+
+// Rooms open on demand (Quick Play, private rooms); nothing to set up at publish time.
+export const init = spacetimedb.init(() => {});
 
 export const onDisconnect = spacetimedb.clientDisconnected(ctx => {
   const player = ctx.db.player.identity.find(ctx.sender);
   if (!player) return;
   ctx.db.player.identity.delete(ctx.sender);
-  withMatch(ctx, (state, sim) => { removeSoldier(state, sim, player.soldierId); balanceTeams(state, sim); });
+  leaveRoom(ctx, player);
 });
 
 /** Apply every queued movement report and command, in arrival order, through the shared rules. */
 function applyInputs(ctx: Ctx, state: MatchState, sim: SimContext) {
   const present = new Set(state.soldiers.map(s => s.id));
   for (const row of [...ctx.db.inbox.iter()]) {
-    if (!present.has(row.soldierId)) { ctx.db.inbox.soldierId.delete(row.soldierId); continue; }
+    if (!present.has(row.soldierId)) { if (!ctx.db.soldier.id.find(row.soldierId)) ctx.db.inbox.soldierId.delete(row.soldierId); continue; }
     if (!row.pending) continue;
     reportState(state, sim, row.soldierId, {
       x: row.x, y: row.y, z: row.z, vx: row.vx, vy: row.vy, vz: row.vz, yaw: row.yaw, pitch: row.pitch, crouch: row.crouch,
@@ -424,10 +531,12 @@ function applyInputs(ctx: Ctx, state: MatchState, sim: SimContext) {
   const commands = [...ctx.db.command.iter()].sort((a, b) => (a.id < b.id ? -1 : a.id > b.id ? 1 : 0));
   const applied = new Map<number, number>();
   for (const c of commands) {
+    // Other rooms' commands wait for their own tick; those of vanished soldiers are dropped.
+    if (!present.has(c.soldierId)) { if (!ctx.db.soldier.id.find(c.soldierId)) ctx.db.command.id.delete(c.id); continue; }
     ctx.db.command.id.delete(c.id);
     const count = (applied.get(c.soldierId) ?? 0) + 1;
     applied.set(c.soldierId, count);
-    if (!present.has(c.soldierId) || count > COMMANDS_PER_TICK) continue;
+    if (count > COMMANDS_PER_TICK) continue;
     const cmd = JSON.parse(c.json) as Command;
     switch (cmd.kind) {
       case 'fire': fireShot(state, sim, c.soldierId, cmd); break;
@@ -441,29 +550,29 @@ function applyInputs(ctx: Ctx, state: MatchState, sim: SimContext) {
   }
 }
 
-export const tick = spacetimedb.reducer({ onSchedule: tickTable }, { arg: tickTable.rowType }, ctx => {
-  const row = ctx.db.match.id.find(0);
-  if (!row) return;
+export const tick = spacetimedb.reducer({ onSchedule: tickTable }, { arg: tickTable.rowType }, (ctx, { arg }) => {
+  const room = arg.room;
+  const row = ctx.db.match.id.find(room);
+  if (!row) { ctx.db.tickSchedule.scheduledId.delete(arg.scheduledId); return; }
   const now = micros(ctx);
-  const clock = ctx.db.clock.id.find(0);
+  const clock = ctx.db.clock.id.find(room);
   const last = clock?.lastTickMicros ?? row.lastTickMicros;
   const dt = Math.min(0.1, Math.max(0, Number(now - last) / 1_000_000));
-  // Nobody connected: freeze the battlefield instead of simulating bots for no one.
-  if (row.humans === 0 || dt <= 0) {
-    if (clock) ctx.db.clock.id.update({ ...clock, lastTickMicros: now });
-    else ctx.db.match.id.update({ ...row, lastTickMicros: now });
-    return;
-  }
-  withMatch(ctx, (state, sim, loaded) => {
+  // A room without humans closes (its tick stops, so idle rooms cost nothing).
+  if (humansIn(ctx, room) === 0) { closeRoom(ctx, room); return; }
+  if (dt <= 0) return;
+  withMatch(ctx, room, (state, sim, loaded) => {
     loaded.clock.lastTickMicros = now;
     applyInputs(ctx, state, sim);
     if (state.phase === 'ended' && state.phaseLeft - dt <= 0) {
-      // Rotate maps and modes between matches; clients rebuild their scene when mapId changes.
-      const next = nextMatch(state.mapId, state.config.mode);
-      const { def, world } = loadMap(next.mapId);
-      state.mapId = next.mapId;
-      state.config = { ...state.config, mode: next.mode };
-      const nextSim = { ...sim, map: def, world, nav: loadNav(next.mapId) };
+      // Public rooms rotate maps and modes between matches; private rooms replay the host's choice.
+      if (!row.code) {
+        const next = nextMatch(state.mapId, state.config.mode, state.config.teamSize);
+        state.mapId = next.mapId;
+        state.config = { ...state.config, mode: next.mode };
+      }
+      const { def, world } = loadMap(state.mapId);
+      const nextSim = { ...sim, map: def, world, nav: loadNav(state.mapId) };
       resetMatch(state, nextSim);
       balanceTeams(state, nextSim);
       return;
@@ -481,24 +590,38 @@ export const tick = spacetimedb.reducer({ onSchedule: tickTable }, { arg: tickTa
 
 // ---- Player commands ----------------------------------------------------------------------
 
-export const join = spacetimedb.reducer({ name: t.string(), team: t.i8() }, (ctx, { name, team }) => {
-  const clean = name.replace(/[^\p{L}\p{N} _\-.]/gu, '').trim().slice(0, 16) || 'Operator';
-  // Updating an existing starter database does not run the init lifecycle reducer.
-  initializeMatch(ctx);
-  const existing = ctx.db.player.identity.find(ctx.sender);
-  withMatch(ctx, (state, sim) => {
-    if (existing && state.soldiers.some(s => s.id === existing.soldierId)) return;
-    const soldier = addSoldier(state, sim, { name: clean, bot: false, team: team === 0 || team === 1 ? team : undefined });
-    balanceTeams(state, sim);
-    if (existing) ctx.db.player.identity.update({ ...existing, soldierId: soldier.id, lastReportMicros: micros(ctx) });
-    else ctx.db.player.insert({ identity: ctx.sender, soldierId: soldier.id, lastReportMicros: micros(ctx), chatWindowMicros: 0n, chatCount: 0 });
+/** Older clients' join: Quick Play 6v6. */
+export const join = spacetimedb.reducer({ name: t.string(), team: t.i8() }, (ctx, { name, team }) => { quickPlay(ctx, name, 6, team); });
+
+/** Quick Play: the fullest public room of this size (1, 6 or 24 per team) with a free slot. */
+export const quickJoin = spacetimedb.reducer({ name: t.string(), size: t.u8(), team: t.i8() }, (ctx, { name, size, team }) => {
+  quickPlay(ctx, name, size, team);
+});
+
+/** Private room: the host picks size, mode, map and bots; friends join with the code. */
+export const createRoom = spacetimedb.reducer({ name: t.string(), size: t.u8(), mode: t.string(), mapId: t.string(), bots: t.bool(), team: t.i8() },
+  (ctx, { name, size, mode, mapId, bots, team }) => {
+    if (!isRoomSize(size)) throw new SenderError('Unknown room size');
+    if (mode !== 'elimination' && mode !== 'sabotage') throw new SenderError('Unknown mode');
+    if (!mapsFor(size, mode).includes(mapId)) throw new SenderError('That map does not host this room');
+    let code = '';
+    for (let i = 0; i < 20 && (!code || [...ctx.db.match.iter()].some(r => r.code === code)); i++) code = roomCode(() => ctx.random());
+    const room = openRoom(ctx, mapId, { ...ONLINE_CONFIG, mode, teamSize: size, noBots: !bots }, code);
+    enterRoom(ctx, room, name, team);
   });
+
+/** Join a private room by its code. */
+export const joinRoom = spacetimedb.reducer({ name: t.string(), code: t.string(), team: t.i8() }, (ctx, { name, code, team }) => {
+  const clean = cleanCode(code);
+  const row = clean ? [...ctx.db.match.iter()].find(r => r.code === clean) : undefined;
+  if (!row) throw new SenderError('No room with that code');
+  enterRoom(ctx, row.id, name, team);
 });
 
 export const leave = spacetimedb.reducer({}, ctx => {
   const player = mySoldier(ctx);
   ctx.db.player.identity.delete(ctx.sender);
-  withMatch(ctx, (state, sim) => { removeSoldier(state, sim, player.soldierId); balanceTeams(state, sim); });
+  leaveRoom(ctx, player);
 });
 
 /** Movement report: stored for the next tick (latest wins; elapsed time accumulates for the budget). */
@@ -563,5 +686,5 @@ export const say = spacetimedb.reducer({ text: t.string(), team: t.bool() }, (ct
   const soldier = ctx.db.soldier.id.find(player.soldierId);
   if (!soldier) return;
   const event: MatchEvent = { type: 'chat', id: soldier.id, name: soldier.name, team: soldier.team as Team, text: clean, teamOnly: team };
-  ctx.db.matchEvent.insert({ seq: 0, json: JSON.stringify(event) });
+  ctx.db.matchEvent.insert({ seq: 0, json: JSON.stringify(event), room: player.room });
 });

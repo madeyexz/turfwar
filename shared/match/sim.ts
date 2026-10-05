@@ -77,7 +77,7 @@ export function balanceTeams(state: MatchState, ctx: SimContext) {
   for (const team of [0, 1] as Team[]) {
     const members = state.soldiers.filter(s => s.team === team);
     const humans = members.filter(s => !s.bot).length;
-    const wantBots = Math.max(0, size - humans);
+    const wantBots = state.config.noBots ? 0 : Math.max(0, size - humans);
     const bots = members.filter(s => s.bot);
     for (let i = bots.length; i < wantBots; i++) addSoldier(state, ctx, { name: botName(state, ctx.random), team, bot: true });
     // Remove dead bots first when a human takes a slot.

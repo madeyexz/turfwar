@@ -40,9 +40,9 @@ describe('maps and navigation', () => {
       }
       for (const site of def.sabotage?.sites ?? []) expect(def.points.some(p => p.id === site), site).toBe(true);
     });
-    it(`${id}: each base fits a Mega server (12 a side)`, () => {
+    it(`${id}: each base fits its largest room (6v6 with spare slots; 24v24 on big maps)`, () => {
       const { def } = loadMap(id);
-      for (const team of [0, 1]) expect(def.spawns.filter(s => s.team === team).length).toBeGreaterThanOrEqual(12);
+      for (const team of [0, 1]) expect(def.spawns.filter(s => s.team === team).length).toBeGreaterThanOrEqual(def.big ? 24 : 12);
     });
     // Ochre Quarter keeps its source layout's attacker/defender asymmetry on purpose.
     it.skipIf(id === 'ochre')(`${id}: is rotationally symmetric for fairness`, () => {
@@ -91,11 +91,17 @@ describe('bot matches', () => {
     expect(events.some(e => e.type === 'bomb' && e.action === 'armed')).toBe(true);
   });
 
-  it('Mega servers (12 a side) run on the largest map', () => {
-    const { ctx, state, events } = setup({ ...ELIMINATION, teamSize: 12, warmup: 0 }, 11, 'meridian');
+  it('24v24 rooms run on the big map', () => {
+    const { ctx, state, events } = setup({ ...ELIMINATION, teamSize: 24, warmup: 0 }, 11, 'meridian');
     balanceTeams(state, ctx);
-    expect(state.soldiers.filter(s => s.team === 0).length).toBe(12);
-    expect(state.soldiers.filter(s => s.team === 1).length).toBe(12);
+    expect(state.soldiers.filter(s => s.team === 0).length).toBe(24);
+    expect(state.soldiers.filter(s => s.team === 1).length).toBe(24);
+    tick(state, ctx, 0.1);
+    // Everyone deploys in the base at once without standing inside each other or a wall.
+    for (const a of state.soldiers) {
+      expect(ctx.world.overlapsSolid(a.m, 0.3, 1.2)).toBe(false);
+      for (const b of state.soldiers) if (a !== b && a.team === b.team) expect(Math.hypot(a.m.x - b.m.x, a.m.z - b.m.z)).toBeGreaterThan(0.5);
+    }
     tick(state, ctx, 60);
     expect(events.filter(e => e.type === 'kill').length).toBeGreaterThan(3);
     for (const s of state.soldiers) if (s.alive) expect(ctx.world.overlapsSolid(s.m, 0.2, 1.2)).toBe(false);

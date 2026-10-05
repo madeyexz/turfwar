@@ -34,12 +34,12 @@ export function loadMap(id: string): LoadedMap {
   return loaded;
 }
 
-/** Spawn slots each base needs: a Mega server is 12 a side. */
-export const BASE_SLOTS = 12;
+/** Spawn slots each base needs: 6v6 on every map (with room to spare), 24v24 on big maps. */
+export const BASE_SLOTS = 12, BIG_BASE_SLOTS = 24;
 
 /**
- * Every round deploys the whole team in its base at once, so each base needs room for a Mega
- * server, plus an ammo crate. Maps built for fewer slots get extra ones on clear, level floor
+ * Every round deploys the whole team in its base at once, so each base needs room for the largest
+ * room the map hosts, plus an ammo crate. Maps built for fewer slots get extra ones on clear, level floor
  * next to their own (deterministic, so Solo and the server agree).
  */
 function furnishBases(def: MapDef, world: CollisionWorld) {
@@ -52,14 +52,15 @@ function furnishBases(def: MapDef, world: CollisionWorld) {
     if (taken.some(p => Math.hypot(p.x - x, p.z - z) < gap)) return undefined;
     return floor;
   };
-  const rings = [1.8, 3.4, 5];
+  const rings = [1.8, 3.4, 5, 6.6];
+  const slots = def.big ? BIG_BASE_SLOTS : BASE_SLOTS;
   for (const team of [0, 1] as const) {
     const own = def.spawns.filter(s => s.team === team);
     if (!own.length) continue;
     const taken = def.spawns.map(s => ({ x: s.x, z: s.z }));
-    for (const r of rings) for (let k = 0; k < 8 && own.length < BASE_SLOTS; k++) {
+    for (const r of rings) for (let k = 0; k < 8 && own.length < slots; k++) {
       for (const base of own.slice()) {
-        if (own.length >= BASE_SLOTS) break;
+        if (own.length >= slots) break;
         const a = (k / 8) * Math.PI * 2;
         const x = base.x + Math.cos(a) * r, z = base.z + Math.sin(a) * r;
         const y = fits(x, base.y, z, taken, 1.5);
@@ -93,6 +94,6 @@ export function loadNav(id: string): NavGraph {
 export function mapSummaries() {
   return MAP_IDS.map(id => {
     const d = loadMap(id).def;
-    return { id, name: d.name, region: d.region, description: d.description, theme: d.theme, sites: d.sabotage?.sites.length ?? 0 };
+    return { id, name: d.name, region: d.region, description: d.description, theme: d.theme, sites: d.sabotage?.sites.length ?? 0, big: !!d.big };
   });
 }

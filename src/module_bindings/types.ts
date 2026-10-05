@@ -24,6 +24,7 @@ export const Body = __t.object("Body", {
   team: __t.i8(),
   hp: __t.f32(),
   timer: __t.f32(),
+  room: __t.u8(),
 });
 export type Body = __Infer<typeof Body>;
 
@@ -50,6 +51,12 @@ export const Command = __t.object("Command", {
   json: __t.string(),
 });
 export type Command = __Infer<typeof Command>;
+
+export const Counter = __t.object("Counter", {
+  id: __t.u8(),
+  nextId: __t.u32(),
+});
+export type Counter = __Infer<typeof Counter>;
 
 export const Frame = __t.object("Frame", {
   id: __t.u8(),
@@ -111,12 +118,14 @@ export const Match = __t.object("Match", {
   historyLength: __t.u32(),
   lastTickMicros: __t.u64(),
   humans: __t.u32(),
+  code: __t.string(),
 });
 export type Match = __Infer<typeof Match>;
 
 export const MatchEvent = __t.object("MatchEvent", {
   seq: __t.u32(),
   json: __t.string(),
+  room: __t.u8(),
 });
 export type MatchEvent = __Infer<typeof MatchEvent>;
 
@@ -126,6 +135,7 @@ export const Player = __t.object("Player", {
   lastReportMicros: __t.u64(),
   chatWindowMicros: __t.u64(),
   chatCount: __t.u32(),
+  room: __t.u8(),
 });
 export type Player = __Infer<typeof Player>;
 
@@ -154,6 +164,7 @@ export type Profile = __Infer<typeof Profile>;
 
 export const Roster = __t.object("Roster", {
   id: __t.u32(),
+  room: __t.u8(),
   name: __t.string(),
   team: __t.u8(),
   bot: __t.bool(),
@@ -231,12 +242,14 @@ export const Soldier = __t.object("Soldier", {
   bought1: __t.string(),
   sinceSpawn: __t.f32(),
   gearJson: __t.string(),
+  room: __t.u8(),
 });
 export type Soldier = __Infer<typeof Soldier>;
 
 export const TickSchedule = __t.object("TickSchedule", {
   scheduledId: __t.u64(),
   scheduledAt: __t.scheduleAt(),
+  room: __t.u8(),
 });
 export type TickSchedule = __Infer<typeof TickSchedule>;
 

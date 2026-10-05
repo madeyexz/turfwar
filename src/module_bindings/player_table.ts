@@ -16,4 +16,5 @@ export default __t.row({
   lastReportMicros: __t.u64().name("last_report_micros"),
   chatWindowMicros: __t.u64().name("chat_window_micros"),
   chatCount: __t.u32().name("chat_count"),
+  room: __t.u8(),
 });

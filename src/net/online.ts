@@ -1,6 +1,7 @@
 import type { Identity, Infer } from 'spacetimedb';
 import type { Vec3 } from '../../shared/math';
-import type { ClientReport, MatchEvent, MatchState, ShotClaim, Soldier, Team } from '../../shared/match/state';
+import type { ClientReport, MatchEvent, MatchState, Mode, ShotClaim, Soldier, Team } from '../../shared/match/state';
+import { sizeLabel } from '../../shared/match/rooms';
 import type { Body } from '../../shared/world';
 import type { CareerStats, GameLink } from '../game/link';
 import type { DbConnection } from '../module_bindings';
@@ -56,6 +57,12 @@ function soldierFrom(r: RosterRow, p: FramePose, reloadLeft: number, sinceShot: 
   };
 }
 
+/** How to get into a room: Quick Play by size, a new private room, or a private room's code. */
+export type OnlineEntry =
+  | { kind: 'quick'; size: number }
+  | { kind: 'create'; size: number; mode: Mode; mapId: string; bots: boolean }
+  | { kind: 'code'; code: string };
+
 /** A match hosted by the SpacetimeDB module; this client renders it and sends validated intents. */
 export class OnlineLink implements GameLink {
   readonly mode = 'online' as const;
@@ -70,8 +77,11 @@ export class OnlineLink implements GameLink {
   private reportsInFlight = 0;
   private disconnected = false;
   private rejoining = false;
-  /** Join parameters, kept so the client can rejoin if the server drops an idle soldier. */
-  joinArgs?: { name: string; team: number };
+  /** How we got in, kept so the client can rejoin its room if the server drops an idle soldier. */
+  entry?: { name: string; team: number; how: OnlineEntry };
+  /** Our room, and the subscription to its roster, frame and events. */
+  private room = -1;
+  private roomSub?: { unsubscribe(): void };
 
   private frame?: DecodedFrame;
   private frameMap = '';
@@ -85,7 +95,8 @@ export class OnlineLink implements GameLink {
     db.roster.onInsert(bump); db.roster.onUpdate(bump); db.roster.onDelete(bump);
     db.match.onUpdate(bump); db.match.onInsert(bump);
     db.player.onInsert(bump); db.player.onUpdate(bump); db.player.onDelete(bump);
-    const onFrame = (row: { mapId: string; data: Uint8Array }) => {
+    const onFrame = (row: { id: number; mapId: string; data: Uint8Array }) => {
+      if (row.id !== this.room) return;
       const decoded = decodeFrame(row.data);
       if (!decoded) return;
       this.frame = decoded; this.frameMap = row.mapId; this.dirty = true;
@@ -94,23 +105,46 @@ export class OnlineLink implements GameLink {
     };
     db.frame.onInsert((_ctx, row) => onFrame(row));
     db.frame.onUpdate((_ctx, _old, row) => onFrame(row));
-    db.matchEvent.onInsert((_ctx, row) => { try { this.events.push(JSON.parse(row.json)); } catch { /* malformed event */ } });
+    db.matchEvent.onInsert((_ctx, row) => { if (row.room === this.room) try { this.events.push(JSON.parse(row.json)); } catch { /* malformed event */ } });
   }
 
   markDisconnected() { this.disconnected = true; }
   myId() { this.state(); return this.me; }
   version() { this.state(); return this.ver; }
 
+  /** Follow our player row into its room: subscribe to that room's rows (and drop the old room's). */
+  private followRoom() {
+    const mine = this.conn.db.player.identity.find(this.identity);
+    this.me = mine?.soldierId ?? -1;
+    const room = mine ? mine.room : -1;
+    if (room < 0 || room === this.room) return;
+    this.room = room; this.frame = undefined; this.view = undefined;
+    const old = this.roomSub;
+    this.roomSub = this.conn.subscriptionBuilder()
+      .onApplied(() => { old?.unsubscribe(); this.dirty = true; })
+      .subscribe([`SELECT * FROM roster WHERE room = ${room}`, `SELECT * FROM frame WHERE id = ${room}`, `SELECT * FROM match_event WHERE room = ${room}`]);
+  }
+
+  /** The room we play in: its private code ('' = Quick Play) and size. */
+  roomInfo() {
+    const row = this.room >= 0 ? this.conn.db.match.id.find(this.room) : undefined;
+    if (!row) return undefined;
+    const config = JSON.parse(row.configJson) as { teamSize: number };
+    return { code: row.code, size: sizeLabel(config.teamSize) };
+  }
+
   state(): MatchState | undefined {
     if (!this.dirty && this.view) return this.view;
     const db = this.conn.db;
-    const match = db.match.id.find(0);
+    this.followRoom();
+    const match = this.room >= 0 ? db.match.id.find(this.room) : undefined;
     const frame = this.frame;
     if (!match || !frame) return this.view;
     const now = performance.now();
     const poses = new Map(frame.poses.map(p => [p.id, p]));
     const soldiers: Soldier[] = [];
     for (const r of db.roster.iter()) {
+      if (r.room !== this.room) continue;
       const p = poses.get(r.id);
       if (!p) continue; // joined after the latest frame
       let reloadLeft = 0;
@@ -125,12 +159,11 @@ export class OnlineLink implements GameLink {
     }
     soldiers.sort((a, b) => a.id - b.id);
     const bodies: Body[] = frame.bodies.map(b => ({ ...b, age: 0, owner: -1, hp: 1, timer: 0 }));
-    const mine = db.player.identity.find(this.identity);
-    this.me = mine?.soldierId ?? -1;
-    if (this.me < 0 && this.joinArgs && !this.rejoining && !this.disconnected) {
-      // Backgrounded tabs stop reporting and get dropped as idle; rejoin transparently.
+    if (this.me < 0 && this.entry && !this.rejoining && !this.disconnected) {
+      // Backgrounded tabs stop reporting and get dropped as idle; rejoin the same room transparently.
       this.rejoining = true;
-      void this.conn.reducers.join(this.joinArgs).catch(() => undefined).finally(() => { setTimeout(() => { this.rejoining = false; }, 2000); });
+      const info = this.roomInfo(), how: OnlineEntry = info?.code ? { kind: 'code', code: info.code } : this.entry.how.kind === 'code' ? this.entry.how : { kind: 'quick', size: JSON.parse(match.configJson).teamSize };
+      void enter(this.conn, { ...this.entry, how }).catch(() => undefined).finally(() => { setTimeout(() => { this.rejoining = false; }, 2000); });
     }
     // Mid-rotation the frame may still describe the previous map: hold its bomb back.
     const sameMap = this.frameMap === match.mapId;
@@ -163,7 +196,9 @@ export class OnlineLink implements GameLink {
   status() {
     if (this.disconnected) return 'DISCONNECTED';
     const humans = this.view?.soldiers.filter(s => !s.bot).length ?? 0;
-    return `ONLINE · ${humans} PLAYER${humans === 1 ? '' : 'S'} · ${Math.round(this.pingMs)} MS`;
+    const info = this.roomInfo();
+    const room = info ? (info.code ? `ROOM ${info.code} · ${info.size}` : `QUICK PLAY ${info.size}`) : 'ONLINE';
+    return `${room} · ${humans} PLAYER${humans === 1 ? '' : 'S'} · ${Math.round(this.pingMs)} MS`;
   }
 
   report(r: ClientReport) {
@@ -191,8 +226,16 @@ export class OnlineLink implements GameLink {
   }
 }
 
-/** Connect, subscribe, join the match and wait until our soldier exists. */
-export async function connectOnline(name: string, team: Team | undefined, status: (s: string) => void): Promise<GameLink> {
+/** Ask the server for a room (Quick Play, new private room, or by code). */
+function enter(conn: DbConnection, e: { name: string; team: number; how: OnlineEntry }) {
+  const { name, team, how } = e;
+  if (how.kind === 'quick') return conn.reducers.quickJoin({ name, team, size: how.size });
+  if (how.kind === 'create') return conn.reducers.createRoom({ name, team, size: how.size, mode: how.mode, mapId: how.mapId, bots: how.bots });
+  return conn.reducers.joinRoom({ name, team, code: how.code });
+}
+
+/** Connect, subscribe, enter a room and wait until our soldier exists. */
+export async function connectOnline(name: string, team: Team | undefined, how: OnlineEntry, status: (s: string) => void): Promise<OnlineLink> {
   const { uri, database } = onlineConfig();
   if (!uri || !database) throw new Error('No SpacetimeDB server configured.');
   status('Connecting to SpacetimeDB…');
@@ -200,7 +243,7 @@ export async function connectOnline(name: string, team: Team | undefined, status
   const tokenKey = `lawbreaker.token:${uri}:${database}`;
   let token: string | undefined;
   try { token = localStorage.getItem(tokenKey) ?? undefined; } catch { /* storage disabled */ }
-  return new Promise<GameLink>((resolve, reject) => {
+  return new Promise<OnlineLink>((resolve, reject) => {
     let link: OnlineLink | undefined;
     const timer = setTimeout(() => reject(new Error('Timed out connecting to the match server.')), 20_000);
     const conn = DbConnection.builder().withUri(uri).withDatabaseName(database).withToken(token)
@@ -211,17 +254,19 @@ export async function connectOnline(name: string, team: Team | undefined, status
         connection.subscriptionBuilder()
           .onApplied(async () => {
             try {
-              link!.joinArgs = { name, team: team ?? -1 };
-              await connection.reducers.join(link!.joinArgs);
+              link!.entry = { name, team: team ?? -1, how };
+              await enter(connection, link!.entry);
+              // Our soldier exists once the room's frame (with us in it) has arrived.
               const wait = () => {
-                if (link!.myId() >= 0) { clearTimeout(timer); resolve(link!); } else setTimeout(wait, 50);
+                if (link!.myId() >= 0 && link!.state()) { clearTimeout(timer); resolve(link!); } else setTimeout(wait, 50);
               };
               wait();
             } catch (error) { clearTimeout(timer); reject(error); }
           })
           .onError(() => { clearTimeout(timer); reject(new Error('Subscription failed.')); })
-          // Per-tick state arrives packed in `frame`; `soldier` and `body` are server-side detail.
-          .subscribe(['SELECT * FROM match', 'SELECT * FROM roster', 'SELECT * FROM frame', 'SELECT * FROM player', 'SELECT * FROM match_event', 'SELECT * FROM profile']);
+          // Rooms (match rows), players and career stats; the room's own roster, frame and events
+          // follow once we know our room. `soldier` and `body` are server-side detail.
+          .subscribe(['SELECT * FROM match', 'SELECT * FROM player', 'SELECT * FROM profile']);
       })
       .onConnectError((_ctx, error) => { clearTimeout(timer); reject(new Error(`Could not reach the match server (${error?.message ?? 'connection refused'}).`)); })
       .onDisconnect(() => { link?.markDisconnected(); })

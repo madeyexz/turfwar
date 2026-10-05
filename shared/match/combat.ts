@@ -49,10 +49,11 @@ export function spawnSoldier(state: MatchState, ctx: SimContext, s: Soldier) {
   for (const o of options) {
     let near = Infinity;
     for (const other of state.soldiers) if (other.alive && other.id !== s.id && other.team === s.team) near = Math.min(near, Math.hypot(other.m.x - o.x, other.m.z - o.z));
-    const score = Math.min(near, 12) + ctx.random() * 2;
+    // A slot someone already stands on is the last resort (big rooms fill every slot).
+    const score = near < 1.3 ? near - 20 : Math.min(near, 12) + ctx.random() * 2;
     if (score > bestScore) { bestScore = score; best = o; }
   }
-  s.m = createMoveState(best.x + (ctx.random() - 0.5) * 1.5, best.y, best.z + (ctx.random() - 0.5) * 1.5);
+  s.m = createMoveState(best.x + (ctx.random() - 0.5) * 0.5, best.y, best.z + (ctx.random() - 0.5) * 0.5);
   s.m.y = ctx.world.groundHeight(s.m.x, s.m.z, best.y + 1, 0.3);
   s.yaw = best.yaw; s.pitch = 0;
   s.alive = true; s.health = HEALTH.max; s.stamina = STAMINA.max;

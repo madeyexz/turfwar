@@ -36,10 +36,13 @@ import {
 // Import all reducer arg schemas
 import BuyReducer from "./buy_reducer";
 import BuyAttachmentReducer from "./buy_attachment_reducer";
+import CreateRoomReducer from "./create_room_reducer";
 import FireReducer from "./fire_reducer";
 import GrenadeReducer from "./grenade_reducer";
 import JoinReducer from "./join_reducer";
+import JoinRoomReducer from "./join_room_reducer";
 import LeaveReducer from "./leave_reducer";
+import QuickJoinReducer from "./quick_join_reducer";
 import ReloadWeaponReducer from "./reload_weapon_reducer";
 import ReportReducer from "./report_reducer";
 import SayReducer from "./say_reducer";
@@ -143,6 +146,9 @@ const tablesSchema = __schema({
       { accessor: 'id', name: 'roster_id_idx_btree', algorithm: 'btree', columns: [
         'id',
       ] },
+      { accessor: 'room', name: 'roster_room_idx_btree', algorithm: 'btree', columns: [
+        'room',
+      ] },
     ],
     constraints: [
       { name: 'roster_id_key', constraint: 'unique', columns: ['id'] },
@@ -165,10 +171,13 @@ const tablesSchema = __schema({
 const reducersSchema = __reducers(
   __reducerSchema("buy", BuyReducer),
   __reducerSchema("buy_attachment", BuyAttachmentReducer),
+  __reducerSchema("create_room", CreateRoomReducer),
   __reducerSchema("fire", FireReducer),
   __reducerSchema("grenade", GrenadeReducer),
   __reducerSchema("join", JoinReducer),
+  __reducerSchema("join_room", JoinRoomReducer),
   __reducerSchema("leave", LeaveReducer),
+  __reducerSchema("quick_join", QuickJoinReducer),
   __reducerSchema("reload_weapon", ReloadWeaponReducer),
   __reducerSchema("report", ReportReducer),
   __reducerSchema("say", SayReducer),

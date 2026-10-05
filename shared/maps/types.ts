@@ -60,4 +60,6 @@ export interface MapDef {
   pickups?: PickupDef[];
   /** Sabotage: bomb sites (named map points) and which base the attacking Militia deploys from. */
   sabotage?: { sites: PointId[]; attackerSpawn: 0 | 1 };
+  /** Big enough for 24v24 (bases padded to 24 slots); only big maps host 24v24. */
+  big?: boolean;
 }
