@@ -25,7 +25,7 @@ import { Hud } from '../ui/hud';
 import { Input } from './input';
 import type { GameLink } from './link';
 import { LocalPlayer } from './player';
-import { settings } from './settings';
+import { isMagnified, settings } from './settings';
 
 type Sample = { x: number; y: number; z: number; vx: number; vy: number; vz: number; yaw: number; pitch: number; crouch: number };
 /** Remote soldiers closer than this get full animation and shadows; up to LOD_MID, half rate. */
@@ -314,7 +314,8 @@ export class Game {
       const targetFov = base + (this.player.aimFov - base) * this.player.ads + (this.player.sprinting ? 6 : 0) + (this.player.m.slideTime > 0 ? 4 : 0);
       cam.fov += (targetFov - cam.fov) * Math.min(1, dt * 14);
       cam.updateProjectionMatrix();
-      this.renderer.viewCamera.fov = 58 - this.player.ads * (w.class === 'sniper' ? 0 : 10);
+      // Aiming: open sights keep the weapon small (more of the world visible); scopes bring the lens up large.
+      this.renderer.viewCamera.fov = 58 - this.player.ads * (isMagnified(w) ? 12 : -4);
       this.renderer.viewCamera.updateProjectionMatrix();
       // update() also decides visibility: a full-zoom scope or binoculars hide the weapon.
       this.viewmodel.update(dt, this.player, look);
@@ -416,7 +417,7 @@ export class Game {
       vm.update(dt, w, look);
       const fov = settings.fov + (w.aimFov - settings.fov) * w.ads + (w.sprinting ? 6 : 0);
       cam.fov += (fov - cam.fov) * Math.min(1, dt * 14); cam.updateProjectionMatrix();
-      this.renderer.viewCamera.fov = 58 - w.ads * (w.weapon.class === 'sniper' ? 0 : 10);
+      this.renderer.viewCamera.fov = 58 - w.ads * (isMagnified(w.weapon) ? 12 : -4);
       this.renderer.viewCamera.updateProjectionMatrix();
       this.hud.spectate(target.name, target.team);
       return;

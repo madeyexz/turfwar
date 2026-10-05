@@ -152,6 +152,16 @@ export interface WeaponDef {
   suppressed: boolean;
 }
 
+/**
+ * Aiming magnification. BeGone's zoom-FOV numbers read as a 3.5× zoom even on iron sights, which hides
+ * most of the screen; here iron sights barely zoom, red dot and holo a little more, and the scopes
+ * keep their marked power (seen through the lens; the view around it zooms only slightly).
+ */
+const MAGNIFICATION: Record<string, number> = { reflex: 1.45, holo: 1.6, acog: 4, x4: 4, x6: 6 };
+const IRONS: Partial<Record<WeaponClass, number>> = { pistol: 1.15, sniper: 1.5 };
+export const magnification = (c: WeaponClass, optic?: AttachmentId) =>
+  !optic || optic === 'irons' ? IRONS[c] ?? 1.3 : MAGNIFICATION[optic] ?? 1.3;
+
 /** The documented mapping from BeGone's stats to this engine's feel (see SPEC). */
 function derive(b: Base, d: Required<Delta>, attachments: Attachments): WeaponDef {
   const acc = Math.min(100, b.accuracy.hip + d.accuracy), zacc = Math.min(100, b.accuracy.zoom + d.zoomAccuracy);
@@ -166,7 +176,7 @@ function derive(b: Base, d: Required<Delta>, attachments: Attachments): WeaponDe
     pellets: b.pellets ?? 1,
     range: b.reach ?? (b.class === 'shotgun' ? 60 : b.class === 'sniper' ? 300 : 200),
     speed: Math.max(0.5, (b.move + d.move) / 100),
-    zoom: melee ? 1 : Math.max(4, b.zoomFov + d.zoomFov) / 70,
+    zoom: melee ? 1 : 1 / magnification(b.class, attachments.optic),
     spread: {
       hip: (100 - acc) * 0.35, ads: (100 - zacc) * 0.25,
       moving: melee ? 0 : 1.2, air: melee ? 0 : 3,

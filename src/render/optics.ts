@@ -569,8 +569,10 @@ export function topAt(model: THREE.Object3D, x0: number, x1: number) {
  * scopes fill it like an eyepiece; iron sights put the rear aperture close, with the front post far out.
  */
 const RELIEF: Record<OpticId, { long: number; pistol: number }> = {
-  irons: { long: 0.14, pistol: 0.22 }, reflex: { long: 0.1, pistol: 0.13 }, holo: { long: 0.1, pistol: 0.1 },
-  acog: { long: 0.042, pistol: 0.042 }, x4: { long: 0.05, pistol: 0.05 }, x6: { long: 0.05, pistol: 0.05 },
+  // Open sights sit well ahead of the eye (a small rear sight, most of the screen clear); scopes sit
+  // close so the ocular lens fills a large part of the view.
+  irons: { long: 0.24, pistol: 0.4 }, reflex: { long: 0.12, pistol: 0.24 }, holo: { long: 0.11, pistol: 0.22 },
+  acog: { long: 0.03, pistol: 0.03 }, x4: { long: 0.034, pistol: 0.034 }, x6: { long: 0.034, pistol: 0.034 },
 };
 
 interface OpticModel { group: THREE.Group; sightLine: number; eyeX?: number; relief?: number; sight?: Sight }

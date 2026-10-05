@@ -32,8 +32,10 @@ const DEG = Math.PI / 180;
 /** Optics seen through a magnifying lens (picture-in-picture or full-screen eyepiece). */
 export const isMagnified = (w: WeaponDef) => { const o = w.attachments.optic; return o === 'acog' || o === 'x4' || o === 'x6'; };
 
+/** Field of view at a magnification of the base field of view. */
+const fovAt = (magnification: number) => 2 * Math.atan(Math.tan(settings.fov * DEG / 2) / magnification) / DEG;
 /** The weapon's full zoom (optic included), as a field of view: what the optic itself shows. */
-export const opticFov = (w: WeaponDef) => Math.min(settings.fov * w.zoom, settings.fov * 0.85);
+export const opticFov = (w: WeaponDef) => fovAt(1 / w.zoom);
 
 /**
  * Aim-down-sights field of view of the world camera, always narrower than the base FOV. Iron sights,
@@ -41,11 +43,8 @@ export const opticFov = (w: WeaponDef) => Math.min(settings.fov * w.zoom, settin
  * lens at a mild zoom (the square root of the optic's magnification) and magnifies only through it.
  */
 export const adsFov = (w: WeaponDef) => {
-  const full = opticFov(w);
-  if (settings.scopeMode !== 'pip' || !isMagnified(w)) return full;
-  const t = Math.tan(settings.fov * DEG / 2), m = t / Math.tan(full * DEG / 2);
-  const outer = Math.max(1.6, Math.min(3.5, Math.sqrt(m)));
-  return 2 * Math.atan(t / outer) / DEG;
+  // Through the lens: the view around the scope zooms only slightly, so it stays easy to track targets.
+  return settings.scopeMode === 'pip' && isMagnified(w) ? fovAt(1.2) : opticFov(w);
 };
 
 /** Binoculars (Z): BeGone's 10× zoom. */
