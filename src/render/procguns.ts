@@ -4,18 +4,15 @@ import * as THREE from 'three';
  * Parts the CC0 gun pack lacks, built in code in the imported guns' model space (barrel along -X,
  * up +Y, origin at the grip) and added to the shared models before they are refinished, so the view
  * model, soldiers and buy menu all show the same weapon: the M249's stock, ammo box and folded
- * bipod, the M110's brake and bipod, the M4A1's vertical grip and the M1014's shell carrier.
+ * bipod, the M110's folded bipod, the M4A1's vertical grip and the M1014's shell carrier.
  */
 export function addProceduralGuns(weapons: Map<string, THREE.Object3D>) {
   const grip = weapons.get('Acc_Grip');
   const m249 = weapons.get('Gun_M249');
   if (m249) saw(m249);
   const m110 = weapons.get('Gun_M110');
-  if (m110) {
-    part(m110, tube(0.0135, 0.055, 8), mat(0x1c1d1f, 0.5, 0.6), -0.875, 0.175);
-    for (const x of [-0.862, -0.886]) part(m110, box(0.006, 0.02, 0.031), mat(0x1c1d1f, 0.5, 0.6), x, 0.175);
-    bipod(m110, -0.58, 0.129, 0.2);
-  }
+  // The M110 (SniperRifle_2) has its own muzzle brake; the bipod clamps under the fore-end tip.
+  if (m110) bipod(m110, -0.47, 0.012, 0.18);
   const m4 = weapons.get('Gun_M4A1');
   if (m4 && grip) { const g = grip.clone(); g.scale.setScalar(0.9); g.position.set(-0.33, 0.05, 0); m4.add(g); }
   const m1014 = weapons.get('Gun_M1014');

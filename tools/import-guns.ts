@@ -26,13 +26,15 @@ const OUT = join(import.meta.dir, '../public/assets');
  * grip: where the shooting hand's grip sits (metres, model space with the pack's own origin), moved to
  * the origin. Accessories set `fit: 'max'` (length = largest extent) and an anchor: 'rear' puts the
  * back face centre at the origin (suppressors screw onto the muzzle), 'centre' the bounding-box centre.
+ * cut: drops every face whose centre lies above y within [x0, x1] (output model space), e.g. a built-in
+ * scope and its rings above the rail: our optics are fitted attachments (iron sights by default).
  */
-interface GunSpec { name: string; file: string; length: number; grip: [number, number]; fit?: 'max'; anchor?: 'rear' | 'centre' }
+interface GunSpec { name: string; file: string; length: number; grip: [number, number]; fit?: 'max'; anchor?: 'rear' | 'centre'; cut?: { above: number; x: [number, number] } }
 export const GUNS: GunSpec[] = [
   { name: 'Gun_MP5', file: 'SubmachineGun_3', length: 0.74, grip: [0, 0] },
   { name: 'Gun_MP7', file: 'SubmachineGun_2', length: 0.6, grip: [0, 0] },
   { name: 'Gun_M4A1', file: 'AssaultRifle2_1', length: 1.02, grip: [0, 0] },
-  { name: 'Gun_M110', file: 'AssaultRifle2_2', length: 1.3, grip: [0, 0] },
+  { name: 'Gun_M110', file: 'SniperRifle_2', length: 1.25, grip: [0, 0], cut: { above: 0.0655, x: [-0.36, 0.05] } },
   { name: 'Gun_M249', file: 'AssaultRifle2_3', length: 1.1, grip: [0, 0] },
   { name: 'Gun_M1014', file: 'Shotgun_1', length: 1.06, grip: [0, 0] },
   { name: 'Gun_M9A1', file: 'Pistol_3', length: 0.36, grip: [0, 0] },
@@ -82,6 +84,16 @@ function transform(gun: GunSpec, obj: Obj) {
   };
 }
 
+/** The gun's faces, less those its `cut` removes. */
+function keptFaces(gun: GunSpec, obj: Obj, point: (p: number[]) => number[], faces: [number, number][][]) {
+  const cut = gun.cut;
+  if (!cut) return faces;
+  return faces.filter(face => {
+    const c = face.map(([v]) => point(obj.positions[v])).reduce((a, p) => [a[0] + p[0] / face.length, a[1] + p[1] / face.length], [0, 0]);
+    return !(c[1] > cut.above && c[0] >= cut.x[0] && c[0] <= cut.x[1]);
+  });
+}
+
 /** Material look from the pack's material names (colours are kept, slightly lifted for our lighting). */
 function look(name: string, kd: number[]) {
   const lower = name.toLowerCase();
@@ -103,7 +115,9 @@ async function build() {
     const obj = parseObj(gun.file);
     const { point, normal } = transform(gun, obj);
     const mesh = doc.createMesh(gun.name);
-    for (const [mtl, faces] of obj.groups) {
+    for (const [mtl, all] of obj.groups) {
+      const faces = keptFaces(gun, obj, point, all);
+      if (!faces.length) continue;
       const key = `${mtl}:${obj.colors.get(mtl)?.join(',')}`;
       let material = materials.get(key);
       if (!material) {
@@ -141,13 +155,14 @@ if (previewAt > 0) {
   mkdirSync(dir, { recursive: true });
   // --all previews every OBJ in the pack at 1 m, to choose models.
   const all = process.argv.includes('--all') ? [...readdirSync(SRC).filter(f => f.endsWith('.obj')), ...readdirSync(join(SRC, 'Accessories')).filter(f => f.endsWith('.obj')).map(f => `Accessories/${f}`)]
-    .map(f => ({ name: f.replace(/\.obj$/, '').replace('/', '_'), file: f.replace(/\.obj$/, ''), length: 1, grip: [0, 0] })) : undefined;
+    .map(f => ({ name: f.replace(/\.obj$/, '').replace('/', '_'), file: f.replace(/\.obj$/, ''), length: 1, grip: [0, 0] as [number, number] })) : undefined;
   for (const gun of all ?? GUNS) {
     const obj = parseObj(gun.file);
     const { point } = transform(gun, obj);
     const tris: { pts: number[][]; z: number; color: string }[] = [];
     let minX = Infinity, maxX = -Infinity, minY = Infinity, maxY = -Infinity;
-    for (const [mtl, faces] of obj.groups) {
+    for (const [mtl, all] of obj.groups) {
+      const faces = keptFaces(gun, obj, point, all);
       const c = look(mtl, obj.colors.get(mtl) ?? [0.05, 0.05, 0.05]).color;
       for (const face of faces) {
         const pts = face.map(([v]) => point(obj.positions[v]));

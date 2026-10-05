@@ -5,7 +5,7 @@
 import * as THREE from 'three';
 import { loadAssets } from '../src/assets';
 import { LocalPlayer } from '../src/game/player';
-import { settings, type OpticDetail, type ReticleColor, type ReticleStyle, type ScopeMode } from '../src/game/settings';
+import { isMagnified, settings, type OpticDetail, type ReticleColor, type ReticleStyle, type ScopeMode } from '../src/game/settings';
 import { THEMES } from '../src/render/materials';
 import { fitAttachments } from '../src/render/optics';
 import { QUALITY, Renderer } from '../src/render/renderer';
@@ -97,7 +97,8 @@ r.renderer.setAnimationLoop(() => {
   if (slash !== null) (vm as any).slashT = Number(slash) - dt / 0.32;
   if (!params.has('ads')) p.ads += Math.sign(adsTarget - p.ads) * Math.min(Math.abs(adsTarget - p.ads), dt * 5);
   if (reload) p.reloadLeft = 2 * (1 - reload); else p.reloadLeft = Math.max(0, p.reloadLeft - dt);
-  r.viewCamera.fov = 58 - p.ads * (weapon === 'm110' ? 0 : 10); r.viewCamera.updateProjectionMatrix();
+  // The view-model camera widens for open sights and narrows for magnified optics, as in the game.
+  r.viewCamera.fov = 58 - p.ads * (isMagnified(p.weapon) ? 12 : -4); r.viewCamera.updateProjectionMatrix();
   // The world camera zooms like the game's (settings FOV towards the weapon's aim FOV).
   if (!inspect) { r.camera.fov = settings.fov + (p.aimFov - settings.fov) * p.ads; r.camera.updateProjectionMatrix(); }
   vm.update(dt, p, { x: 0, y: 0 });

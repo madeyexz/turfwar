@@ -55,7 +55,7 @@ export const GUN_FIT: Record<WeaponId, GunFit> = {
   mp5: { grip: [0.005, 0, 0], fore: [-0.27, -0.045, 0], muzzle: [-0.39, 0.086, 0], mag: [-0.15, -0.06, 0], magModel: 'Gun_SMG_Ammo', irons: 0.151, optic: -0.1, bore: 0.85, rail: [-0.31, 0.09, 0.03], clip: { at: [-0.142, -0.139, 0], tilt: 0, w: 0.05, d: 0.028 }, butt: [0.35, 0.06, 0.1], kind: 'long' },
   mp7: { grip: [0.005, 0, 0], fore: [-0.17, 0.035, 0], muzzle: [-0.33, 0.085, 0], mag: [-0.1, -0.07, 0], magModel: 'Gun_SMG_Ammo', irons: 0.142, optic: -0.08, bore: 0.8, rail: [-0.24, 0.1, 0.032], clip: { at: [-0.125, -0.128, 0], tilt: 0, w: 0.045, d: 0.024 }, butt: [0.27, 0.04, 0.1], kind: 'long' },
   m4a1: { grip: [0.005, 0, 0], fore: [-0.33, 0.035, 0], muzzle: [-0.71, 0.13, 0], mag: [-0.2, -0.05, 0], magModel: 'Gun_SMG_Ammo', irons: 0.19, optic: -0.14, bore: 1, rail: [-0.37, 0.13, 0.03], clip: { at: [-0.18, -0.135, 0], tilt: -0.3, w: 0.05, d: 0.026 }, butt: [0.31, 0.07, 0.16], kind: 'long' },
-  m110: { grip: [0.005, 0, 0], fore: [-0.42, 0.11, 0], muzzle: [-0.9, 0.175, 0], mag: [-0.25, -0.06, 0], magModel: 'Gun_SMG_Ammo', irons: 0.25, optic: -0.2, bore: 1.1, rail: [-0.52, 0.165, 0.032], clip: { at: [-0.245, -0.181, 0], tilt: -0.3, w: 0.06, d: 0.034 }, butt: [0.42, 0.1, 0.2], kind: 'long' },
+  m110: { grip: [0.005, 0, 0], fore: [-0.4, -0.04, 0], muzzle: [-0.935, 0.05, 0], mag: [-0.266, -0.01, 0], magModel: 'Gun_SMG_Ammo', irons: 0.095, optic: -0.155, bore: 0.95, rail: [-0.44, 0.022, 0.024], clip: { at: [-0.266, -0.026, 0], tilt: 0, w: 0.078, d: 0.022 }, butt: [0.312, -0.045, 0.17], kind: 'long' },
   m249: { grip: [0.005, 0, 0], fore: [-0.42, 0.12, 0], muzzle: [-1.02, 0.18, 0], mag: [-0.24, -0.08, 0], irons: 0.279, optic: 0, bore: 1.25, rail: [-0.56, 0.17, 0.04], clip: { at: [-0.23, -0.125, 0.045], tilt: 0, w: 0.14, d: 0.1 }, butt: [0.372, 0.1, 0.16], kind: 'long' },
   m1014: { grip: [0.025, -0.02, 0], fore: [-0.45, 0.0, 0], muzzle: [-0.79, 0.052, 0], mag: [-0.4, 0.0, 0], irons: 0.082, optic: -0.15, bore: 1.15, rail: [-0.55, 0.03, 0.026], clip: { at: [-0.71, 0.0, 0], tilt: 0, w: 0.05, d: 0.03, tube: true }, butt: [0.29, -0.05, 0.1], kind: 'long' },
   m9a1: { grip: [0.005, 0, 0], fore: [0.02, -0.05, 0.03], muzzle: [-0.295, 0.135, 0], mag: [0.025, -0.074, 0], irons: 0.174, optic: -0.05, bore: 0.62, rail: [-0.205, 0.064, 0], clip: { at: [0.02, -0.082, 0], tilt: 0.28, w: 0.042, d: 0.026 }, kind: 'pistol' },
@@ -70,7 +70,7 @@ const FINISHES: Record<WeaponId, Finish> = {
   mp5: { body: 0x2a2d31, dark: 0x141518, accent: 0x50555c },                               // HK black
   mp7: { body: 0x474d3e, dark: 0x1a1c18, accent: 0x6a705e },                               // ranger-green polymer
   m4a1: { body: 0x26282b, dark: 0x3a3d41, accent: 0x6b7077 },                              // matte black
-  m110: { body: 0x85775a, dark: 0x2b2a26, accent: 0x5f5542 },                              // flat dark earth
+  m110: { body: 0x3a3833, dark: 0x2a2b2c, accent: 0x85775a },                              // flat-dark-earth stock, black steel
   m249: { body: 0x3c4236, dark: 0x1c1e1a, accent: 0x5d6352 },                              // parkerized olive
   m1014: { body: 0x1e2023, dark: 0x2c2e31, accent: 0x8d939a, metal: 0.55 },                // black, bright bolt
   m9a1: { body: 0x2a2c30, dark: 0x141516, accent: 0x303236, wood: 0x1f2022, metal: 0.6 },  // black slide and grips
@@ -206,15 +206,6 @@ function roundedBox(w: number, h: number, d: number, r = Math.min(w, h, d) * 0.2
   return g.translate(0, 0, -(d - 2 * b) / 2);
 }
 
-/** Front-view frame (width along z, height along y, optional window hole) extruded along the barrel. */
-function hood(w: number, h: number, r: number, hole: [number, number, number], length: number, segments = 8) {
-  const shape = roundedRect(w, h, r);
-  shape.holes.push(roundedRect(hole[0], hole[1], hole[2]));
-  const b = Math.min(0.0008, length * 0.2);
-  const g = new THREE.ExtrudeGeometry(shape, { depth: length - 2 * b, bevelEnabled: true, bevelThickness: b, bevelSize: b * 0.8, bevelSegments: 2, curveSegments: segments });
-  return g.translate(0, 0, -(length - 2 * b) / 2).rotateY(Math.PI / 2);
-}
-
 /** Side profile (x along the barrel, y up) extruded across the gun (z), centred on z. */
 function slab(points: [number, number][], thickness: number) {
   const s = new THREE.Shape();
@@ -340,7 +331,7 @@ interface IronFit {
 }
 const IRONS: Partial<Record<WeaponId, IronFit>> = {
   m4a1: { rear: [-0.035, 0.187], front: [-0.5, 0.188], line: 0.21, rearKind: 'aperture', frontKind: 'post' },
-  m110: { rear: [-0.035, 0.259], front: [-0.625, 0.266], line: 0.29, rearKind: 'aperture', frontKind: 'post' },
+  m110: { rear: [-0.1, 0.0642], front: [-0.6, 0.056], line: 0.095, rearKind: 'aperture', frontKind: 'post' },
   m249: { rear: [-0.02, 0.27], front: [-0.725, 0.28], line: 0.304, rearKind: 'aperture', frontKind: 'post' },
   mp5: { rear: [0.012, 0.143], front: [-0.312, 0.143], line: 0.157, rearKind: 'aperture', frontKind: 'hood' },
   mp7: { rear: [0.02, 0.134], front: [-0.262, 0.134], line: 0.153, rearKind: 'aperture', frontKind: 'hood' },
@@ -348,130 +339,164 @@ const IRONS: Partial<Record<WeaponId, IronFit>> = {
   m9a1: { rear: [0.03, 0.159], front: [-0.252, 0.158], line: 0.172, rearKind: 'notch', frontKind: 'blade' },
 };
 
-/** Flip-up rear aperture (rifles) or ghost ring (shotgun): clamp base, leaf, aperture ring, protective wings, windage knob. */
+/**
+ * Flip-up rear aperture (rifles) or ghost ring (shotgun), low profile: slim clamp base, thin leaf and
+ * aperture ring, thin protective wings, windage knob. Returns the rear sighting surface.
+ */
 function rearAperture(kit: Kit, x: number, y: number, line: number, ghost: boolean) {
-  const s = kit.seg(40), ro = ghost ? 0.0078 : 0.0052, ri = ghost ? 0.0047 : 0.0024, t = ghost ? 0.0035 : 0.0026;
-  const deck = y + 0.006;
-  kit.add('body', roundedBox(0.03, 0.006, 0.023, 0.002), C.anodised, x, y + 0.003);
-  screw(kit, x - 0.009, deck, 0, 'y', 1, 0.0014);
-  kit.add('body', knurl(0.0042, 0.004, 14, 'z'), C.anodised, x + 0.005, y + 0.0035, 0.0135);
-  kit.add('body', cyl(0.0019, 0.0016, 'z', kit.seg(12)), C.screw, x + 0.005, y + 0.0035, 0.0163);
-  const h = line - ro - deck + 0.0015;
-  kit.add('body', roundedBox(t, h, 0.012, 0.001), C.anodised, x, deck + h / 2);
+  const s = kit.seg(40), ro = ghost ? 0.0066 : 0.0042, ri = ghost ? 0.0048 : 0.0022, t = ghost ? 0.0026 : 0.0018;
+  const deck = y + 0.0042;
+  kit.add('body', roundedBox(0.022, 0.0042, 0.016, 0.0015), C.anodised, x, y + 0.0021);
+  screw(kit, x - 0.007, deck, 0, 'y', 1, 0.0012);
+  kit.add('body', knurl(0.0034, 0.0032, 12, 'z'), C.anodised, x + 0.004, y + 0.0026, 0.0096);
+  kit.add('body', cyl(0.0015, 0.0012, 'z', kit.seg(12)), C.screw, x + 0.004, y + 0.0026, 0.0118);
+  const h = line - ro - deck + 0.001;
+  kit.add('body', roundedBox(t, h, 0.0075, 0.0008), C.anodised, x, deck + h / 2);
   kit.add('body', washer(ri, ro, t, s), C.anodised, x + t / 2, line);
-  const wingTop = line + ro * 0.55, wh = wingTop - deck;
-  for (const sz of [-1, 1]) kit.add('body', roundedBox(0.016, wh, 0.0022, 0.0011), C.anodised, x, deck + wh / 2, sz * (ro + 0.0034));
+  const wingTop = line + ro * 0.2, wh = wingTop - deck;
+  for (const sz of [-1, 1]) kit.add('body', roundedBox(0.011, wh, 0.0012, 0.0005), C.anodised, x, deck + wh / 2, sz * (ro + 0.0026));
   return x + t / 2;
 }
 
-/** Front sight: a square post between protective ears, a hooded post, a fibre bead or a pistol blade with a tritium dot. */
+/** Front sight: a thin square post between slim protective ears, a hooded post, a fibre bead or a pistol blade with a tritium dot. */
 function frontSight(kit: Kit, x: number, y: number, line: number, kind: IronFit['frontKind']) {
   const s = kit.seg(32);
   if (kind === 'post') {
-    const earTop = line + 0.0035, eh = earTop - y;
-    for (const sz of [-1, 1]) kit.add('body', roundedBox(0.011, eh, 0.0026, 0.0011), C.anodised, x, y + eh / 2, sz * 0.0086);
-    kit.add('body', roundedBox(0.012, 0.005, 0.0198, 0.0015), C.anodised, x, y + 0.0025);
-    kit.add('body', cyl(0.0042, 0.0028, 'y', s), C.steel, x, y + 0.0064);
-    const ph = line - (y + 0.0078);
-    kit.add('body', roundedBox(0.0032, ph, 0.0032, 0.0004, 2), C.anodised, x, y + 0.0078 + ph / 2);
+    const earTop = line + 0.002, eh = earTop - y;
+    for (const sz of [-1, 1]) kit.add('body', roundedBox(0.008, eh, 0.0016, 0.0007), C.anodised, x, y + eh / 2, sz * 0.0072);
+    kit.add('body', roundedBox(0.01, 0.0042, 0.016, 0.0012), C.anodised, x, y + 0.0021);
+    kit.add('body', cyl(0.0034, 0.0022, 'y', s), C.steel, x, y + 0.0053);
+    const ph = line - (y + 0.0064);
+    kit.add('body', roundedBox(0.0024, ph, 0.0022, 0.0003, 2), C.anodised, x, y + 0.0064 + ph / 2);
   } else if (kind === 'hood') {
-    const ro = 0.0088, ri = 0.0071, len = 0.01;
+    const ro = 0.0078, ri = 0.0068, len = 0.008;
     kit.add('body', washer(ri, ro, len, s), C.anodised, x + len / 2, line);
     const bh = line - ri - y;
-    kit.add('body', roundedBox(0.012, bh, 0.0095, 0.002), C.anodised, x, y + bh / 2);
-    const ph = line - (line - ri);
-    kit.add('body', roundedBox(0.0028, ph + 0.001, 0.0028, 0.0004, 2), C.anodised, x, line - ph / 2 + 0.0005 - 0.001);
+    kit.add('body', roundedBox(0.01, bh, 0.0075, 0.0018), C.anodised, x, y + bh / 2);
+    kit.add('body', roundedBox(0.0022, ri + 0.0006, 0.0022, 0.0003, 2), C.anodised, x, line - ri / 2 - 0.0003);
   } else if (kind === 'bead') {
-    const bh = line - 0.0018 - y;
-    kit.add('body', slab([[-0.009, 0], [0.009, 0], [0.006, bh], [-0.006, bh]], 0.0036), C.anodised, x, y);
-    kit.add('body', roundedBox(0.012, 0.0012, 0.005, 0.0004), C.anodised, x, y + bh - 0.0006);
-    kit.add('glow', cyl(0.0017, 0.01, 'x', kit.seg(14)), C.red, x, line);
+    const bh = line - 0.0016 - y;
+    kit.add('body', slab([[-0.008, 0], [0.008, 0], [0.005, bh], [-0.005, bh]], 0.003), C.anodised, x, y);
+    kit.add('body', roundedBox(0.01, 0.001, 0.0042, 0.0003), C.anodised, x, y + bh - 0.0005);
+    kit.add('glow', cyl(0.0015, 0.009, 'x', kit.seg(14)), C.red, x, line);
   } else {
     const bh = line - y;
-    kit.add('body', slab([[-0.0045, 0], [0.0045, 0], [0.0045, bh], [-0.0025, bh], [-0.0045, bh * 0.7]], 0.0034), C.anodised, x, y);
-    kit.add('body', disc(0.0015, s), C.white, x + 0.0046, line - 0.0026, 0);
-    kit.add('glow', disc(0.00085, s), C.tritium, x + 0.00465, line - 0.0026, 0);
+    kit.add('body', slab([[-0.004, 0], [0.004, 0], [0.004, bh], [-0.0022, bh], [-0.004, bh * 0.7]], 0.0028), C.anodised, x, y);
+    kit.add('body', disc(0.0012, s), C.white, x + 0.0041, line - 0.0022, 0);
+    kit.add('glow', disc(0.0007, s), C.tritium, x + 0.00415, line - 0.0022, 0);
   }
 }
 
-/** Pistol rear sight: dovetailed block with a square notch and two tritium dots (three-dot with the front). */
+/** Pistol rear sight: low dovetailed block with a square notch and two tritium dots (three-dot with the front). */
 function rearNotch(kit: Kit, x: number, y: number, line: number) {
-  const s = kit.seg(32), notch = 0.0044, depth = 0.0046, half = 0.0108, bh = line - depth - y;
-  kit.add('body', slab([[-0.0045, 0], [0.0045, 0], [0.0045, bh], [-0.0045, bh]], 0.0216), C.anodised, x, y);
+  const s = kit.seg(32), notch = 0.0042, depth = 0.0038, half = 0.0092, bh = line - depth - y;
+  kit.add('body', slab([[-0.004, 0], [0.004, 0], [0.004, bh], [-0.004, bh]], 2 * half), C.anodised, x, y);
   const w = half - notch / 2;
   for (const sz of [-1, 1]) {
-    kit.add('body', slab([[-0.0045, 0], [0.0045, 0], [0.0045, depth], [-0.0025, depth], [-0.0045, depth * 0.6]], w), C.anodised, x, line - depth, sz * (notch / 2 + w / 2));
-    kit.add('body', disc(0.0015, s), C.white, x + 0.0046, line - 0.0026, sz * (notch / 2 + 0.0029));
-    kit.add('glow', disc(0.00085, s), C.tritium, x + 0.00465, line - 0.0026, sz * (notch / 2 + 0.0029));
+    kit.add('body', slab([[-0.004, 0], [0.004, 0], [0.004, depth], [-0.0022, depth], [-0.004, depth * 0.6]], w), C.anodised, x, line - depth, sz * (notch / 2 + w / 2));
+    kit.add('body', disc(0.0012, s), C.white, x + 0.0041, line - 0.0021, sz * (notch / 2 + 0.0024));
+    kit.add('glow', disc(0.0007, s), C.tritium, x + 0.00415, line - 0.0021, sz * (notch / 2 + 0.0024));
   }
-  screw(kit, x, y + bh, 0.0, 'y', 1, 0.0011);
-  return x + 0.0045;
+  screw(kit, x, y + bh, 0.0, 'y', 1, 0.001);
+  return x + 0.004;
 }
 
 // ---- Optic builders (kit space: mount surface at y = 0, centred on the optic's x) ----------------
 interface Built { length: number; window: number; rear: number; sight: Sight }
 
-/** Pistol mini red dot (RMR style): bevelled plate, sloped protective ears, framed coated window, buttons, top battery cap. */
-function miniDot(kit: Kit): Built {
-  const plate = 0.0042, s = kit.seg(32);
-  kit.add('body', roundedBox(0.048, plate, 0.025, 0.004), C.anodised, 0, plate / 2);
-  kit.add('body', roundedBox(0.024, 0.0085, 0.025, 0.003), C.anodised, 0.0115, plate + 0.00425);
-  const win = plate + 0.0118, frameTop = win + 0.0106;
-  kit.add('body', hood(0.025, 0.0212, 0.0058, [0.0188, 0.0148, 0.0042], 0.0085, kit.seg(10)), C.anodised, -0.0155, win);
-  for (const sz of [-1, 1]) kit.add('body', slab([[-0.019, plate], [-0.0005, plate], [-0.0005, plate + 0.0086], [-0.011, frameTop - 0.0006], [-0.019, frameTop - 0.0006]], 0.0032), C.anodised, 0, 0, sz * 0.0109);
-  for (const sz of [-1, 1]) kit.add('rubber', cyl(0.0021, 0.0016, 'z', s), C.rubber, 0.012, plate + 0.0045, sz * 0.0131);
-  kit.add('body', knurl(0.0045, 0.0016, 10, 'y'), C.steel, 0.012, plate + 0.0093);
-  kit.add('body', cyl(0.0017, 0.002, 'x', s), C.socket, 0.0005, plate + 0.0058);
-  for (const x of [0.019, 0.004]) screw(kit, x, plate, 0, 'y', 1, 0.0015);
-  kit.add('window', pane(0.0188, 0.0148, 0.0042), C.white, -0.0145, win);
-  return { length: 0.048, window: win, rear: 0.0235, sight: { kind: 'dot', center: kit.at(-0.0145, win), radius: 0.0094, half: [0.0094, 0.0074] } };
+/** Points (z, y) round a rounded rectangle, `k` + 1 per corner arc: the same count at any size, so two loops stitch into a band. */
+function loop(hz: number, hy: number, r: number, k: number, dy = 0): [number, number][] {
+  const out: [number, number][] = [];
+  for (const [sz, sy, a0] of [[1, 1, 0], [-1, 1, 0.5], [-1, -1, 1], [1, -1, 1.5]]) for (let i = 0; i <= k; i++) {
+    const a = (a0 + (i / k) * 0.5) * Math.PI;
+    out.push([sz * (hz - r) + r * Math.cos(a), sy * (hy - r) + r * Math.sin(a) + dy]);
+  }
+  return out;
+}
+/** Smooth band between two loops at x = xa and x = xb. */
+function band(a: [number, number][], xa: number, b: [number, number][], xb: number) {
+  const n = a.length, pos: number[] = [], index: number[] = [];
+  for (const [z, y] of a) pos.push(xa, y, z);
+  for (const [z, y] of b) pos.push(xb, y, z);
+  for (let i = 0; i < n; i++) { const j = (i + 1) % n; index.push(i, n + i, n + j, i, n + j, j); }
+  const g = new THREE.BufferGeometry().setAttribute('position', new THREE.Float32BufferAttribute(pos, 3));
+  g.setIndex(index);
+  g.computeVertexNormals();
+  return g;
+}
+/**
+ * Thin-walled window frame (rounded rectangle, `wall` thick) from its rear face at x = 0 forward to
+ * x = -length, opening out by `flare` toward the front, round the window centre. With the flare
+ * 1 + length / eye relief, its inner and outer walls are seen edge-on from the aiming eye: the hood
+ * frames the window with only its thin rear rim, without a tunnel of walls round the view.
+ */
+function windowFrame(hz: number, hy: number, r: number, wall: number, length: number, flare: number, k: number) {
+  const fz = hz * flare, fy = hy * flare;
+  const inRear = loop(hz, hy, r, k), outRear = loop(hz + wall, hy + wall, r + wall, k);
+  const inFront = loop(fz, fy, r * flare, k), outFront = loop(fz + wall, fy + wall, r * flare + wall, k);
+  return mergeGeometries([band(outRear, 0, outFront, -length), band(inRear, 0, inFront, -length), band(outRear, 0, inRear, 0), band(outFront, -length, inFront, -length)])!;
 }
 
-/** Rifle red dot (micro tube): riser mount with clamp, hollow tube with front hood, capped turrets, brightness dial, flip cap. */
-function microDot(kit: Kit): Built {
-  const s = kit.seg(64), top = rail(kit, -0.022, 0.022, 0);
-  railClamp(kit, -0.022, 0.022, top, [-0.009, 0.009]);
-  const riser = 0.03;
-  kit.add('body', roundedBox(0.04, riser, 0.021, 0.003), C.anodised, 0, top + riser / 2);
-  for (const sz of [-1, 1]) kit.add('body', roundedBox(0.026, riser * 0.45, 0.0006, 0.002), C.rail, 0, top + riser * 0.48, sz * 0.0106);
-  const R = 0.0145, ri = 0.0113, L = 0.062, axis = top + riser + 0.006 + R - 0.002;
-  kit.add('body', roundedBox(0.032, 0.007, 0.019, 0.002), C.anodised, 0.002, top + riser + 0.0035);
-  for (const x of [-0.008, 0.012]) screw(kit, x, top + riser + 0.0035, 0.0095, 'z', 1, 0.0013);
-  const tube = lathe([[ri, 0], [0.0128, 0], [0.0137, 0.0012], [0.0137, 0.007], [R, 0.008], [R, 0.026], [R + 0.0007, 0.0268], [R + 0.0007, 0.045], [R, 0.046],
-    [R, 0.053], [R + 0.0012, 0.054], [R + 0.0012, L - 0.0008], [R + 0.0004, L], [ri + 0.0008, L], [ri, L - 0.0012], [ri, 0]], s);
-  kit.add('body', tube, p => (Math.hypot(p.y, p.z) < ri + 0.0004 ? C.inner : C.anodised), L / 2, axis);
-  turret(kit, 0.004, axis + R - 0.001, 0, 0.0062, 'y', C.steel, 1, true);
-  turret(kit, 0.004, axis, -(R - 0.001), 0.0062, 'z', C.steel, -1, true);
-  kit.add('body', cyl(0.0092, 0.0024, 'z', s), C.anodised, 0.008, axis, R + 0.0004);
-  kit.add('body', knurl(0.0088, 0.0058, kit.detail === 'high' ? 28 : 14, 'z'), C.anodised, 0.008, axis, R + 0.0045);
-  kit.add('body', cyl(0.0076, 0.0012, 'z', s), C.steel, 0.008, axis, R + 0.0079);
-  kit.add('body', roundedBox(0.0045, 0.0011, 0.0006, 0.0002), ACCENT.reflex, 0.0055, axis, R + 0.0086);
-  kit.add('window', disc(ri - 0.0002, s), C.white, -L / 2 + 0.006, axis);
-  return { length: 0.044, window: axis, rear: L / 2, sight: { kind: 'dot', center: kit.at(-L / 2 + 0.006, axis), radius: ri - 0.0002 } };
+/**
+ * Open reflex sight (micro red dot, RMR style): low plate, rear LED emitter below the window line,
+ * thin window frame with a large coated window, slim sloped ears, side buttons. Rifles mount it on a
+ * narrow riser at co-witness height; pistols cut it into the slide.
+ */
+function reflexDot(kit: Kit, rifle: boolean, relief: number): Built {
+  const s = kit.seg(32), k = kit.seg(8);
+  const g = rifle ? 1.2 : 1.12, hz = 0.0108 * g, hy = 0.0086 * g, r = 0.0042 * g, wall = 0.0012, plate = 0.0032, depth = 0.0045;
+  const pl = 0.036 * g, pw = 0.021 * g, front = -pl / 2 + 0.0008, rear = front + depth;
+  let base = 0;
+  if (rifle) {
+    // Narrow riser under the window, forward of the eye: from behind, only the thin plate shows below the window.
+    const x0 = front - 0.003, x1 = front + 0.03, mid = (x0 + x1) / 2, top = rail(kit, x0, x1, 0);
+    railClamp(kit, x0, x1, top, [x0 + 0.008, x1 - 0.008]);
+    const riser = 0.011;
+    kit.add('body', roundedBox(x1 - x0 - 0.004, riser, 0.014, 0.002), C.anodised, mid, top + riser / 2);
+    for (const sz of [-1, 1]) kit.add('body', roundedBox(x1 - x0 - 0.014, riser * 0.4, 0.0006, 0.0015), C.rail, mid, top + riser * 0.5, sz * 0.0071);
+    base = top + riser;
+  }
+  const win = base + plate + wall + hy;
+  // Plate: full width under the window, narrowing behind it so little shows below the window from the eye.
+  const fl = depth + 0.006, rw = pw * 0.62;
+  kit.add('body', roundedBox(fl, plate, pw, 0.0025), C.anodised, front + fl / 2, base + plate / 2);
+  kit.add('body', roundedBox(pl - fl + 0.002, plate, rw, 0.0025), C.anodised, front + fl + (pl - fl) / 2 - 0.001, base + plate / 2);
+  kit.add('body', windowFrame(hz, hy, r, wall, depth, 1 + depth / relief, k), C.anodised, rear, win);
+  // Emitter: a low, narrow block at the back of the plate, below the window's lower edge as seen from the eye.
+  const ex = pl / 2 - 0.0075 * g, eh = 0.0024;
+  kit.add('body', roundedBox(0.012 * g, eh, rw * 0.9, 0.001), C.anodised, ex, base + plate + eh / 2);
+  kit.add('body', roundedBox(0.0004, 0.0011, 0.0026, 0.0002), C.socket, ex - 0.006 * g, base + plate + eh * 0.5);
+  for (const sz of [-1, 1]) kit.add('rubber', cyl(0.0014, 0.0012, 'z', s), C.rubber, front + fl / 2, base + plate * 0.5, sz * (pw / 2 + 0.0004));
+  screw(kit, ex - 0.009 * g, base + plate, 0, 'y', 1, 0.0011);
+  kit.add('window', pane(2 * hz, 2 * hy, r), C.white, rear - 0.0012, win);
+  return { length: pl, window: win, rear, sight: { kind: 'dot', center: kit.at(rear - 0.0012, win), radius: hz, half: [hz, hy] } };
 }
 
-/** Holographic sight: rail base with QD lever, rear button console, framed hood with a large coated window, battery cap. */
-function holoSight(kit: Kit): Built {
-  const s = kit.seg(32), top = rail(kit, -0.042, 0.042, 0);
-  kit.add('body', roundedBox(0.088, 0.021, 0.031, 0.004), C.anodised, 0, top + 0.0105);
-  for (const sz of [-1, 1]) kit.add('body', roundedBox(0.05, 0.007, 0.0006, 0.0025), C.rail, -0.012, top + 0.011, sz * 0.0156);
-  const base = top + 0.021;
-  kit.add('body', cyl(0.0036, 0.003, 'z', s), C.steel, 0.024, top + 0.0045, 0.0168);
-  kit.add('body', slab([[-0.016, -0.0026], [0.016, -0.0022], [0.018, 0.0], [0.016, 0.0024], [-0.016, 0.0028], [-0.018, 0.0]], 0.0034), C.anodised, 0.008, top + 0.0046, 0.0185);
-  nut(kit, -0.02, top + 0.004, -0.0155, 'z', -1, 0.0032);
-  kit.add('body', roundedBox(0.03, 0.013, 0.031, 0.004), C.anodised, 0.028, base + 0.0065);
-  for (const x of [0.021, 0.033]) kit.add('rubber', cyl(0.0032, 0.0018, 'z', s), C.rubber, x, base + 0.0062, 0.0161);
-  kit.add('rubber', roundedBox(0.008, 0.0035, 0.0016, 0.0012), C.rubber, 0.027, base + 0.0112, 0.0158);
-  kit.add('body', knurl(0.0068, 0.009, 16, 'z'), C.anodised, -0.03, base - 0.004, 0.0195);
-  kit.add('body', cyl(0.006, 0.0012, 'z', s), C.steel, -0.03, base - 0.004, 0.0246);
-  const win = base + 0.0178;
-  kit.add('body', hood(0.0405, 0.0355, 0.0068, [0.0312, 0.0252, 0.0042], 0.05, kit.seg(10)), C.anodised, -0.012, win);
-  kit.add('body', roundedBox(0.03, 0.0024, 0.024, 0.001), C.anodised, -0.014, win + 0.0188);
-  kit.add('body', hood(0.0372, 0.032, 0.0062, [0.0312, 0.0252, 0.0042], 0.003, kit.seg(10)), C.rail, 0.0145, win);
-  for (const x of [-0.03, 0.004]) screw(kit, x, win - 0.011, 0.0202, 'z', 1, 0.0014);
-  kit.add('body', roundedBox(0.012, 0.004, 0.006, 0.0012), C.socket, 0.0185, win - 0.0135, 0);
-  kit.add('window', pane(0.0312, 0.0252, 0.0042), C.white, -0.034, win);
-  return { length: 0.088, window: win, rear: 0.0145, sight: { kind: 'holo', center: kit.at(-0.034, win), radius: 0.0156, half: [0.0156, 0.0126] } };
+/**
+ * Holographic sight (EXPS style), low profile: narrow clamp base, a battery housing wedged under a
+ * thin flared hood, side buttons and a transverse battery cap; the coated window fills the hood's rear.
+ */
+function holoSight(kit: Kit, relief: number): Built {
+  const s = kit.seg(32), k = kit.seg(8), top = rail(kit, -0.034, 0.03, 0);
+  const baseH = 0.0055, bw = 0.019;
+  kit.add('body', roundedBox(0.062, baseH, bw, 0.0018), C.anodised, -0.002, top + baseH / 2);
+  railClamp(kit, -0.03, 0.026, top, [-0.024, -0.006]);
+  // Quick-detach lever along the left of the base.
+  kit.add('body', slab([[-0.014, -0.0018], [0.014, -0.0015], [0.0155, 0.0], [0.014, 0.0017], [-0.014, 0.002], [-0.0155, 0.0]], 0.0026), C.anodised, 0.004, top + 0.0024, 0.0142);
+  kit.add('body', cyl(0.0026, 0.0022, 'z', s), C.anodised, -0.009, top + 0.0024, 0.0155);
+  const hz = 0.0174, hy = 0.013, wall = 0.0013, L = 0.015, flare = 1 + L / relief, rear = 0.012, front = rear - L;
+  const floorFront = top + baseH + 0.003, win = floorFront + wall + hy * flare, floorRear = win - hy - wall;
+  // Battery housing: a wedge under the hood's floor, narrower than the hood.
+  kit.add('body', slab([[front - 0.004, top + baseH - 0.0006], [rear - 0.0015, top + baseH - 0.0006], [rear - 0.0015, floorRear - 0.0003], [front, floorFront - 0.0003]], 0.021), C.anodised, 0, 0);
+  kit.add('body', windowFrame(hz, hy, 0.0034, wall, L, flare, k), C.anodised, rear, win);
+  // A thin rear rim in a lighter finish, so the hood's edge reads against dark backgrounds.
+  kit.add('body', windowFrame(hz + wall, hy + wall, 0.0034 + wall, 0.0005, 0.0012, 1.01, k), C.rail, rear + 0.0006, win);
+  for (const x of [rear - 0.006, rear - 0.0125]) kit.add('rubber', cyl(0.0022, 0.0012, 'z', s), C.rubber, x, top + baseH + 0.0042, 0.0108);
+  kit.add('body', knurl(0.0046, 0.005, 14, 'z'), C.anodised, front + 0.002, top + baseH + 0.0012, -0.0122);
+  kit.add('body', cyl(0.004, 0.001, 'z', s), C.steel, front + 0.002, top + baseH + 0.0012, -0.0151);
+  for (const x of [front - 0.001, rear - 0.004]) screw(kit, x, top + baseH * 0.5, bw / 2, 'z', 1, 0.0011);
+  kit.add('window', pane(2 * hz, 2 * hy, 0.0034), C.white, rear - 0.0015, win);
+  return { length: 0.064, window: win, rear: rear + 0.0006, sight: { kind: 'holo', center: kit.at(rear - 0.0015, win), radius: hz, half: [hz, hy] } };
 }
 
 /** Prism sight (ACOG style): mount with thumb nuts, forged body with a top fibre-optic channel, objective bell with sunshade, rubber eyepiece. */
@@ -565,13 +590,14 @@ export function topAt(model: THREE.Object3D, x0: number, x1: number) {
 
 /**
  * How far in front of the eye each sight sits when aimed (m, eye to its rear sighting surface). The
- * view model sets the weapon by it, so red dots and holo sights frame a good part of the view and
- * scopes fill it like an eyepiece; iron sights put the rear aperture close, with the front post far out.
+ * view model sets the weapon by it. As in modern shooters, the eye sits just behind a holo or red dot,
+ * so its thin-framed window fills the centre of the view and the low mount and receiver drop below it
+ * (the holo's window spans about half the screen height, a red dot's about a quarter); scopes fill the
+ * view like an eyepiece. Iron sights sit further out: a small, thin rear aperture with the front post
+ * inside it and only a little of the receiver below; pistols are held at arm's length.
  */
 const RELIEF: Record<OpticId, { long: number; pistol: number }> = {
-  // Open sights sit well ahead of the eye (a small rear sight, most of the screen clear); scopes sit
-  // close so the ocular lens fills a large part of the view.
-  irons: { long: 0.24, pistol: 0.4 }, reflex: { long: 0.12, pistol: 0.24 }, holo: { long: 0.11, pistol: 0.22 },
+  irons: { long: 0.24, pistol: 0.4 }, reflex: { long: 0.08, pistol: 0.24 }, holo: { long: 0.05, pistol: 0.22 },
   acog: { long: 0.03, pistol: 0.03 }, x4: { long: 0.034, pistol: 0.034 }, x6: { long: 0.034, pistol: 0.034 },
 };
 
@@ -604,8 +630,8 @@ function opticModel(weapons: Map<string, THREE.Object3D>, id: WeaponId, optic: O
     o = { group: kit.build(`Optic_${optic}`, first), sightLine: f.axis, eyeX: built.rear, relief, sight: built.sight };
   } else {
     let built: Built;
-    if (optic === 'reflex') built = fit.kind === 'pistol' ? miniDot(kit) : microDot(kit);
-    else if (optic === 'holo') built = holoSight(kit);
+    if (optic === 'reflex') built = reflexDot(kit, fit.kind !== 'pistol', relief);
+    else if (optic === 'holo') built = holoSight(kit, relief);
     else built = prismSight(kit, FIBRE[first ? settings.reticleColor : 'amber']);
     const top = topAt(model, fit.optic - built.length / 2, fit.optic + built.length / 2);
     const group = kit.build(`Optic_${optic}`, first);
