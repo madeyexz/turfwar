@@ -5,7 +5,7 @@ import { ELIMINATION, SABOTAGE, type Mode, type Team } from '../shared/match/sta
 import { loadAssets, type Assets } from './assets';
 import { Audio } from './audio';
 import { Game } from './game/game';
-import { OPTIC_DETAILS, RETICLE_COLORS, RETICLE_STYLES, SCOPE_MODES, settings, type OpticDetail, type ReticleColor, type ReticleStyle, type ScopeMode } from './game/settings';
+import { settings } from './game/settings';
 import type { GameLink } from './game/link';
 import { OfflineLink } from './game/offline';
 import { Bench, BENCH_SECONDS, benchReport, type BenchResult } from './game/bench';
@@ -13,8 +13,8 @@ import { onlineAvailable, onlineConfig, connectOnline, watchRooms, type OnlineEn
 import { LevelView } from './render/level';
 import { THEMES } from './render/materials';
 import { QUALITY, Renderer } from './render/renderer';
-import { RETICLE_CSS } from './render/sights';
 import { renderTheme, THEME_START } from './theme';
+import { SettingsMenu, type GraphicsQuality, type SettingsTab } from './ui/settingsmenu';
 import './style.css';
 import './menu.css';
 
@@ -44,22 +44,6 @@ const MODES: Record<Mode, { tag: string; name: string }> = {
   elimination: { tag: 'E', name: 'Elimination' },
   sabotage: { tag: 'S', name: 'Sabotage' },
 };
-const CROSSHAIRS = {
-  classic: '<path d="M12 2.5v6M12 15.5v6M2.5 12h6M15.5 12h6"/><circle cx="12" cy="12" r="1.3"/>',
-  dot: '<circle cx="12" cy="12" r="2.4"/>',
-  circle: '<circle cx="12" cy="12" r="7" fill="none"/><circle cx="12" cy="12" r="1.3"/>',
-  t: '<path d="M12 15.5v6M2.5 12h6M15.5 12h6"/><circle cx="12" cy="12" r="1.3"/>',
-} as const;
-type Crosshair = keyof typeof CROSSHAIRS;
-/** Red dot / holo reticle icons ('stock': each sight's own). */
-const RETICLES: Record<ReticleStyle, string> = {
-  stock: '<circle cx="12" cy="12" r="1.8"/><path d="M4 8.5V4h4.5M15.5 4H20v4.5M20 15.5V20h-4.5M8.5 20H4v-4.5" fill="none"/>',
-  dot: '<circle cx="12" cy="12" r="2.6"/>',
-  circle: '<circle cx="12" cy="12" r="8" fill="none"/><circle cx="12" cy="12" r="1.5"/>',
-  chevron: '<path d="M5 16.5l7-8 7 8" fill="none" stroke-linejoin="round"/>',
-  cross: '<path d="M12 3v6M12 15v6M3 12h6M15 12h6"/><circle cx="12" cy="12" r="1.3"/>',
-};
-const cap = (s: string) => s[0].toUpperCase() + s.slice(1);
 const esc = (s: string) => s.replace(/[&<>"']/g, c => `&#${c.charCodeAt(0)};`);
 
 const menu = document.createElement('div');
@@ -69,128 +53,91 @@ const mapName = (id: string) => maps.find(m => m.id === id)?.name ?? id;
 const server = onlineConfig();
 const online = onlineAvailable();
 const vs = (n: number) => `${n}v${n}`;
-const choice = (group: string, attr: string, items: [string, string][]) =>
-  `<div class="choices segmented" id="${group}" style="--n:${items.length}">${items.map(([v, label]) => `<button class="choice" data-${attr}="${v}"><b>${label}</b></button>`).join('')}</div>`;
+const choice = (group: string, attr: string, items: [string, string][], label?: string) =>
+  `<div class="choices segmented" id="${group}" style="--n:${items.length}"${label ? ` role="group" aria-label="${label}"` : ''}>${items.map(([v, text]) => `<button class="choice" data-${attr}="${v}"><b>${text}</b></button>`).join('')}</div>`;
 const sizeChoice = (group: string) =>
-  `<div class="choices segmented sizes" id="${group}" style="--n:${SIZES.length}">${SIZES.map(s => `<button class="choice" data-size="${s.id}"><b>${s.label}</b><small>${s.name}${s.perTeam > 12 ? ' · big map' : ''}</small></button>`).join('')}</div>`;
+  `<div class="choices segmented sizes" id="${group}" style="--n:${SIZES.length}" role="group" aria-label="Room size">${SIZES.map(s => `<button class="choice" data-size="${s.id}"><b>${s.label}</b><small>${s.name}${s.perTeam > 12 ? ' · big map' : ''}</small></button>`).join('')}</div>`;
 const modeChoice = (group: string) => choice(group, 'gamemode', Object.entries(MODES).map(([id, m]) => [id, `<span class="mtag">[${m.tag}]</span> ${m.name}`]));
 const mapChoice = (group: string) =>
   `<div class="maps" id="${group}">${maps.map(m => `<button class="map" data-map="${m.id}" data-theme="${m.theme}"><b>${m.name}</b><small></small></button>`).join('')}</div>`;
 const field = (label: string, body: string) => `<div class="field"><span class="label">${label}</span>${body}</div>`;
+const GEAR = '<svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="3.2"/><path d="M12 2.8v2.6M12 18.6v2.6M21.2 12h-2.6M5.4 12H2.8M18.5 5.5l-1.84 1.84M7.34 16.66 5.5 18.5M18.5 18.5l-1.84-1.84M7.34 7.34 5.5 5.5"/><circle cx="12" cy="12" r="6.4"/></svg>';
 
+/*
+ * Left: only what starts a match (callsign, team, size, Quick Play) and one row of other ways in, each
+ * opening its drawer. Right: the live backdrop with the map in view and, when any exist, public rooms.
+ * Settings and controls live behind the gear (top right).
+ */
 menu.innerHTML = `
   <section class="panel">
     <header class="brand">
       <div class="tag">Lawbreaker // Frontline</div>
       <h1>SWAT <em>vs Militia</em></h1>
-      <p class="lede">Round-based team combat. One life a round, cash for every kill, first team to ten rounds wins.</p>
+      <p class="lede">Round-based team combat · first to ten rounds.</p>
     </header>
     <div class="form">
       <div class="who">
-        <label class="field"><span class="label">Callsign</span><input type="text" id="callsign" maxlength="16" autocomplete="off" spellcheck="false"></label>
-        ${field('Team', choice('teams', 'team', [['auto', 'Auto'], ['0', '<span class="swat">SWAT</span>'], ['1', '<span class="militia">Militia</span>']]))}
+        <label class="callsign"><span class="label">Callsign</span><input type="text" id="callsign" maxlength="16" autocomplete="off" spellcheck="false"></label>
+        ${choice('teams', 'team', [['auto', 'Auto'], ['0', '<span class="swat">SWAT</span>'], ['1', '<span class="militia">Militia</span>']], 'Team')}
       </div>
 
-      <section class="block" id="online-block">
-        <div class="block-head"><span class="label">Play online</span><span class="conn" id="conn"></span></div>
+      <section class="block" id="online-block" aria-label="Play online">
         ${sizeChoice('sizes-online')}
         <button class="deploy" id="quick" data-act="quick" disabled>Loading…</button>
-        <p class="hint" id="quick-hint"></p>
-        <div class="subs">
-          <button class="sub" data-toggle="create" aria-expanded="false">Create private room</button>
-          <button class="sub" data-toggle="join" aria-expanded="false">Join with code</button>
-        </div>
-        <div class="drawer" id="drawer-create">
-          ${field('Mode', modeChoice('modes-create'))}
-          ${field('Map', mapChoice('maps-create'))}
-          ${field('Bots', choice('botsfills', 'botsfill', [['on', 'Fill empty slots'], ['off', 'Humans only']]))}
-          <button class="go" id="create-go" data-act="create">Create room</button>
-          <p class="hint">You get a four-letter code to share. Size: the chip above.</p>
-        </div>
-        <div class="drawer" id="drawer-join">
-          <div class="code-row">
-            <input type="text" id="roomcode" maxlength="4" autocomplete="off" spellcheck="false" placeholder="ABCD" aria-label="Room code">
-            <button class="go" id="join-go" data-act="join">Join</button>
-          </div>
-          <p class="hint">The host's code is on their status line (ROOM ABCD) and in their invite link.</p>
-        </div>
+        <p class="rooms-line" id="rooms-line"><span class="conn" id="conn"><i></i></span><span id="quick-hint"></span></p>
         <p class="unavailable" id="online-off"></p>
       </section>
 
-      <section class="block" id="offline-block">
-        <span class="label">Play offline</span>
-        <div class="subs big">
-          <button class="sub" data-toggle="bots" aria-expanded="false"><b>Play vs bots</b><small>Your own match, any map</small></button>
-          <button class="sub" data-toggle="range" aria-expanded="false"><b>Practice range</b><small>No bots · free store</small></button>
+      <div class="subs" role="group" aria-label="More ways to play">
+        <button class="sub" data-toggle="create" aria-expanded="false" aria-controls="drawer-create">Private room</button>
+        <button class="sub" data-toggle="join" aria-expanded="false" aria-controls="drawer-join">Join code</button>
+        <button class="sub" data-toggle="bots" aria-expanded="false" aria-controls="drawer-bots">Vs bots</button>
+        <button class="sub" data-toggle="range" aria-expanded="false" aria-controls="drawer-range">Practice</button>
+      </div>
+      <div class="drawer" id="drawer-create">
+        ${field('Mode', modeChoice('modes-create'))}
+        ${field('Map', mapChoice('maps-create'))}
+        ${field('Bots', choice('botsfills', 'botsfill', [['on', 'Fill empty slots'], ['off', 'Humans only']]))}
+        <button class="go" id="create-go" data-act="create">Create room</button>
+        <p class="hint">You get a four-letter code to share. Size: the chip above.</p>
+      </div>
+      <div class="drawer" id="drawer-join">
+        <div class="code-row">
+          <input type="text" id="roomcode" maxlength="4" autocomplete="off" spellcheck="false" placeholder="ABCD" aria-label="Room code">
+          <button class="go" id="join-go" data-act="join">Join</button>
         </div>
-        <div class="drawer" id="drawer-bots">
-          ${field('Mode', modeChoice('modes-bots'))}
-          ${field('Size', sizeChoice('sizes-bots'))}
-          ${field('Map', mapChoice('maps-bots'))}
-          ${field('Bot difficulty', choice('skills', 'skill', [['0.25', 'Recruit'], ['0.45', 'Veteran'], ['0.75', 'Elite']]))}
-          <button class="go" id="bots-go" data-act="bots">Start match</button>
-        </div>
-        <div class="drawer" id="drawer-range">
-          ${field('Map', mapChoice('maps-range'))}
-          <button class="go" id="range-go" data-act="range">Enter the range</button>
-          <p class="hint">The whole store is free and there is no round limit: try every gun and attachment, learn the routes.</p>
-        </div>
-      </section>
-
-      <details class="settings">
-        <summary>Options &amp; controls</summary>
-        <div class="settings-body">
-        <div class="field"><span class="label">Graphics</span><div class="choices segmented" id="qualities">
-          <button class="choice" data-quality="low" title="No bloom, 1k shadows"><b>Low</b></button><button class="choice" data-quality="medium" title="Bloom, 2k shadows"><b>Medium</b></button><button class="choice" data-quality="high" title="1.5× resolution"><b>High</b></button>
-        </div></div>
-        <div class="field"><span class="label">Crosshair</span><div class="choices segmented crosshairs" id="crosshairs" style="--n:4">${Object.entries(CROSSHAIRS).map(([id, svg]) => `<button class="choice" data-crosshair="${id}" title="${id === 't' ? 'T' : id[0].toUpperCase() + id.slice(1)}"><svg viewBox="0 0 24 24" aria-hidden="true">${svg}</svg><b>${id === 't' ? 'T' : id}</b></button>`).join('')}</div></div>
-        <div class="field"><span class="label">Scope view</span><div class="choices segmented" id="scopemodes" style="--n:2"><button class="choice" data-scopemode="pip" title="Magnified optics show the zoom through the lens; the view around it stays wide"><b>Through the lens</b></button><button class="choice" data-scopemode="overlay" title="Magnified optics fill the screen with a black eyepiece"><b>Full-screen</b></button></div></div>
-        <div class="field"><span class="label">Reticle colour</span><div class="choices segmented" id="reticlecolors" style="--n:4">${RETICLE_COLORS.map(c => `<button class="choice" data-reticlecolor="${c}"><b><i style="display:inline-block;width:8px;height:8px;margin-right:6px;border-radius:50%;vertical-align:1px;background:${RETICLE_CSS[c]};box-shadow:0 0 5px ${RETICLE_CSS[c]}"></i>${cap(c)}</b></button>`).join('')}</div></div>
-        <div class="field"><span class="label">Red dot &amp; holo reticle</span><div class="choices segmented crosshairs" id="reticlestyles" style="--n:5">${RETICLE_STYLES.map(id => `<button class="choice" data-reticlestyle="${id}" title="${id === 'stock' ? 'Each sight\'s own: dot for the red dot, circle-dot for the holo' : cap(id)}"><svg viewBox="0 0 24 24" aria-hidden="true">${RETICLES[id]}</svg><b>${id}</b></button>`).join('')}</div></div>
-        <div class="field"><span class="label">Optic detail</span><div class="choices segmented" id="opticdetails" style="--n:2"><button class="choice" data-opticdetail="high" title="Smoothest optic models, sharper scope view"><b>High</b></button><button class="choice" data-opticdetail="low" title="Lighter optic models and scope view"><b>Low</b></button></div></div>
-        <div class="sliders">
-          <label class="field"><span class="label">Mouse sensitivity <output id="sens-out"></output></span><input type="range" id="sens" min="0.2" max="3" step="0.05"></label>
-          <label class="field" title="1.00 = matched: aiming scales your mouse by the zoom you look through, so moves feel the same scoped and unscoped. Lower = slower when aiming."><span class="label">Aim sensitivity <output id="adssens-out"></output></span><input type="range" id="adssens" min="0.5" max="1.5" step="0.05"></label>
-          <label class="field"><span class="label">Field of view <output id="fov-out"></output></span><input type="range" id="fov" min="65" max="95" step="1"></label>
-          <label class="field"><span class="label">Effects volume <output id="volume-out"></output></span><input type="range" id="volume" min="0" max="1" step="0.05"></label>
-          <label class="field"><span class="label">Menu music <output id="music-out"></output></span><input type="range" id="music" min="0" max="1" step="0.05"></label>
-        </div>
-        <dl class="controls">
-          <dt>WASD · Mouse</dt><dd>Move · look</dd>
-          <dt>LMB · RMB</dt><dd>Fire · accuracy (zoom)</dd>
-          <dt>Shift · Space</dt><dd>Sprint · jump (both cost stamina)</dd>
-          <dt>C / Ctrl</dt><dd>Crouch</dd>
-          <dt>1 · 2 · 3</dt><dd>Knife · secondary · primary</dd>
-          <dt>4 / G</dt><dd>M67 grenade</dd>
-          <dt>Q / Wheel</dt><dd>Cycle weapons</dd>
-          <dt>R · E</dt><dd>Reload · use (bomb, ammo crate)</dd>
-          <dt>Z · B</dt><dd>Binoculars · store</dd>
-          <dt>Enter · T</dt><dd>Chat · team chat</dd>
-          <dt>Tab</dt><dd>Scoreboard</dd>
-          <dt>Esc / P · F</dt><dd>Menu (settings) · fullscreen</dd>
-          <dt>V</dt><dd>Camera view (reserved)</dd>
-          <dt>M</dt><dd>Back to the lobby (mouse released)</dd>
-        </dl>
-        <button class="bench-link" id="bench">Run the ${BENCH_SECONDS}-second performance check</button>
-        <p class="credits">Characters, weapons and props: CC0 packs by Quaternius. Gunshots: CC0 Free Firearm Sound Library. Textures: CC0 Poly Haven. Font: Rajdhani (OFL). No proprietary game assets.</p>
-        </div>
-      </details>
+        <p class="hint">The host's code is on their status line (ROOM ABCD) and in their invite link.</p>
+      </div>
+      <div class="drawer" id="drawer-bots">
+        ${field('Mode', modeChoice('modes-bots'))}
+        ${field('Size', sizeChoice('sizes-bots'))}
+        ${field('Map', mapChoice('maps-bots'))}
+        ${field('Bot difficulty', choice('skills', 'skill', [['0.25', 'Recruit'], ['0.45', 'Veteran'], ['0.75', 'Elite']]))}
+        <button class="go" id="bots-go" data-act="bots">Start match</button>
+        <p class="hint">Your own match, offline: bots fill both teams.</p>
+      </div>
+      <div class="drawer" id="drawer-range">
+        ${field('Map', mapChoice('maps-range'))}
+        <button class="go" id="range-go" data-act="range">Enter the range</button>
+        <p class="hint">No bots, a free store and no round limit: try every gun and attachment, learn the routes.</p>
+      </div>
     </div>
     <div class="status" id="status" role="status"></div>
   </section>
   <section class="stage">
     <div class="showcase" id="showcase">
-      <div class="region"></div>
       <h2></h2>
       <div class="meta"></div>
-      <p class="about"></p>
     </div>
-    <div class="browser">
-      <div class="browser-head"><b>Public rooms</b><span id="rooms-state"></span></div>
-      <div class="browser-cols"><span>Map</span><span>Mode</span><span>Size</span><span>Players</span><span>Status</span><span></span></div>
+    <div class="browser" id="browser" hidden>
+      <div class="browser-head"><b>Public rooms</b><span id="rooms-count"></span></div>
       <div class="browser-rows" id="rooms"></div>
     </div>
-  </section>`;
+  </section>
+  <div class="corner">
+    <button class="icon-btn" id="open-controls" data-tip="Controls" aria-label="Controls" aria-haspopup="dialog">?</button>
+    <button class="icon-btn" id="open-settings" data-tip="Settings" aria-label="Settings" aria-haspopup="dialog">${GEAR}</button>
+  </div>`;
 app.appendChild(menu);
 document.body.classList.add('menu-open');
 
@@ -214,7 +161,6 @@ let size: SizeId = sizeOf(params.get('size') ?? store.get('size', 'squad')).id;
 let botsFill = store.get('botsFill', 'on');
 let team = params.get('team') ?? store.get('team', 'auto');
 let skill = params.get('skill') ?? store.get('skill', '0.45');
-let crosshair = store.get('crosshair', 'classic') as Crosshair;
 let quality = (params.get('quality') ?? store.get('quality', 'medium')) as keyof typeof QUALITY;
 if (!QUALITY[quality]) quality = 'medium';
 /** ?bench: scripted solo run that measures frame times on this device (Elimination, Squad unless ?size). */
@@ -229,7 +175,7 @@ const status = $('#status');
 if (!online.ok) {
   $('#online-block').classList.add('off');
   $('#online-off').textContent = online.reason;
-  menu.querySelectorAll<HTMLButtonElement>('#online-block button').forEach(b => { b.disabled = true; });
+  menu.querySelectorAll<HTMLButtonElement>('#online-block button, [data-toggle="create"], [data-toggle="join"]').forEach(b => { b.disabled = true; });
 }
 
 // ---- Public rooms: a live list from the server while the lobby is open. ----
@@ -265,33 +211,40 @@ const roomStatus = (r: PublicRoom) => r.phase === 'warmup' ? 'Warm-up' : r.phase
 const quickTarget = () => rooms.find(r => r.size === sizeOf(size).perTeam && !full(r));
 const selectedRoom = () => rooms.find(r => r.room === roomId);
 
+/** One quiet line under Quick Play: the server state (dot) and where Quick Play would put you. */
+function renderLine() {
+  const line = $('#rooms-line');
+  line.hidden = !online.ok;
+  if (!online.ok) return;
+  const target = quickTarget();
+  const [state, text] = roomsState === 'connecting' ? ['wait', 'Connecting to the match server…']
+    : roomsState === 'offline' ? ['off', 'Server offline — Vs bots and Practice still work']
+    : target ? ['live', `Quick Play joins ${mapName(target.mapId)} · ${target.humans}/${target.size * 2} players`]
+    : rooms.length ? ['live', `No open ${sizeOf(size).label} room — Quick Play opens one`]
+    : ['live', 'No public rooms right now — Quick Play opens one'];
+  const conn = $('#conn');
+  conn.className = `conn ${state}`;
+  line.title = roomsState === 'live' ? `Live · ${server.database ?? 'online'} · bots fill empty slots and step aside for players` : '';
+  $('#quick-hint').textContent = text;
+}
+
+/** Public rooms: a slim card list, shown only while there are rooms. */
 function renderRooms() {
+  renderLine();
   const list = $('#rooms');
-  const stateEl = $('#rooms-state');
+  const browser = $('#browser');
+  browser.hidden = !rooms.length;
+  menu.classList.toggle('has-rooms', rooms.length > 0);
+  if (!rooms.length) { list.innerHTML = ''; return; }
   const humans = rooms.reduce((n, r) => n + r.humans, 0);
-  const state = !online.ok ? ['off', 'No server in this build']
-    : roomsState === 'connecting' ? ['wait', 'Connecting…']
-    : roomsState === 'offline' ? ['off', 'Server offline']
-    : ['live', `Live · ${rooms.length} room${rooms.length === 1 ? '' : 's'} · ${humans} player${humans === 1 ? '' : 's'}`];
-  stateEl.className = `conn ${state[0]}`;
-  stateEl.innerHTML = `<i></i>${state[1]}`;
-  const connEl = $('#conn');
-  connEl.className = stateEl.className;
-  connEl.innerHTML = `<i></i>${!online.ok ? 'Unavailable' : roomsState === 'live' ? esc(server.database ?? 'Online') : roomsState === 'connecting' ? 'Connecting…' : 'Server offline'}`;
-  if (!rooms.length) {
-    list.innerHTML = `<p class="empty">${!online.ok ? 'Online play is not set up in this build. Play vs bots works offline.'
-      : roomsState === 'live' ? 'No public rooms yet — Quick Play opens one.'
-      : roomsState === 'connecting' ? 'Looking for rooms…' : 'Cannot reach the match server. Play vs bots works offline.'}</p>`;
-    return;
-  }
+  $('#rooms-count').innerHTML = `<span class="conn live"><i></i>${rooms.length} room${rooms.length === 1 ? '' : 's'} · ${humans} player${humans === 1 ? '' : 's'}</span>`;
   list.innerHTML = rooms.map(r => {
     const m = maps.find(x => x.id === r.mapId), md = MODES[r.mode] ?? MODES.elimination;
-    return `<div class="room${focus === 'room' && r.room === roomId ? ' selected' : ''}" data-room="${r.room}" data-theme="${m?.theme ?? ''}" tabindex="0" role="button" aria-label="${esc(mapName(r.mapId))} ${md.name} ${sizeLabel(r.size)}">
-      <span class="srv"><b>${esc(mapName(r.mapId))}</b><small>Room ${r.room}<span class="nm"> · [${md.tag}] ${md.name} · ${roomStatus(r)}</span></small></span>
-      <span class="mode"><span class="mtag">[${md.tag}]</span> ${md.name}</span>
+    return `<div class="room${focus === 'room' && r.room === roomId ? ' selected' : ''}" data-room="${r.room}" data-theme="${m?.theme ?? ''}" tabindex="0" role="button" title="Room ${r.room} · ${roomStatus(r)}" aria-label="${esc(mapName(r.mapId))} ${md.name} ${sizeLabel(r.size)}, ${r.humans} of ${r.size * 2} players, ${roomStatus(r)}">
+      <span class="srv"><b>${esc(mapName(r.mapId))}</b><small class="state ${r.phase}">${roomStatus(r)}</small></span>
+      <span class="mode" title="${md.name}"><span class="mtag">[${md.tag}]</span><span class="mname"> ${md.name}</span></span>
       <span class="size">${sizeLabel(r.size)}</span>
-      <span class="players">${r.humans} / ${r.size * 2}<small>${full(r) ? 'full' : '+ bots'}</small></span>
-      <span class="state ${r.phase}">${roomStatus(r)}</span>
+      <span class="players">${r.humans}/${r.size * 2}</span>
       <button class="join" data-joinroom="${r.room}"${full(r) || !ready || starting ? ' disabled' : ''}>${full(r) ? 'Full' : 'Join'}</button>
     </div>`;
   }).join('');
@@ -358,45 +311,34 @@ const refresh = () => {
         : gameMode === 'sabotage' ? (m.sites > 1 ? 'Sites A · B' : 'Site A') : m.region.split('/')[1]?.trim().toLowerCase() ?? '';
     });
   }
-  // Quick Play says where it is about to put you.
+  // The showcase: the map in view and one line about what you would play there.
   const target = quickTarget();
-  $('#quick-hint').textContent = !online.ok ? ''
-    : target ? `Joins ${mapName(target.mapId)} — ${target.humans} player${target.humans === 1 ? '' : 's'} in that ${s.label} room now.`
-    : `Opens a new ${s.label} room${roomsState === 'live' ? ' (none open yet)' : ''}. Bots fill empty slots and step aside for players.`;
-
   const box = $('#showcase');
-  const set = (region: string, title: string, meta: string, about: string) => {
-    box.querySelector('.region')!.textContent = region; box.querySelector('h2')!.textContent = title;
-    box.querySelector('.meta')!.textContent = meta; box.querySelector('.about')!.textContent = about;
-  };
+  const set = (title: string, meta: string) => { box.querySelector('h2')!.textContent = title; box.querySelector('.meta')!.textContent = meta; };
   const shown = maps.find(x => x.id === shownMap())!;
   const room = focus === 'room' ? selectedRoom() : focus === 'quick' ? target : undefined;
   if (room) {
     const rm = MODES[room.mode] ?? MODES.elimination;
-    set(`${focus === 'quick' ? 'Quick Play' : 'Public room'} · ${shown.region}`, shown.name,
-      `[${rm.tag}] ${rm.name} · ${sizeLabel(room.size)} · ${room.humans}/${room.size * 2} players · ${roomStatus(room)}`, shown.description);
+    set(shown.name, `${focus === 'quick' ? 'Quick Play · ' : ''}[${rm.tag}] ${rm.name} · ${sizeLabel(room.size)} · ${room.humans}/${room.size * 2} players`);
   } else if (focus === 'quick') {
-    set(`Online · ${server.database ?? 'not configured'}`, `Quick Play ${s.label}`, `${s.name} · [E] ⇄ [S]${s.perTeam > 12 ? ' · big maps' : ''}`,
-      'You join the fullest public room of this size, or open a new one. Every match moves on to the next map and alternates Elimination and Sabotage; bots hold the empty slots.');
+    set(`${s.name} ${s.label}`, `Quick Play · [E] ⇄ [S] · map rotation${s.perTeam > 12 ? ' · big maps' : ''}`);
   } else if (focus === 'join') {
-    set(`Online · ${server.database ?? 'not configured'}`, 'Join a private room', roomCode.value ? `Room ${roomCode.value}` : 'Four-letter code', 'Ask the host for the code shown on their status line (ROOM ABCD), or open their invite link.');
+    set('Private room', roomCode.value ? `Room ${roomCode.value}` : 'Enter the four-letter code');
   } else if (focus === 'range') {
-    set(shown.region, shown.name, 'Practice range · free store', shown.description);
+    set(shown.name, 'Practice range · free store');
   } else {
-    set(shown.region, shown.name, `${focus === 'create' ? 'Private · ' : ''}[${md.tag}] ${md.name} · ${s.name} ${vs(s.perTeam)}${gameMode === 'sabotage' ? ` · ${shown.sites} bomb site${shown.sites > 1 ? 's' : ''}` : ''}`, shown.description);
+    set(shown.name, `${focus === 'create' ? 'Private · ' : 'Vs bots · '}[${md.tag}] ${md.name} · ${vs(s.perTeam)}${gameMode === 'sabotage' ? ` · ${shown.sites} bomb site${shown.sites > 1 ? 's' : ''}` : ''}`);
   }
+  renderLine();
   menu.querySelectorAll<HTMLElement>('#rooms .room').forEach(r => r.classList.toggle('selected', focus === 'room' && Number(r.dataset.room) === roomId));
   syncButtons();
   showBackdrop();
 };
 const audio = new Audio();
 select('teams', 'team', team); select('skills', 'skill', skill);
-/** Sight options live in `settings` (read from storage there); the buttons write them back. */
-const selectSights = () => {
-  select('scopemodes', 'scopemode', settings.scopeMode); select('reticlecolors', 'reticlecolor', settings.reticleColor);
-  select('reticlestyles', 'reticlestyle', settings.reticleStyle); select('opticdetails', 'opticdetail', settings.opticDetail);
-};
 
+/** The open drawer (or picked public room) steps back to Quick Play; offline there is nothing to fall back to. */
+const closeDrawer = () => { if (focus === 'quick' || !online.ok) return false; focus = 'quick'; refresh(); return true; };
 const onClick = (attr: string, fn: (value: string) => void) => menu.querySelectorAll<HTMLButtonElement>(`[data-${attr}]`).forEach(b => b.addEventListener('click', () => { fn(b.dataset[attr]!); audio.ui(); }));
 onClick('toggle', v => {
   focus = focus === v ? (online.ok ? 'quick' : focus) : v as Focus;
@@ -412,15 +354,6 @@ onClick('botsfill', v => { botsFill = v; refresh(); });
 onClick('map', v => { mapId = v; refresh(); });
 onClick('team', v => { team = v; select('teams', 'team', team); });
 onClick('skill', v => { skill = v; select('skills', 'skill', skill); });
-onClick('crosshair', v => { crosshair = v as Crosshair; select('crosshairs', 'crosshair', crosshair); store.set('crosshair', crosshair); });
-onClick('scopemode', v => { if (SCOPE_MODES.includes(v as ScopeMode)) { settings.scopeMode = v as ScopeMode; store.set('scopeMode', v); selectSights(); } });
-onClick('reticlecolor', v => { if (RETICLE_COLORS.includes(v as ReticleColor)) { settings.reticleColor = v as ReticleColor; store.set('reticleColor', v); selectSights(); } });
-onClick('reticlestyle', v => { if (RETICLE_STYLES.includes(v as ReticleStyle)) { settings.reticleStyle = v as ReticleStyle; store.set('reticleStyle', v); selectSights(); } });
-onClick('opticdetail', v => { if (OPTIC_DETAILS.includes(v as OpticDetail)) { settings.opticDetail = v as OpticDetail; store.set('opticDetail', v); selectSights(); } });
-onClick('quality', v => {
-  quality = v as keyof typeof QUALITY; select('qualities', 'quality', quality); store.set('quality', quality);
-  renderer?.applyQuality(QUALITY[quality]);
-});
 roomCode.addEventListener('input', () => { roomCode.value = cleanCode(roomCode.value); refresh(); });
 roomCode.addEventListener('focus', () => { if (focus !== 'join' && online.ok) { focus = 'join'; refresh(); } });
 
@@ -440,44 +373,38 @@ roomList.addEventListener('keydown', e => {
   e.preventDefault(); e.stopPropagation(); roomId = Number(row.dataset.room); void act('room');
 });
 
-const sens = $<HTMLInputElement>('#sens'), fov = $<HTMLInputElement>('#fov'), adsSens = $<HTMLInputElement>('#adssens');
-const volume = $<HTMLInputElement>('#volume'), music = $<HTMLInputElement>('#music');
+// ---- Settings and controls: the gear (and ?) open the shared settings menu in its lobby mode. ----
 const clamp01 = (v: string) => Math.max(0, Math.min(1, Number(v) || 0));
-/** Vertical FOV (what three.js uses) with its 16:9 horizontal equivalent, which players usually quote. */
-const horizontal = (v: number) => Math.round(2 * Math.atan(Math.tan(v * Math.PI / 360) * 16 / 9) * 180 / Math.PI);
-const percent = (v: number) => v > 0 ? `${Math.round(v * 100)}%` : 'Off';
-const showSettings = () => {
-  $('#sens-out').textContent = `${settings.sensitivity.toFixed(2)}×`;
-  $('#adssens-out').textContent = `${settings.adsSensitivity.toFixed(2)}×${settings.adsSensitivity === 1 ? ' · matched' : ''}`;
-  $('#fov-out').textContent = `${settings.fov}° · ${horizontal(settings.fov)}° horizontal`;
-  $('#volume-out').textContent = percent(audio.volume);
-  $('#music-out').textContent = percent(audio.musicVolume);
-};
+const options = new SettingsMenu(document.body, {
+  sensitivity: () => undefined, // `settings` is already updated; the next match reads it.
+  crosshair: () => undefined, // Saved; the HUD reads `lawbreaker.crosshair` when a match starts.
+  quality: q => { quality = q; renderer?.applyQuality(QUALITY[q]); },
+  volume: v => audio.setVolume(v),
+}, {
+  lobby: {
+    current: () => ({ volume: audio.volume, music: audio.musicVolume, quality: quality as GraphicsQuality }),
+    music: v => audio.setMusicVolume(v),
+    previewVolume: () => audio.cash(),
+    bench: { label: `Run the ${BENCH_SECONDS}-second performance check`, run: () => { location.search = `?bench&map=${mapId}&quality=${quality}`; } },
+    credits: 'Characters, weapons and props: CC0 packs by Quaternius. Gunshots: CC0 Free Firearm Sound Library. Textures: CC0 Poly Haven. Font: Rajdhani (OFL). No proprietary game assets.',
+  },
+});
+const openOptions = (tab: SettingsTab) => { audio.ui(); options.show(false, tab); };
+$('#open-settings').addEventListener('click', () => openOptions('options'));
+$('#open-controls').addEventListener('click', () => openOptions('controls'));
+
 /**
- * Options from storage into `settings`, the audio and every lobby control. Runs at start and again on
- * returning to the lobby: the in-game menu changes the same keys mid-match.
+ * Options from storage into `settings` and the audio. Runs at start and again on returning to the
+ * lobby: the in-game menu changes the same keys mid-match.
  */
 function syncOptions() {
   settings.sensitivity = Math.max(0.2, Math.min(3, Number(store.get('sensitivity', '1')) || 1));
   settings.fov = Math.max(65, Math.min(95, Number(store.get('fov', '78')) || 78));
   settings.adsSensitivity = Math.max(0.5, Math.min(1.5, Number(store.get('adsSensitivity', '1')) || 1));
-  sens.value = String(settings.sensitivity); fov.value = String(settings.fov); adsSens.value = String(settings.adsSensitivity);
   audio.setVolume(clamp01(store.get('volume', '0.8')));
   audio.setMusicVolume(clamp01(store.get('music', '0.6')));
-  volume.value = String(audio.volume); music.value = String(audio.musicVolume);
-  crosshair = store.get('crosshair', crosshair) as Crosshair;
-  if (!(crosshair in CROSSHAIRS)) crosshair = 'classic';
   if (game || ready) { const q = store.get('quality', quality) as keyof typeof QUALITY; if (QUALITY[q]) quality = q; }
-  select('qualities', 'quality', quality); select('crosshairs', 'crosshair', crosshair);
-  selectSights(); showSettings();
 }
-sens.addEventListener('input', () => { settings.sensitivity = Number(sens.value); store.set('sensitivity', sens.value); showSettings(); });
-adsSens.addEventListener('input', () => { settings.adsSensitivity = Number(adsSens.value); store.set('adsSensitivity', adsSens.value); showSettings(); });
-fov.addEventListener('input', () => { settings.fov = Number(fov.value); store.set('fov', fov.value); showSettings(); });
-volume.addEventListener('input', () => { audio.setVolume(Number(volume.value)); store.set('volume', volume.value); showSettings(); });
-volume.addEventListener('change', () => audio.cash());
-music.addEventListener('input', () => { audio.setMusicVolume(Number(music.value)); store.set('music', music.value); showSettings(); });
-$('#bench').addEventListener('click', () => { location.search = `?bench&map=${mapId}&quality=${quality}`; });
 
 let assets: Assets;
 let renderer: Renderer;
@@ -532,6 +459,7 @@ async function start() {
     store.set('team', team); store.set('skill', skill); store.set('onlineKind', kind === 'room' ? 'quick' : kind); store.set('botsFill', botsFill);
   }
   starting = true; refresh();
+  options.hide();
   status.textContent = '';
   unwatchRooms();
   inMenu = false;
@@ -595,10 +523,20 @@ document.addEventListener('keydown', e => {
       if (relock && game && !game.input.locked) void game.input.lock()?.catch?.(() => undefined);
     }, () => undefined);
   }
-  if (e.key === 'Enter' && !e.repeat && !game && !menu.hidden && !e.isComposing) {
+  // Esc in the lobby: close the settings dialog, else the open drawer (or picked room) back to Quick Play.
+  if (e.key === 'Escape' && !game && !menu.hidden) {
+    if (options.open) { e.preventDefault(); options.close(); return; }
+    const was = focus;
+    if (closeDrawer()) {
+      e.preventDefault();
+      if (was !== 'room') menu.querySelector<HTMLElement>(`[data-toggle="${was}"]`)?.focus({ preventScroll: true });
+    }
+    return;
+  }
+  if (e.key === 'Enter' && !e.repeat && !game && !menu.hidden && !options.open && !e.isComposing) {
     const t = e.target as HTMLElement;
     if (t === roomCode) { e.preventDefault(); act('join'); return; }
-    // Buttons, toggles and the options drawer keep their own Enter.
+    // Buttons, toggles and rows keep their own Enter.
     if (t.closest('button, summary, a, .room')) return;
     e.preventDefault(); primary();
   }

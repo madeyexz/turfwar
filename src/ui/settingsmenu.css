@@ -1,22 +1,67 @@
-/* ---------- In-game menu (Esc / P): resume, settings, leave ---------- */
-#ingame-menu { position: fixed; inset: 0; z-index: 9; display: grid; place-items: center; background: rgba(3, 7, 10, 0.55); backdrop-filter: blur(3px); }
-#ingame-menu[hidden] { display: none !important; }
-#ingame-menu .panel { width: min(640px, 94vw); max-height: 92vh; overflow-y: auto; padding: 18px 22px; display: flex; flex-direction: column; gap: 14px;
-  background: linear-gradient(180deg, rgba(14, 26, 33, 0.97), rgba(7, 13, 18, 0.97)); border: 1px solid rgba(127, 246, 255, 0.55); color: var(--ink); text-transform: uppercase; letter-spacing: 0.06em; }
-#ingame-menu header { display: flex; align-items: baseline; justify-content: space-between; gap: 12px; flex-wrap: wrap; }
-#ingame-menu h2 { margin: 0; font-size: 24px; letter-spacing: 0.2em; color: var(--accent); }
-#ingame-menu .hint { font-size: 12px; color: var(--muted); letter-spacing: 0.1em; }
-#ingame-menu button { font: inherit; color: var(--ink); text-transform: inherit; letter-spacing: inherit; cursor: pointer; }
-#ingame-menu .resume { padding: 12px; font-size: 18px; font-weight: 700; letter-spacing: 0.3em; color: #031013; background: var(--accent); border: 0; }
-#ingame-menu .grid { display: flex; flex-direction: column; gap: 10px; }
-#ingame-menu label { display: grid; grid-template-columns: 1fr auto; gap: 4px 10px; font-size: 13px; font-weight: 700; color: var(--muted); }
-#ingame-menu label input { grid-column: 1 / -1; width: 100%; accent-color: var(--accent); }
-#ingame-menu output { color: var(--ink); }
-#ingame-menu .row { display: grid; grid-template-columns: 170px 1fr; align-items: center; gap: 10px; font-size: 13px; font-weight: 700; color: var(--muted); }
-#ingame-menu .seg { display: flex; flex-wrap: wrap; gap: 4px; }
-#ingame-menu .seg button { padding: 5px 10px; font-size: 12px; font-weight: 700; background: rgba(255, 255, 255, 0.04); border: 1px solid var(--line); color: var(--muted); }
-#ingame-menu .seg button:hover { color: var(--ink); }
-#ingame-menu .seg button.on { color: var(--accent); border-color: var(--accent); background: rgba(127, 246, 255, 0.12); }
-#ingame-menu footer { display: flex; justify-content: flex-end; }
-#ingame-menu .leave { padding: 8px 16px; font-size: 13px; font-weight: 700; background: rgba(255, 90, 74, 0.1); border: 1px solid var(--crimson); color: var(--crimson); }
-@media (max-width: 560px) { #ingame-menu .row { grid-template-columns: 1fr; } }
+/* ---------- Settings menu ----------
+ * In-game (#ingame-menu, Esc / P): resume, settings, leave.
+ * Lobby (#lobby-settings, the gear): a Settings dialog with Options and Controls tabs.
+ */
+.lb-settings { position: fixed; inset: 0; z-index: 9; display: grid; place-items: center; background: rgba(3, 7, 10, 0.55); backdrop-filter: blur(3px); }
+.lb-settings[hidden] { display: none !important; }
+.lb-settings .panel { width: min(640px, 94vw); max-height: 92vh; overflow-y: auto; padding: 18px 22px; display: flex; flex-direction: column; gap: 14px;
+  background: linear-gradient(180deg, rgba(14, 26, 33, 0.97), rgba(7, 13, 18, 0.97)); border: 1px solid rgba(127, 246, 255, 0.55); color: var(--ink); text-transform: uppercase; letter-spacing: 0.06em;
+  scrollbar-width: thin; scrollbar-color: rgba(190, 236, 244, 0.2) transparent; }
+.lb-settings header { display: flex; align-items: baseline; justify-content: space-between; gap: 12px; flex-wrap: wrap; }
+.lb-settings h2 { margin: 0; font-size: 24px; letter-spacing: 0.2em; color: var(--accent); }
+.lb-settings .hint { font-size: 12px; color: var(--muted); letter-spacing: 0.1em; }
+.lb-settings button { font: inherit; color: var(--ink); text-transform: inherit; letter-spacing: inherit; cursor: pointer; }
+.lb-settings .resume { padding: 12px; font-size: 18px; font-weight: 700; letter-spacing: 0.3em; color: #031013; background: var(--accent); border: 0; }
+.lb-settings .grid, .lb-settings .sliders, .lb-settings .rows { display: flex; flex-direction: column; gap: 10px; }
+.lb-settings label { display: grid; grid-template-columns: 1fr auto; gap: 4px 10px; font-size: 13px; font-weight: 700; color: var(--muted); }
+.lb-settings label input { grid-column: 1 / -1; width: 100%; margin: 0; accent-color: var(--accent); }
+.lb-settings output { color: var(--ink); }
+.lb-settings .row { display: grid; grid-template-columns: 170px 1fr; align-items: center; gap: 10px; font-size: 13px; font-weight: 700; color: var(--muted); }
+.lb-settings .seg { display: flex; flex-wrap: wrap; gap: 4px; }
+.lb-settings .seg button { display: inline-flex; align-items: center; gap: 5px; padding: 5px 10px; font-size: 12px; font-weight: 700; background: rgba(255, 255, 255, 0.04); border: 1px solid var(--line); color: var(--muted); }
+.lb-settings .seg button:hover { color: var(--ink); }
+.lb-settings .seg button.on { color: var(--accent); border-color: var(--accent); background: rgba(127, 246, 255, 0.12); }
+.lb-settings .seg svg { width: 14px; height: 14px; flex: none; stroke: currentColor; stroke-width: 2; fill: currentColor; }
+.lb-settings .seg .swatch { width: 8px; height: 8px; border-radius: 50%; background: var(--c); box-shadow: 0 0 5px var(--c); }
+.lb-settings footer { display: flex; justify-content: flex-end; }
+.lb-settings .leave { padding: 8px 16px; font-size: 13px; font-weight: 700; background: rgba(255, 90, 74, 0.1); border: 1px solid var(--crimson); color: var(--crimson); }
+.lb-settings :focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+
+/* ---- Lobby dialog ---- */
+.lb-settings.lobby { z-index: 20; }
+/* A fixed height, so switching tabs does not make the dialog jump. */
+.lb-settings.lobby .panel { width: min(720px, calc(100vw - 32px)); height: min(556px, calc(100dvh - 32px)); max-height: none; padding: 0; gap: 0; }
+.lb-settings.lobby header { position: sticky; top: 0; z-index: 1; align-items: center; flex-wrap: nowrap; padding: 14px 14px 0 22px; background: rgba(12, 22, 28, 0.98); border-bottom: 1px solid rgba(190, 236, 244, 0.12); }
+.lb-settings.lobby h2 { font-size: 20px; padding-bottom: 12px; }
+.lb-settings .tabs { display: flex; gap: 2px; margin-right: auto; align-self: flex-end; }
+.lb-settings .tabs button { padding: 8px 14px 10px; background: none; border: none; border-bottom: 2px solid transparent; font-size: 13px; font-weight: 700; letter-spacing: 0.16em; color: var(--muted); }
+.lb-settings .tabs button:hover { color: var(--ink); }
+.lb-settings .tabs button[aria-selected='true'] { color: var(--accent); border-bottom-color: var(--accent); }
+.lb-settings .close { display: grid; place-items: center; width: 34px; height: 34px; margin-bottom: 10px; flex: none; padding: 0; background: rgba(255, 255, 255, 0.04); border: 1px solid var(--line); border-radius: 3px; color: var(--muted); }
+.lb-settings .close:hover { color: var(--ink); border-color: rgba(127, 246, 255, 0.5); }
+.lb-settings .close svg { width: 16px; height: 16px; stroke: currentColor; stroke-width: 2.2; stroke-linecap: round; }
+.lb-settings .pane { padding: 18px 22px 20px; }
+.lb-settings .pane[hidden] { display: none; }
+.lb-settings.lobby .grid { gap: 18px; }
+.lb-settings.lobby .sliders { display: grid; grid-template-columns: 1fr 1fr; gap: 14px 22px; }
+.lb-settings.lobby .rows { gap: 9px; }
+.lb-settings .extras { display: flex; flex-direction: column; gap: 8px; padding-top: 14px; border-top: 1px solid rgba(190, 236, 244, 0.1); text-transform: none; letter-spacing: 0.02em; }
+.lb-settings .bench-link { align-self: flex-start; padding: 0; background: none; border: none; color: var(--muted); font-size: 13px; font-weight: 600; letter-spacing: 0.06em; text-decoration: underline; text-underline-offset: 3px; }
+.lb-settings .bench-link:hover { color: var(--accent); }
+.lb-settings .credits { margin: 0; font-size: 12px; color: #7c8e94; line-height: 1.35; }
+
+/* Controls tab: key chips and what they do, two columns when there is room. */
+.lb-settings .keys { display: grid; grid-template-columns: 1fr 1fr; gap: 2px 26px; margin: 0; }
+.lb-settings .keys > div { display: grid; grid-template-columns: 108px 1fr; align-items: center; gap: 10px; padding: 6px 0; border-bottom: 1px solid rgba(190, 236, 244, 0.07); }
+.lb-settings .keys dt { display: flex; flex-wrap: wrap; gap: 3px; }
+.lb-settings .keys kbd { min-width: 22px; padding: 1px 6px; text-align: center; font-size: 12px; color: var(--ink); text-transform: none; letter-spacing: 0.04em; }
+.lb-settings .keys dd { margin: 0; font-size: 13px; font-weight: 600; color: var(--muted); text-transform: none; letter-spacing: 0.03em; }
+
+@media (max-width: 560px) {
+  .lb-settings .row { grid-template-columns: 1fr; gap: 6px; }
+  .lb-settings.lobby .sliders, .lb-settings .keys { grid-template-columns: 1fr; }
+  .lb-settings.lobby .panel { height: calc(100dvh - 32px); }
+  .lb-settings.lobby header { padding-left: 16px; }
+  .lb-settings.lobby h2 { display: none; }
+  .lb-settings .pane { padding: 16px; }
+}
