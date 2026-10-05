@@ -35,17 +35,20 @@ Improve playable gunplay, map flow, animation, and multiplayer—not only the HU
 
 ## Gameplay and authority
 
-Modes are Solo skirmish (bots), Online, and a Practice range (no bots). Eight maps support
-Domination (three flags; Meridian District, the 50v50 city, has five). Online holds up to 100
-soldiers. Every map has weapon, ammo and armor pickups.
+The rules follow BeGone (nplay): round-based Elimination and Sabotage (SWAT defends, Militia
+arms the bomb), first to 10 rounds, 4 s freeze and 20 s buy time, BeGone's cash awards, its
+weapons (knife, MP5, M4A1, M1014, M110, M249, M9A1, MP7, M67) and attachments with their exact
+stats. Solo (bots fill a chosen server size, Duel to Mega 12v12), Online (one match per database;
+map and mode rotate each match) and a Practice range. Maps have ammo crates; bases are padded to
+12 spawn slots. `shared/weapons.ts` and `shared/match/economy.ts` cite the BeGone numbers.
 
-Online damage, scores, credits, purchases, pickups, bots and objectives are server-controlled. Human
+Online damage, scores, cash, purchases, crates, rounds, the bomb, bots and chat are server-controlled. Human
 movement is client-predicted/reported and server-validated, not fully server-simulated.
 Keep client and module simulation/schema compatible. Do not weaken validation to
 hide synchronization failures. Test with separate client identities.
 
 Player reducers only queue input; the scheduled tick applies it through the shared rules
-(buy time/spawn zone and credits for purchases, reach and availability for pickups). Keep
+(base, buy time and cash for purchases, reach and cash for ammo crates). Keep
 that one-load-per-tick shape: per-reducer match loads do not scale to 100 soldiers.
 
 ## Local development
