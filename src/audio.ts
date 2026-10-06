@@ -166,9 +166,13 @@ export class Audio {
   volume = 0.8;
   musicVolume = 0.6;
 
-  start() {
-    if (this.ctx) { void (this.ctx as AudioContext).resume(); return; }
-    const ctx = new AudioContext();
+  /**
+   * Builds the live mix (buses, compressors, tails, wind) and loads the recordings. Tools may pass an
+   * OfflineAudioContext to render the game's sound exactly as it plays (the trailer's mix does).
+   */
+  start(context?: BaseAudioContext): Promise<void> {
+    if (this.ctx) { if (this.ctx instanceof AudioContext) void this.ctx.resume(); return Promise.resolve(); }
+    const ctx = context ?? new AudioContext();
     this.build(ctx);
     const comp = ctx.createDynamicsCompressor(); comp.threshold.value = -14; comp.ratio.value = 4;
     // A final safety limiter so stacked gunfire never clips the output.
@@ -189,13 +193,13 @@ export class Audio {
     const lp = ctx.createBiquadFilter(); lp.type = 'lowpass'; lp.frequency.value = 6500;
     this.tailBus.connect(hp).connect(lp).connect(tail).connect(this.master);
     this.wind();
-    void this.loadSamples(ctx);
+    return this.loadSamples(ctx);
   }
 
   private get live() { return !!this.gunBus; }
 
   /** Fetch and decode the recordings; until each arrives its sound stays synthesized. */
-  private async loadSamples(ctx: AudioContext) {
+  private async loadSamples(ctx: BaseAudioContext) {
     const files = [
       ...Object.entries(GUNS).flatMap(([id, v]) => Array.from({ length: v!.takes }, (_, i) => `shot-${id}-${i + 1}`)),
       ...[...new Set(Object.values(GUNS).map(v => `far-${v!.far}`))],
@@ -754,7 +758,7 @@ export class Audio {
    */
   engine(kind: 'car' | 'scooter' | 'heli'): EngineVoice | undefined {
     const ctx = this.ctx;
-    if (!(ctx instanceof AudioContext) || !this.live) return undefined;
+    if (!ctx || !this.live) return undefined;
     const t = this.now();
     const out = ctx.createGain(); out.gain.value = 0;
     const pan = ctx.createStereoPanner();
@@ -832,7 +836,7 @@ export class Audio {
    */
   screech(kind: 'car' | 'scooter'): EngineVoice | undefined {
     const ctx = this.ctx;
-    if (!(ctx instanceof AudioContext) || !this.live) return undefined;
+    if (!ctx || !this.live) return undefined;
     const t = this.now();
     const out = ctx.createGain(); out.gain.value = 0;
     const pan = ctx.createStereoPanner();

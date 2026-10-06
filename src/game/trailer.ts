@@ -82,11 +82,10 @@ export class Trailer {
       vc?.advance(dt * 1000);
       vc?.frame();
       const game = this.game;
-      if (game) {
-        this.hook(game);
-        for (const d of this.drivers.values()) d(dt);
-        game.frame(dt, i === n - 1);
-      } else this.lb.step(1, i === n - 1);
+      if (game) this.hook(game);
+      for (const d of this.drivers.values()) d(dt);
+      if (game) game.frame(dt, i === n - 1);
+      else this.lb.step(1, i === n - 1);
       vc?.animations(dt * 1000);
       this.frames++;
     }
@@ -251,6 +250,12 @@ export class Trailer {
     (p as any).prev = { x, y, z, crouch: p.m.crouch };
     me.groundY = y;
     if (yaw !== undefined) { p.yaw = yaw; me.yaw = yaw; p.pitch = pitch; }
+    return true;
+  }
+
+  /** Keep the local soldier at a point each frame (a vantage point no floor reaches, for a still shot). */
+  hold(x: number, y: number, z: number) {
+    this.drivers.set('hold', () => this.teleport(x, y, z));
     return true;
   }
 
