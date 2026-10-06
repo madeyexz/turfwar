@@ -37,6 +37,7 @@ import { isMagnified, settings } from './settings';
 import { ownedOf, purchaseOf, type BuyRequest, type Owned } from './purchases';
 import { roundEnded, track } from '../analytics';
 import { TouchControls, type TouchInfo } from '../ui/touchcontrols';
+import { holdAimMode } from './holdfire';
 import { onTouchLayout, touchActive, type TouchContext } from './touchlayout';
 
 type Sample = { x: number; y: number; z: number; vx: number; vy: number; vz: number; yaw: number; pitch: number; crouch: number };
@@ -75,6 +76,8 @@ export class Game {
   private fpsTime = 0;
   private wasAlive = false;
   private hudReady = false;
+  /** Trigger pulls that went off (shots and dry clicks): a touch sniper's release shot waits for the next one. */
+  private shotCount = 0;
   private menu: SettingsMenu;
   private menuAt = 0;
   /** The match-end screen has buttons: free the mouse once when it appears. */
@@ -362,6 +365,7 @@ export class Game {
     if (result.dryFire) this.audio.dryFire(this.player.weapon.id);
     if (result.zoomed) this.player.binoculars ? this.audio.binoculars() : this.audio.ui();
     if (result.grenade) link.grenade(result.grenade.origin, result.grenade.dir);
+    this.shotCount += result.shots.length + (result.dryFire ? 1 : 0);
     for (const shot of result.shots) this.shoot(shot.origin, shot.dir, shot.weapon.range, state);
 
     this.reportTimer -= dt;
@@ -540,9 +544,13 @@ export class Game {
       };
     }
     const free = !!state.config.freeBuy;
+    const holdAim = holdAimMode({
+      scope: ctx.scope, melee: p.slot === 2, sniper: p.weapon.class === 'sniper', rider: p.rider, binoculars: p.binoculars, throwing: p.throwLeft > 0,
+    });
     this.touch!.update(ctx, {
       slot: p.slot, weapons: [WEAPONS[p.weapons[0]].name, WEAPONS[p.weapons[1]].name], grenades: p.grenades, use,
       storeHot: !!me && buyWindow && (free || inBase(me, this.map.def, sideOf(state, this.map.def, me.team))), reloading: p.reloading,
+      holdAim, shots: this.shotCount,
     });
   }
 

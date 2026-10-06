@@ -28,6 +28,8 @@ const touchOnly = () => {
 export class ControlsPanel {
   readonly el = document.createElement('div');
   private readonly readOnly = touchOnly();
+  /** Read-only: whether the folded key list is open (kept across redraws). */
+  private foldOpen = false;
   private capture?: { action: ActionId; slot: number; at: number; problem?: string };
   private pending?: { action: ActionId; slot: number; code: InputCode; result: Extract<Rebind, { kind: 'conflict' }> };
   /** Swallow the release and click that follow a captured mouse button, so they do not press a button again. */
@@ -182,10 +184,11 @@ export class ControlsPanel {
       const rows = ACTION_IDS.filter(a => ACTIONS[a].group === g).map(row);
       return `<section class="kb-group" aria-label="${escape(t(`grp.${g}` as Key))}"><h3>${escape(t(`grp.${g}` as Key))}</h3>${g === 'combat' ? look : ''}${rows.join('')}</section>`;
     }).join('');
-    const top = ro
-      ? `<div class="kb-top"><p>${escape(t('kb.readonly'))}</p></div>`
-      : `<div class="kb-top"><p>${escape(t('kb.intro'))}</p><button type="button" class="kb-btn" data-kb-reset-all>${escape(t('kb.resetAll'))}</button></div>`;
-    this.el.innerHTML = `${top}${groups}<p class="kb-note">${escape(t('kb.reserved'))}</p>`;
+    // Read-only (a touch screen): the key list is folded away under its note, so the touch settings above it fit a phone.
+    this.el.innerHTML = ro
+      ? `<details class="kb-fold"${this.foldOpen ? ' open' : ''}><summary>${escape(t('kb.readonly'))}</summary>${groups}<p class="kb-note">${escape(t('kb.reserved'))}</p></details>`
+      : `<div class="kb-top"><p>${escape(t('kb.intro'))}</p><button type="button" class="kb-btn" data-kb-reset-all>${escape(t('kb.resetAll'))}</button></div>${groups}<p class="kb-note">${escape(t('kb.reserved'))}</p>`;
+    this.el.querySelector('details')?.addEventListener('toggle', e => { this.foldOpen = (e.target as HTMLDetailsElement).open; });
     const target = this.capture ?? focus;
     if (target) this.el.querySelector<HTMLElement>(`[data-kb-cap="${target.action}"][data-slot="${target.slot}"]`)?.focus({ preventScroll: !this.capture });
     if (this.capture) this.el.querySelector('.capturing')?.scrollIntoView?.({ block: 'nearest' });

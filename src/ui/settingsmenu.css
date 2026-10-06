@@ -98,3 +98,58 @@
   .lb-settings.lobby h2 { display: none; }
   .lb-settings .pane { padding: 16px; }
 }
+
+/* A sideways phone: the menus fit the short screen. Headings and type step down, rows tighten, the
+   panel fills the height between the notches and scrolls inside; the in-game menu puts Leave beside
+   the title and the tabs beside Resume, so both stay on screen above the scrolling options. Only real
+   controls keep the 44 px minimum. */
+@media (max-height: 560px) and (orientation: landscape) {
+  .lb-settings { padding: env(safe-area-inset-top, 0px) env(safe-area-inset-right, 0px) env(safe-area-inset-bottom, 0px) env(safe-area-inset-left, 0px); }
+  .lb-settings .panel { padding: 8px 14px; gap: 6px; letter-spacing: 0.04em; }
+  .lb-settings label, .lb-settings .row { font-size: 12px; }
+  .lb-settings .seg button { padding: 4px 10px; }
+  .lb-settings .grid, .lb-settings .rows { gap: 6px; }
+  .lb-settings .sliders, .lb-settings.lobby .sliders { display: grid; grid-template-columns: 1fr 1fr; gap: 4px 20px; }
+  .lb-settings .row { grid-template-columns: 140px 1fr; gap: 8px; }
+  .lb-settings .extras { padding-top: 8px; gap: 4px; }
+
+  .lb-settings:not(.lobby) .panel {
+    width: min(760px, calc(100vw - 24px)); height: calc(100dvh - 16px - env(safe-area-inset-top, 0px) - env(safe-area-inset-bottom, 0px));
+    display: grid; grid-template-columns: minmax(0, 1fr) auto; grid-template-rows: auto auto minmax(0, 1fr); column-gap: 12px; row-gap: 6px;
+  }
+  .lb-settings:not(.lobby) header { grid-column: 1; grid-row: 1; align-self: center; }
+  .lb-settings:not(.lobby) h2 { font-size: 16px; letter-spacing: 0.16em; }
+  .lb-settings:not(.lobby) footer { grid-column: 2; grid-row: 1; }
+  .lb-settings .leave { min-height: 40px; padding: 0 14px; font-size: 12px; }
+  .lb-settings .resume { grid-column: 1; grid-row: 2; min-height: 44px; padding: 0 8px; font-size: 15px; letter-spacing: 0.24em; }
+  .lb-settings:not(.lobby) .tabs { grid-column: 2; grid-row: 2; margin: 0; border-bottom: 0; align-self: stretch; }
+  .lb-settings .tabs button { padding: 0 12px; font-size: 12px; letter-spacing: 0.12em; }
+  .lb-settings:not(.lobby) .pane { grid-column: 1 / -1; grid-row: 3; padding: 4px 8px 2px 0; border-top: 1px solid rgba(190, 236, 244, 0.12); }
+
+  .lb-settings.lobby .panel { width: min(760px, calc(100vw - 24px)); height: calc(100dvh - 16px - env(safe-area-inset-top, 0px) - env(safe-area-inset-bottom, 0px)); padding: 0; }
+  .lb-settings.lobby header { padding: 4px 8px 0 14px; }
+  .lb-settings.lobby h2 { font-size: 16px; letter-spacing: 0.16em; padding-bottom: 0; align-self: center; }
+  .lb-settings.lobby .close { width: 40px; height: 40px; margin-bottom: 4px; }
+  .lb-settings .pane { padding: 10px 14px 14px; }
+  .lb-settings .ts-touch { padding: 8px 10px; gap: 6px; margin-bottom: 10px; }
+  .lb-settings .ts-touch .ts-row { gap: 4px 10px; }
+  .lb-settings .kb-row { padding: 1px 0; }
+  .lb-settings .kb-name { font-size: 12px; }
+}
+/* Phones upright (the lobby's Settings): smaller type and tighter rows too. */
+@media (max-width: 560px) {
+  .lb-settings .panel { letter-spacing: 0.04em; }
+  .lb-settings label, .lb-settings .row { font-size: 12px; }
+  .lb-settings .grid { gap: 12px; }
+  .lb-settings.lobby .sliders { gap: 10px; }
+  .lb-settings .seg button { padding: 4px 9px; }
+  .lb-settings .ts-touch { padding: 10px; }
+  .lb-settings .ts-touch .ts-row > span { min-width: 0; flex: 1 1 100%; }
+}
+/* The folded key list on touch screens. */
+.lb-settings .kb-fold > summary { display: flex; align-items: center; gap: 8px; min-height: 44px; cursor: pointer; font-size: 12px; font-weight: 600; color: var(--muted); line-height: 1.35; list-style: none; }
+.lb-settings .kb-fold > summary::-webkit-details-marker { display: none; }
+.lb-settings .kb-fold > summary::before { content: '▸'; flex: none; color: var(--accent); transition: transform 0.15s; }
+.lb-settings .kb-fold[open] > summary::before { transform: rotate(90deg); }
+.lb-settings .kb-fold[open] > summary { margin-bottom: 8px; }
+.lb-settings .kb-fold > .kb-group + .kb-group, .lb-settings .kb-fold > .kb-note { margin-top: 14px; }

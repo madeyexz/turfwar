@@ -1,14 +1,13 @@
+import { HoldFire, type HoldAim } from '../game/holdfire';
 import type { Input } from '../game/input';
 import type { ActionId } from '../game/keybinds';
 import {
-  CONTROLS, CONTROL_IDS, SPRINT_PUSH, STICK, controlAction, onTouchLayout, placeOf, stickActions, stickShown, touchLayout, touchSensitivity, visibleControls,
-  type ControlId, type PlaceId, type TouchContext, type TouchLayout,
+  CONTROLS, CONTROL_IDS, SPRINT_PUSH, STICK, TOUCH_LOOK_SCALE, controlAction, onTouchLayout, placeOf, stickActions, stickShown, touchAutoAim, touchLayout,
+  touchSensitivity, visibleControls, type ControlId, type PlaceId, type TouchContext, type TouchLayout,
 } from '../game/touchlayout';
 import { onLang, t, type Key } from './i18n';
 import './touch.css';
 
-/** Finger look speed relative to the mouse's (a drag across a phone screen turns about half round). */
-const LOOK_SCALE = 1.6;
 const esc = (s: string) => s.replace(/[&<>"']/g, c => `&#${c.charCodeAt(0)};`);
 const svg = (body: string) => `<svg viewBox="0 0 24 24" aria-hidden="true">${body}</svg>`;
 
@@ -73,6 +72,10 @@ export interface TouchInfo {
   /** The store is worth a look: buy time in base, or a free store. */
   storeHot?: boolean;
   reloading?: boolean;
+  /** What holding fire does with the weapon in hand (`holdfire.ts`); `none` when absent. */
+  holdAim?: HoldAim;
+  /** This player's shots so far (a sniper's release shot waits for the next one). */
+  shots?: number;
 }
 
 export interface TouchHooks {
@@ -105,6 +108,9 @@ export class TouchControls {
   private held = new Set<ControlId>();
   private toggled = new Set<ControlId>();
   private pulsed = new Set<ControlId>();
+  /** Hold fire to aim: the fire control driving it (fire, or a custom slot set to fire) while a finger is on it. */
+  private readonly hold = new HoldFire();
+  private holdId?: ControlId;
   private stickVec = { x: 0, y: 0 };
   private ctx: TouchContext = { scope: 'none' };
   private shownKey = '';
@@ -187,8 +193,10 @@ export class TouchControls {
       // Controls that went away let go of what they held.
       for (const id of [...this.held, ...this.toggled]) if (!shown.has(id) && id !== 'scoreboard') { this.held.delete(id); this.toggled.delete(id); }
       for (const [pid, f] of this.fingers) if (f.role === 'button' && !shown.has(f.id)) this.fingers.delete(pid);
+      if (this.holdId && !shown.has(this.holdId)) { this.hold.reset(); this.holdId = undefined; }
       if (!stickShown(ctx.scope)) this.releaseStick();
     }
+    if (ctx.scope === 'none' || ctx.scope === 'dead') { this.hold.reset(); this.holdId = undefined; }
     const ikey = `${info.slot}|${info.weapons}|${info.grenades}|${info.use}|${info.storeHot}`;
     if (ikey !== this.infoKey) {
       this.infoKey = ikey;
@@ -208,6 +216,9 @@ export class TouchControls {
 
   private fingerOn(id: ControlId) { for (const f of this.fingers.values()) if (f.role === 'button' && f.id === id) return true; return false; }
 
+  /** What holding fire does now: nothing extra once Aim is toggled on (the sights are already up). */
+  private holdMode(): HoldAim { return this.toggled.has('aim') ? 'none' : this.info.holdAim ?? 'none'; }
+
   /** Writes what the controls hold into the input for this frame. */
   private sync() {
     const held = this.input.touchHeld;
@@ -217,6 +228,9 @@ export class TouchControls {
     const layout = touchLayout();
     for (const id of new Set([...this.held, ...this.toggled, ...this.pulsed])) held.set(controlAction(id, layout).action, 1);
     this.pulsed.clear();
+    const hold = this.hold.frame(performance.now(), this.holdMode(), this.info.slot, this.info.shots ?? 0);
+    if (hold.fire) held.set('fire', 1);
+    if (hold.aim) held.set('aim', 1);
   }
 
   // ---- Fingers ---------------------------------------------------------------------------------
@@ -248,8 +262,12 @@ export class TouchControls {
     this.fingers.set(e.pointerId, { role: 'button', id, x: e.clientX, y: e.clientY, look: action === 'fire' || action === 'aim' });
     navigator.vibrate?.(8);
     if (id === 'chat') { this.openSheet(); return; }
+    // Hold fire to aim: the hold decides when to shoot and when to raise the sights (a second fire control adds nothing).
+    if (action === 'fire' && kind === 'hold' && touchAutoAim()) {
+      if (!this.holdId) { this.holdId = id; this.hold.press(performance.now(), this.holdMode(), this.info.slot); }
+    }
     // A held control is also a press, as a key is: Use gets in a vehicle on the press and arms the bomb while held.
-    if (kind === 'hold') { this.held.add(id); this.pulsed.add(id); this.input.touchPress(action); }
+    else if (kind === 'hold') { this.held.add(id); this.pulsed.add(id); this.input.touchPress(action); }
     else if (kind === 'toggle') { if (this.toggled.has(id)) this.toggled.delete(id); else this.toggled.add(id); }
     else this.input.touchPress(action);
     this.buttons.get(id)?.classList.add('active');
@@ -267,7 +285,7 @@ export class TouchControls {
     if (f.role === 'button' && !f.look) return;
     const dx = e.clientX - f.x, dy = e.clientY - f.y;
     f.x = e.clientX; f.y = e.clientY;
-    this.input.touchLook(dx, dy, LOOK_SCALE * touchSensitivity());
+    this.input.touchLook(dx, dy, TOUCH_LOOK_SCALE * touchSensitivity());
   }
 
   private up(e: PointerEvent) {
@@ -276,6 +294,10 @@ export class TouchControls {
     this.fingers.delete(e.pointerId);
     if (f.role === 'stick') this.releaseStick();
     else if (f.role === 'button' && !this.fingerOn(f.id)) {
+      if (f.id === this.holdId) {
+        this.hold.release(performance.now(), this.holdMode(), this.info.slot, this.info.shots ?? 0);
+        this.holdId = undefined;
+      }
       this.held.delete(f.id);
       this.buttons.get(f.id)?.classList.toggle('active', this.toggled.has(f.id));
     }
@@ -352,6 +374,7 @@ export class TouchControls {
   reset() {
     this.fingers.clear(); this.held.clear(); this.pulsed.clear();
     this.toggled.delete('aim');
+    this.hold.reset(); this.holdId = undefined;
     this.releaseStick();
     this.input.touchHeld.clear();
   }

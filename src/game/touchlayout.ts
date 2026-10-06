@@ -337,13 +337,39 @@ export function touchActive() {
   return touchEnabled(touchPref(), readEnv(), flag);
 }
 
-/** Look speed for a dragging finger (`lawbreaker.touchSens`), 1 = default. */
-export const TOUCH_SENS_RANGE = [0.3, 3] as const;
-export function touchSensitivity() {
-  const v = Number(read('lawbreaker.touchSens'));
-  return num(v) && v > 0 ? clamp(v, TOUCH_SENS_RANGE[0], TOUCH_SENS_RANGE[1]) : 1;
+/**
+ * Look speed for a dragging finger (`lawbreaker.touchSens`), a multiple of the base finger speed
+ * (`TOUCH_LOOK_DEG_PER_PX` degrees per CSS pixel; CSS pixels are about the same physical size on
+ * every phone, so a given thumb movement turns the same amount whatever the screen).
+ *
+ * The default is 1.35×: 0.27° per pixel, so a swipe across the whole screen of the smallest phone we
+ * play on (iPhone SE, 667 px landscape) turns about 180°, and about 230° on an iPhone 14 (844 px). The
+ * old default (1.00×, 0.20°/px: 135° on the SE, 170° on the 14) took two swipes across the look side
+ * of the screen (the stick has the left 45%) to turn round, slower than phone shooters start you at.
+ * Only the default moved: a value the player saved (any speed, even 1.00×) is kept as it is. Aiming
+ * scales this by the zoom like the mouse (`Player.lookScale`).
+ */
+export const TOUCH_SENS_RANGE = [0.3, 4] as const;
+export const TOUCH_SENS_DEFAULT = 1.35;
+/** How much a finger outruns the mouse at 1.00× (per CSS pixel against per mouse count). */
+export const TOUCH_LOOK_SCALE = 1.6;
+/** Degrees turned per CSS pixel of drag at 1.00× (the mouse's 0.0022 rad per count × `TOUCH_LOOK_SCALE`). */
+export const TOUCH_LOOK_DEG_PER_PX = 0.0022 * TOUCH_LOOK_SCALE * 180 / Math.PI;
+const TOUCH_SENS_KEY = 'lawbreaker.touchSens';
+/** A saved finger speed, clamped into range; the default when nothing (or nothing readable) was saved. */
+export function parseTouchSensitivity(raw: string | null | undefined): number {
+  const v = raw == null || raw.trim() === '' ? NaN : Number(raw);
+  return num(v) && v > 0 ? clamp(v, TOUCH_SENS_RANGE[0], TOUCH_SENS_RANGE[1]) : TOUCH_SENS_DEFAULT;
 }
-export function setTouchSensitivity(v: number) { write('lawbreaker.touchSens', String(clamp(v, TOUCH_SENS_RANGE[0], TOUCH_SENS_RANGE[1]))); notify(); }
+export function touchSensitivity() { return parseTouchSensitivity(read(TOUCH_SENS_KEY)); }
+export function setTouchSensitivity(v: number) { write(TOUCH_SENS_KEY, String(clamp(v, TOUCH_SENS_RANGE[0], TOUCH_SENS_RANGE[1]))); notify(); }
+
+/**
+ * Hold fire to aim (`lawbreaker.touchAutoAim`, on unless switched off): holding the fire button
+ * raises the sights as it shoots (`holdfire.ts`). The Aim button still toggles them by itself.
+ */
+export function touchAutoAim() { return read('lawbreaker.touchAutoAim') !== '0'; }
+export function setTouchAutoAim(on: boolean) { write('lawbreaker.touchAutoAim', on ? '1' : '0'); notify(); }
 
 /** Called when the layout or a touch preference changes. Returns an unsubscribe. */
 export function onTouchLayout(f: () => void) { listeners.add(f); return () => { listeners.delete(f); }; }

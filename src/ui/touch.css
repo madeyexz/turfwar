@@ -89,7 +89,7 @@ body.menu-open .touch-layer { display: none; }
 .tc-edit-bar output { min-width: 3.2em; color: var(--ink); }
 
 /* Touch settings in Settings → Controls. */
-.ts-touch { display: flex; flex-direction: column; gap: 10px; padding: 12px 14px; margin-bottom: 14px; border: 1px solid var(--line); background: rgba(255, 255, 255, 0.03); }
+.ts-touch { display: flex; flex-direction: column; gap: 10px; padding: 12px 14px; margin-bottom: 14px; font-size: 13px; border: 1px solid var(--line); background: rgba(255, 255, 255, 0.03); }
 .ts-touch h3 { margin: 0; font-size: 13px; letter-spacing: 0.18em; color: var(--accent); text-transform: uppercase; }
 .ts-touch .ts-row { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 14px; }
 .ts-touch .ts-row > span { min-width: 9em; color: var(--muted); font-weight: 600; }
@@ -99,6 +99,9 @@ body.menu-open .touch-layer { display: none; }
 .ts-touch .seg button.on { border-color: var(--accent); color: var(--accent); background: rgba(127, 246, 255, 0.1); }
 .ts-touch .note { margin: 0; font-size: 12px; color: var(--muted); }
 .ts-touch input[type="range"] { flex: 1; min-width: 140px; accent-color: var(--accent); }
+.ts-touch .ts-row > p.note { flex: 1 1 100%; }
+.ts-touch .ts-default { min-height: 44px; padding: 0 12px; border: 1px solid var(--line); background: rgba(255, 255, 255, 0.04); color: var(--muted); font-size: 12px; font-weight: 700; letter-spacing: 0.06em; text-transform: uppercase; }
+.ts-touch .ts-default[hidden] { display: none; }
 .ts-touch .edit { min-height: 44px; padding: 0 18px; border: 1px solid var(--accent); color: var(--accent); background: rgba(127, 246, 255, 0.1); font-weight: 700; letter-spacing: 0.1em; text-transform: uppercase; }
 
 /* ---------- Rotate to landscape (in a match or the layout editor) ---------- */
@@ -139,7 +142,9 @@ body.touch:not(.menu-open) canvas { touch-action: none; }
 /* The HUD around the touch controls: clear of notches, compact, and out from under the thumbs. */
 body.touch #hud { left: env(safe-area-inset-left, 0px); right: env(safe-area-inset-right, 0px); top: env(safe-area-inset-top, 0px); bottom: env(safe-area-inset-bottom, 0px); }
 body.touch #hud kbd, body.touch #hud .vkeys { display: none; }
-body.touch .sb { transform: translateX(-50%) scale(0.78); transform-origin: top center; top: 6px; }
+/* The score bar fits between the top buttons (Hud.fitScoreBar sets --sbs and drops the chips when tight). */
+body.touch .sb { transform: translateX(-50%) scale(var(--sbs, 0.78)); transform-origin: top center; top: 6px; }
+body.touch .sb.sb-tight .sb-avs { display: none; }
 body.touch .sb-sub { top: 50px; font-size: 10px; }
 body.touch .bomb { top: 66px; transform: translateX(-50%) scale(0.85); transform-origin: top center; }
 body.touch .toast { top: 104px; font-size: 14px; }
@@ -179,13 +184,31 @@ body.touch .vehicle { bottom: auto; top: 84px; width: 260px; padding: 5px 10px 6
 body.touch .vehicle .vrow > b { font-size: 14px; }
 body.touch .vehicle .vread b { font-size: 18px; }
 body.touch .spectate { bottom: 70px; }
-body.touch #hud .scoreboard { max-height: calc(100% - 16px); padding: 8px 10px; gap: 6px 10px; width: min(960px, 96vw); }
+/* The scoreboard (toggled by its button) sits under the top row of buttons and over the other controls,
+   and scrolls under a finger: a 24-a-side list is taller than a sideways phone. */
+body.touch.hud-board #hud { z-index: 4; }
+body.touch #hud .scoreboard {
+  /* Just below the top buttons: their centre is 7.5% down and they are 40 px × the controls' scale (≈ 5.13vmin). */
+  --board-top: calc(7.5% + min(30px, 5.13vmin) + 6px);
+  top: var(--board-top); bottom: auto; transform: translateX(-50%); max-height: calc(100% - var(--board-top) - 8px); width: min(960px, 100% - 16px);
+  padding: 6px 10px 8px; gap: 4px 10px; overflow-y: auto; overscroll-behavior: contain; pointer-events: auto; touch-action: pan-y;
+  scrollbar-width: thin; scrollbar-color: rgba(190, 236, 244, 0.25) transparent;
+}
+body.touch .scoreboard header { font-size: 10px; letter-spacing: 0.14em; }
 body.touch .scoreboard table { font-size: 12px; }
-body.touch .scoreboard td, body.touch .scoreboard th { padding: 1px 4px; }
-body.touch .scoreboard h3 { margin-bottom: 3px; padding: 2px 8px; }
+body.touch .scoreboard td, body.touch .scoreboard th { padding: 0 4px; line-height: 1.35; }
+body.touch .scoreboard th { font-size: 9px; }
+body.touch .scoreboard .bot { font-size: 9px; margin-left: 4px; }
+body.touch .scoreboard .life { width: 6px; height: 6px; margin-right: 5px; }
+body.touch .scoreboard h3 { position: sticky; top: -6px; z-index: 1; margin-bottom: 2px; padding: 2px 8px; background: color-mix(in srgb, var(--team) 30%, rgb(8, 16, 22)); }
 body.touch .scoreboard h3 b { font-size: 18px; }
-body.touch #hud .end { max-height: calc(100% - 12px); padding: 12px 16px; }
-body.touch .end h2 { font-size: 36px; }
+body.touch .scoreboard h3 small { font-size: 10px; }
+body.touch #hud .end { top: 50%; max-height: calc(100% - 12px); padding: 10px 16px 12px; overscroll-behavior: contain; }
+body.touch .end h2 { font-size: 32px; }
+body.touch .end .final { font-size: 20px; margin-bottom: 6px; }
+body.touch .end table { font-size: 13px; }
+body.touch .end td, body.touch .end th { padding: 1px 6px; }
+body.touch .end p { margin: 8px 0 6px; font-size: 13px; }
 body.touch .end button { min-height: 44px; padding: 0 20px; }
 body.touch .released { display: none; }
 
@@ -203,17 +226,7 @@ body.touch .lb-settings .hint { display: none; }
 body.touch .lb-settings .seg button, body.touch .lb-settings .tabs button, body.touch .lb-settings .leave { min-height: 44px; }
 body.touch .lb-settings .close { width: 44px; height: 44px; }
 body.touch .lb-settings input[type="range"] { min-height: 30px; }
-@media (max-height: 560px) and (orientation: landscape) {
-  .lb-settings .panel { padding: 8px 14px; gap: 8px; }
-  .lb-settings:not(.lobby) .panel { width: min(760px, calc(100vw - 24px)); height: calc(100dvh - 12px); }
-  .lb-settings:not(.lobby) h2 { font-size: 16px; }
-  .lb-settings .resume { padding: 8px; font-size: 15px; }
-  .lb-settings.lobby .panel { height: calc(100dvh - 12px); }
-  .lb-settings.lobby h2 { padding-bottom: 6px; }
-  .lb-settings .pane { padding: 10px 14px; }
-  .lb-settings:not(.lobby) .pane { padding: 2px 8px 2px 0; }
-  .lb-settings .grid, .lb-settings .sliders, .lb-settings .rows { gap: 6px; }
-}
+body.touch .ts-touch .seg button { min-height: 44px; }
 
 /* Left-handed: the HUD's side panels swap sides with the controls. */
 body.touch.tc-lefty .vitals, body.touch.tc-lefty .minimap, body.touch.tc-lefty .chat { left: auto; right: 6px; }

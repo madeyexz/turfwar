@@ -377,6 +377,8 @@
   #menu .browser-rows { flex: none; min-height: 126px; max-height: 50vh; }
   #menu .stage { display: none; }
   #menu .site-links { position: static; justify-content: center; padding: 0 16px 24px; }
+  /* The install card sits over the bottom of the page: let the page scroll past it. */
+  #menu:has(> .install-hint:not([hidden])) .site-links { padding-bottom: 220px; }
 }
 @media (max-width: 560px) {
   #menu .brand { flex: 1; }
@@ -396,6 +398,8 @@
   #menu .rooms-line { flex-wrap: wrap; }
   #menu .rooms-line .line-text { white-space: normal; flex: 1 1 0; }
   #menu .browser-head .server-chip .server-word { display: none; }
+  /* The totals and the server chip share a line only when they fit. */
+  #menu .browser-head { flex-wrap: wrap; align-items: center; row-gap: 4px; }
   #menu .tab { flex-direction: column; justify-content: center; gap: 0; height: 50px; padding: 4px; text-align: center; }
   #menu .tab > span { align-items: center; }
   #menu .tab b { white-space: normal; font-size: 12px; line-height: 1.15; }
@@ -405,4 +409,116 @@
   #menu .code-row .code-box { flex: 1 1 100%; }
   #menu .others { grid-template-columns: 1fr 1fr; }
   #menu .others .label { grid-column: 1 / -1; }
+}
+
+/* ---- Phones sideways (and other short screens): a compact two-column lobby ----
+ * One slim bar on top (the name, callsign, team, Controls, Settings), a rail on the left that never
+ * scrolls away (the three tabs, Solo and Practice, the footer links), and the open tab on the right
+ * in a panel that scrolls by itself. The backdrop's map title is hidden, every control is a 44 px
+ * target, and the notch and home indicator are kept clear. The panel's children join the menu's grid
+ * (display: contents) so the rail and the view sit side by side without new markup.
+ */
+@media (orientation: landscape) and (max-height: 500px) {
+  #menu {
+    --rail: clamp(200px, 27vw, 250px); --gap: 12px;
+    display: grid; overflow: hidden; background: rgba(4, 9, 12, 0.9);
+    grid-template-columns: var(--rail) minmax(0, 1fr);
+    grid-template-rows: auto auto auto auto minmax(0, 1fr) auto;
+    column-gap: var(--gap);
+    padding: env(safe-area-inset-top, 0px) max(var(--gap), env(safe-area-inset-right, 0px)) 0 max(var(--gap), env(safe-area-inset-left, 0px));
+  }
+  #menu .stage { display: none; }
+
+  /* Top bar: one line, 44 px tall. */
+  #menu .top { grid-column: 1 / -1; grid-row: 1; flex-wrap: nowrap; gap: var(--gap); padding: 8px 0 6px; }
+  #menu .brand { flex: 0 0 var(--rail); }
+  #menu .logo { gap: 0; }
+  #menu .logo-name, #menu .logo-name.cjk { font-size: 20px; }
+  #menu .logo-sub { display: none; }
+  #menu .who { flex: 1 1 auto; flex-wrap: nowrap; justify-content: flex-end; gap: 6px; }
+  #menu .callsign { flex: 1 1 auto; width: auto; max-width: 300px; height: 46px; }
+  #menu .who .segmented { flex: 0 0 156px; width: auto; height: 46px; }
+  #menu .icons { position: static; flex: none; margin: 0; gap: 6px; }
+  #menu .icon-btn { width: 46px; height: 46px; }
+
+  /* The rail and the view. */
+  #menu .panel { display: contents; }
+  #menu .tabs { grid-column: 1; grid-row: 2; grid-template-columns: 1fr; gap: 4px; }
+  #menu .tab { height: 46px; padding: 0 10px; gap: 8px; }
+  #menu .tab b { font-size: 13px; }
+  #menu .others { grid-column: 1; grid-row: 3; margin: 10px 0 0; grid-template-columns: 1fr 1fr; gap: 4px 6px; }
+  #menu .others .label { grid-column: 1 / -1; font-size: 10px; }
+  #menu .sub { height: 44px; padding: 0 4px; font-size: 12px; letter-spacing: 0.03em; }
+  #menu .unavailable { grid-column: 1; grid-row: 4; margin-top: 8px; font-size: 12px; }
+  #menu .status { grid-column: 2; grid-row: 6; margin: 0 0 8px; }
+  #menu .site-links {
+    position: static; grid-column: 1; grid-row: 5 / 7; align-self: end; justify-content: flex-start;
+    padding: 0 0 max(4px, env(safe-area-inset-bottom, 0px)); letter-spacing: 0.1em;
+  }
+  #menu .site-links a { min-height: 44px; padding: 0 6px; }
+  #menu .view {
+    grid-column: 2; grid-row: 2 / 6; min-height: 0; overflow-y: auto; overscroll-behavior: contain; gap: 8px;
+    padding: 0 4px max(12px, env(safe-area-inset-bottom, 0px)) 0;
+    scrollbar-width: thin; scrollbar-color: rgba(190, 236, 244, 0.2) transparent;
+  }
+  /* Room for the install strip under the last row (the rail is clear of it). */
+  #menu:has(> .install-hint:not([hidden])) .view { padding-bottom: 70px; }
+  #menu:has(> .install-hint:not([hidden])) .site-links { padding-bottom: max(4px, env(safe-area-inset-bottom, 0px)); }
+
+  /* Quick play. */
+  #menu .deploy { flex: none; min-height: 52px; padding: 0 16px; }
+  #menu .deploy-l { font-size: 18px; }
+  #menu .deploy-r { font-size: 13px; }
+  #menu .quick-card { gap: 8px; margin-top: 0; padding: 10px 12px; }
+  #menu .quick-card p { font-size: 13px; line-height: 1.35; }
+  #menu .quick-links .link { display: inline-flex; align-items: center; min-height: 44px; }
+
+  /* Start a server: the form scrolls, START stays in reach at the bottom. */
+  #menu .filters { gap: 6px 10px; }
+  #menu .filters .segmented, #menu .join-filters .segmented { height: 46px; }
+  #menu .mapline { height: 46px; }
+  #menu .map-trigger { min-width: 0; max-width: 60%; }
+  #menu .quick-maps { height: 44px; align-items: center; }
+  #menu .qmap { height: 44px; }
+  #menu #view-start .deploy { position: sticky; bottom: 0; z-index: 1; margin-top: 2px; }
+
+  /* Join a server: both filters on one line, the rooms in the scrolling view, the code box under them. */
+  #menu #view-join { container-type: inline-size; }
+  #menu .join-filters { grid-template-columns: auto minmax(0, 1.1fr) auto minmax(0, 1fr); }
+  #menu .join-filters .label { font-size: 10px; letter-spacing: 0.14em; }
+  #menu .browser { flex: none; min-height: 0; max-height: none; overflow: visible; }
+  #menu .browser-head { flex-wrap: wrap; align-items: center; row-gap: 4px; padding: 6px 10px; }
+  #menu .browser-head .server-chip .server-word { display: none; }
+  #menu .browser-rows { flex: none; min-height: 0; max-height: none; overflow: visible; }
+  #menu .room { height: 52px; padding-right: 6px; }
+  #menu .room .join { height: 44px; }
+  #menu .browser .empty { min-height: 0; padding: 12px; gap: 6px; }
+  #menu .empty-go .sub { height: 44px; }
+  #menu .browser-foot { height: auto; min-height: 30px; }
+  #menu .browser-foot .link { min-height: 44px; }
+  #menu .code-row { flex-wrap: nowrap; gap: 10px; }
+  #menu .code-row .code-box { flex: 1 1 220px; max-width: 280px; height: 46px; }
+  #menu .code-go { min-width: 64px; }
+
+  /* Install hint: a one-line strip over the view's bottom-right, not a card over the lobby. */
+  .install-hint {
+    left: auto; right: max(12px, env(safe-area-inset-right, 0px)); bottom: max(6px, env(safe-area-inset-bottom, 0px)); transform: none;
+    width: min(560px, calc(100vw - var(--rail) - 36px - env(safe-area-inset-left, 0px) - env(safe-area-inset-right, 0px)));
+    grid-template-columns: minmax(0, 1fr) auto; gap: 0 8px; padding: 4px 4px 4px 12px;
+  }
+  .install-hint .mark, .install-hint b, .install-hint:not(.tip-only) p.tip { display: none; }
+  .install-hint p, .install-hint.tip-only p.tip {
+    grid-column: 1; grid-row: 1; font-size: 12px; line-height: 1.25;
+    display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden;
+  }
+  .install-hint .acts { grid-column: 2; grid-row: 1; }
+}
+/* Narrow rails: the room rows drop the mode's name for its tag and keep the ping as a small badge. */
+@media (orientation: landscape) and (max-height: 500px) {
+  @container (max-width: 720px) { #menu .join-filters .jname { display: none; } }
+  @container (max-width: 560px) {
+    #menu .room { grid-template-columns: minmax(0, 1fr) 30px 40px 40px 50px 64px; gap: 6px; padding-left: 12px; }
+    #menu .room .ping { justify-self: end; padding: 1px 5px; border: 1px solid currentColor; border-radius: 9px; font-size: 11px; line-height: 1.2; }
+    #menu .room .ping small { display: none; }
+  }
 }
