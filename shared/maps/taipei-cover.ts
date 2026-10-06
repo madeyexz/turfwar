@@ -294,12 +294,16 @@ function wheels(k: Kit, x0: number, z0: number, x1: number, z1: number, alongX: 
   }
 }
 
+const VAN_LENGTH = 5.2;
+/** A van's footprint (5.2 × 2 m) from its -x/-z corner, its length along x or z. */
+export const vanRect = (x0: number, z0: number, alongX: boolean): Rect => alongX ? [x0, z0, x0 + VAN_LENGTH, z0 + 2.0] : [x0, z0, x0 + 2.0, z0 + VAN_LENGTH];
+
 /**
  * A delivery van parked along an axis, its cab toward `front` (+1 toward +x/+z): a box van up
  * to 2.45 m and a lower cab, each a collider from the ground.
  */
 export function van(k: Kit, x0: number, z0: number, alongX: boolean, front: 1 | -1, color: number, label: [string, string], y = KERB) {
-  const L = 5.2, W = 2.0, x1 = alongX ? x0 + L : x0 + W, z1 = alongX ? z0 + W : z0 + L;
+  const L = VAN_LENGTH, W = 2.0, [, , x1, z1] = vanRect(x0, z0, alongX);
   if (!k.free([x0, z0, x1, z1])) return;
   const a0 = alongX ? x0 : z0, cab = 1.7;
   // Cab span and cargo span along the length.
@@ -621,6 +625,13 @@ function templeStage(k: Kit) {
 
 export const MOVIES: [string, string, string][] = [['鬼門關', '#3a0a14', 'GHOST GATE · 9月25日'], ['台北狂飆', '#c8141a', 'TAIPEI RUSH'], ['西門之戀', '#d8507a', 'XIMEN LOVE STORY'], ['夜市英雄', '#1a3a8a', 'NIGHT MARKET HEROES']];
 
+/** Delivery vans parked in the streets: their -x/-z corner, along x, cab toward, colour and livery. */
+export const DELIVERY_VANS: [x0: number, z0: number, alongX: boolean, front: 1 | -1, color: number, label: [string, string]][] = [
+  [-857.5, -259.25, true, -1, 0xf2f2ee, ['西門快遞', 'XIMEN EXPRESS']],   // Wuchang St, west (Cinema Street, site A)
+  [-746.0, -248.75, true, 1, 0xd8d4c8, ['宅配通', 'HOME DELIVERY']],       // Wuchang St, east
+  [-762.95, -230.9, false, 1, 0xe8e8e2, ['冷凍宅配', 'COLD CHAIN']],       // Hanzhong St outside the arcade (site B)
+];
+
 export function taipeiCover(k: Kit) {
   nightMarket(k);
   constructionSite(k);
@@ -628,7 +639,7 @@ export function taipeiCover(k: Kit) {
   templeStage(k);
 
   // ---- Wuchang St, west (Cinema Street, site A) ----
-  van(k, -857.5, -259.25, true, -1, 0xf2f2ee, ['西門快遞', 'XIMEN EXPRESS']);
+  van(k, ...DELIVERY_VANS[0]);
   crates(k, NX(11), NZ(22), 'x', true);
   jersey(k, [-857.2, -248.4, -854.3, -247.8]);
   kiosk(k, cells(14, 14, 21, 21, -0.1), 'e', '電影售票', 'CINEMA TICKETS', 0x7a1a2a);
@@ -639,12 +650,12 @@ export function taipeiCover(k: Kit) {
   planter(k, [-822.4, -256.1, -820.0, -254.0]);
 
   // ---- Wuchang St, east (Hanzhong St to Zhonghua Rd) ----
-  van(k, -746.0, -248.75, true, 1, 0xd8d4c8, ['宅配通', 'HOME DELIVERY']);
+  van(k, ...DELIVERY_VANS[1]);
   kiosk(k, clampTo(cells(63, 63, 22, 23), undefined, undefined, undefined, -246.75), 'w', '報攤', 'NEWS', 0x2a6a4a);
 
   // ---- Hanzhong St outside the arcade (site B) ----
   kiosk(k, [-763.2, -243.6, -759.6, -238.9], 'e', '彩券行', 'LOTTERY · NEWS', 0x2a7a4a);
-  van(k, -762.95, -230.9, false, 1, 0xe8e8e2, ['冷凍宅配', 'COLD CHAIN']);
+  van(k, ...DELIVERY_VANS[2]);
   crates(k, NX(51) + 0.3, NZ(25) + 0.4, 'x', true);
   stall(k, [-763.2, -216.1, -760.9, -213.4], 'e');
   island(k, cells(50, 51, 32, 32), 'x');

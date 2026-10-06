@@ -2,6 +2,7 @@ import * as THREE from 'three';
 import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader.js';
 import { MeshoptDecoder } from 'three/examples/jsm/libs/meshopt_decoder.module.js';
 import { mergeGeometries } from 'three/examples/jsm/utils/BufferGeometryUtils.js';
+import { cutTest, modelCut, type Cut } from '../../shared/maps/dressing';
 import type { Decor } from '../../shared/maps/types';
 import { rng } from '../../shared/math';
 import { buildSkyline, type SkylineData } from './skyline';
@@ -71,33 +72,22 @@ export async function addDressing(group: THREE.Group, decor: Decor[]) {
   for (const [model, data] of byModel) for (const m of instanced(model, data, 0, 0, models)) group.add(m);
 }
 
-/** Point test against cut boxes (minX, minY, minZ, maxX, maxY, maxZ, map coordinates). */
-type Cut = (x: number, y: number, z: number) => boolean;
-function cutTest(c: number[]): Cut {
-  return (x, y, z) => {
-    for (let i = 0; i < c.length; i += 6) if (x > c[i] && x < c[i + 3] && y > c[i + 1] && y < c[i + 4] && z > c[i + 2] && z < c[i + 5]) return true;
-    return false;
-  };
-}
-
 /** The street set without what stands in the cut boxes. */
 function cutStreet(s: StreetData, ox: number, oz: number, cut: Cut): StreetData {
-  const keep = (list: number[], stride: number, at: (r: number[]) => [number, number, number]) => {
+  const keep = (list: number[], stride: number, gone: (r: number[]) => boolean) => {
     const out: number[] = [];
-    for (let i = 0; i < list.length; i += stride) { const r = list.slice(i, i + stride), [x, y, z] = at(r); if (!cut(x - ox, y, z - oz)) out.push(...r); }
+    for (let i = 0; i < list.length; i += stride) { const r = list.slice(i, i + stride); if (!gone(r)) out.push(...r); }
     return out;
   };
-  const p3 = (r: number[]): [number, number, number] => [r[0], r[1] + 0.1, r[2]];
+  const at = (x: number, y: number, z: number) => cut(x - ox, y, z - oz);
+  const p3 = (r: number[]) => at(r[0], r[1] + 0.1, r[2]);
   return {
     boxes: keep(s.boxes, 8, p3), glows: keep(s.glows, 8, p3),
-    cyls: keep(s.cyls, 8, r => [(r[0] + r[3]) / 2, Math.min(r[1], r[4]) + 0.1, (r[2] + r[5]) / 2]),
-    plates: s.plates.filter(p => !cut(p[0] - ox, p[1], p[2] - oz)),
-    marks: keep(s.marks, 9, r => [r[0], r[1] + 0.05, r[2]]),
+    cyls: keep(s.cyls, 8, r => at((r[0] + r[3]) / 2, Math.min(r[1], r[4]) + 0.1, (r[2] + r[5]) / 2)),
+    plates: s.plates.filter(p => !at(p[0], p[1], p[2])),
+    marks: keep(s.marks, 9, r => at(r[0], r[1] + 0.05, r[2])),
     // A model goes when any part of it (about a metre round its foot) is in a cut.
-    models: Object.fromEntries(Object.entries(s.models).map(([k, v]) => [k, keep(v, STRIDE, r => {
-      for (const [dx, dz] of [[0, 0], [0.9, 0], [-0.9, 0], [0, 0.9], [0, -0.9]]) if (cut(r[0] + dx - ox, r[1] + 0.1, r[2] + dz - oz)) return [r[0] + dx, r[1] + 0.1, r[2] + dz];
-      return [r[0], r[1] + 0.1, r[2]];
-    })])),
+    models: Object.fromEntries(Object.entries(s.models).map(([k, v]) => [k, keep(v, STRIDE, r => modelCut(cut, r[0] - ox, r[1], r[2] - oz))])),
   };
 }
 
