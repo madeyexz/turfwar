@@ -377,6 +377,19 @@ describe('server-side validation', () => {
     expect(accepted).toBe(30);
   });
 
+  it('the M1014 is a close-range killer: a near one-shot at 8 m, much weaker at 30 m', () => {
+    const shotgun = (gap: number) => {
+      const env = duel(gap);
+      env.state.config.freeBuy = true;
+      buyItem(env.state, env.ctx, env.a.id, 'm1014');
+      env.a.switchLeft = 0; env.a.fireCooldown = 0;
+      fireShot(env.state, env.ctx, env.a.id, claimAt(env.a, env.b));
+      return 100 - env.b.health;
+    };
+    expect(shotgun(8)).toBeGreaterThanOrEqual(70);
+    expect(shotgun(30)).toBeLessThan(shotgun(8));
+  });
+
   it('the knife only reaches arm\'s length', () => {
     const near = duel(1.6);
     near.a.weapon = 2; near.a.switchLeft = 0;
