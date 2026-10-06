@@ -6,6 +6,7 @@ import { LADDER_DIRS, terrainHeight, type Ladder, type Ramp, type Solid } from '
 import { fbm } from '../../shared/maps/builder';
 import type { BlockStyle, Decor, MapDef, RampStyle } from '../../shared/maps/types';
 import { rng } from '../../shared/math';
+import { separateCoplanar, type DrawnBox } from './coplanar';
 import { addDressing } from './dressing';
 import { shieldMaterial, surfaceMaterial, terrainMaterial, type Theme } from './materials';
 
@@ -86,17 +87,14 @@ export class LevelView {
     const signs: SignDecor[] = [];
     let shapes = 0;
     this.buildTerrain();
+    const drawn = drawnBoxes(map);
     map.decor.forEach((d, i) => {
       switch (d.kind) {
-        case 'block': this.block(map.solids[d.solid], d.style, d.solid, d.color); break;
-        case 'detail': this.block({ minX: d.x - d.w / 2, maxX: d.x + d.w / 2, minY: d.y, maxY: d.y + d.h, minZ: d.z - d.d / 2, maxZ: d.z + d.d / 2, surface: 'metal' }, d.style, 100000 + i, d.color); break;
+        case 'block': this.block(drawn.get(i) ?? map.solids[d.solid], d.style, d.solid, d.color); break;
+        case 'detail': this.block(drawn.get(i)!, d.style, 100000 + i, d.color); break;
         case 'loft': this.loft(d); break;
         case 'disc': this.disc(d); break;
-        case 'shape': {
-          const [minX, minY, minZ] = d.min, [maxX, maxY, maxZ] = d.max;
-          this.block({ minX, minY, minZ, maxX, maxY, maxZ, surface: 'concrete' }, d.style, 100000 + shapes++, d.color);
-          break;
-        }
+        case 'shape': this.block(drawn.get(i)!, d.style, 100000 + shapes++, d.color); break;
         case 'cylinder': this.cylinder(d.x, d.y, d.z, d.radius, d.height, d.axis, d.style, d.color, d.sides, d.top); break;
         case 'water': this.add('water', boxGeo(d.x, d.y - 0.01, d.z, d.w, 0.02, d.d)); break;
         case 'ball': this.ball(d.x, d.y, d.z, d.radius, d.style, d.color); break;
@@ -767,6 +765,25 @@ function beam(a: THREE.Vector3, b: THREE.Vector3, thickness: number, height: num
   g.translate((a.x + b.x) / 2, (a.y + b.y) / 2, (a.z + b.z) / 2);
   worldUV(g, 3);
   return g;
+}
+
+/** The map's blocks, details and shapes as drawn (by decor index), with flush overlays stood off their bases. */
+function drawnBoxes(map: MapDef): Map<number, Solid> {
+  const index: number[] = [], boxes: DrawnBox[] = [], source: Solid[] = [];
+  map.decor.forEach((d, i) => {
+    let s: Solid | undefined;
+    if (d.kind === 'block') s = map.solids[d.solid];
+    else if (d.kind === 'detail') s = { minX: d.x - d.w / 2, maxX: d.x + d.w / 2, minY: d.y, maxY: d.y + d.h, minZ: d.z - d.d / 2, maxZ: d.z + d.d / 2, surface: 'metal' };
+    else if (d.kind === 'shape') s = { minX: d.min[0], minY: d.min[1], minZ: d.min[2], maxX: d.max[0], maxY: d.max[1], maxZ: d.max[2], surface: 'concrete' };
+    if (!s) return;
+    index.push(i); source.push(s);
+    boxes.push({ min: [s.minX, s.minY, s.minZ], max: [s.maxX, s.maxY, s.maxZ] });
+  });
+  const out = new Map<number, Solid>();
+  separateCoplanar(boxes).forEach((b, k) => out.set(index[k], {
+    ...source[k], minX: b.min[0], minY: b.min[1], minZ: b.min[2], maxX: b.max[0], maxY: b.max[1], maxZ: b.max[2],
+  }));
+  return out;
 }
 
 function boxGeo(cx: number, cy: number, cz: number, w: number, h: number, d: number, bevel = 0, uvScale = 3) {
