@@ -25,6 +25,8 @@ export interface Events {
   store_purchase: { item: string; price: number };
   language_changed: { to: string };
   error_shown: { where: string; message: string };
+  /** The lobby found the game server asleep and it came up after `seconds` (`queued`: a play button was waiting). */
+  server_woke: { seconds: number; queued: boolean };
 }
 type EventName = keyof Events;
 type Props = Record<string, string | number | boolean>;
@@ -99,9 +101,11 @@ function devTestId() {
 
 /**
  * Load posthog-js and start sending; call once the lobby has rendered. `base` are the super
- * properties every event carries (the app version is added here).
+ * properties every event carries (the app version is added here): the language, the SpacetimeDB
+ * database and its host (`server_host`, e.g. play.turfwar.ianhsiao.me), so events can be told
+ * apart by server.
  */
-export function startAnalytics(base: { lang: string; online_db: string }) {
+export function startAnalytics(base: { lang: string; online_db: string; server_host: string }) {
   if (state !== 'waiting') return;
   state = 'loading';
   const version = typeof __APP_VERSION__ === 'undefined' ? 'dev' : __APP_VERSION__;
@@ -128,7 +132,7 @@ export function startAnalytics(base: { lang: string; online_db: string }) {
       } : {}),
       loaded: ph => {
         ph.register({
-          lang: base.lang, app_version: version, online_db: base.online_db,
+          lang: base.lang, app_version: version, online_db: base.online_db, server_host: base.server_host,
           screen: screenBucket(screen.width, screen.height), ...(guard.test ? { test: true } : {}),
         });
       },

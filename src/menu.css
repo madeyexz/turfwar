@@ -276,6 +276,38 @@
 #menu .status { margin: -4px 0 0; padding: 8px 12px; border: 1px solid var(--line); border-radius: 3px; background: rgba(4, 9, 12, 0.85); font-size: 13px; color: var(--ink); letter-spacing: 0.06em; font-weight: 600; }
 #menu .status:empty { display: none; }
 
+/* ---- Waking the server (src/net/wake.ts): it sleeps when nobody plays. A calm amber card under the
+   tabs, never a red error: what is happening, the time so far, a queued play action with Cancel; after
+   3 minutes "Can't reach the server" with Retry. ---- */
+#menu .wake {
+  flex: none; display: flex; flex-direction: column; gap: 9px; padding: 12px 14px;
+  border: 1px solid rgba(255, 180, 90, 0.45); border-radius: 4px; background: rgba(6, 12, 16, 0.84); backdrop-filter: blur(6px);
+}
+#menu .wake[hidden] { display: none; }
+#menu .wake-say { display: flex; flex-direction: column; gap: 5px; }
+#menu .wake-head { display: flex; align-items: center; gap: 9px; font-size: 14px; font-weight: 700; letter-spacing: 0.12em; text-transform: uppercase; color: var(--amber); }
+#menu .wake-head .conn { flex: none; }
+#menu .wake p { margin: 0; color: var(--ink); opacity: 0.9; font-size: 14px; font-weight: 500; line-height: 1.4; }
+#menu .wake .wake-note { color: var(--muted); opacity: 1; font-size: 13px; }
+#menu .wake .wake-note[hidden], #menu .wake-meter[hidden], #menu .wake-queued[hidden], #menu .wake-retry[hidden] { display: none; }
+#menu .wake-meter { display: flex; align-items: center; gap: 10px; }
+#menu .wake-bar { flex: 1; height: 4px; border-radius: 2px; background: rgba(190, 236, 244, 0.12); overflow: hidden; }
+#menu .wake-bar i { display: block; width: 0; height: 100%; border-radius: 2px; background: linear-gradient(90deg, var(--amber), var(--accent)); transition: width 0.95s linear; }
+#menu .wake-time { flex: none; min-width: 3.6em; text-align: right; color: var(--muted); font-size: 12px; font-weight: 700; letter-spacing: 0.08em; font-variant-numeric: tabular-nums; }
+#menu .wake-queued { display: flex; align-items: center; justify-content: space-between; gap: 6px 12px; flex-wrap: wrap; padding-top: 9px; border-top: 1px solid rgba(190, 236, 244, 0.1); color: var(--accent); font-size: 13px; font-weight: 700; letter-spacing: 0.04em; }
+#menu .wake-queued .link { min-height: 28px; text-transform: uppercase; letter-spacing: 0.1em; font-size: 12px; }
+#menu .wake.down { border-color: var(--line); }
+#menu .wake.down .wake-head { color: var(--ink); }
+#menu .wake-retry { align-self: flex-start; padding: 0 22px; }
+/* The amber dot: still, after giving up (not the red of an error). */
+#menu .conn.down i { background: var(--amber); }
+#menu .ping.waking { color: var(--amber); }
+/* A big button whose action waits for the server: outlined, so it reads as pending rather than ready. */
+#menu .deploy.queued { background: rgba(127, 246, 255, 0.12); color: var(--accent); box-shadow: none; }
+#menu .browser .empty.waking p { display: inline-flex; align-items: center; gap: 9px; color: var(--amber); }
+#menu .browser .empty.waking small { color: var(--muted); font-size: 13px; font-weight: 500; letter-spacing: 0.02em; }
+@media (prefers-reduced-motion: reduce) { #menu .wake-bar i { transition: none; } #menu .conn.wait i { animation: none; } }
+
 /* ---- Stage: the map in view ---- */
 #menu .stage { grid-column: 2; grid-row: 2; position: relative; display: flex; flex-direction: column; justify-content: flex-end; padding: 0 36px 32px; min-width: 0; min-height: 0; pointer-events: none; }
 #menu .showcase { align-self: flex-end; max-width: 460px; text-align: right; text-shadow: 0 2px 18px rgba(0, 0, 0, 0.7); }
@@ -423,7 +455,7 @@
     --rail: clamp(200px, 27vw, 250px); --gap: 12px;
     display: grid; overflow: hidden; background: rgba(4, 9, 12, 0.9);
     grid-template-columns: var(--rail) minmax(0, 1fr);
-    grid-template-rows: auto auto auto auto minmax(0, 1fr) auto;
+    grid-template-rows: auto auto auto auto minmax(0, 1fr) auto auto;
     column-gap: var(--gap);
     padding: env(safe-area-inset-top, 0px) max(var(--gap), env(safe-area-inset-right, 0px)) 0 max(var(--gap), env(safe-area-inset-left, 0px));
   }
@@ -450,9 +482,15 @@
   #menu .others .label { grid-column: 1 / -1; font-size: 10px; }
   #menu .sub { height: 44px; padding: 0 4px; font-size: 12px; letter-spacing: 0.03em; }
   #menu .unavailable { grid-column: 1; grid-row: 4; margin-top: 8px; font-size: 12px; }
-  #menu .status { grid-column: 2; grid-row: 6; margin: 0 0 8px; }
+  /* The waking card sits under the scrolling view, always in sight; the status line under it. */
+  #menu .wake { grid-column: 2; grid-row: 6; margin: 6px 0 8px; gap: 6px; padding: 8px 12px; }
+  #menu .wake p { font-size: 13px; line-height: 1.3; }
+  #menu .wake-head { font-size: 13px; }
+  #menu .wake-queued { padding-top: 6px; }
+  #menu .wake-queued .link, #menu .wake-retry { min-height: 44px; }
+  #menu .status { grid-column: 2; grid-row: 7; margin: 0 0 8px; }
   #menu .site-links {
-    position: static; grid-column: 1; grid-row: 5 / 7; align-self: end; justify-content: flex-start;
+    position: static; grid-column: 1; grid-row: 5 / 8; align-self: end; justify-content: flex-start;
     padding: 0 0 max(4px, env(safe-area-inset-bottom, 0px)); letter-spacing: 0.1em;
   }
   #menu .site-links a { min-height: 44px; padding: 0 6px; }

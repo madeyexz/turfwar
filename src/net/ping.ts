@@ -1,14 +1,14 @@
 /**
  * Round-trip time from this browser to each game server, for the lobby.
  *
- * A "server" is a SpacetimeDB host (its websocket URI). Every room lives in one Maincloud database
- * today, so every room shows the same ping; rooms carry their server's URI so a second server (a
- * Taiwan host, say) gets its own column value without changes here.
+ * A "server" is a SpacetimeDB host (its websocket URI). Every room lives in one database today (the
+ * self-hosted server in Singapore in production), so every room shows the same ping; rooms carry
+ * their server's URI so a second server gets its own column value without changes here.
  *
  * Measured with SpacetimeDB's own HTTP `GET /v1/ping` on that host: it is answered by the host
  * without touching the database (no reducer, no subscription, nothing queued behind the match
- * tick), Maincloud allows it cross-origin (`Access-Control-Allow-Origin: *`) and a plain GET needs
- * no preflight. The browser websocket API cannot send ping frames, and the SDK has no one-off
+ * tick), SpacetimeDB allows it cross-origin (`Access-Control-Allow-Origin: *`) and a plain GET needs
+ * no preflight. The same request tells a sleeping server from a running one (src/net/wake.ts). The browser websocket API cannot send ping frames, and the SDK has no one-off
  * query, so the open websocket offers nothing cheaper that does not load the database.
  *
  * The first sample pays for the TCP + TLS handshake (about 3× the RTT to Maincloud) and is
@@ -36,17 +36,40 @@ export function pingUrl(uri: string): string | undefined {
 /** Where each known server host is, as the lobby names it. Any other host is shown by its name. */
 export const SERVER_REGIONS: Record<string, Key> = {
   'maincloud.spacetimedb.com': 'server.region.usEast',
+  // The production server: SpacetimeDB on InstaCloud compute in Singapore (ap-southeast).
+  'play.turfwar.ianhsiao.me': 'server.region.singapore',
   localhost: 'server.region.local',
   '127.0.0.1': 'server.region.local',
 };
+/** Host suffixes with a known region: InstaCloud's own compute hostnames (every one of ours is in Singapore). */
+export const SERVER_REGION_SUFFIXES: readonly [string, Key][] = [['.compute.instacloud-edge.com', 'server.region.singapore']];
 export function serverHost(uri: string) {
   try { return new URL(uri).hostname; } catch { return uri; }
 }
-/** "US East", "Local", or the host name. */
+/** The region's dictionary key for a server URI, if its host is a known one. */
+export function serverRegionKey(uri: string): Key | undefined {
+  const host = serverHost(uri).toLowerCase();
+  return SERVER_REGIONS[host] ?? SERVER_REGION_SUFFIXES.find(([suffix]) => host.endsWith(suffix))?.[1];
+}
+/** "Singapore", "US East", "Local", or the host name. */
 export function serverRegion(uri: string) {
-  const host = serverHost(uri);
-  const key = SERVER_REGIONS[host];
-  return key ? t(key) : host;
+  const key = serverRegionKey(uri);
+  return key ? t(key) : serverHost(uri);
+}
+
+/**
+ * One `/v1/ping` to a server (its ping URL): true when the host answered 200. A sleeping server's
+ * edge answers 502/503/504, holds the request until `signal` aborts it, or fails outright (a 5xx
+ * from the edge usually has no CORS header, so the browser reports a network error): all false.
+ */
+export async function hostAnswers(url: string, signal: AbortSignal, fetcher: Fetch = (u, i) => fetch(u, i)): Promise<boolean> {
+  try {
+    const res = await fetcher(url, { cache: 'no-store', signal });
+    await res.arrayBuffer().catch(() => undefined);
+    return res.ok;
+  } catch {
+    return false;
+  }
 }
 
 export function median(xs: readonly number[]): number | undefined {
