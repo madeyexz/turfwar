@@ -1,7 +1,7 @@
 import { Identity, ScheduleAt, Timestamp } from 'spacetimedb';
 import { schema, table, t, SenderError, type ReducerCtx, type InferSchema } from 'spacetimedb/server';
 import { loadMap, loadNav } from '../../shared/maps/index';
-import { cleanCode, filterError, isRoomSize, mapsFor, newRoomRules, nextRoomRules, pickRoom, roomCode, type RoomFilter, type RoomView } from '../../shared/match/rooms';
+import { cleanCode, filterError, isRoomSize, mapsFor, newRoomRules, nextRoomRules, pickAnyRoom, pickRoom, QUICK_PLAY_NEW, roomCode, startRoomConfig, startRoomError, type RoomFilter, type RoomView } from '../../shared/match/rooms';
 import type { SimContext } from '../../shared/match/combat';
 import { encodeFrame } from '../../shared/match/frame';
 import {
@@ -552,7 +552,7 @@ function markDay(ctx: Ctx) {
   if (!ctx.db.playerDay.key.find(key)) ctx.db.playerDay.insert({ key, day, identity: ctx.sender });
 }
 
-/** Put the caller into `room` (leaving any other room first). Every way in (quick_play, quick_join, join, create_room, join_room, join_public) ends here. */
+/** Put the caller into `room` (leaving any other room first). Every way in (quick_any, start_room, quick_play, quick_join, join, create_room, join_room, join_public) ends here. */
 function enterRoom(ctx: Ctx, room: number, name: string, team: number) {
   const clean = name.replace(/[^\p{L}\p{N} _\-.]/gu, '').trim().slice(0, 16) || 'Operator';
   markSeen(ctx, { name: clean });
@@ -580,26 +580,40 @@ function enterRoom(ctx: Ctx, room: number, name: string, team: number) {
 function matchmake(ctx: Ctx, name: string, filter: RoomFilter, team: number) {
   const error = filterError(filter);
   if (error) throw new SenderError(error);
+  let room = pickRoom(publicRooms(ctx, filter.size), filter)?.room;
+  if (room === undefined) room = openFor(ctx, filter);
+  enterRoom(ctx, room, name, team);
+}
+
+/** Public rooms (of one size, or every size) as matchmaking sees them; our own seat does not count against the room we are in. */
+function publicRooms(ctx: Ctx, size?: number): RoomView[] {
   const mine = ctx.db.player.identity.find(ctx.sender);
   const rooms: RoomView[] = [];
   for (const row of ctx.db.match.iter()) {
     if (row.code !== '') continue;
     const config = configOf(row);
-    if (config.teamSize !== filter.size) continue;
-    // Our own seat does not count against the room we are already in.
+    if (size !== undefined && config.teamSize !== size) continue;
     const humans = humansIn(ctx, row.id) - (mine?.room === row.id ? 1 : 0);
     rooms.push({ room: row.id, mapId: row.mapId, mode: config.mode, size: config.teamSize, humans, phase: row.phase, fixedMap: config.fixedMap, fixedMode: config.fixedMode });
   }
-  let room = pickRoom(rooms, filter)?.room;
-  if (room === undefined) {
-    const rules = newRoomRules(filter, () => ctx.random());
-    const config: MatchConfig = { ...ONLINE_CONFIG, mode: rules.mode, teamSize: filter.size };
-    // Only rooms opened for a specific map or mode carry the flags (older rooms simply rotate).
-    if (rules.fixedMap) config.fixedMap = true;
-    if (rules.fixedMode) config.fixedMode = true;
-    room = openRoom(ctx, rules.mapId, config, '');
-  }
-  enterRoom(ctx, room, name, team);
+  return rooms;
+}
+
+/** A new public room for a filter: what it names is kept from match to match, what is "any" rotates. */
+function openFor(ctx: Ctx, filter: RoomFilter) {
+  const rules = newRoomRules(filter, () => ctx.random());
+  const config: MatchConfig = { ...ONLINE_CONFIG, mode: rules.mode, teamSize: filter.size };
+  // Only rooms opened for a specific map or mode carry the flags (older rooms simply rotate).
+  if (rules.fixedMap) config.fixedMap = true;
+  if (rules.fixedMode) config.fixedMode = true;
+  return openRoom(ctx, rules.mapId, config, '');
+}
+
+/** A fresh private room code (not in use). */
+function freshCode(ctx: Ctx) {
+  let code = '';
+  for (let i = 0; i < 20 && (!code || [...ctx.db.match.iter()].some(r => r.code === code)); i++) code = roomCode(() => ctx.random());
+  return code;
 }
 
 // ---- Lifecycle ----------------------------------------------------------------------------
@@ -732,9 +746,30 @@ export const createRoom = spacetimedb.reducer({ name: t.string(), size: t.u8(), 
     if (!isRoomSize(size)) throw new SenderError('Unknown room size');
     if (mode !== 'elimination' && mode !== 'sabotage') throw new SenderError('Unknown mode');
     if (!mapsFor(size, mode).includes(mapId)) throw new SenderError('That map does not host this room');
-    let code = '';
-    for (let i = 0; i < 20 && (!code || [...ctx.db.match.iter()].some(r => r.code === code)); i++) code = roomCode(() => ctx.random());
-    const room = openRoom(ctx, mapId, { ...ONLINE_CONFIG, mode, teamSize: size, noBots: !bots }, code);
+    const room = openRoom(ctx, mapId, { ...ONLINE_CONFIG, mode, teamSize: size, noBots: !bots }, freshCode(ctx));
+    enterRoom(ctx, room, name, team);
+  });
+
+/**
+ * Quick Play: any public room with a free slot, any size, map or mode (`pickAnyRoom`: the fullest,
+ * private and full rooms never), else a new public 6v6 room with bots on a random map and mode.
+ */
+export const quickAny = spacetimedb.reducer({ name: t.string(), team: t.i8() }, (ctx, { name, team }) => {
+  let room = pickAnyRoom(publicRooms(ctx))?.room;
+  if (room === undefined) room = openFor(ctx, QUICK_PLAY_NEW);
+  enterRoom(ctx, room, name, team);
+});
+
+/**
+ * Start a server: a new room with exactly these rules (validated like Play Online: a known size and
+ * mode, a map the size and mode play). Public: listed, kept on its map and mode, and filled by
+ * Quick Play and Play Online. Private: joined with its four-letter code. Bots off leaves empty slots empty.
+ */
+export const startRoom = spacetimedb.reducer({ name: t.string(), size: t.u8(), mode: t.string(), mapId: t.string(), bots: t.bool(), isPublic: t.bool(), team: t.i8() },
+  (ctx, { name, size, mode, mapId, bots, isPublic, team }) => {
+    const error = startRoomError({ size, mode, map: mapId });
+    if (error) throw new SenderError(error);
+    const room = openRoom(ctx, mapId, { ...ONLINE_CONFIG, ...startRoomConfig({ size, mode, map: mapId, bots, isPublic }) }, isPublic ? '' : freshCode(ctx));
     enterRoom(ctx, room, name, team);
   });
 

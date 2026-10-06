@@ -60,6 +60,10 @@ export interface RoomView {
   phase?: string;
   /** The room keeps its map / mode from match to match (it was opened for them). */
   fixedMap?: boolean; fixedMode?: boolean;
+  /** A private room (joined only by its code): never listed, never matched. */
+  private?: boolean;
+  /** The room was started with bots off. */
+  noBots?: boolean;
 }
 
 /**
@@ -68,7 +72,7 @@ export interface RoomView {
  * mode does not match it.
  */
 export function roomMatches(r: RoomView, f: RoomFilter): boolean {
-  if (r.size !== f.size) return false;
+  if (r.private || r.size !== f.size) return false;
   const leaving = r.phase === 'ended';
   if (f.map && (r.mapId !== f.map || (leaving && !r.fixedMap))) return false;
   if (f.mode && (r.mode !== f.mode || (leaving && !r.fixedMode))) return false;
@@ -114,4 +118,51 @@ export function nextRoomRules(current: string, mode: Mode, perTeam: number, fixe
   const mapId = fixed.fixedMap ? current : maps[(maps.indexOf(current) + 1) % maps.length] ?? current;
   if (fixed.fixedMode) return { mapId, mode };
   return { mapId, mode: mode === 'elimination' && hasSites(mapId) ? 'sabotage' : 'elimination' };
+}
+
+// ---- Quick Play: anything open ----------------------------------------------------------------
+
+/** What Quick Play opens when no public room has a free slot: 6v6 with bots, a random map and mode that rotate. */
+export const QUICK_PLAY_NEW: RoomFilter = { size: 6, mode: '', map: '' };
+
+/**
+ * Quick Play: any public room (any size, map and mode) with a free slot, the fullest first; on a
+ * tie the one on the lowest-ping server (`ping`, when the caller knows it; the server does not),
+ * then the lowest room id. Private and full rooms are never picked. Undefined = open `QUICK_PLAY_NEW`.
+ */
+export function pickAnyRoom<R extends RoomView>(rooms: readonly R[], ping?: (r: R) => number | undefined): R | undefined {
+  const lag = (r: R) => ping?.(r) ?? Infinity;
+  let best: R | undefined;
+  for (const r of rooms) {
+    if (r.private || roomFull(r)) continue;
+    if (!best || r.humans > best.humans
+      || (r.humans === best.humans && (lag(r) < lag(best) || (lag(r) === lag(best) && r.room < best.room)))) best = r;
+  }
+  return best;
+}
+
+// ---- Start a server: a room with exactly these rules --------------------------------------------
+
+/** What Start a Server asks for: every rule is chosen (no "any"). */
+export interface StartRules { size: number; mode: string; map: string; bots: boolean; isPublic: boolean }
+
+/**
+ * Why the server refuses a started room (the module's error text), or undefined: a known size, a
+ * known mode, and a map that size and mode can play (24v24 big maps only, Sabotage bomb sites).
+ */
+export function startRoomError(r: { size: number; mode: string; map: string }): string | undefined {
+  if (!isRoomSize(r.size)) return 'Unknown room size';
+  if (!isMode(r.mode)) return 'Unknown mode';
+  if (!mapsFor(r.size, r.mode).includes(r.map)) return 'That map does not host this room';
+  return undefined;
+}
+
+/**
+ * A started room's config: its size, mode and bots. A public one keeps its map and mode from match
+ * to match (it is listed, and Quick Play and Play Online may fill it); a private one replays the
+ * host's choice anyway.
+ */
+export function startRoomConfig(r: StartRules): { mode: Mode; teamSize: number; noBots: boolean; fixedMap?: boolean; fixedMode?: boolean } {
+  const config = { mode: r.mode as Mode, teamSize: r.size, noBots: !r.bots };
+  return r.isPublic ? { ...config, fixedMap: true, fixedMode: true } : config;
 }
