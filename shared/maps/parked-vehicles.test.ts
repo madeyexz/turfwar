@@ -15,7 +15,8 @@ import { STREET_MODELS } from './taipei-street';
 interface Parked { what: string; y: number; points: { x: number; z: number }[] }
 
 /** The street models of each dressing set (what src/render/dressing.ts draws from it). */
-const DRESSING_MODELS: Record<string, Record<string, number[]>> = { taipei: STREET_MODELS };
+// taipei101's set is the city 383 m below the office floor: nothing in it is in reach.
+const DRESSING_MODELS: Record<string, Record<string, number[]>> = { taipei: STREET_MODELS, taipei101: {} };
 /** Two-wheelers among the dressing models, about 1.8 m long. */
 const TWO_WHEELERS = ['scooter', 'bike'];
 /** Instance models that are cars (src/render/dressing.ts carGeometry: 1.8 × 4.5 m). */
