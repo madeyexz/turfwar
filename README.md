@@ -94,9 +94,15 @@ Checks: `bun run test` (Vitest; not `bun test`), `bun run build` and `bun run ty
 
 Touch-primary devices (a coarse pointer or touch points with no mouse, iPads included) get on-screen
 controls; **Settings → Controls** switches them Auto / On / Off (`?touch=1|0` for testing) and sets the
-finger look speed. The left part of the screen is a floating stick (it appears under the thumb; past
-its ring you sprint; in a vehicle it is throttle, brake and steering), the rest is a look pad, and fire
-also looks while held. Buttons press the same actions as keys (`src/game/touchlayout.ts` →
+finger look speed (default 1.35×: a swipe across an iPhone SE's width turns about 180°, 230° on an
+iPhone 14; aiming scales it by the zoom like the mouse). The left part of the screen is a floating stick
+(it appears under the thumb; past its ring you sprint; in a vehicle it is throttle, brake and steering),
+the rest is a look pad, and fire also looks while held. **Auto-aim when firing** (on by default,
+`src/game/holdfire.ts`): a tap on fire shoots from the hip at once, holding it past 150 ms raises the
+sights while it keeps firing, and letting go lowers them; the M110 sniper instead raises its scope while
+held and fires one aimed shot on release (a quick tap fires from the hip). The knife, binoculars, a
+grenade throw, a scooter rider and a toggled Aim keep the plain trigger; the Aim button still works on
+its own. Buttons press the same actions as keys (`src/game/touchlayout.ts` →
 `Input.touchHeld` / `touchPress`), and only those that matter are shown: Use appears near a vehicle,
 crate or bomb site (hold it to arm or defuse), vehicle buttons replace the on-foot ones while seated, a
 scooter rider keeps fire and the one-handed guns, and the dead get Next. Quick chat opens the keyboard
