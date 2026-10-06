@@ -36,6 +36,8 @@ import { LocalPlayer } from './player';
 import { isMagnified, settings } from './settings';
 import { ownedOf, purchaseOf, type BuyRequest, type Owned } from './purchases';
 import { roundEnded, track } from '../analytics';
+import { TouchControls, type TouchInfo } from '../ui/touchcontrols';
+import { onTouchLayout, touchActive, type TouchContext } from './touchlayout';
 
 type Sample = { x: number; y: number; z: number; vx: number; vy: number; vz: number; yaw: number; pitch: number; crouch: number };
 /** Remote soldiers closer than this get full animation and shadows; up to LOD_MID, half rate. */
@@ -113,6 +115,9 @@ export class Game {
   private skids = new SkidMarks();
   private skidding = new Map<number, number>();
   private screeches = new Map<number, EngineVoice>();
+  /** On-screen controls on phones and tablets (or when switched on in Settings → Controls). */
+  private touch?: TouchControls;
+  private stopTouch: () => void;
 
   /** Rebuild a view model only when the weapon or its attachments change. */
   private showWeapon(vm: ViewModel, p: LocalPlayer) {
@@ -177,6 +182,19 @@ export class Game {
     // With the menu up, resuming goes through its button (or Esc / P), not a stray click on the view.
     this.input.canRelock = () => !this.buymenu.open && !this.hud.chatting && !this.menu.open && this.link.state()?.phase !== 'ended';
     if (me) this.player.spawnFrom(me);
+    // Touch controls follow the setting live (Auto / On / Off).
+    const applyTouch = () => {
+      const on = touchActive();
+      if (on && !this.touch) this.touch = new TouchControls(container, this.input, {
+        typeChat: team => { this.input.clear(); this.hud.openChat(team, text => this.link.say(text, team), true); },
+        say: (text, team) => this.link.say(text, team),
+      });
+      else if (!on && this.touch) { this.touch.dispose(); this.touch = undefined; }
+      this.input.touch = on;
+      document.body.classList.toggle('touch', on);
+    };
+    applyTouch();
+    this.stopTouch = onTouchLayout(applyTouch);
     const room = link.roomInfo?.();
     if (room?.code) this.hud.toast(t('hud.privateToast', { code: room.code, size: room.size }), 12000);
     if (import.meta.env.DEV) Object.assign(window, { __game: this });
@@ -199,6 +217,8 @@ export class Game {
     this.viewmodel.root.removeFromParent();
     this.viewmodel.torch.removeFromParent(); this.viewmodel.torch.target.removeFromParent();
     for (const vm of [this.otherViewmodel]) if (vm) { vm.root.removeFromParent(); vm.torch.removeFromParent(); vm.torch.target.removeFromParent(); }
+    this.stopTouch();
+    this.touch?.dispose(); this.touch = undefined;
     this.input.dispose();
     this.hud.released(false, false);
     document.exitPointerLock?.();
@@ -219,8 +239,12 @@ export class Game {
     const myId = link.myId();
     const me = state.soldiers.find(s => s.id === myId);
     if (me && this.buying.length) this.confirmPurchases(me, !!state.config.freeBuy);
-    if (state.phase === 'ended' && !this.endShown) { this.endShown = true; this.buymenu.close(); document.exitPointerLock?.(); }
-    if (state.phase !== 'ended') this.endShown = false;
+    if (state.phase === 'ended' && !this.endShown) { this.endShown = true; this.buymenu.close(); this.input.release(); }
+    if (state.phase !== 'ended') {
+      // Touch: a new match starts playing again by itself (there is no click to recapture the mouse).
+      if (this.endShown && this.input.touch) void this.input.lock();
+      this.endShown = false;
+    }
     const sabotage = modeOf(state, this.map.def) === 'sabotage';
     const active = this.input.locked && !this.buymenu.open && !this.hud.chatting;
     // Esc (the browser frees the mouse) or the menu key (P) opens the in-game menu; Esc / P again (or Resume) closes it.
@@ -236,9 +260,10 @@ export class Game {
     const site = sabotage && me?.alive ? this.siteHere(state) : -1;
     const myJob = state.bomb.armed ? me?.team !== ATTACKERS && site === state.bomb.site : me?.team === ATTACKERS && site >= 0;
     this.nearVehicle = me?.alive && !this.seated && !(myJob && site >= 0) ? this.vehicleNear(state, me) : -1;
+    if (this.touch) this.touchFrame(state, me, site, myJob, buyWindow);
 
     // ---- Hotkeys ----
-    if (active && this.input.take('menu')) document.exitPointerLock?.();
+    if (active && this.input.take('menu')) this.input.release();
     if (active) {
       // The store is open anywhere: weapons only sell in base during buy time, attachments always.
       if (this.input.take('store') && me) { this.buymenu.show(this.player.weapons[this.player.slot === 2 ? 0 : this.player.slot]); this.input.clear(); }
@@ -494,6 +519,31 @@ export class Game {
     this.fpsFrames++; this.fpsTime += dt;
     if (this.fpsTime > 1) { this.hud.fps(`${Math.round(this.fpsFrames / this.fpsTime)} FPS · ${this.renderer.renderer.info.render.calls} calls`); this.fpsFrames = 0; this.fpsTime = 0; }
     this.input.endFrame();
+  }
+
+  /** Touch controls: which buttons matter now, what they show; then they write the held actions for this frame. */
+  private touchFrame(state: MatchState, me: Soldier | undefined, site: number, myJob: boolean, buyWindow: boolean) {
+    const p = this.player, live = state.roundPhase === 'live';
+    const playing = !!me && this.input.locked && !this.buymenu.open && !this.hud.chatting && !this.menu.open && state.phase !== 'ended';
+    let ctx: TouchContext = { scope: 'none' };
+    let use: TouchInfo['use'];
+    if (playing && !me!.alive) ctx = { scope: 'dead', canSpectate: state.soldiers.some(s => s.alive && s.id !== me!.id) };
+    else if (playing) {
+      const seat = this.seated;
+      const kind = seat ? state.vehicles[seat.index]?.kind : undefined;
+      const scope = !seat ? 'foot' : seat.seat === 1 ? 'passenger' : kind === 'heli' ? 'heli' : 'car';
+      const crate = this.crates.nearest(p.m.x, p.m.y, p.m.z, CRATE_REACH) >= 0 && p.slot !== 2;
+      if (scope === 'foot') use = this.nearVehicle >= 0 ? 'vehicle' : myJob && site >= 0 && live ? (state.bomb.armed ? 'disarm' : 'arm') : crate ? 'crate' : undefined;
+      ctx = {
+        scope, scooter: kind === 'scooter', use: !!use, melee: p.slot === 2,
+        scoped: p.ads > 0.6 && p.weapon.class === 'sniper' && !p.binoculars,
+      };
+    }
+    const free = !!state.config.freeBuy;
+    this.touch!.update(ctx, {
+      slot: p.slot, weapons: [WEAPONS[p.weapons[0]].name, WEAPONS[p.weapons[1]].name], grenades: p.grenades, use,
+      storeHot: !!me && buyWindow && (free || inBase(me, this.map.def, sideOf(state, this.map.def, me.team))), reloading: p.reloading,
+    });
   }
 
   /** The vehicles' bodies where we see them (as rendered): they block us, carry us on their roofs and push us aside. */

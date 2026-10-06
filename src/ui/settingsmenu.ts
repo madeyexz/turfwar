@@ -2,7 +2,10 @@ import { OPTIC_DETAILS, RETICLE_COLORS, RETICLE_STYLES, SCOPE_MODES, settings, t
 import { RETICLE_CSS } from '../render/sights';
 import type { CrosshairStyle } from './hud';
 import { matches, onBindings } from '../game/keybinds';
+import { defaultQuality } from '../game/device';
+import { touchActive } from '../game/touchlayout';
 import { ControlsPanel } from './controlspanel';
+import { TouchSettings } from './touchsettings';
 import { LANGS, lang, onLang, setLang, t, type Key, type Lang } from './i18n';
 import { kbd, kbdCode } from './keys';
 import './settingsmenu.css';
@@ -90,6 +93,8 @@ export class SettingsMenu {
   private stopLang: () => void;
   private stopKeys: () => void;
   private readonly controls = new ControlsPanel();
+  /** Touch controls on or off, finger look speed and the layout editor, above the key list. */
+  private readonly touch = new TouchSettings();
 
   constructor(parent: HTMLElement, private actions: SettingsActions, options: SettingsOptions = {}) {
     const lobby = this.lobby = options.lobby;
@@ -210,7 +215,7 @@ export class SettingsMenu {
         ${controls}
         <footer><button type="button" class="leave" data-act="leave">${t('set.leave')}</button></footer>
       </div>`;
-    this.root.querySelector('[data-pane="controls"]')!.appendChild(this.controls.el);
+    this.root.querySelector('[data-pane="controls"]')!.append(this.touch.el, this.controls.el);
     this.tab(this.current);
   }
 
@@ -220,7 +225,7 @@ export class SettingsMenu {
   }
 
   private current: SettingsTab = 'options';
-  private quality: GraphicsQuality = load('quality', 'medium') as GraphicsQuality;
+  private quality: GraphicsQuality = load('quality', defaultQuality(touchActive())) as GraphicsQuality;
   get open() { return !this.root.hidden; }
 
   /** In-game: `solo` picks the title (it opens on the tab last shown). Lobby: `tab` picks the section to open on. */
@@ -290,8 +295,8 @@ export class SettingsMenu {
     pick('lang', lang());
     pick('crosshair', load('crosshair', 'classic')); pick('scope', settings.scopeMode); pick('rcolor', settings.reticleColor);
     pick('rstyle', settings.reticleStyle); pick('optic', settings.opticDetail);
-    pick('quality', this.lobby ? this.quality : load('quality', 'medium'));
+    pick('quality', this.lobby ? this.quality : load('quality', defaultQuality(touchActive())));
   }
 
-  dispose() { this.stopLang(); this.stopKeys(); this.controls.dispose(); this.root.remove(); }
+  dispose() { this.stopLang(); this.stopKeys(); this.controls.dispose(); this.touch.dispose(); this.root.remove(); }
 }
