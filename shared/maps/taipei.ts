@@ -326,11 +326,12 @@ export function taipei(): MapDef {
 
   // ---- Dressing (taipei-decor.ts), kept clear of the spawns, crates and vehicle spots -------
   const shift: Shift = { X, Z, ox: OX, oz: OZ };
-  const vehicleRoom = { car: 3.4, scooter: 1.6, heli: 9 } as Record<string, number>;
+  const vehicleRoom = { car: 3.4, scooter: 1.6 } as Record<string, number>;
   const keep: Keep = [
     ...b.spawns.map(p => [p.x, p.z, 1.4] as [number, number, number]),
     ...b.pickups.map(p => [p.x, p.z, 1.6] as [number, number, number]),
-    ...TAIPEI_VEHICLES.map(([kind, x, z]) => [X(x), Z(z), vehicleRoom[kind] ?? 3.4] as [number, number, number]),
+    // The helicopter stands on a roof, above anything the street keeps clear.
+    ...TAIPEI_VEHICLES.filter(([kind]) => kind !== 'heli').map(([kind, x, z]) => [X(x), Z(z), vehicleRoom[kind] ?? 3.4] as [number, number, number]),
   ];
   const cuts = [...interiors(b, shift, ALL_SHOPS), ...openings(b, shift)];
   // Nothing of the street dressing (look or collider) stands on the ring road, where a vehicle
