@@ -79,8 +79,7 @@ export const POINTS = [
 
 /** Ammo crates (the bases get theirs from the loader): [x, y, z]. */
 export const AMMO: [number, number, number][] = [
-  [-38, LEVEL.G, -2.5], [-14, LEVEL.G, -10.75], [34.75, LEVEL.G, -21.25], [-38.5, LEVEL.M, 30.5],
-  [-17.5, LEVEL.U, 24], [32.5, LEVEL.M, -32.5], [-5, LEVEL.M, -16.5], [-10, LEVEL.H, 10.75],
+  [-38, LEVEL.G, -2.5], [-14, LEVEL.G, -10.75], [-17.5, LEVEL.U, 24], [32.5, LEVEL.M, -32.5], [-5, LEVEL.M, -16.5], [-10, LEVEL.H, 10.75],
 ];
 
 const { G, M, U, H } = LEVEL;
@@ -136,14 +135,6 @@ function stairs(k: Kit, t1Holes: R[], shaftHoles: R[]) {
     k.flight([x0, z0, x1, z1], y0, y1, 0, { steps, base: y0, color: C.step });
     for (const side of [[z0 - 0.4, z0], [z1, z1 + 0.4]]) k.cheek([x0, side[0], x1, side[1]], y0, y0, y1, 0, 4);
   }
-  // A marble strip down the middle of each flight, between two lanes of steps (drawn only).
-  for (const [x0, x1, y0, y1] of GRAND.flights) {
-    for (let i = 0; i < 6; i++) {
-      const a = x0 + (x1 - x0) * i / 6, c = x0 + (x1 - x0) * (i + 1) / 6, top = y0 + (y1 - y0) * (i + 1) / 6;
-      k.shape([a, -0.6, c, 0.6], y0, top + 0.05, 'painted', C.marbleShade);
-    }
-  }
-
   // ---- Rear staircase (east): straight up, the cheeks stopping short of each terrace so it opens onto them ----
   for (const [x0, x1, y0, y1] of REAR.flights) {
     k.flight([x0, REAR.z0, x1, REAR.z1], y0, y1, 2, { base: y0, color: C.step });
@@ -181,9 +172,9 @@ function stairs(k: Kit, t1Holes: R[], shaftHoles: R[]) {
 
     // ---- Stairwell to the chamber (inside the hall's footprint): two flights round a landing ----
     // Flight a: upper gallery (4.5) east to the landing (9); flight b: back west into the chamber (13.5).
-    k.flight(rect(2.5, -13, 10.5, -10.25), M, U, 0, { base: M, style: 'tile', color: C.chamberFloor });
+    k.flight(rect(2.5, -13, 10.5, -10.25), M, U, 0, { base: M, style: 'paving', color: C.chamberFloor });
     k.box(rect(10.5, -13.6, 13, -7), M, U, 'painted', C.cream);
-    k.flight(rect(2.5, -9.75, 10.5, -7), U, H, 2, { base: M, style: 'tile', color: C.chamberFloor });
+    k.flight(rect(2.5, -9.75, 10.5, -7), U, H, 2, { base: M, style: 'paving', color: C.chamberFloor });
     k.box(rect(2.5, -10.25, 10.5, -9.75), M, H + 1, 'painted', C.cream);
     k.box(rect(2.5, -13.6, 10.5, -13), M, M_TOP, 'painted', C.cream);
     shaftHoles.push(rect(2.5, -13.6, 13, -7));
@@ -218,13 +209,16 @@ function tiers(k: Kit, t1Holes: R[], shaftHoles: R[]) {
   k.slab(T1, t1Holes, G_TOP, M, 'paving', C.granite);
   // Second tier's slab and the platform's fill, with the stairwells cut through both.
   k.slab(T2, shaftHoles, M_TOP, U, 'paving', C.granite);
-  k.slab(T3, shaftHoles, U, H, 'paving', 0xf0ede6);
+  k.slab(T3, shaftHoles, U, H, 'paving', C.granite);
+  // The platform's faces in white marble (the slab's own texture is the paving on top).
+  const [p0, q0, p1, q1] = T3;
+  for (const r of [[p0 - 0.03, q0 - 0.03, p1 + 0.03, q0], [p0 - 0.03, q1, p1 + 0.03, q1 + 0.03], [p0 - 0.03, q0, p0, q1], [p1, q0, p1 + 0.03, q1]] as R[]) k.shape(r, U, H - 0.75, 'painted', C.marble);
   // Floors and ceilings inside (drawn): red granite downstairs, pale marble in the chamber.
   k.shape([-40.75, -33.25, 35.75, 33.25], G - 0.04, G + 0.03, 'tile', C.redGranite);
   for (const r of cover([-30.75, -25.75, 28.25, 25.75], t1Holes)) k.shape(r, M, M + 0.03, 'tile', C.redGranite);
   for (const r of cover([-40.75, -33.25, 35.75, 33.25], t1Holes)) k.shape(r, G_TOP - 0.04, G_TOP - 0.01, 'painted', C.cream);
   for (const r of cover([-30.75, -25.75, 28.25, 25.75], shaftHoles)) k.shape(r, M_TOP - 0.04, M_TOP - 0.01, 'painted', C.cream);
-  for (const r of cover(CHAMBER, shaftHoles)) k.shape(r, H, H + 0.03, 'tile', C.chamberFloor);
+  for (const r of cover(CHAMBER, shaftHoles)) k.shape(r, H, H + 0.03, 'paving', C.chamberFloor);
 
   // Terrace balustrades, open where the stairs arrive.
   const sides = (area: R, y: number, n: [number, number], w: [number, number], e: [number, number]) => {
@@ -256,7 +250,7 @@ function tiers(k: Kit, t1Holes: R[], shaftHoles: R[]) {
 /** Ground floor (G): the base's outer walls and the museum's partitions. Doors are centred on the nav lattice. */
 function groundWalls(k: Kit) {
   const door = (at: number, width = 3, top = 3.2) => ({ at, width, top: G + top });
-  const OUT = 'paving', IN = 'painted';
+  const OUT = 'painted', IN = 'painted';
   // Outer walls (1 m): west doors either side of the grand staircase, east doors either side of the rear one.
   k.wall('z', -41.25, T1[1], T1[3], G, G_TOP, [door(-25), door(-10), door(10), door(25)], OUT, C.marble, 1);
   k.wall('z', 36.25, T1[1], T1[3], G, G_TOP, [door(-27.5), { at: -6.25, width: 3.5, top: G + 3.4 }, { at: 6.25, width: 3.5, top: G + 3.4 }, door(27.5)], OUT, C.marble, 1);
@@ -273,9 +267,9 @@ function groundWalls(k: Kit) {
 /** Upper gallery (M): the second tier's outer walls and the gallery partitions. */
 function upperWalls(k: Kit) {
   const door = (at: number, width = 3, top = 3.2) => ({ at, width, top: M + top });
-  k.wall('z', -31.25, T2[1], T2[3], M, M_TOP, [door(-15), door(15)], 'paving', C.marble, 1);
-  k.wall('z', 28.75, T2[1], T2[3], M, M_TOP, [door(-12.5), door(12.5)], 'paving', C.marble, 1);
-  for (const z of [-26.25, 26.25]) k.wall('x', z, -30.75, 28.25, M, M_TOP, [door(-17.5), door(17.5)], 'paving', C.marble, 1);
+  k.wall('z', -31.25, T2[1], T2[3], M, M_TOP, [door(-15), door(15)], 'painted', C.marble, 1);
+  k.wall('z', 28.75, T2[1], T2[3], M, M_TOP, [door(-12.5), door(12.5)], 'painted', C.marble, 1);
+  for (const z of [-26.25, 26.25]) k.wall('x', z, -30.75, 28.25, M, M_TOP, [door(-17.5), door(17.5)], 'painted', C.marble, 1);
   // West gallery (behind the grand staircase's upper flights) and east gallery (behind the rear stair).
   k.wall('z', -21.25, -25.75, 25.75, M, M_TOP, [{ at: -23.75, width: 4.4, top: M_TOP }, door(-17.5), door(-5), door(5), door(17.5), { at: 23.75, width: 4.4, top: M_TOP }], 'painted', C.cream);
   for (const z of [-8.75, 8.75]) k.wall('x', z, -30.75, -21.65, M, M_TOP, [door(-26.25)], 'painted', C.cream);

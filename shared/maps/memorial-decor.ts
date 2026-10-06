@@ -82,8 +82,8 @@ function statue(k: Kit) {
 /** Inscription panels: the wall behind the statue and the two side walls, gold "characters" in columns (not legible text). */
 function inscriptions(k: Kit) {
   // Behind the statue: a dark marble panel with three pairs of large gold characters.
-  k.shape([12.9, -3.3, 13, 3.3], 22.4, 27.4, 'painted', 0x3a3a40);
-  k.shape([12.88, -3.45, 12.9, 3.45], 22.25, 27.55, 'painted', C.gold);
+  k.shape([12.89, -3.3, 12.95, 3.3], 22.4, 27.4, 'painted', 0x23262c);
+  k.shape([12.95, -3.45, 12.99, 3.45], 22.25, 27.55, 'painted', C.gold);
   for (let i = 0; i < 6; i++) {
     const z = -2.75 + i * 1.1 + (i >= 2 ? 0.25 : 0) + (i >= 4 ? 0.25 : 0) - 0.25;
     k.shape([12.86, z - 0.4, 12.88, z + 0.4], 24.4, 25.2, 'painted', C.gold);
@@ -99,10 +99,10 @@ function inscriptions(k: Kit) {
     k.shape([-11.15, p2, 11.15, q2], 20.35, 20.5, 'painted', C.gold);
     for (let col = 0; col < 24; col++) {
       const x = -10.3 + col * 0.9;
-      const rows = 9 - ((col * 5) % 4);
+      const rows = 12 - ((col * 5) % 5);
       for (let r = 0; r < rows; r++) {
-        const top = 27 - r * 0.68;
-        k.shape([x - 0.24, p3, x + 0.24, q3], top - 0.48, top, 'painted', 0x2c2a2a);
+        const top = 26.9 - r * 0.52;
+        k.shape([x - 0.17, p3, x + 0.17, q3], top - 0.34, top, 'painted', C.gold);
       }
     }
   }

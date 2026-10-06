@@ -9,8 +9,8 @@ export type R = [x0: number, z0: number, x1: number, z1: number];
 
 /** Palette: white marble, granite, the blue glaze of the roof tiles, dark bronze and gold leaf. */
 export const C = {
-  marble: 0xf4f2ec, marbleShade: 0xe6e2da, granite: 0xd9d4ca, step: 0xe6e1d8, plaza: 0xcbc4b8,
-  redGranite: 0xc98a78, chamberFloor: 0xe8ddd0, blue: 0x2a5cb8, blueDeep: 0x173f8a, bronze: 0x5c4630,
+  marble: 0xf4f2ec, marbleShade: 0xe6e2da, granite: 0xf0ebe2, step: 0xe6e1d8, plaza: 0xe6e0d6,
+  redGranite: 0xc98a78, chamberFloor: 0xf2ece2, blue: 0x2a5cb8, blueDeep: 0x173f8a, bronze: 0x5c4630,
   bronzeDark: 0x3a2c1f, gold: 0xd4a94a, wood: 0x7a4e30, woodDark: 0x4e3020, cream: 0xf1e6cf, red: 0xa82a22,
   ink: 0x2a2a2e, hedge: 0x6a9a4e, lawn: 0x7aa85a,
 } as const;

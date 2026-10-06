@@ -205,7 +205,11 @@ function library(k: Kit) {
   for (const z of [-30, -27.5, -15, -12.5]) {
     for (const [x0, x1] of [[8.75, 18.75], [26.25, 33.75]]) {
       k.box([x0, z - 0.35, x1, z + 0.35], G, 2.2, 'wood', C.woodDark);
-      for (let x = x0 + 0.3; x < x1 - 0.2; x += 1.2) k.shape([x, z - 0.37, x + 0.9, z + 0.37], 0.35, 2.0, 'painted', [0x8a3a2a, 0x2a4a6a, 0x5a6a3a, 0xc8b080][Math.floor(x * 7) & 3]);
+      // Books on three shelves, in runs of one colour and height.
+      for (const lv of [0.3, 0.95, 1.6]) for (let x = x0 + 0.12, i = 0; x < x1 - 0.5; x += 0.62, i++) {
+        const h = 0.38 + ((i * 7 + lv * 10) % 5) * 0.04;
+        k.shape([x, z - 0.38, x + 0.56, z + 0.38], lv, lv + h, 'painted', [0x8a3a2a, 0x2a4a6a, 0x5a6a3a, 0xc8b080, 0x6a2a4a][(i + Math.round(lv * 3)) % 5]);
+      }
     }
   }
   for (const [x0, z0] of [[10, -22.5], [14, -22.5], [28, -22.5], [32, -22.5]]) {

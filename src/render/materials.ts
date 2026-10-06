@@ -89,7 +89,7 @@ export const THEMES: Record<ThemeId, Theme> = {
   // sun on the white marble, green lawns; the hemisphere keeps the galleries under the hall readable.
   memorial: {
     id: 'memorial', ground: 'moss', rock: 'lichen', dirt: 'path',
-    groundTint: new THREE.Color(0.66, 0.92, 0.5), rockTint: new THREE.Color(0.9, 0.9, 0.86), dirtTint: new THREE.Color(0.96, 0.9, 0.8),
+    groundTint: new THREE.Color(0.62, 1.0, 0.46), rockTint: new THREE.Color(0.92, 0.92, 0.88), dirtTint: new THREE.Color(1.05, 0.98, 0.86),
     skyTop: new THREE.Color(0x4f7cb8), skyHorizon: new THREE.Color(0xf2c896), fog: new THREE.Color(0xd8c4ac), fogDensity: 0.0026,
     sunColor: new THREE.Color(0xffd4a4), sunIntensity: 3.0, hemiSky: new THREE.Color(0xc4d4ec), hemiGround: new THREE.Color(0x9a8a72), hemiIntensity: 1.6,
     planet: null, exposure: 1.0, urban: true,
