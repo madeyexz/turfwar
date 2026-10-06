@@ -1,4 +1,5 @@
 import type { WeaponId } from '../shared/weapons';
+import { Voice, VoicePool, unit } from './voices';
 
 type V3 = { x: number; y: number; z: number };
 type Listener = { pos: V3; yaw: number };
@@ -135,8 +136,10 @@ const GUN_SOUNDS: Record<WeaponId, GunSound> = {
 };
 
 const SPEED_OF_SOUND = 343;
-/** Remote gunshot voices allowed to ring at once; quieter distant ones are dropped beyond it. */
+/** Remote gunshot voices allowed to ring at once: beyond it distant shots are dropped and near ones take the oldest's place. */
 const MAX_REMOTE_VOICES = 14;
+/** Where a source with no valid position (NaN or infinite) is heard: far off, nearly silent, centred. */
+const UNPLACED = 1000;
 const smoothstep = (a: number, b: number, x: number) => { const k = Math.max(0, Math.min(1, (x - a) / (b - a))); return k * k * (3 - 2 * k); };
 const jitter = (amount: number) => 1 + (Math.random() - 0.5) * 2 * amount;
 
@@ -158,10 +161,21 @@ export class Audio {
   /** The player's weapon in hand (last equipped or fired), for reloads and dry fire without one. */
   private held: WeaponId = 'mp5';
   private lastTake = new Map<WeaponId, number>();
-  private lastBody?: GainNode;
+  /** The player's previous shot: its body is choked (and its takes stopped) when the next one fires. */
+  private lastShot?: { body: GainNode; takes: AudioScheduledSourceNode[] };
   private lastShotAt = -1;
   private lastCasingAt = -1;
-  private remoteVoices = 0;
+  /** Remote gunshots ringing now; a stolen one fades out on its input gain. */
+  private remote = new VoicePool<{ voice: Voice; input: GainNode }>(MAX_REMOTE_VOICES, ({ voice, input }) => {
+    const t = this.ctx!.currentTime;
+    input.gain.cancelScheduledValues(t); input.gain.setValueAtTime(input.gain.value, t); input.gain.setTargetAtTime(0, t, 0.015);
+    voice.stop(t + 0.12);
+  });
+  /** The sound being built: its nodes leave the mix together when its last source ends (see src/voices.ts). */
+  private voice?: Voice;
+  private comp?: DynamicsCompressorNode;
+  private limit?: DynamicsCompressorNode;
+  private tailVerb?: ConvolverNode;
   muted = false;
   volume = 0.8;
   musicVolume = 0.6;
@@ -170,9 +184,9 @@ export class Audio {
     if (this.ctx) { void (this.ctx as AudioContext).resume(); return; }
     const ctx = new AudioContext();
     this.build(ctx);
-    const comp = ctx.createDynamicsCompressor(); comp.threshold.value = -14; comp.ratio.value = 4;
+    const comp = this.comp = ctx.createDynamicsCompressor(); comp.threshold.value = -14; comp.ratio.value = 4;
     // A final safety limiter so stacked gunfire never clips the output.
-    const limit = ctx.createDynamicsCompressor();
+    const limit = this.limit = ctx.createDynamicsCompressor();
     limit.threshold.value = -1.5; limit.knee.value = 0; limit.ratio.value = 20; limit.attack.value = 0.001; limit.release.value = 0.08;
     this.master.connect(comp).connect(limit).connect(ctx.destination);
     this.reverb = ctx.createConvolver(); this.reverb.buffer = reverbImpulse(ctx, 1.6);
@@ -184,7 +198,7 @@ export class Audio {
     this.gunBus.connect(gunComp).connect(this.master);
     // Outdoor tail: slap off buildings and a rolling decay, kept out of the lows so bursts stay clear.
     this.tailBus = ctx.createGain();
-    const tail = ctx.createConvolver(); tail.buffer = outdoorImpulse(ctx);
+    const tail = this.tailVerb = ctx.createConvolver(); tail.buffer = outdoorImpulse(ctx);
     const hp = ctx.createBiquadFilter(); hp.type = 'highpass'; hp.frequency.value = 170;
     const lp = ctx.createBiquadFilter(); lp.type = 'lowpass'; lp.frequency.value = 6500;
     this.tailBus.connect(hp).connect(lp).connect(tail).connect(this.master);
@@ -193,6 +207,15 @@ export class Audio {
   }
 
   private get live() { return !!this.gunBus; }
+
+  /** Debug (?audiodebug): the mix's nodes and counters, for src/audio-probe.ts. */
+  debugTaps() {
+    if (!this.ctx || !this.comp || !this.limit) return undefined;
+    return {
+      ctx: this.ctx, master: this.master, world: this.world, gunBus: this.gunBus!, tail: this.tailVerb!, reverb: this.reverb,
+      comp: this.comp, limit: this.limit, voices: () => ({ remote: this.remote.size }),
+    };
+  }
 
   /** Fetch and decode the recordings; until each arrives its sound stays synthesized. */
   private async loadSamples(ctx: AudioContext) {
@@ -273,9 +296,30 @@ export class Audio {
   private get ready() { return !!this.ctx && !this.muted; }
   private now() { return this.clock ?? this.ctx!.currentTime; }
 
+  /**
+   * The voice collecting the nodes being created. play() gives a sound its own; any other call shares one
+   * per task (everything one frame starts), sealed once the task's synchronous work is done.
+   */
+  private get v(): Voice {
+    if (!this.voice) {
+      const v = this.voice = new Voice();
+      queueMicrotask(() => { if (this.voice === v) this.voice = undefined; v.seal(); });
+    }
+    return this.voice;
+  }
+
+  /** Builds one sound in its own voice. */
+  private play(build: () => void, voice = new Voice()) {
+    const outer = this.voice;
+    this.voice = voice;
+    try { build(); } finally { this.voice = outer; voice.seal(); }
+  }
+
   /** Distance, stereo position and facing of a world source relative to the listener. */
   private spatial(listener: Listener, at: V3) {
     const dx = at.x - listener.pos.x, dz = at.z - listener.pos.z, dy = at.y - listener.pos.y;
+    // A NaN position would reach an AudioParam, which throws (and aborts the frame that played it).
+    if (!Number.isFinite(dx + dy + dz + listener.yaw)) return { d: UNPLACED, pan: 0, front: 0 };
     const d = Math.hypot(dx, dy, dz) || 0.001;
     // Listener right vector for yaw: (cos, -sin); forward: (-sin, -cos).
     const right = (dx * Math.cos(listener.yaw) - dz * Math.sin(listener.yaw)) / d;
@@ -301,8 +345,10 @@ export class Audio {
       g.connect(lp).connect(pan); node = pan;
       wet = Math.min(0.9, wet + d * 0.01);
     }
-    node.connect(world ? this.world : this.master);
-    const send = ctx.createGain(); send.gain.value = wet; node.connect(send).connect(this.reverbSend);
+    const voice = this.v;
+    voice.route(node, world ? this.world : this.master);
+    const send = ctx.createGain(); send.gain.value = wet; node.connect(send);
+    voice.route(send, this.reverbSend);
     return g;
   }
 
@@ -315,6 +361,7 @@ export class Audio {
     g.gain.setValueAtTime(0.0001, t); g.gain.exponentialRampToValueAtTime(gain, t + attack); g.gain.exponentialRampToValueAtTime(0.0001, t + dur);
     src.connect(f).connect(g).connect(dest);
     src.start(t, Math.random() * 1.5); src.stop(t + dur + 0.05);
+    this.v.track(src);
     return f;
   }
 
@@ -325,6 +372,7 @@ export class Audio {
     const g = ctx.createGain();
     g.gain.setValueAtTime(0.0001, t); g.gain.exponentialRampToValueAtTime(gain, t + attack); g.gain.exponentialRampToValueAtTime(0.0001, t + dur);
     o.connect(g).connect(dest); o.start(t); o.stop(t + dur + 0.05);
+    this.v.track(o);
   }
 
   /** Plays a decoded recording from its onset into `dest`. */
@@ -336,7 +384,7 @@ export class Audio {
     if (gain === 1) src.connect(dest);
     else { const g = ctx.createGain(); g.gain.value = gain; src.connect(g).connect(dest); }
     src.start(Math.max(t, this.now()), s.onset);
-    return src;
+    return this.v.track(src);
   }
 
   /** Foley hits with a little random pitch and level. */
@@ -392,28 +440,38 @@ export class Audio {
 
   /** The player's own shot: every layer, through the weapon bus. */
   private ownShot(weapon: WeaponId, v: GunVoice, t: number, suppressed: boolean) {
-    const ctx = this.ctx!, bus = this.gunBus!;
+    this.play(() => this.buildOwnShot(weapon, v, t, suppressed));
+  }
+
+  private buildOwnShot(weapon: WeaponId, v: GunVoice, t: number, suppressed: boolean) {
+    const ctx = this.ctx!, bus = this.gunBus!, voice = this.v;
     const since = t - this.lastShotAt;
     this.lastShotAt = t;
     const rapid = since < 0.16;
-    // Choke the previous shot's body so bursts stay tight; its tail keeps ringing in the convolver.
-    if (this.lastBody) {
-      const g = this.lastBody.gain;
+    // Choke the previous shot's body so bursts stay tight; its tail keeps ringing in the convolver. Its takes
+    // stop once choked, so full auto keeps one or two bodies playing instead of every take to its end.
+    if (this.lastShot) {
+      const g = this.lastShot.body.gain;
       g.cancelScheduledValues(t); g.setValueAtTime(g.value, t); g.setTargetAtTime(0, t + 0.006, 0.022);
+      for (const take of this.lastShot.takes) take.stop(t + 0.2);
     }
     const body = ctx.createGain();
-    this.lastBody = body;
-    body.connect(bus);
+    const takes: AudioScheduledSourceNode[] = [];
+    this.lastShot = { body, takes };
+    voice.route(body, bus);
     const send = ctx.createGain(); send.gain.value = v.tail * (suppressed ? 0.07 : rapid ? 0.24 : 0.42);
-    body.connect(send).connect(this.tailBus!);
+    body.connect(send);
+    voice.route(send, this.tailBus!);
 
     const level = 0.55 * v.gain * (suppressed ? 0.32 : 1) * jitter(0.1);
     const input = ctx.createGain(); input.gain.value = level;
     this.shape(input, v, suppressed).connect(body);
     const rate = v.rate * (suppressed ? 1.06 : 1) * jitter(0.022);
-    this.sample(this.take(weapon, v), input, t, rate);
+    const near = this.sample(this.take(weapon, v), input, t, rate);
+    if (near) takes.push(near);
     // Not choked: the kick, the action and the suppressor's gas.
-    const direct = ctx.createGain(); direct.gain.value = 0.55 * v.gain; direct.connect(bus);
+    const direct = ctx.createGain(); direct.gain.value = 0.55 * v.gain;
+    voice.route(direct, bus);
     const [f0, f1, dur, kick] = v.thump;
     const thump = kick * (suppressed ? 0.45 : 1) * (rapid ? 0.8 : 1);
     this.tone(direct, t, 'sine', f0, f1, dur, thump, 0.0015);
@@ -426,7 +484,8 @@ export class Audio {
       this.noiseBurst(direct, t, 0.07, 'bandpass', 520, 1.1, 0.45);
       this.noiseBurst(direct, t + 0.002, 0.05, 'highpass', 4200, 0.7, 0.1, 0.004);
     } else {
-      this.sample(`far-${v.far}`, input, t + 0.006, rate, v.room);
+      const room = this.sample(`far-${v.far}`, input, t + 0.006, rate, v.room);
+      if (room) takes.push(room);
       this.noiseBurst(input, t, 0.012, 'highpass', 3600, 0.7, v.crack);
       if (v.blast) this.noiseBurst(input, t, 0.24, 'lowpass', 650, 0.6, v.blast, 0.002);
       if (v.bark) this.noiseBurst(input, t, 0.06, 'bandpass', 760, 1.2, v.bark);
@@ -439,22 +498,32 @@ export class Audio {
   private remoteShot(weapon: WeaponId, v: GunVoice, now: number, listener: Listener, at: V3, suppressed: boolean) {
     const ctx = this.ctx!;
     const { d, pan: p, front } = this.spatial(listener, at);
-    if (this.remoteVoices >= MAX_REMOTE_VOICES && d > 20) return;
+    const input = ctx.createGain();
+    const entry = { voice: new Voice(), input };
+    // A full pool drops a distant shot; a near one takes the oldest's place.
+    if (!this.remote.add(entry, d > 20)) return;
+    entry.voice.onEnd = () => this.remote.remove(entry);
+    this.play(() => this.buildRemoteShot(weapon, v, now, d, p, front, input, suppressed), entry.voice);
+  }
+
+  private buildRemoteShot(weapon: WeaponId, v: GunVoice, now: number, d: number, p: number, front: number, input: GainNode, suppressed: boolean) {
+    const ctx = this.ctx!, voice = this.v;
     const t = now + d / SPEED_OF_SOUND;
     const far = smoothstep(12, 60, d);
     const level = 0.72 * v.gain * (suppressed ? 0.32 : 1) * (12 / (12 + d)) * jitter(0.08);
-    const input = ctx.createGain(); input.gain.value = level;
+    input.gain.value = level;
     // Highs fall away with distance, a little more from behind.
     const lp = ctx.createBiquadFilter(); lp.type = 'lowpass';
     lp.frequency.value = Math.min(suppressed ? 1100 : 18000, Math.max(1500, 18000 * Math.exp(-d / 45)) * (front < 0 ? 1 + front * 0.3 : 1));
     const pan = ctx.createStereoPanner(); pan.pan.value = p;
-    this.shape(input, v, suppressed).connect(lp).connect(pan).connect(this.world);
+    this.shape(input, v, suppressed).connect(lp).connect(pan);
+    voice.route(pan, this.world);
     const send = ctx.createGain(); send.gain.value = v.tail * (0.3 + far * 0.75) * (suppressed ? 0.25 : 1);
-    pan.connect(send).connect(this.tailBus!);
+    pan.connect(send);
+    voice.route(send, this.tailBus!);
 
     const rate = v.rate * (suppressed ? 1.06 : 1) * jitter(0.025);
-    const src = this.sample(this.take(weapon, v), input, t, rate, Math.cos(far * Math.PI / 2) + 0.05);
-    if (src) { this.remoteVoices++; src.onended = () => { this.remoteVoices--; }; }
+    this.sample(this.take(weapon, v), input, t, rate, Math.cos(far * Math.PI / 2) + 0.05);
     if (!suppressed) {
       this.sample(`far-${v.far}`, input, t, rate, 0.15 + Math.sin(far * Math.PI / 2) * 0.95);
       // Beyond the crossfade a supersonic round still cracks through the low-passed rumble.
@@ -758,12 +827,14 @@ export class Audio {
     const t = this.now();
     const out = ctx.createGain(); out.gain.value = 0;
     const pan = ctx.createStereoPanner();
-    out.connect(pan).connect(this.world);
-    const nodes: AudioScheduledSourceNode[] = [];
-    const osc = (type: OscillatorType, f: number) => { const o = ctx.createOscillator(); o.type = type; o.frequency.value = f; o.start(t); nodes.push(o); return o; };
+    // Unplugged from the world bus once stop() has ended every source (see src/voices.ts).
+    const voice = new Voice();
+    out.connect(pan);
+    voice.route(pan, this.world);
+    const osc = (type: OscillatorType, f: number) => { const o = ctx.createOscillator(); o.type = type; o.frequency.value = f; o.start(t); voice.track(o); return o; };
     let tune: (rpm: number) => void;
     if (kind === 'heli') {
-      const src = ctx.createBufferSource(); src.buffer = this.noise; src.loop = true; src.start(t); nodes.push(src);
+      const src = ctx.createBufferSource(); src.buffer = this.noise; src.loop = true; src.start(t); voice.track(src);
       const lp = ctx.createBiquadFilter(); lp.type = 'lowpass'; lp.frequency.value = 700;
       const chop = ctx.createGain(); chop.gain.value = 0.5;
       const lfo = osc('sine', 10); const depth = ctx.createGain(); depth.gain.value = 0.5;
@@ -803,11 +874,12 @@ export class Audio {
       };
     }
     const base = kind === 'heli' ? 0.55 : kind === 'scooter' ? 0.32 : 0.4;
+    voice.seal();
     let stopped = false;
     return {
       set: (rpm, listener, at) => {
         if (stopped) return;
-        const r = Math.max(0, Math.min(1, rpm));
+        const r = unit(rpm);
         tune(r);
         let gain = base * (0.55 + r * 0.45), p = 0;
         if (listener && at) { const sp = this.spatial(listener, at); gain /= 1 + sp.d * 0.07; p = sp.pan; }
@@ -819,8 +891,7 @@ export class Audio {
         stopped = true;
         const now = ctx.currentTime;
         out.gain.setTargetAtTime(0, now, 0.15);
-        for (const n of nodes) n.stop(now + 0.8);
-        setTimeout(() => out.disconnect(), 1000);
+        voice.stop(now + 0.8);
       },
     };
   }
@@ -836,7 +907,9 @@ export class Audio {
     const t = this.now();
     const out = ctx.createGain(); out.gain.value = 0;
     const pan = ctx.createStereoPanner();
-    out.connect(pan).connect(this.world);
+    const voice = new Voice();
+    out.connect(pan);
+    voice.route(pan, this.world);
     const base = kind === 'car' ? 820 : 1150;
     const a = ctx.createOscillator(), b = ctx.createOscillator();
     a.type = 'triangle'; b.type = 'triangle'; a.frequency.value = base; b.frequency.value = base * 1.47;
@@ -850,13 +923,13 @@ export class Audio {
     const hg = ctx.createGain(); hg.gain.value = 0.5;
     hiss.connect(bp).connect(hg).connect(out);
     tone.connect(out);
-    const nodes = [a, b, vib, hiss];
-    for (const n of nodes) n.start(t);
+    for (const n of [a, b, vib, hiss]) { n.start(t); voice.track(n); }
+    voice.seal();
     let stopped = false;
     return {
       set: (amount, listener, at) => {
         if (stopped) return;
-        const r = Math.max(0, Math.min(1, amount)), now = ctx.currentTime;
+        const r = unit(amount), now = ctx.currentTime;
         a.frequency.setTargetAtTime(base * (0.9 + r * 0.25), now, 0.08);
         b.frequency.setTargetAtTime(base * 1.47 * (0.9 + r * 0.25), now, 0.08);
         let gain = (kind === 'car' ? 0.36 : 0.24) * r * r, p = 0;
@@ -869,8 +942,7 @@ export class Audio {
         stopped = true;
         const now = ctx.currentTime;
         out.gain.setTargetAtTime(0, now, 0.1);
-        for (const n of nodes) n.stop(now + 0.6);
-        setTimeout(() => out.disconnect(), 800);
+        voice.stop(now + 0.6);
       },
     };
   }
