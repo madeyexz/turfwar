@@ -9,6 +9,7 @@
   --op: 0.55; --tcs: 1;
 }
 .touch-layer.off { pointer-events: none; visibility: hidden; }
+.touch-layer.nostick .tc-stick { display: none; }
 body.menu-open .touch-layer { display: none; }
 
 .tc-btn {
@@ -35,7 +36,7 @@ body.menu-open .touch-layer { display: none; }
 .tc-btn[data-c="use"] { border-color: var(--amber); color: var(--amber); opacity: max(var(--op), 0.9); }
 /* Weapon slots are rounded squares that show the gun. */
 .tc-btn[data-c="knife"], .tc-btn[data-c="secondary"], .tc-btn[data-c="primary"], .tc-btn[data-c="grenade"] {
-  border-radius: 10px; width: calc(var(--d) * var(--tcs) * 1.45px);
+  border-radius: 10px; width: calc(var(--d) * var(--tcs) * 1.25px);
 }
 .tc-btn[data-c="grenade"] svg { width: 38%; height: 38%; }
 @keyframes tcHot { from { box-shadow: 0 0 0 rgba(156, 240, 138, 0); } to { box-shadow: 0 0 14px rgba(156, 240, 138, 0.6); } }
@@ -145,6 +146,9 @@ body.touch .toast { top: 104px; font-size: 14px; }
 body.touch .minimap { left: 6px; top: 50px; width: 130px; height: 130px; }
 body.touch .vitals { left: 6px; top: 50px; bottom: auto; width: 168px; padding: 5px 9px 6px; clip-path: none; }
 @media (min-width: 901px) { body.touch .vitals { top: 188px; } }
+/* Tablets: the top row of buttons is bigger, so the map and vitals start lower. */
+@media (min-height: 600px) { body.touch .minimap, body.touch .vitals { top: 100px; } body.touch .chat { top: 200px; } }
+@media (min-height: 600px) and (min-width: 901px) { body.touch .vitals { top: 240px; } body.touch .chat { top: 340px; } }
 body.touch .meter span { width: 24px; font-size: 9px; }
 body.touch .meter b { width: 30px; font-size: 15px; }
 body.touch .meter.stamina b { font-size: 11px; }

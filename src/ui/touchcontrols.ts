@@ -183,6 +183,7 @@ export class TouchControls {
       this.shownKey = key;
       for (const [id, el] of this.buttons) el.hidden = !shown.has(id);
       this.root.classList.toggle('off', ctx.scope === 'none');
+      this.root.classList.toggle('nostick', !stickShown(ctx.scope));
       // Controls that went away let go of what they held.
       for (const id of [...this.held, ...this.toggled]) if (!shown.has(id) && id !== 'scoreboard') { this.held.delete(id); this.toggled.delete(id); }
       for (const [pid, f] of this.fingers) if (f.role === 'button' && !shown.has(f.id)) this.fingers.delete(pid);
