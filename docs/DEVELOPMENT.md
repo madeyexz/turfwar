@@ -1,0 +1,145 @@
+# Development
+
+Running, testing and debugging locally, the URL flags and check scripts, deploying and releasing,
+analytics and the admin page, and a one-minute demo script. Start with
+[CONTRIBUTING.md](../CONTRIBUTING.md) for the workflow and the checks a pull request needs.
+
+Back to the [README](../README.md) · [Gameplay](GAMEPLAY.md) · [Architecture](ARCHITECTURE.md)
+
+## Run, test and develop
+
+```sh
+bun install --frozen-lockfile
+bun install --cwd spacetimedb --frozen-lockfile
+bun run dev            # Vite dev server (solo and the practice range work immediately, offline after load)
+bun run test           # Vitest (not `bun test`): rounds, bomb, economy, weapons, movement, collision, maps, bots, validation
+bun run build          # type-check + production build
+bun run typecheck:module
+```
+
+Online play locally needs the [SpacetimeDB CLI](https://spacetimedb.com/install) (verified with 2.10.2):
+
+```sh
+bun run dev:spacetime  # starts a local server on :3000 and (re)publishes the module as "lawbreaker"
+VITE_SPACETIMEDB_URI=same-origin VITE_SPACETIMEDB_DATABASE=lawbreaker bun run dev
+```
+
+`same-origin` routes the websocket through the dev server at `/stdb`, so a single URL serves the
+game and the match server. After changing the module, regenerate client bindings with
+`spacetime generate --lang typescript --out-dir src/module_bindings --module-path spacetimedb`.
+In Amp orbs, `.amp/services.yaml` declares both services (`amp orb services ensure`).
+
+Lobby URL flags: `?tab=quick|start|join` (the open tab), `?mode=offline|online|lab` (what `&autostart=1`
+starts: Solo, Quick Play or Practice), `&game=elimination|sabotage`, `&size=duel|squad|war` and `&map=<id>`
+(the Start a Server form; a 24v24 map picks 24v24 unless `size` says otherwise), `&room=CODE` (opens Join a
+server with the code filled in; with `autostart` joins it), `&team=0|1|auto`, `&skill=0.25…0.75`, `&name=…`,
+`&autostart=1`. Choices are remembered per browser under `lawbreaker.*` in localStorage (`lawbreaker.start.*`
+holds the form; `lawbreaker.crosshair` holds the crosshair style the HUD draws).
+
+`bun scripts/roomcheck.ts ws://127.0.0.1:<port> <db>` (local only) checks Play Online with separate
+identities: the same filters share a room, different maps split, Any joins a specific-map room,
+`quick_join` and `join` still work, bad sizes, modes and maps are refused, and after a match fixed rooms
+keep their map (and mode) while Any rooms rotate (it ends matches early with `spacetime sql`, owner-only).
+`scripts/loadtest.ts` takes `--mode` and `--map` to Play Online with filters.
+`bun scripts/startcheck.ts ws://127.0.0.1:<port> <db>` (local only, an empty database) checks Quick Play and
+Start a Server with separate identities: Quick Play opens a 6v6 with bots and a second one joins it, a public
+started room is listed, fixed and joinable, a private one is hidden, never Quick Played into and joined by
+code, bots off leaves slots empty, `start_room` refuses bad sizes, modes and maps, and the older reducers work.
+
+Testing the store: the practice range always buys for free, anywhere; add `&freebuy` to the URL for a
+free-buy Solo match; for a **local** Online database, set `"freeBuy":true` in the match's
+`configJson` with
+`spacetime sql <db> "UPDATE match SET configJson = '…' WHERE id = 0" --server http://127.0.0.1:3000`
+(owner-only; never on Maincloud).
+
+Development pages (dev server only): `/dev/level.html?map=verdant` (map preview; `&cut=6` clips
+everything above 6 m to see under roofs),
+`/dev/soldier.html` (animation/IK pose sheet), `/dev/viewmodel.html?ads=1` (first-person weapon),
+`/dev/viewer.html?model=/assets/props.glb` (asset viewer). Dev-only URL flags `debuginput`,
+`fixeddt` and `capture` make automated runs deterministic on software renderers.
+
+## Deploy
+
+Production: https://turfwar.ianhsiao.me (also https://lawbreaker.vercel.app). The GitHub repository
+[`madeyexz/turfwar`](https://github.com/madeyexz/turfwar) is connected to Vercel project
+`madeyexzs-projects/lawbreaker`: pushing `main` deploys production, and every push to `dev` deploys a
+preview wired to the development database `lawbreaker-dev`. Releases are maintainers merging `dev` into
+`main` (see [CONTRIBUTING.md](../CONTRIBUTING.md)). Production Maincloud database: `3d-game-c4lhd`
+(dashboard: https://spacetimedb.com/3d-game-c4lhd).
+
+Vercel production build variables are `VITE_SPACETIMEDB_URI=wss://maincloud.spacetimedb.com`
+and `VITE_SPACETIMEDB_DATABASE=3d-game-c4lhd`. Do not use `same-origin` on Vercel; that proxy
+exists only in the development server.
+
+For module updates, run tests and module type checks, then publish non-destructively:
+
+```sh
+bun run test && bun run build && bun run typecheck:module
+spacetime publish -s maincloud -p spacetimedb --delete-data=never --yes=remote,skip-login 3d-game-c4lhd
+```
+
+Stop if schema changes require deletion; never use the local development script for cloud
+publication. On an existing empty starter database, the first valid join initializes the match
+atomically; subsequent joins preserve its state. Publish the compatible module before pushing
+the matching commit to `main`, which triggers Vercel's GitHub deployment.
+Verify the production URL and two separate Online clients after each release.
+
+## Players, analytics and the admin page
+
+Players stay anonymous (no login). The player-facing summary is the privacy page (`privacy/index.html`,
+served at `/privacy` and linked from the lobby, in English and 繁體中文): change it in the same commit
+whenever what is collected changes. These answer "how many players, and from where":
+
+- **PostHog** (US cloud, project 649207; `src/analytics.ts`): `VITE_POSTHOG_KEY` (public `phc_…`
+  token) and `VITE_POSTHOG_HOST` are set in Vercel for Production and for Preview on `dev`.
+  posthog-js (slim build, no external scripts) loads lazily once the lobby is up. Autocapture and
+  recordings are off; `$pageview` / `$pageleave` stay on; Do Not Track is respected; PostHog derives
+  the country from the IP on its side. Events: `lobby_view`, `play_clicked`, `match_joined`,
+  `match_left` (also on tab close, by beacon), `round_ended`, `vehicle_entered`, `store_purchase`,
+  `language_changed`, `error_shown`, with super properties `lang`, `app_version` (git SHA),
+  `online_db` and `screen`. Online, the person property `stdb_identity` links a PostHog person to
+  a SpacetimeDB profile. Nothing is sent without a key, under `?bench`, `?trailer`, `?capture`,
+  `?fixeddt`, in headless browsers (`navigator.webdriver`), or from the dev server unless the URL
+  has `?analytics`; dev events then carry `test: true` and a `dev-test-…` distinct id (and are
+  printed to the console as sent).
+- **Vercel Web Analytics** (`inject()` at the top of `src/main.ts`): cookieless page views and visitor
+  counts for the game page (not `/privacy` or `/admin`); the dev server only logs them.
+- **SpacetimeDB** keeps the ground truth in the private table `player_seen` (first and last seen,
+  sessions, time zone, language, callsign per identity; `player_day` per active day), filled by the
+  join reducers, `hello(tz, lang)` (sent once per connection) and the connect lifecycle.
+  `bun scripts/players.ts <database> [--server maincloud|http://127.0.0.1:3000]` prints totals, new
+  and active players, countries estimated from time zones, who is online and career totals
+  (read-only, `spacetime sql` as the owner). Local checks: `bun scripts/seencheck.ts ws://127.0.0.1:<port> <db>`.
+
+**Admin page** (`/admin`, `admin/index.html`, not linked from the game, `noindex`): live totals,
+rooms, a 30-day chart of new and active players, countries and a sortable player list, for the
+database of the build (`VITE_SPACETIMEDB_*`). The owner logs in with the **admin key**; the module
+keeps only its SHA-256 (`ADMIN_KEY_SHA256` in `spacetimedb/src/admin.ts`). `admin_login(key)` adds
+the browser's SpacetimeDB identity to the private `admin` table (five wrong keys per identity per
+10 minutes, then refused until the window passes), and the `admin_*` views return rows only to
+identities in it. The page remembers only that this browser is logged in, never the key; **Log out**
+calls `admin_logout`.
+
+- *Rotate the key*: `printf %s "$NEW_KEY" | shasum -a 256`, put the hash in `ADMIN_KEY_SHA256`,
+  publish the module (`--delete-data=never`), then sign everyone out (below) and log in again.
+- *Revoke every admin session*: **Sign out all admins** on the admin page (`admin_revoke_all`,
+  admins only), or, without a logged-in browser, the owner's SQL: `spacetime sql <db> "DELETE FROM admin"`.
+- Local check with a test key (never the real one): publish a copy of the module whose
+  `ADMIN_KEY_SHA256` is the test key's hash to a local server, then
+  `ADMIN_TEST_KEY=<test key> bun scripts/admincheck.ts ws://127.0.0.1:<port> <db>`.
+
+## 60-second demo script — one continuous shot
+
+1. **0–6 s** — Lobby: size *6v6*, mode **[S] Sabotage**, map *Ochre Quarter* from the map picker,
+   team *Militia*. Click *Solo vs bots*, then **Start match**.
+2. **6–16 s** — Freeze time: press **B** in your base. You start with $1,000 and the MP5 and M9A1;
+   open *Attachments* and fit a **Reflex sight** to the MP5 ($800). Close the store.
+3. **16–35 s** — Sprint toward site A (Shift; watch stamina), hold RMB to zoom through the reflex and
+   win a firefight: hit markers, a kill, "+$500 KILL" and "+$300 FIRST KILL" popups.
+4. **35–45 s** — Reach site A and hold **E** for 5 s: the bomb arms, the clock drops to 40 s and the
+   bomb beeps. Defend it.
+5. **45–60 s** — The bomb goes off or SWAT disarms it: the round banner, round-end cash, and the
+   next round's freeze. Press **Tab** for the scoreboard.
+
+For the online version, open the game in two browsers (separate identities) and choose *Online* in
+both: each sees the other move, fight, buy and arm, all validated by the server.

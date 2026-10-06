@@ -1,0 +1,79 @@
+/* The /privacy page: the game's dark palette and Rajdhani headings, body text in a plain readable face. */
+@font-face { font-family: 'Rajdhani'; font-weight: 600; font-display: swap; src: url('/fonts/rajdhani-600.woff2') format('woff2'); }
+@font-face { font-family: 'Rajdhani'; font-weight: 700; font-display: swap; src: url('/fonts/rajdhani-700.woff2') format('woff2'); }
+
+:root {
+  --ink: #e9f3f5;
+  --muted: #9fb3b9;
+  --line: rgba(190, 236, 244, 0.22);
+  --accent: #7ff6ff;
+  --display: 'Rajdhani', 'PingFang TC', 'Noto Sans TC', 'Microsoft JhengHei', system-ui, sans-serif;
+  --text: system-ui, -apple-system, 'Segoe UI', 'PingFang TC', 'Noto Sans TC', 'Microsoft JhengHei', sans-serif;
+  color-scheme: dark;
+  color: var(--ink);
+  background: #05090c;
+  font-family: var(--text);
+}
+* { box-sizing: border-box; }
+body {
+  margin: 0; min-height: 100vh;
+  background: radial-gradient(1200px 500px at 15% -10%, rgba(127, 246, 255, 0.08), transparent 60%), #05090c;
+}
+a { color: var(--accent); text-underline-offset: 3px; }
+a:hover { color: #fff; }
+:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+
+/* Only the chosen language (once the script has picked one; without it both show, stacked). */
+html[data-lang='en'] [lang='zh-TW'], html[data-lang='zh-TW'] [lang='en'] { display: none; }
+html:not([data-lang]) article + article { margin-top: 56px; padding-top: 40px; border-top: 1px solid var(--line); }
+
+.bar {
+  display: flex; align-items: center; justify-content: space-between; gap: 16px;
+  max-width: 760px; margin: 0 auto; padding: 22px 24px 0;
+}
+.home {
+  display: inline-flex; align-items: center; gap: 10px; color: var(--ink); text-decoration: none;
+  font-family: var(--display); font-weight: 700; font-size: 18px; letter-spacing: 0.12em; text-transform: uppercase;
+}
+.home:hover { color: var(--accent); }
+.mark { width: 12px; height: 12px; transform: rotate(45deg); background: var(--accent); box-shadow: 0 0 12px rgba(127, 246, 255, 0.5); }
+.langs { display: flex; border: 1px solid var(--line); border-radius: 3px; overflow: hidden; }
+.langs button {
+  padding: 6px 12px; border: none; background: transparent; color: var(--muted); cursor: pointer;
+  font: 700 13px var(--display); letter-spacing: 0.08em;
+}
+.langs button + button { border-left: 1px solid var(--line); }
+.langs button[aria-pressed='true'] { background: rgba(127, 246, 255, 0.12); color: var(--accent); box-shadow: inset 0 -2px 0 var(--accent); }
+
+main { max-width: 760px; margin: 0 auto; padding: 28px 24px 8px; }
+h1 {
+  margin: 0; font-family: var(--display); font-weight: 700; font-size: clamp(34px, 6vw, 46px); line-height: 1;
+  letter-spacing: 0.08em; text-transform: uppercase;
+}
+h2 {
+  margin: 34px 0 8px; font-family: var(--display); font-weight: 700; font-size: 15px; letter-spacing: 0.2em;
+  text-transform: uppercase; color: var(--accent);
+}
+:lang(zh-TW) h1 { letter-spacing: 0.16em; }
+:lang(zh-TW) h2 { letter-spacing: 0.12em; font-size: 16px; }
+.updated { margin: 10px 0 0; color: var(--muted); font-size: 13px; }
+.lead { margin: 22px 0 0; font-size: 18px; line-height: 1.6; }
+p, li { font-size: 16px; line-height: 1.7; color: #d3e2e6; }
+p { margin: 0 0 10px; }
+ul { margin: 0 0 10px; padding-left: 22px; }
+li + li { margin-top: 4px; }
+
+.foot {
+  display: flex; flex-wrap: wrap; align-items: center; gap: 10px; max-width: 760px; margin: 0 auto; padding: 28px 24px 48px;
+  color: var(--muted); font-family: var(--display); font-weight: 700; font-size: 13px; letter-spacing: 0.14em; text-transform: uppercase;
+}
+.foot a { color: var(--muted); text-decoration: none; }
+.foot a:hover { color: var(--accent); }
+
+@media (max-width: 560px) {
+  .bar { padding: 16px 16px 0; }
+  .home { font-size: 15px; }
+  main { padding: 22px 16px 8px; }
+  .foot { padding: 24px 16px 40px; }
+  .lead { font-size: 17px; }
+}

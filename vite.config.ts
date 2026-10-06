@@ -9,19 +9,21 @@ function appVersion() {
   try { return execSync('git rev-parse --short HEAD', { stdio: ['ignore', 'pipe', 'ignore'] }).toString().trim() || 'dev'; } catch { return 'dev'; }
 }
 
-/** /admin without the trailing slash serves the admin page in the dev server too (Vercel rewrites it). */
-const adminRoute: Plugin = {
-  name: 'admin-route',
+/** /admin and /privacy without the trailing slash serve their pages in the dev server too (Vercel rewrites them). */
+const pageRoutes: Plugin = {
+  name: 'page-routes',
   configureServer(server) {
     server.middlewares.use((req, _res, next) => {
-      if (req.url === '/admin' || req.url?.startsWith('/admin?')) req.url = `/admin/${req.url.slice(6)}`;
+      for (const page of ['/admin', '/privacy']) {
+        if (req.url === page || req.url?.startsWith(`${page}?`)) req.url = `${page}/${req.url.slice(page.length)}`;
+      }
       next();
     });
   },
 };
 
 export default defineConfig({
-  plugins: [adminRoute],
+  plugins: [pageRoutes],
   define: { __APP_VERSION__: JSON.stringify(appVersion()) },
   server: {
     allowedHosts: true,
@@ -31,8 +33,8 @@ export default defineConfig({
   build: {
     chunkSizeWarningLimit: 900,
     rollupOptions: {
-      // The game, and the owner's admin dashboard at /admin (not linked from the game).
-      input: { main: resolve(__dirname, 'index.html'), admin: resolve(__dirname, 'admin/index.html') },
+      // The game, the privacy notice at /privacy, and the owner's admin dashboard at /admin (not linked from the game).
+      input: { main: resolve(__dirname, 'index.html'), privacy: resolve(__dirname, 'privacy/index.html'), admin: resolve(__dirname, 'admin/index.html') },
       output: { manualChunks: { three: ['three'] } },
     },
   },
