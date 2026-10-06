@@ -49,11 +49,13 @@ import JoinReducer from "./join_reducer";
 import JoinPublicReducer from "./join_public_reducer";
 import JoinRoomReducer from "./join_room_reducer";
 import LeaveReducer from "./leave_reducer";
+import QuickAnyReducer from "./quick_any_reducer";
 import QuickJoinReducer from "./quick_join_reducer";
 import QuickPlayReducer from "./quick_play_reducer";
 import ReloadWeaponReducer from "./reload_weapon_reducer";
 import ReportReducer from "./report_reducer";
 import SayReducer from "./say_reducer";
+import StartRoomReducer from "./start_room_reducer";
 import SwitchSlotReducer from "./switch_slot_reducer";
 import UseCrateReducer from "./use_crate_reducer";
 import VehicleReportReducer from "./vehicle_report_reducer";
@@ -233,11 +235,13 @@ const reducersSchema = __reducers(
   __reducerSchema("join_public", JoinPublicReducer),
   __reducerSchema("join_room", JoinRoomReducer),
   __reducerSchema("leave", LeaveReducer),
+  __reducerSchema("quick_any", QuickAnyReducer),
   __reducerSchema("quick_join", QuickJoinReducer),
   __reducerSchema("quick_play", QuickPlayReducer),
   __reducerSchema("reload_weapon", ReloadWeaponReducer),
   __reducerSchema("report", ReportReducer),
   __reducerSchema("say", SayReducer),
+  __reducerSchema("start_room", StartRoomReducer),
   __reducerSchema("switch_slot", SwitchSlotReducer),
   __reducerSchema("use_crate", UseCrateReducer),
   __reducerSchema("vehicle_report", VehicleReportReducer),

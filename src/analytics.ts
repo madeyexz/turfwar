@@ -11,7 +11,7 @@ import type { VehicleKind } from '../shared/vehicles';
  * the automation flags (`?bench`, `?trailer`, `?capture`, `?fixeddt`) and in headless browsers
  * (`navigator.webdriver`). Dev-server events carry `test: true` and a `dev-test-` distinct id.
  */
-export type PlayKind = 'online' | 'room' | 'solo' | 'practice' | 'private' | 'code';
+export type PlayKind = 'online' | 'start' | 'room' | 'solo' | 'practice' | 'private' | 'code';
 export type Reason = 'menu' | 'disconnect' | 'close';
 
 /** Every event and its properties (kept small and typed). */

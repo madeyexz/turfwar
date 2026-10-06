@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { PLAYABLE_MAP_IDS, RETIRED_MAPS, loadMap } from '../maps/index';
-import { filterError, hasSites, mapsFor, newRoomRules, nextRoomRules, pickRoom, roomMatches, ROOM_SIZES, type RoomFilter, type RoomView } from './rooms';
+import { filterError, hasSites, listOrder, mapsFor, newRoomRules, nextRoomRules, pickAnyRoom, pickRoom, QUICK_PLAY_NEW, roomMatches, ROOM_SIZES, startRoomConfig, startRoomError, type RoomFilter, type RoomView } from './rooms';
 
 const room = (r: Partial<RoomView> & { room: number }): RoomView => ({ mapId: 'crane', mode: 'elimination', size: 6, humans: 1, phase: 'live', ...r });
 const any = (size = 6): RoomFilter => ({ size, mode: '', map: '' });
@@ -136,5 +136,83 @@ describe('new rooms and rotation', () => {
 
   it('a fixed map and mode replay', () => {
     expect(nextRoomRules('crane', 'sabotage', 6, { fixedMap: true, fixedMode: true })).toEqual({ mapId: 'crane', mode: 'sabotage' });
+  });
+});
+
+describe('Quick Play (anything open)', () => {
+  it('prefers the fullest open public room, whatever its size, map or mode', () => {
+    const rooms = [
+      room({ room: 0, size: 1, humans: 1, mapId: 'tower' }),
+      room({ room: 1, size: 6, humans: 5, mapId: 'taipei', mode: 'sabotage' }),
+      room({ room: 2, size: 24, humans: 3, mapId: 'meridian' }),
+    ];
+    expect(pickAnyRoom(rooms)?.room).toBe(1);
+  });
+
+  it('opens a new 6v6 room with bots, on a random map and mode, when nothing is open', () => {
+    expect(pickAnyRoom([])).toBeUndefined();
+    expect(QUICK_PLAY_NEW).toEqual({ size: 6, mode: '', map: '' });
+    const rules = newRoomRules(QUICK_PLAY_NEW, seeded(3));
+    expect(mapsFor(6)).toContain(rules.mapId);
+    expect(rules.fixedMap || rules.fixedMode).toBe(false);
+  });
+
+  it('never auto-joins a private room', () => {
+    const rooms = [room({ room: 0, humans: 7, private: true }), room({ room: 1, humans: 1 })];
+    expect(pickAnyRoom(rooms)?.room).toBe(1);
+    expect(pickAnyRoom([room({ room: 0, humans: 1, private: true })])).toBeUndefined();
+    expect(pickRoom(rooms, any())?.room).toBe(1);
+  });
+
+  it('skips full rooms', () => {
+    const rooms = [room({ room: 0, size: 1, humans: 2 }), room({ room: 1, size: 6, humans: 12 }), room({ room: 2, size: 6, humans: 2 })];
+    expect(pickAnyRoom(rooms)?.room).toBe(2);
+    expect(pickAnyRoom(rooms.slice(0, 2))).toBeUndefined();
+  });
+
+  it('breaks a tie by the lower ping, then the lower room id', () => {
+    const rooms = [room({ room: 0, humans: 3 }), room({ room: 1, humans: 3 }), room({ room: 2, humans: 2 })];
+    expect(pickAnyRoom(rooms)?.room).toBe(0);
+    const ping = new Map([[0, 190], [1, 25], [2, 5]]);
+    expect(pickAnyRoom(rooms, r => ping.get(r.room))?.room).toBe(1);
+  });
+});
+
+describe('Start a server', () => {
+  it('validates size, mode and map the way the server does', () => {
+    expect(startRoomError({ size: 6, mode: 'sabotage', map: 'taipei' })).toBeUndefined();
+    expect(startRoomError({ size: 24, mode: 'elimination', map: 'meridian' })).toBeUndefined();
+    expect(startRoomError({ size: 5, mode: 'elimination', map: 'taipei' })).toBe('Unknown room size');
+    expect(startRoomError({ size: 6, mode: '', map: 'taipei' })).toBe('Unknown mode');
+    expect(startRoomError({ size: 6, mode: 'capture', map: 'taipei' })).toBe('Unknown mode');
+    expect(startRoomError({ size: 6, mode: 'elimination', map: '' })).toBe('That map does not host this room');
+    expect(startRoomError({ size: 6, mode: 'elimination', map: 'nowhere' })).toBe('That map does not host this room');
+    // 24v24 plays big maps only, and a small room no big map.
+    expect(startRoomError({ size: 24, mode: 'elimination', map: 'taipei' })).toBe('That map does not host this room');
+    expect(startRoomError({ size: 6, mode: 'elimination', map: 'meridian' })).toBe('That map does not host this room');
+    // Sabotage needs bomb sites.
+    const noSites = mapsFor(6).find(id => !hasSites(id))!;
+    expect(startRoomError({ size: 6, mode: 'sabotage', map: noSites })).toBe('That map does not host this room');
+    expect(startRoomError({ size: 6, mode: 'elimination', map: noSites })).toBeUndefined();
+  });
+
+  it('a public room keeps its map and mode; bots off is carried', () => {
+    expect(startRoomConfig({ size: 6, mode: 'sabotage', map: 'taipei', bots: true, isPublic: true })).toEqual({ mode: 'sabotage', teamSize: 6, noBots: false, fixedMap: true, fixedMode: true });
+    expect(startRoomConfig({ size: 1, mode: 'elimination', map: 'tower', bots: false, isPublic: false })).toEqual({ mode: 'elimination', teamSize: 1, noBots: true });
+  });
+});
+
+describe('the room list', () => {
+  it('lists joinable rooms first, then the most players, then the lowest ping; full rooms stay, last', () => {
+    const rooms = [
+      room({ room: 0, size: 1, humans: 2 }), // full duel
+      room({ room: 1, size: 6, humans: 3 }),
+      room({ room: 2, size: 24, humans: 9 }),
+      room({ room: 3, size: 6, humans: 12 }), // full squad
+      room({ room: 4, size: 6, humans: 3 }),
+    ];
+    expect(listOrder(rooms).map(r => r.room)).toEqual([2, 1, 4, 3, 0]);
+    const ping = new Map([[1, 190], [4, 30]]);
+    expect(listOrder(rooms, r => ping.get(r.room)).map(r => r.room)).toEqual([2, 4, 1, 3, 0]);
   });
 });
