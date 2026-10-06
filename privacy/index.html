@@ -34,15 +34,16 @@
         <p>Your settings, callsign, key bindings, touch layout, lobby choices and the anonymous game ID are saved in your browser's local storage, so the game remembers them next time. They stay on your device. The analytics service below keeps its own random ID there too.</p>
 
         <h2>Game server</h2>
-        <p>Online matches run on our game server (SpacetimeDB). For each anonymous game ID it keeps:</p>
+        <p>Online matches run on our game server: SpacetimeDB, hosted by InstaCloud in Singapore. For each anonymous game ID it keeps:</p>
         <ul>
           <li>your callsign and your gameplay stats (kills, deaths, assists, headshots, rounds and matches played and won);</li>
           <li>when you first and last played, how much time you spent in online matches (in total and per day), how many sessions and on which days, and your browser's time zone and language, which we use to estimate which countries players come from.</li>
         </ul>
         <p>Your callsign and stats are public: other players see them in matches and on the in-game leaderboard. Chat messages go to the players in your room.</p>
+        <p>Before the move to Singapore the game server was SpacetimeDB Maincloud in the United States, and data from that time may remain there.</p>
 
         <h2>Product analytics</h2>
-        <p>We use PostHog to learn how the game is played: anonymous events such as page views, opening the lobby, starting or leaving a match, rounds, maps and modes played, vehicles used, store purchases, language changes and errors, with your callsign, language, graphics setting and rounded screen size. PostHog estimates your approximate country from the connection; we don't store IP addresses ourselves. When you play online, these events are linked to your anonymous game ID. There are no session recordings, and no clicks or typing are captured from the page. If your browser sends Do Not Track or Global Privacy Control, no analytics events are sent.</p>
+        <p>We use PostHog to learn how the game is played: anonymous events such as page views, opening the lobby, starting or leaving a match, rounds, maps and modes played, vehicles used, store purchases, language changes, errors and how long the game server took to wake up, with your callsign, language, graphics setting and rounded screen size. PostHog estimates your approximate country from the connection; we don't store IP addresses ourselves. When you play online, these events are linked to your anonymous game ID. There are no session recordings, and no clicks or typing are captured from the page. If your browser sends Do Not Track or Global Privacy Control, no analytics events are sent.</p>
 
         <h2>Website analytics</h2>
         <p>Vercel Web Analytics counts anonymous page views and visitors, without cookies.</p>
@@ -63,15 +64,16 @@
         <p>你的設定、呼號、按鍵配置、觸控配置、大廳選項與匿名遊戲 ID 會存在瀏覽器的本機儲存空間，讓遊戲下次記得。這些資料只留在你的裝置上。下方的分析服務也會在這裡存放它自己的隨機 ID。</p>
 
         <h2>遊戲伺服器</h2>
-        <p>線上對戰在我們的遊戲伺服器（SpacetimeDB）上進行。每個匿名遊戲 ID 會保存：</p>
+        <p>線上對戰在我們的遊戲伺服器上進行：SpacetimeDB，由 InstaCloud 託管於新加坡。每個匿名遊戲 ID 會保存：</p>
         <ul>
           <li>你的呼號與遊戲戰績（擊殺、陣亡、助攻、爆頭，以及參與和獲勝的回合數、場數）；</li>
           <li>你第一次與最近一次遊玩的時間、在線上對戰中遊玩的時間（總計與每日）、遊玩次數與日期，以及瀏覽器的時區與語言，用來估計玩家來自哪些國家。</li>
         </ul>
         <p>你的呼號與戰績是公開的：其他玩家會在對戰中與遊戲內排行榜上看到。聊天訊息會傳給同一房間的玩家。</p>
+        <p>遷至新加坡之前，遊戲伺服器是位於美國的 SpacetimeDB Maincloud，當時的資料可能仍留在那裡。</p>
 
         <h2>產品分析</h2>
-        <p>我們使用 PostHog 了解大家怎麼玩：匿名的事件，例如瀏覽頁面、開啟大廳、開始或離開對戰、回合、玩過的地圖與模式、使用載具、商店購買、切換語言與錯誤，並附上你的呼號、語言、畫質設定與概略的螢幕尺寸。PostHog 會從連線推估你大致所在的國家；我們自己不保存 IP 位址。線上遊玩時，這些事件會與你的匿名遊戲 ID 連結。不錄製操作畫面，也不擷取你在頁面上的點擊或輸入。如果你的瀏覽器送出「不要追蹤」（Do Not Track）或全球隱私控制（Global Privacy Control），就不會傳送任何分析事件。</p>
+        <p>我們使用 PostHog 了解大家怎麼玩：匿名的事件，例如瀏覽頁面、開啟大廳、開始或離開對戰、回合、玩過的地圖與模式、使用載具、商店購買、切換語言、錯誤，以及遊戲伺服器喚醒所需的時間，並附上你的呼號、語言、畫質設定與概略的螢幕尺寸。PostHog 會從連線推估你大致所在的國家；我們自己不保存 IP 位址。線上遊玩時，這些事件會與你的匿名遊戲 ID 連結。不錄製操作畫面，也不擷取你在頁面上的點擊或輸入。如果你的瀏覽器送出「不要追蹤」（Do Not Track）或全球隱私控制（Global Privacy Control），就不會傳送任何分析事件。</p>
 
         <h2>網站分析</h2>
         <p>Vercel Web Analytics 計算匿名的瀏覽次數與訪客數，不使用 Cookie。</p>
