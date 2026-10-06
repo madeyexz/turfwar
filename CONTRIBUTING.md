@@ -143,3 +143,9 @@ secrets, keys or other people's data in an issue.
 
 Be kind. Assume good intent, keep feedback about the work, and help newcomers. Harassment or
 abuse of any kind is not tolerated, and maintainers may remove comments or block people who do it.
+
+## License
+
+By contributing, you agree that your contributions are licensed under the [MIT License](LICENSE),
+the same as the rest of the code. Assets you add keep their own licence (CC0, OFL or compatible),
+credited in the README.
