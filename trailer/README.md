@@ -6,8 +6,10 @@ cards, and the edit that cuts them together.
 
 | Output (not committed) | |
 | --- | --- |
-| `out/lawbreaker-trailer.mp4` | 106 s, 1920×1080, 30 fps, H.264 + stereo AAC, −14 LUFS |
-| `out/lawbreaker-trailer-30s.mp4` | the 30-second cut-down |
+| `out/turfwar-trailer.mp4` | 107 s, 1920×1080, 30 fps, H.264 + stereo AAC, −14 LUFS, true peak under −1 dBTP |
+| `out/turfwar-trailer-30s.mp4` | the 30-second cut |
+| `out/turfwar-trailer.zh-TW.mp4`, `out/turfwar-trailer-30s.zh-TW.mp4` | the same in Traditional Chinese |
+| `out/previous/` | earlier versions (the first Lawbreaker // Frontline edit, with its first and its cinematic score) |
 
 ## Regenerate
 
@@ -38,6 +40,7 @@ The steps can also run alone (with the dev server up on 5201):
 | `scripts/audio.ts` | Renders the score for each cut (`music/score.ts`, kept as `music/<cut>.flac`) and the game's sound for each cut, replayed from the capture logs. |
 | `scripts/build.ts [--sound-only]` | Cuts `edit.ts` into `out/` (`--sound-only` re-masters the sound onto the finished picture). |
 | `scripts/analyze.ts` | Loudness curves, impacts vs cuts, spectrograms and waveforms. |
+| `scripts/stills.ts`, `scripts/rooms.ts`, `scripts/glyphs.ts` | Stills of clips; local Play Online rooms for the lobby; the zh-TW copy against the game font. |
 | `scripts/probe.ts`, `scout.ts`, `sheet.ts` | Scouting stills, camera tests and contact sheets of any clip. |
 
 ## How the capture works
@@ -104,14 +107,22 @@ draws spectrograms (`build/analysis/`). `scripts/audio.ts` also writes each rend
 
 ## Shots (`shots.ts`) and the cut (`edit.ts`)
 
-Shots are staged in Solo matches and the lobby: the cold open over Ximending with Taipei 101, the
-gateway on Hanzhong St, the store (M4A1 and a holographic sight), gunplay with the MP5, M4A1 (holo),
-M110 (x6 through the lens), M1014 and M249, Sabotage arming and disarming, a slowed 3v3 on Crane,
-the knife, an M67, binoculars on Taipei 101, a slide, the Tower ladder, the helicopter off the
-7-TWELVE roof and over the district, a drift on the ring road, a scooter rider shooting one-handed,
-the maps (Taipei 101 · Xinyi and its atrium, the night market and Cinema Street, Crane, Tower,
-Warehouse, Meridian at 24v24) and the online lobby. `edit.ts` lists the segments, cards and score
-sections of both cuts, in frames.
+The current edit is `TURF` / `TURF_SHORT` in `edit.ts` (the first one stays there as `LEGACY`). It opens
+on a trailer-only sequence: a SWAT soldier free-soloing the west face of Taipei 101 at golden hour, a
+tribute to Alex Honnold's 2025 free solo (`src/game/trailer-climb.ts`, dev and `?trailer` only: the
+game's soldier rig posed by hand with two-bone IK onto holds on the glass; no likeness of anyone, no
+endorsement implied). The score stops on the punchline (a helicopter rises level with him on the
+388 m terrace) and the title hits on the cut. Then Taipei 101 · 88F (the push from outside the glass
+into the server room, the tuned mass damper, the gallery over the hall, the server-room fight, arming
+in the boardroom, a kill by the window 383 m up), Memorial Hall (the aerial, the charge up the grand
+staircase, the chamber's defender, the Gallery Hall), the store, Sabotage, Elimination, a 1v1 duel and
+the 24v24 Meridian battle, the vehicles (helicopter, drift, scooter, a car shunting a parked car, a
+jump onto a car roof, flight over Ximending), a silent beat on Taipei 101 through binoculars, the maps
+and the lobby. Cards in both languages are in `edit.ts` (`CARDS`, `CARDS_ZH`).
+
+Staging: fights are set up in Solo matches (enemies placed, the filming soldier kept alive as in
+`?bench`, enemies sometimes holding fire); the lobby's rooms are headless clients on a local server
+(`scripts/rooms.ts`). Everything on screen is the real game and its rules, except the climb.
 
 ## Credits and licences
 
@@ -128,4 +139,5 @@ sections of both cuts, in frames.
 - The lobby's rooms are headless load-test clients on a local server, not real players.
 - Fights are staged: enemies are placed, the filming soldier is kept alive (as in `?bench`), and in
   a few shots enemies hold fire. Everything on screen is the real game and its rules.
-- The meshes of Taipei 101 (Xinyi) are scenery at night; Ximending is at dusk.
+- Xinyi plays at night in the game; the free solo relights it with the 88F map's golden hour. The climb is
+  a trailer-only prop: its hands and feet are posed by IK on the glass, not physically simulated.
