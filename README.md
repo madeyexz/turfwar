@@ -1,4 +1,6 @@
-# Lawbreaker // Frontline
+# 角頭械鬥 · Turf War: Taipei
+
+Formerly *Lawbreaker // Frontline*: the repository, databases (`lawbreaker-dev`, `3d-game-c4lhd`) and the `lawbreaker.vercel.app` URL keep the old name.
 
 A browser-first, keyboard-and-mouse team shooter faithful to **BeGone** (nPlay's browser FPS):
 SWAT against Militia in short rounds with one life each, cash for every kill, a store in your
