@@ -825,6 +825,56 @@ export class Audio {
     };
   }
 
+  /**
+   * Tyre screech while a car or scooter slides: a squeal (two detuned triangles wobbling at a fast
+   * vibrato) over band-passed hiss. `set(amount)` (0..1 skid) fades it in and bends it up with the
+   * slide; `stop` fades it out. Undefined until audio has started.
+   */
+  screech(kind: 'car' | 'scooter'): EngineVoice | undefined {
+    const ctx = this.ctx;
+    if (!(ctx instanceof AudioContext) || !this.live) return undefined;
+    const t = this.now();
+    const out = ctx.createGain(); out.gain.value = 0;
+    const pan = ctx.createStereoPanner();
+    out.connect(pan).connect(this.world);
+    const base = kind === 'car' ? 820 : 1150;
+    const a = ctx.createOscillator(), b = ctx.createOscillator();
+    a.type = 'triangle'; b.type = 'triangle'; a.frequency.value = base; b.frequency.value = base * 1.47;
+    const vib = ctx.createOscillator(); vib.frequency.value = 13;
+    const vibDepth = ctx.createGain(); vibDepth.gain.value = base * 0.03;
+    vib.connect(vibDepth); vibDepth.connect(a.frequency); vibDepth.connect(b.frequency);
+    const tone = ctx.createGain(); tone.gain.value = 0.13;
+    a.connect(tone); b.connect(tone);
+    const hiss = ctx.createBufferSource(); hiss.buffer = this.noise; hiss.loop = true;
+    const bp = ctx.createBiquadFilter(); bp.type = 'bandpass'; bp.frequency.value = base * 1.6; bp.Q.value = 3;
+    const hg = ctx.createGain(); hg.gain.value = 0.5;
+    hiss.connect(bp).connect(hg).connect(out);
+    tone.connect(out);
+    const nodes = [a, b, vib, hiss];
+    for (const n of nodes) n.start(t);
+    let stopped = false;
+    return {
+      set: (amount, listener, at) => {
+        if (stopped) return;
+        const r = Math.max(0, Math.min(1, amount)), now = ctx.currentTime;
+        a.frequency.setTargetAtTime(base * (0.9 + r * 0.25), now, 0.08);
+        b.frequency.setTargetAtTime(base * 1.47 * (0.9 + r * 0.25), now, 0.08);
+        let gain = (kind === 'car' ? 0.36 : 0.24) * r * r, p = 0;
+        if (listener && at) { const sp = this.spatial(listener, at); gain /= 1 + sp.d * 0.08; p = sp.pan; }
+        out.gain.setTargetAtTime(this.muted ? 0 : gain, now, 0.06);
+        pan.pan.setTargetAtTime(p, now, 0.05);
+      },
+      stop: () => {
+        if (stopped) return;
+        stopped = true;
+        const now = ctx.currentTime;
+        out.gain.setTargetAtTime(0, now, 0.1);
+        for (const n of nodes) n.stop(now + 0.6);
+        setTimeout(() => out.disconnect(), 800);
+      },
+    };
+  }
+
   /** Doors and seat: a latch clunk getting in or out of a vehicle. */
   door() {
     if (!this.ready) return;

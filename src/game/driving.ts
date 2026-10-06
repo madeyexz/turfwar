@@ -12,10 +12,12 @@ const CHASE = { car: { up: 1.7, back: 6.4 }, scooter: { up: 1.5, back: 4.2 }, he
 const hit = new THREE.Vector3();
 
 /**
- * The vehicle we drive: keyboard to controls (W/S throttle and brake, A/D steer, Space handbrake;
- * the helicopter climbs on Space, descends on C or Ctrl and turns to the mouse), client-side
- * prediction with the shared physics at 120 Hz, reports for the host, and the chase camera (V
- * switches to the driver's seat). The host validates every report like soldier movement.
+ * The vehicle we drive: keyboard to controls (W/S throttle and brake, A/D steer, Space handbrake —
+ * held through a turn at speed it drifts; the helicopter climbs on Space, descends on C or Ctrl and
+ * turns to the mouse), client-side prediction with the shared physics at 120 Hz, reports for the
+ * host, and the chase camera (V switches to the driver's seat). On a scooter the mouse aims a
+ * one-handed weapon independently of the steering: while you aim, the camera holds its direction
+ * as the bike turns under it. The host validates every report like soldier movement.
  */
 export class Driving {
   /** Predicted vehicle while we hold its driver's seat. */
@@ -29,8 +31,17 @@ export class Driving {
   firstPerson = false;
   private lookIdle = 0;
   sensitivity = 0.0022;
+  /** Handbrake held this frame (locked wheels leave marks even without a slide). */
+  braking = false;
+  /** Where the rider aims (world yaw and pitch), sent with each report. */
+  aimYaw = 0;
+  aimPitch = 0;
 
   get active() { return !!this.v; }
+  /** A scooter: the rider has a hand free to shoot. */
+  get armed() { return !!this.v && VEHICLES[this.v.kind].driverArms; }
+  /** The rider fired: keep the camera on the aim (no swing back behind the bike for a moment). */
+  aiming() { this.lookIdle = 0; }
 
   begin(v: Vehicle) {
     this.v = { ...v };
@@ -38,7 +49,8 @@ export class Driving {
     this.accumulator = 0;
     this.camYaw = v.kind === 'heli' ? v.yaw : 0;
     this.camPitch = v.kind === 'heli' ? -0.22 : -0.16;
-    this.lookIdle = 0;
+    this.lookIdle = 9;
+    this.aimYaw = v.yaw; this.aimPitch = 0;
   }
 
   end() { this.v = undefined; this.prev = undefined; }
@@ -60,7 +72,7 @@ export class Driving {
       const look = input.consumeLook();
       const sens = this.sensitivity * input.sensitivity;
       this.camYaw -= look.x * sens;
-      this.camPitch = clamp(this.camPitch - look.y * sens, heli ? -1.3 : -0.9, this.firstPerson ? 0.9 : 0.35);
+      this.camPitch = clamp(this.camPitch - look.y * sens, heli ? -1.3 : -0.9, this.firstPerson ? 0.9 : this.armed ? 0.6 : 0.35);
       if (Math.abs(look.x) + Math.abs(look.y) > 0.5) this.lookIdle = 0;
       if (input.take('KeyV')) this.firstPerson = !this.firstPerson;
     }
@@ -78,6 +90,8 @@ export class Driving {
       engine: true,
     };
     if (frozen) { controls.throttle = 0; controls.steer = 0; controls.lift = 0; controls.yaw = v.yaw; controls.brake = true; }
+    this.braking = controls.brake && !heli;
+    const yawBefore = v.yaw;
     this.accumulator += Math.min(dt, 0.1);
     while (this.accumulator >= STEP) {
       this.prev = { ...v };
@@ -85,6 +99,8 @@ export class Driving {
       events.impact = Math.max(events.impact, e.impact); events.landed = Math.max(events.landed, e.landed);
       this.accumulator -= STEP;
     }
+    // A rider aiming keeps the view where it points while the bike turns (or drifts) under it.
+    if (this.armed && this.lookIdle < 1.2) this.camYaw -= wrapAngle(v.yaw - yawBefore);
     return events;
   }
 
@@ -99,7 +115,7 @@ export class Driving {
   report(): VehicleReport | undefined {
     const v = this.v;
     if (!v) return undefined;
-    return { vehicle: v.id, x: v.x, y: v.y, z: v.z, vx: v.vx, vy: v.vy, vz: v.vz, yaw: v.yaw, pitch: v.pitch, roll: v.roll };
+    return { vehicle: v.id, x: v.x, y: v.y, z: v.z, vx: v.vx, vy: v.vy, vz: v.vz, yaw: v.yaw, pitch: v.pitch, roll: v.roll, aimYaw: this.aimYaw, aimPitch: this.aimPitch };
   }
 
   /** Where the camera looks from and toward (chase or the driver's seat). Returns the view yaw. */
