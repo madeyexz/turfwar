@@ -35,8 +35,32 @@ a { color: var(--accent); }
 header.top { display: flex; flex-wrap: wrap; align-items: center; gap: 10px 16px; padding: 4px 0 16px; border-bottom: 1px solid var(--line); margin-bottom: 18px; }
 header.top h1 { margin: 0; font-size: 26px; font-weight: 700; letter-spacing: 0.06em; text-transform: uppercase; }
 header.top h1 em { font-style: normal; color: var(--accent); }
-.db { display: inline-flex; align-items: center; gap: 6px; padding: 3px 10px; border: 1px solid var(--line-strong); border-radius: 999px; font-weight: 600; font-size: 14px; color: var(--muted); }
+.db { display: inline-flex; align-items: center; flex-wrap: wrap; gap: 0 6px; padding: 3px 10px; border: 1px solid var(--line-strong); border-radius: 999px; font-weight: 600; font-size: 14px; color: var(--muted); }
 .db b { color: var(--ink); font-weight: 700; }
+/* The server switcher: the build's server (Singapore in production), Maincloud legacy and dev. */
+.server-pick { display: inline-flex; align-items: center; gap: 8px; font-weight: 600; font-size: 13px; color: var(--muted); text-transform: uppercase; letter-spacing: 0.06em; }
+.server-pick select {
+  max-width: min(360px, 70vw); padding: 5px 28px 5px 10px; border: 1px solid var(--line-strong); border-radius: 6px; font: inherit; font-size: 14px;
+  text-transform: none; letter-spacing: 0.02em; color: var(--ink); background: rgba(0, 0, 0, 0.35); cursor: pointer;
+}
+.server-pick select:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.server-pick option { background: #0b151b; color: var(--ink); }
+
+/* Waking the server (src/net/wake.ts): it sleeps when idle; opening this page woke it. */
+.wake { max-width: 520px; margin: 12vh auto 0; padding: 22px 24px; background: var(--panel); border: 1px solid rgba(255, 180, 90, 0.45); border-radius: 10px; }
+.wake.down { border-color: var(--line-strong); }
+.wake h2 { display: flex; align-items: center; gap: 10px; margin: 0 0 8px; font-size: 20px; letter-spacing: 0.04em; text-transform: uppercase; color: var(--amber); }
+.wake.down h2 { color: var(--ink); }
+.wake p { margin: 0 0 12px; color: var(--ink); opacity: 0.9; line-height: 1.45; }
+.wake .note { color: var(--muted); opacity: 1; }
+.wake .note[hidden] { display: none; }
+.wake-meter { display: flex; align-items: center; gap: 12px; }
+.wake-bar { flex: 1; height: 5px; border-radius: 3px; background: rgba(255, 255, 255, 0.08); overflow: hidden; }
+.wake-bar i { display: block; width: 0; height: 100%; border-radius: 3px; background: linear-gradient(90deg, var(--amber), var(--accent)); transition: width 0.95s linear; }
+.wake-time { flex: none; min-width: 3.5em; text-align: right; color: var(--muted); font-weight: 700; font-variant-numeric: tabular-nums; }
+.dot.wait { animation: admin-pulse 1s ease-in-out infinite; }
+@keyframes admin-pulse { 50% { opacity: 0.35; } }
+@media (prefers-reduced-motion: reduce) { .dot.wait { animation: none; } .wake-bar i { transition: none; } }
 .dot { width: 8px; height: 8px; border-radius: 50%; background: var(--faint); flex: none; }
 .dot.live { background: var(--cash); box-shadow: 0 0 8px var(--cash); }
 .dot.wait { background: var(--amber); }
