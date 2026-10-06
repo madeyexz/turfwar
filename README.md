@@ -6,13 +6,10 @@ cash, a store and attachments in the spirit of BeGone. Nothing to install.
 
 ### [▶ Play now: turfwar.ianhsiao.me](https://turfwar.ianhsiao.me)
 
-<!--
-  TRAILER_URL is a placeholder: replace it with the trailer's URL (a GitHub release asset or a video
-  dragged into a README edit on GitHub) before going public. The GIF is a short loop from the trailer.
--->
-<a href="TRAILER_URL"><img src="docs/media/trailer-preview.gif" width="720" alt="Turf War: Taipei trailer preview: a helicopter over Ximending, Taipei 101 through binoculars and Cinema Street"></a>
+<!-- The GIF is a short loop from the trailer; the 30-second trailers live in public/media/ and are served by the game's site. -->
+<a href="https://turfwar.ianhsiao.me/media/turfwar-trailer-30s.mp4"><img src="docs/media/trailer-preview.gif" width="720" alt="Turf War: Taipei trailer preview: a helicopter over Ximending, Taipei 101 through binoculars and Cinema Street"></a>
 
-<sub>▶ Click the preview to watch the trailer.</sub>
+<sub>▶ Click the preview to watch the 30-second trailer · [中文版預告片](https://turfwar.ianhsiao.me/media/turfwar-trailer-30s.zh-TW.mp4) · files in [`public/media/`](public/media/)</sub>
 
 ## Screenshots
 
