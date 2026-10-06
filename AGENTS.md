@@ -1,9 +1,17 @@
 # 角頭械鬥 · Turf War: Taipei
 
 Browser-first round-based team FPS modelled on BeGone (nplay): Elimination and Sabotage,
-cash and a store, attachments, 1v1 / 6v6 / 24v24 rooms. Read `README.md`
-for gameplay, architecture, asset attribution, known limits, and the demo script.
+cash and a store, attachments, 1v1 / 6v6 / 24v24 rooms. Repository:
+`https://github.com/madeyexz/turfwar`. `README.md` is the public overview and asset attribution;
+`docs/GAMEPLAY.md` (rules, weapons, maps, vehicles, controls), `docs/ARCHITECTURE.md` (multiplayer,
+performance, known limits, layout) and `docs/DEVELOPMENT.md` (flags, check scripts, deploy, analytics,
+admin, demo script) hold the deep detail.
 Improve playable gunplay, map flow, animation, and multiplayer—not only the HUD.
+
+**Read `CONTRIBUTING.md` before changing code; it holds the branch/PR workflow and checks for outside
+contributors.** Outside contributors fork, branch from `dev` and open pull requests against `dev`.
+Maintainer agents work as documented below instead: branch off `dev` and merge back with git, no pull
+requests.
 
 ## Stack
 
@@ -26,7 +34,9 @@ Improve playable gunplay, map flow, animation, and multiplayer—not only the HU
   navigation, the packed per-tick frame, and the simulation tick.
 - `src/game/`: client loop, player prediction/input, Solo link, settings, performance check.
 - `src/net/online.ts`: SpacetimeDB connection, replicated state, interpolation, and intents.
-- `src/analytics.ts`: PostHog product analytics (lazy, guarded; see README "Players, analytics and the admin page").
+- `src/analytics.ts`: PostHog product analytics (lazy, guarded; see `docs/DEVELOPMENT.md` "Players, analytics and the admin page").
+- `privacy/index.html`, `src/privacy/`: the public `/privacy` page (English and 繁體中文). Keep it true
+  whenever what the game stores or sends changes.
 - `admin/index.html`, `src/admin/`: the owner's `/admin` dashboard (admin-key login checked in the module; admin-only views).
 - Other `src/` modules: rendering, soldier/viewmodel animation, effects, HUD, and audio.
 - `spacetimedb/src/index.ts`: tables, reducers, lifecycle, and scheduled match tick.
@@ -99,7 +109,8 @@ spacetime generate --lang typescript --out-dir src/module_bindings --module-path
 
 ## Git, environments, and release safety
 
-- Source of truth: `https://github.com/madeyexz/lawbreaker` (private).
+- Source of truth: `https://github.com/madeyexz/turfwar` (renamed from `madeyexz/lawbreaker`; private
+  until the owner makes it public). Never change its visibility or settings without the owner.
 - Branches: **`main` = production** (Vercel production, Maincloud `3d-game-c4lhd`); **`dev` =
   development** (every push is a Vercel preview wired to Maincloud `lawbreaker-dev`). Branch features
   off `dev`, commit, and merge back into `dev` with git (no pull requests). A release is merging `dev`
@@ -119,5 +130,5 @@ spacetime generate --lang typescript --out-dir src/module_bindings --module-path
 - Updating an existing database does not invoke the `init` lifecycle. Preserve the
   guarded first-join initialization and avoid duplicate tick schedules.
 - Never reset Maincloud data. Authorized module releases must use `--delete-data=never`
-  and stop on destructive migration requirements. Follow README's release procedure,
+  and stop on destructive migration requirements. Follow the release procedure in docs/DEVELOPMENT.md (Deploy),
   keep module and frontend compatible, and verify both after deployment.

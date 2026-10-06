@@ -282,6 +282,19 @@
 #menu .showcase h2 { margin: 0; font-size: clamp(30px, 3vw, 46px); line-height: 1; letter-spacing: 0.05em; text-transform: uppercase; }
 #menu .showcase .meta { margin-top: 10px; display: inline-block; padding: 3px 10px; font-size: 13px; font-weight: 700; letter-spacing: 0.12em; text-transform: uppercase; border: 1px solid var(--line); border-radius: 999px; background: rgba(4, 9, 12, 0.55); text-shadow: none; }
 
+/* ---- Footer links: the source on GitHub, the privacy page. Quiet, in the stage's bottom-left corner
+   (under the panel on narrow screens, where the stage is hidden). ---- */
+#menu .site-links {
+  position: absolute; left: calc(var(--panel-w) + 36px); bottom: 30px; z-index: 2;
+  display: flex; align-items: center; gap: 8px; font-size: 12px; font-weight: 700; letter-spacing: 0.14em; text-transform: uppercase;
+  color: var(--muted); text-shadow: 0 1px 8px rgba(0, 0, 0, 0.8);
+}
+#menu .site-links a { display: inline-flex; align-items: center; gap: 6px; padding: 4px 2px; color: inherit; text-decoration: none; transition: color 0.15s; }
+#menu .site-links a:hover { color: var(--accent); }
+#menu .site-links svg { width: 14px; height: 14px; fill: currentColor; }
+#menu .site-links .dot { opacity: 0.6; }
+:lang(zh-TW) #menu .site-links { letter-spacing: 0.08em; }
+
 /* ---- Popovers ---- */
 #menu .pop {
   position: fixed; z-index: 20; display: flex; flex-direction: column; gap: 12px; width: 340px; max-width: calc(100vw - 24px); padding: 14px;
@@ -363,6 +376,7 @@
   #menu .browser { flex: none; min-height: 0; }
   #menu .browser-rows { flex: none; min-height: 126px; max-height: 50vh; }
   #menu .stage { display: none; }
+  #menu .site-links { position: static; justify-content: center; padding: 0 16px 24px; }
 }
 @media (max-width: 560px) {
   #menu .brand { flex: 1; }
