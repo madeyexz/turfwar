@@ -26,6 +26,9 @@ export type AdminAttempt = __Infer<typeof AdminAttempt>;
 export const AdminDaily = __t.object("AdminDaily", {});
 export type AdminDaily = __Infer<typeof AdminDaily>;
 
+export const AdminDailyTime = __t.object("AdminDailyTime", {});
+export type AdminDailyTime = __Infer<typeof AdminDailyTime>;
+
 export const AdminDayRow = __t.object("AdminDayRow", {
   day: __t.u32(),
   date: __t.string(),
@@ -33,6 +36,13 @@ export const AdminDayRow = __t.object("AdminDayRow", {
   activePlayers: __t.u32(),
 });
 export type AdminDayRow = __Infer<typeof AdminDayRow>;
+
+export const AdminDayTimeRow = __t.object("AdminDayTimeRow", {
+  day: __t.u32(),
+  date: __t.string(),
+  playSeconds: __t.u64(),
+});
+export type AdminDayTimeRow = __Infer<typeof AdminDayTimeRow>;
 
 export const AdminOverview = __t.object("AdminOverview", {});
 export type AdminOverview = __Infer<typeof AdminOverview>;
@@ -62,6 +72,17 @@ export const AdminPlayerRow = __t.object("AdminPlayerRow", {
   kills: __t.u32(),
 });
 export type AdminPlayerRow = __Infer<typeof AdminPlayerRow>;
+
+export const AdminPlayerTime = __t.object("AdminPlayerTime", {});
+export type AdminPlayerTime = __Infer<typeof AdminPlayerTime>;
+
+export const AdminPlayerTimeRow = __t.object("AdminPlayerTimeRow", {
+  id: __t.string(),
+  rounds: __t.u32(),
+  playSeconds: __t.u64(),
+  playingSince: __t.timestamp(),
+});
+export type AdminPlayerTimeRow = __Infer<typeof AdminPlayerTimeRow>;
 
 export const AdminPlayers = __t.object("AdminPlayers", {});
 export type AdminPlayers = __Infer<typeof AdminPlayers>;
@@ -228,6 +249,14 @@ export const PlayerDay = __t.object("PlayerDay", {
 });
 export type PlayerDay = __Infer<typeof PlayerDay>;
 
+export const PlayerDayTime = __t.object("PlayerDayTime", {
+  key: __t.string(),
+  day: __t.u32(),
+  identity: __t.identity(),
+  seconds: __t.u32(),
+});
+export type PlayerDayTime = __Infer<typeof PlayerDayTime>;
+
 export const PlayerSeen = __t.object("PlayerSeen", {
   identity: __t.identity(),
   firstSeen: __t.timestamp(),
@@ -238,6 +267,13 @@ export const PlayerSeen = __t.object("PlayerSeen", {
   name: __t.string(),
 });
 export type PlayerSeen = __Infer<typeof PlayerSeen>;
+
+export const PlayerTime = __t.object("PlayerTime", {
+  identity: __t.identity(),
+  playSeconds: __t.u64(),
+  since: __t.u64(),
+});
+export type PlayerTime = __Infer<typeof PlayerTime>;
 
 export const Point = __t.object("Point", {
   id: __t.string(),

@@ -16,8 +16,9 @@ import { newRoundStats, type BuyItem } from '../../shared/match/economy';
 import { BODY_RADIUS, type Body } from '../../shared/world';
 import { VEHICLE_KINDS, type Vehicle, type VehicleKind } from '../../shared/vehicles';
 import { cleanHello } from '../../shared/hello';
+import { beginPlay, endPlay, flushDue, flushPlay, type PlayStore } from '../../shared/playtime';
 import * as Admin from './admin';
-import { AdminError, dailyRows, dayOf, forAdmin, playerRows, type AdminStore } from './admin';
+import { AdminError, dailyRows, dailyTimeRows, dayOf, forAdmin, playerRows, playTimeRows, type AdminStore } from './admin';
 
 /**
  * Authoritative multiplayer: the same shared match simulation the offline client runs, executed
@@ -175,6 +176,16 @@ const seenTable = table({ name: 'player_seen' }, {
 /** Days each player was active (key = identity hex + ':' + UTC day): the admin page's daily actives. Private. */
 const dayTable = table({ name: 'player_day' }, { key: t.string().primaryKey(), day: t.u32().index('btree'), identity: t.identity() });
 
+/**
+ * Online play time per player (shared/playtime.ts): seconds spent in rooms, credited on leaving and
+ * once a minute by each room's tick; `since` = start of the stretch not yet credited (epoch
+ * microseconds, 0 = not in a room). Its own table so existing ones keep their columns. Private.
+ */
+const timeTable = table({ name: 'player_time' }, { identity: t.identity().primaryKey(), playSeconds: t.u64(), since: t.u64() });
+
+/** Play time per player per UTC day (key = identity hex + ':' + day, like `player_day`): the admin page's daily play time. Private. */
+const dayTimeTable = table({ name: 'player_day_time' }, { key: t.string().primaryKey(), day: t.u32().index('btree'), identity: t.identity(), seconds: t.u32() });
+
 /** Identities logged in to the admin dashboard with the admin key (see admin.ts). Private. */
 const adminTable = table({ name: 'admin' }, { identity: t.identity().primaryKey(), grantedAt: t.timestamp() });
 /** Failed admin logins per identity in the current 10-minute window (the rate limit). Private. */
@@ -187,7 +198,7 @@ const spacetimedb = schema({
   point: pointTable, body: bodyTable, player: playerTable, inbox: inboxTable, command: commandTable, history: historyTable,
   matchEvent: eventTable, tickSchedule: tickTable, profile: profileTable, counter: counterTable,
   vehicle: vehicleTable, vehicleInbox: vehicleInboxTable, playerSeen: seenTable,
-  playerDay: dayTable, admin: adminTable, adminAttempt: adminAttemptTable,
+  playerDay: dayTable, admin: adminTable, adminAttempt: adminAttemptTable, playerTime: timeTable, playerDayTime: dayTimeTable,
 });
 export default spacetimedb;
 
@@ -514,8 +525,10 @@ function openRoom(ctx: Ctx, mapId: string, config: MatchConfig, code: string) {
   return room;
 }
 
-/** Close a room: its match, soldiers, bodies, frame and tick all go. */
+/** Close a room: its match, soldiers, bodies, frame and tick all go; anyone still placed in it stops accruing play time. */
 function closeRoom(ctx: Ctx, room: number) {
+  const time = playStore(ctx), now = micros(ctx);
+  for (const p of ctx.db.player.iter()) if (p.room === room) endPlay(time, p.identity, now);
   for (const t of [...ctx.db.tickSchedule.iter()]) if (t.room === room) ctx.db.tickSchedule.scheduledId.delete(t.scheduledId);
   for (const r of [...ctx.db.soldier.iter()]) {
     if (r.room !== room) continue;
@@ -530,8 +543,9 @@ function closeRoom(ctx: Ctx, room: number) {
 const humansIn = (ctx: Ctx, room: number) => { let n = 0; for (const r of ctx.db.soldier.iter()) if (r.room === room && !r.bot) n++; return n; };
 const configOf = (row: MatchRow): MatchConfig => ({ ...ONLINE_CONFIG, ...JSON.parse(row.configJson) });
 
-/** Take a player out of their room; an emptied room closes. */
-function leaveRoom(ctx: Ctx, player: { soldierId: number; room: number }) {
+/** Take a player out of their room (crediting their play time); an emptied room closes. */
+function leaveRoom(ctx: Ctx, player: { identity: Identity; soldierId: number; room: number }) {
+  endPlay(playStore(ctx), player.identity, micros(ctx));
   if (!ctx.db.match.id.find(player.room)) return;
   withMatch(ctx, player.room, (state, sim) => { removeSoldier(state, sim, player.soldierId); balanceTeams(state, sim); });
   if (humansIn(ctx, player.room) === 0) closeRoom(ctx, player.room);
@@ -543,6 +557,26 @@ function markSeen(ctx: Ctx, info: { tz?: string; lang?: string; name?: string } 
   if (row) ctx.db.playerSeen.identity.update({ ...row, lastSeen: ctx.timestamp, ...info });
   else ctx.db.playerSeen.insert({ identity: ctx.sender, firstSeen: ctx.timestamp, lastSeen: ctx.timestamp, sessions: 1, tz: info.tz ?? '', lang: info.lang ?? '', name: info.name ?? '' });
   markDay(ctx);
+}
+
+/** `player_time` and `player_day_time` for the play-time rules in shared/playtime.ts. */
+function playStore(ctx: Ctx): PlayStore<Identity> {
+  return {
+    get: identity => {
+      const r = ctx.db.playerTime.identity.find(identity);
+      return r ? { seconds: r.playSeconds, since: r.since } : undefined;
+    },
+    set: (identity, time) => {
+      const row = { identity, playSeconds: time.seconds, since: time.since };
+      if (ctx.db.playerTime.identity.find(identity)) ctx.db.playerTime.identity.update(row); else ctx.db.playerTime.insert(row);
+    },
+    addDay: (identity, day, seconds) => {
+      const key = `${identity.toHexString()}:${day}`;
+      const r = ctx.db.playerDayTime.key.find(key);
+      if (r) ctx.db.playerDayTime.key.update({ ...r, seconds: r.seconds + seconds });
+      else ctx.db.playerDayTime.insert({ key, day, identity, seconds });
+    },
+  };
 }
 
 /** One `player_day` row per player per UTC day they were active. */
@@ -568,6 +602,7 @@ function enterRoom(ctx: Ctx, room: number, name: string, team: number) {
     if (existing) ctx.db.player.identity.update({ ...existing, ...player });
     else ctx.db.player.insert({ ...player, chatWindowMicros: 0n, chatCount: 0 });
   });
+  beginPlay(playStore(ctx), ctx.sender, micros(ctx));
 }
 
 /**
@@ -693,6 +728,13 @@ export const tick = spacetimedb.reducer({ onSchedule: tickTable }, { arg: tickTa
   if (dt <= 0) return;
   withMatch(ctx, room, (state, sim, loaded) => {
     loaded.clock.lastTickMicros = now;
+    // Once a wall-clock minute (not every tick): credit the play time of every human in this room.
+    if (flushDue(last, now)) {
+      const humans = new Set(state.soldiers.filter(s => !s.bot).map(s => s.id));
+      const here: Identity[] = [];
+      for (const p of ctx.db.player.iter()) if (p.room === room && humans.has(p.soldierId)) here.push(p.identity);
+      flushPlay(playStore(ctx), here, now);
+    }
     applyInputs(ctx, state, sim);
     if (state.phase === 'ended' && state.phaseLeft - dt <= 0) {
       // Public rooms rotate maps and modes between matches, except a map or mode they were opened
@@ -712,7 +754,13 @@ export const tick = spacetimedb.reducer({ onSchedule: tickTable }, { arg: tickTa
     // Drop players whose clients vanished without a disconnect.
     for (const s of [...state.soldiers]) {
       if (!s.bot && s.idle > 45) {
-        for (const p of ctx.db.player.iter()) if (p.soldierId === s.id) ctx.db.player.identity.delete(p.identity);
+        // Their play time ends when they went quiet, not now.
+        const quietSince = now - BigInt(Math.round(s.idle * 1_000_000));
+        for (const p of [...ctx.db.player.iter()]) {
+          if (p.soldierId !== s.id) continue;
+          endPlay(playStore(ctx), p.identity, quietSince);
+          ctx.db.player.identity.delete(p.identity);
+        }
         removeSoldier(state, sim, s.id); balanceTeams(state, sim);
       }
     }
@@ -985,4 +1033,33 @@ export const adminDaily = spacetimedb.view({ name: 'admin_daily', public: true }
   ctx => forAdmin(viewAdmins(ctx.db), ctx.sender.toHexString(), () => {
     const seen = [...ctx.db.playerSeen.iter()].map(s => ({ identity: '', firstSeen: s.firstSeen.microsSinceUnixEpoch, lastSeen: s.lastSeen.microsSinceUnixEpoch, sessions: 0, tz: '', lang: '' }));
     return dailyRows(seen, day => [...ctx.db.playerDay.day.filter(day)].length);
+  }));
+
+// Play time has views of its own: changing an existing view's columns would disconnect every client
+// on publish, so the views above keep theirs and the page joins these to `admin_players` by id.
+
+/**
+ * Per player (same short id as `admin_players`): rounds played (from `profile`), online play time
+ * credited so far, and `playingSince`, the start of the stretch not yet credited (the epoch when not
+ * in a room), so the page can count a session in progress.
+ */
+export const adminPlayerTime = spacetimedb.view({ name: 'admin_player_time', public: true },
+  t.array(t.row('AdminPlayerTimeRow', { id: t.string(), rounds: t.u32(), playSeconds: t.u64(), playingSince: t.timestamp() })),
+  ctx => forAdmin(viewAdmins(ctx.db), ctx.sender.toHexString(), () => {
+    const ids = [...ctx.db.playerSeen.iter()].map(s => s.identity.toHexString());
+    const profiles = [...ctx.db.profile.iter()].map(p => ({ identity: p.identity.toHexString(), roundsPlayed: p.roundsPlayed }));
+    const times = [...ctx.db.playerTime.iter()].map(p => ({ identity: p.identity.toHexString(), seconds: p.playSeconds, since: p.since }));
+    return playTimeRows(ids, profiles, times).map(r => ({ ...r, playingSince: new Timestamp(r.playingSince) }));
+  }));
+
+/** Online play time (credited seconds, all players) per UTC day, the 30 days up to the latest activity. */
+export const adminDailyTime = spacetimedb.view({ name: 'admin_daily_time', public: true },
+  t.array(t.row('AdminDayTimeRow', { day: t.u32(), date: t.string(), playSeconds: t.u64() })),
+  ctx => forAdmin(viewAdmins(ctx.db), ctx.sender.toHexString(), () => {
+    const playOn = (day: number) => { let n = 0n; for (const r of ctx.db.playerDayTime.day.filter(day)) n += BigInt(r.seconds); return n; };
+    let last = -1;
+    for (const s of ctx.db.playerSeen.iter()) last = Math.max(last, dayOf(s.lastSeen.microsSinceUnixEpoch));
+    // A session running past midnight credits a day after anyone's last sighting.
+    for (let d = last + 1, end = last + 3; last >= 0 && d <= end; d++) if (playOn(d) > 0n) last = d;
+    return dailyTimeRows(last, playOn);
   }));

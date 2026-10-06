@@ -64,7 +64,9 @@ import VehicleReportReducer from "./vehicle_report_reducer";
 
 // Import all table schema definitions
 import AdminDailyRow from "./admin_daily_table";
+import AdminDailyTimeRow from "./admin_daily_time_table";
 import AdminOverviewRow from "./admin_overview_table";
+import AdminPlayerTimeRow from "./admin_player_time_table";
 import AdminPlayersRow from "./admin_players_table";
 import AdminRoomsRow from "./admin_rooms_table";
 import AdminStatusRow from "./admin_status_table";
@@ -188,6 +190,13 @@ const tablesSchema = __schema({
     constraints: [
     ],
   }, AdminDailyRow),
+  adminDailyTime: __table({
+    name: 'admin_daily_time',
+    indexes: [
+    ],
+    constraints: [
+    ],
+  }, AdminDailyTimeRow),
   adminOverview: __table({
     name: 'admin_overview',
     indexes: [
@@ -195,6 +204,13 @@ const tablesSchema = __schema({
     constraints: [
     ],
   }, AdminOverviewRow),
+  adminPlayerTime: __table({
+    name: 'admin_player_time',
+    indexes: [
+    ],
+    constraints: [
+    ],
+  }, AdminPlayerTimeRow),
   adminPlayers: __table({
     name: 'admin_players',
     indexes: [
