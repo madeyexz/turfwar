@@ -455,7 +455,7 @@
     --rail: clamp(200px, 27vw, 250px); --gap: 12px;
     display: grid; overflow: hidden; background: rgba(4, 9, 12, 0.9);
     grid-template-columns: var(--rail) minmax(0, 1fr);
-    grid-template-rows: auto auto auto auto minmax(0, 1fr) auto auto;
+    grid-template-rows: auto auto auto auto minmax(0, 1fr) auto;
     column-gap: var(--gap);
     padding: env(safe-area-inset-top, 0px) max(var(--gap), env(safe-area-inset-right, 0px)) 0 max(var(--gap), env(safe-area-inset-left, 0px));
   }
@@ -482,15 +482,17 @@
   #menu .others .label { grid-column: 1 / -1; font-size: 10px; }
   #menu .sub { height: 44px; padding: 0 4px; font-size: 12px; letter-spacing: 0.03em; }
   #menu .unavailable { grid-column: 1; grid-row: 4; margin-top: 8px; font-size: 12px; }
-  /* The waking card sits under the scrolling view, always in sight; the status line under it. */
-  #menu .wake { grid-column: 2; grid-row: 6; margin: 6px 0 8px; gap: 6px; padding: 8px 12px; }
+  /* The waking card sits beside the tabs (the rail's tallest row, so the screen grows no taller) and
+     the open view starts under it. */
+  #menu .wake { grid-column: 2; grid-row: 2; align-self: start; margin: 0 4px 6px 0; gap: 4px; padding: 7px 12px; }
   #menu .wake p { font-size: 13px; line-height: 1.3; }
-  #menu .wake-head { font-size: 13px; }
-  #menu .wake-queued { padding-top: 6px; }
-  #menu .wake-queued .link, #menu .wake-retry { min-height: 44px; }
-  #menu .status { grid-column: 2; grid-row: 7; margin: 0 0 8px; }
+  #menu .wake-head { font-size: 12px; }
+  #menu .wake-queued { padding-top: 2px; }
+  #menu .wake-queued .link, #menu .wake-retry { min-height: 40px; }
+  #menu:has(> .panel > .wake:not([hidden])) .view { grid-row: 3 / 6; }
+  #menu .status { grid-column: 2; grid-row: 6; margin: 0 0 8px; }
   #menu .site-links {
-    position: static; grid-column: 1; grid-row: 5 / 8; align-self: end; justify-content: flex-start;
+    position: static; grid-column: 1; grid-row: 5 / 7; align-self: end; justify-content: flex-start;
     padding: 0 0 max(4px, env(safe-area-inset-bottom, 0px)); letter-spacing: 0.1em;
   }
   #menu .site-links a { min-height: 44px; padding: 0 6px; }

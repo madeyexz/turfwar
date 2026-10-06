@@ -375,10 +375,10 @@ function wakeCard() {
   if (wakeShown !== key || !body.querySelector('.wake')) {
     wakeShown = key;
     body.innerHTML = down
-      ? `<section class="wake down"><h2><i class="dot off"></i>Can't reach ${esc(server.name)}</h2>
+      ? `<section class="wake down"><h2><i class="dot off"></i>Can't reach the server</h2>
           <p role="status">It did not wake up within 3 minutes. Check the server on InstaCloud, or try again.</p>
           <button type="button" class="btn primary" id="wake-retry">Retry</button></section>`
-      : `<section class="wake"><h2><i class="dot wait"></i>Waking ${esc(server.name)}</h2>
+      : `<section class="wake"><h2><i class="dot wait"></i>Waking the server</h2>
           <p role="status">The server is asleep to save costs — waking it up (about 30 s). It isn't down: opening this page woke it.</p>
           <p class="note" id="wake-note"></p>
           <div class="wake-meter" aria-hidden="true"><span class="wake-bar"><i id="wake-fill"></i></span><span class="wake-time" id="wake-time"></span></div></section>`;
