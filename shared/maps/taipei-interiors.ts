@@ -1,23 +1,25 @@
 import type { MapBuilder } from './builder';
-import type { Shift } from './taipei-decor';
+import { minusHoles, type Shift } from './taipei-decor';
 import type { BlockStyle } from './types';
 
 /**
  * Enterable ground floors and rooftop access in Ximending (a gameplay layer over the source's
  * district, which draws its shops as closed fronts). Each building listed here replaces its source
  * collision box: a shop storey behind open storefronts (doors and glass where the source hangs the
- * shop's front), fitted out as cover (counters, shelves, fridges, claw machines, tea bars), the
- * storeys above as one mass, and on two buildings a way up: a switchback stair to the roof of the
- * 7-TWELVE / claw-machine corner on Emei and Hanzhong streets, and a ladder shaft to the roof over
- * Wuchang St by bomb site A. Their roofs get parapets to fight from.
+ * shop's front), fitted out as cover (counters, shelves, fridges, claw machines, tea bars), maybe a
+ * second storey up a stair, the storeys above as one mass, and on three buildings a way up: a
+ * switchback stair to the roof of the 7-TWELVE / claw-machine corner on Emei and Hanzhong streets,
+ * and ladder shafts to the roof over Wuchang St by bomb site A and to the 7-TWELVE roof across
+ * Emei St. Their roofs get parapets to fight from. taipei-passages.ts adds the passages through
+ * the blocks with the same machinery.
  *
  * Coordinates are the source's (x east, z south); `cuts` collects the boxes (map coordinates) where
  * the renderer drops the source's own ground-floor shopfront so these interiors show instead.
  */
 type Side = 'n' | 's' | 'e' | 'w';
 /** An opening along a wall: [from, to] along it (x on n/s walls, z on e/w), a door or shop glass. */
-interface Opening { side: Side; a: number; b: number; glass?: boolean }
-interface Shop {
+export interface Opening { side: Side; a: number; b: number; glass?: boolean }
+export interface Shop {
   rect: [number, number, number, number];
   top: number;
   openings: Opening[];
@@ -27,9 +29,16 @@ interface Shop {
   shaft?: [number, number, number, number];
   climb?: (f: Fitter) => void;
   parapet?: boolean;
+  /**
+   * A second storey: its floor over the shop (less the stair's well), walls with windows (glass
+   * is left out up there: they are open to shoot from) and doors, a straight stair up from the
+   * shop rising toward `dir` (0 +x, 1 +z, 2 -x, 3 -z) over `stair`, and its own fittings.
+   */
+  upper?: { openings: Opening[]; stair: [number, number, number, number]; dir: 0 | 1 | 2 | 3; fit?: (f: Fitter) => void };
 }
 export const SHOP_STOREY = 4.2;
-const KERB = 0.15, T = 0.25;
+export const KERB = 0.15;
+const T = 0.25;
 
 export interface Fitter {
   /** Collidable box on source corners. */
@@ -47,20 +56,22 @@ export interface Fitter {
  */
 const SHELF = 0xf0f0ec, WOOD = 0x6a4a34;
 
-const SHOPS: Shop[] = [
+export const SHOPS: Shop[] = [
   // 7-TWELVE (south front on Emei St) and the claw-machine shop (east front on Hanzhong St), one
-  // storey through, with a switchback stair in the north-west corner up to the 13.9 m roof.
+  // storey through, with a switchback stair in the north-west corner up to the 13.9 m roof (the
+  // helicopter's pad) and a door through to the karaoke house behind it (taipei-passages.ts).
   {
-    rect: [-787, -230, -763.3, -213.3], top: 13.9, wall: 0xe8e2d6, parapet: true,
+    rect: [-787, -230, -763.3, -213.3], top: 13.9, wall: 0xe8e2d6,
     openings: [
       { side: 's', a: -773.3, b: -770.6 }, { side: 's', a: -770.4, b: -764.6, glass: true },
       { side: 'e', a: -222.6, b: -220.2 }, { side: 'e', a: -219.8, b: -216.8, glass: true },
-      { side: 's', a: -784, b: -776.5, glass: true },
+      { side: 's', a: -784, b: -776.5, glass: true }, { side: 'n', a: -772.25, b: -769.75 },
     ],
     shaft: [-786.75, -229.75, -777.5, -223.75],
     fit: f => {
       for (const x of [-774.75, -772.25, -769.75]) f.box(x - 0.25, -222.5, x + 0.25, -216.5, KERB, 1.55, 'painted', SHELF);
-      f.box(-776, -229.6, -765, -228.9, KERB, 2.1, 'glass');                         // fridge wall
+      f.box(-776, -229.6, -773, -228.9, KERB, 2.1, 'glass');                          // fridge wall, either side of the back door
+      f.box(-769, -229.6, -765, -228.9, KERB, 2.1, 'glass');
       claws(f, -764.75, -224, -764.75, -218.4);
       f.box(-768.4, -216.75, -765.6, -215.75, KERB, 1.05, 'wood', 0xf2f2ee);           // till
       f.box(-782.5, -221, -782, -216, KERB, 1.6, 'painted', 0xd8dadc);                  // magazine rack
@@ -91,15 +102,22 @@ const SHOPS: Shop[] = [
       f.box(-824.9, -245, -824.6, -242.2, KERB, 1.0, 'painted', 0xb0b4b8);              // queue rail
     },
   },
-  // 7-TWELVE at the Hanzhong St / Emei St corner by the gateway (doors on both streets).
+  // 7-TWELVE at the Hanzhong St / Emei St corner by the gateway (doors on both streets, and west
+  // into the passage through the block, taipei-passages.ts), with a ladder shaft to its roof.
   {
     rect: [-776, -200.7, -763.3, -178.4], top: 13.9, wall: 0xeadcc0,
-    openings: [{ side: 'e', a: -186.4, b: -184 }, { side: 'e', a: -183.6, b: -179.4, glass: true }, { side: 'n', a: -770.5, b: -768.1 }],
+    openings: [
+      { side: 'e', a: -186.4, b: -184 }, { side: 'e', a: -183.6, b: -179.4, glass: true }, { side: 'n', a: -770.5, b: -768.1 },
+      { side: 'w', a: -196.2, b: -193.8 },
+    ],
+    shaft: [-766.8, -200.45, -765.15, -198.8],
     fit: f => {
       for (const x of [-772.25, -769.75]) f.box(x - 0.25, -197, x + 0.25, -190, KERB, 1.55, 'painted', SHELF);
-      f.box(-775.6, -199, -774.9, -180, KERB, 2.1, 'glass');                          // fridge wall
+      f.box(-775.6, -199, -774.9, -197, KERB, 2.1, 'glass');                          // fridge wall, either side of the side door
+      f.box(-775.6, -193, -774.9, -180, KERB, 2.1, 'glass');
       f.box(-767.75, -182.5, -766.75, -180.5, KERB, 1.05, 'wood', 0xf2f2ee);          // till
     },
+    climb: f => ladderShaft(f, [-766.8, -200.45, -765.15, -198.8], 13.9),
   },
   // 7-TWELVE and the claw-machine shop facing Hanzhong St (west), with a side door on Emei St.
   {
@@ -116,7 +134,7 @@ const SHOPS: Shop[] = [
 ];
 
 /** A row of claw machines (tall cabinets) between two points. */
-function claws(f: Fitter, x0: number, z0: number, x1: number, z1: number) {
+export function claws(f: Fitter, x0: number, z0: number, x1: number, z1: number) {
   const n = Math.max(1, Math.floor(Math.hypot(x1 - x0, z1 - z0) / 1.1));
   const colors = [0xff7ab8, 0x7ad0ff, 0xffd84a, 0xb88aff];
   for (let i = 0; i < n; i++) {
@@ -130,7 +148,7 @@ function claws(f: Fitter, x0: number, z0: number, x1: number, z1: number) {
  * Switchback stair in a shaft (flights along x in two lanes split at z = mid), landings at both
  * ends (the east one 2.5 m deep so a line of nav nodes rests on it), from y0 to the roof.
  */
-function stairs(f: Fitter, [x0, z0, x1, z1]: [number, number, number, number], mid: number, y0: number, top: number) {
+export function stairs(f: Fitter, [x0, z0, x1, z1]: [number, number, number, number], mid: number, y0: number, top: number) {
   const flights = 6, rise = (top - y0) / flights;
   const xs = x0 + 1.4, xe = x1 - 2.5, s = f.s;
   for (let k = 0; k < flights; k++) {
@@ -155,7 +173,7 @@ function stairs(f: Fitter, [x0, z0, x1, z1]: [number, number, number, number], m
 }
 
 /** A ladder up a 1.65 m shaft to the roof (rungs on the shaft's west wall, stepping off west onto the roof). */
-function ladderShaft(f: Fitter, r: [number, number, number, number], top: number) {
+export function ladderShaft(f: Fitter, r: [number, number, number, number], top: number) {
   const [x0, z0, x1, z1] = r, s = f.s;
   lining(f, r, SHOP_STOREY, top, 0xeadcc0);
   // The ladder's wall: a pier from the floor to the roof on the shaft's west side.
@@ -168,7 +186,7 @@ function ladderShaft(f: Fitter, r: [number, number, number, number], top: number
 }
 
 /** Visual walls lining a shaft from y0 to y1 (the district's own meshes draw only the outside). */
-function lining(f: Fitter, [x0, z0, x1, z1]: [number, number, number, number], y0: number, y1: number, color: number) {
+export function lining(f: Fitter, [x0, z0, x1, z1]: [number, number, number, number], y0: number, y1: number, color: number) {
   const t = 0.05;
   f.shape(x0, z0, x1, z0 + t, y0, y1, 'mosaic', color);
   f.shape(x0, z1 - t, x1, z1, y0, y1, 'mosaic', color);
@@ -176,11 +194,12 @@ function lining(f: Fitter, [x0, z0, x1, z1]: [number, number, number, number], y
   f.shape(x1 - t, z0, x1, z1, y0, y1, 'mosaic', color);
 }
 
-/** Rects (source x0, z0, x1, z1, top) of the buildings replaced here, to skip their source boxes. */
-export const INTERIOR_BUILDINGS = SHOPS.map(s => [...s.rect, s.top]);
+/** True when a source box is one of the buildings these shops replace (its own box is skipped). */
+export const replaced = (shops: Shop[], [x0, z0, x1, z1, , y1]: readonly (number | string)[]) =>
+  shops.some(({ rect: r, top }) => r[0] === x0 && r[1] === z0 && r[2] === x1 && r[3] === z1 && top === y1);
 
 /** Build every interior; returns the cut boxes (map coordinates) for the renderer. */
-export function interiors(b: MapBuilder, s: Shift): number[] {
+export function interiors(b: MapBuilder, s: Shift, shops: Shop[]): number[] {
   const cuts: number[] = [];
   const f: Fitter = {
     b, s,
@@ -190,45 +209,81 @@ export function interiors(b: MapBuilder, s: Shift): number[] {
     },
     shape: (x0, z0, x1, z1, y0, y1, style, color) => b.shape(s.X((x0 + x1) / 2), y0, s.Z((z0 + z1) / 2), x1 - x0, y1 - y0, z1 - z0, style, color),
   };
-  for (const shop of SHOPS) {
-    const [x0, z0, x1, z1] = shop.rect, gf = SHOP_STOREY;
+  for (const shop of shops) {
+    const [x0, z0, x1, z1] = shop.rect, gf = SHOP_STOREY, up = shop.upper, roofOf = up ? 2 * gf : gf;
     // The storeys above as invisible mass (the district meshes draw them), around the shaft.
-    mass(f, shop.rect, shop.shaft, gf, shop.top);
+    mass(f, shop.rect, shop.shaft, roofOf, shop.top);
     // Ground-floor walls, inset from the facade, broken by the doors and the shop glass.
-    for (const side of ['n', 's', 'e', 'w'] as Side[]) {
-      const along = side === 'n' || side === 's', from = along ? x0 : z0, to = along ? x1 : z1;
-      const ops = shop.openings.filter(o => o.side === side).sort((p, q) => p.a - q.a);
-      const seg = (a: number, c: number, y0: number, y1: number, style: BlockStyle = 'mosaic') => {
-        if (c - a < 0.05) return;
-        const [bx0, bz0, bx1, bz1] = side === 'n' ? [a, z0 + 0.05, c, z0 + 0.05 + T] : side === 's' ? [a, z1 - 0.05 - T, c, z1 - 0.05]
-          : side === 'w' ? [x0 + 0.05, a, x0 + 0.05 + T, c] : [x1 - 0.05 - T, a, x1 - 0.05, c];
-        f.box(bx0, bz0, bx1, bz1, y0, y1, style, style === 'mosaic' ? shop.wall : undefined);
-      };
-      let cursor = from;
-      for (const o of ops) {
-        seg(cursor, o.a, KERB, gf);
-        if (o.glass) { seg(o.a, o.b, KERB, 0.6); seg(o.a, o.b, 0.6, 2.9, 'glass'); }
-        seg(o.a, o.b, 2.9, gf);
-        cursor = o.b;
-      }
-      seg(cursor, to, KERB, gf);
-    }
+    walls(f, shop, shop.openings, KERB, gf, false);
     // Floor, ceiling and lights.
     f.shape(x0 + 0.3, z0 + 0.3, x1 - 0.3, z1 - 0.3, KERB, KERB + 0.02, 'tile');
-    f.shape(x0 + 0.3, z0 + 0.3, x1 - 0.3, z1 - 0.3, gf - 0.12, gf - 0.02, 'painted', 0xf4f2ee);
-    for (let x = x0 + 2.5; x < x1 - 1.5; x += 4) for (let z = z0 + 2.5; z < z1 - 1.5; z += 4) {
-      if (shop.shaft && x > shop.shaft[0] - 1 && x < shop.shaft[2] + 1 && z > shop.shaft[1] - 1 && z < shop.shaft[3] + 1) continue;
-      f.shape(x - 0.6, z - 0.3, x + 0.6, z + 0.3, gf - 0.15, gf - 0.12, 'light');
+    lights(f, shop, gf, up?.stair);
+    if (up) {
+      // The upper floor round the stair's well, a rail along the well's open sides, the walls.
+      const [sx0, sz0, sx1, sz1] = up.stair;
+      for (const [a, c, d, e] of minusHoles([x0, z0, x1, z1], [[sx0, sz0, sx1, sz1]])) f.box(a, c, d, e, gf - 0.15, gf, 'slab', 0xc8c4bc);
+      f.b.stairs(f.s.X((sx0 + sx1) / 2), f.s.Z((sz0 + sz1) / 2), sx1 - sx0, sz1 - sz0, KERB, gf, up.dir);
+      const rail = (a: number, c: number, d: number, e: number) => f.box(a, c, d, e, gf, gf + 1.0, 'glass');
+      if (up.dir !== 2) rail(sx0 - 0.08, sz0, sx0, sz1);
+      if (up.dir !== 0) rail(sx1, sz0, sx1 + 0.08, sz1);
+      if (up.dir !== 3) rail(sx0, sz0 - 0.08, sx1, sz0);
+      if (up.dir !== 1) rail(sx0, sz1, sx1, sz1 + 0.08);
+      walls(f, shop, up.openings, gf, roofOf, true);
+      f.shape(x0 + 0.3, z0 + 0.3, x1 - 0.3, z1 - 0.3, gf, gf + 0.02, 'tile', 0xb8a890);
+      lights(f, shop, roofOf);
+      up.fit?.(f);
     }
     shop.fit(f);
     shop.climb?.(f);
     if (shop.parapet) parapet(f, shop.rect, shop.top, shop.wall);
-    // The renderer drops the source's closed shopfront here (and anything it put over the shaft).
+    // The renderer drops the source's closed shopfront here (its whole facade up a second storey),
+    // and anything it put over the shaft.
     const pad = 0.9;
-    cuts.push(s.X(x0) - pad, 0.05, s.Z(z0) - pad, s.X(x1) + pad, 3.05, s.Z(z1) + pad);
+    cuts.push(s.X(x0) - pad, 0.05, s.Z(z0) - pad, s.X(x1) + pad, up ? roofOf + 0.05 : 3.05, s.Z(z1) + pad);
     if (shop.shaft) { const [a, c, d, e] = shop.shaft; cuts.push(s.X(a) - 0.3, shop.top - 0.2, s.Z(c) - 0.3, s.X(d) + 0.3, shop.top + 6, s.Z(e) + 0.3); }
   }
   return cuts;
+}
+
+/**
+ * A storey's walls from y0 to y1, inset from the facade, broken by the openings: doors (to 2.7 m
+ * above the floor) and shop glass on the ground floor, windows (sill to head) up a storey.
+ */
+function walls(f: Fitter, shop: Shop, openings: Opening[], y0: number, y1: number, upstairs: boolean) {
+  const [x0, z0, x1, z1] = shop.rect;
+  for (const side of ['n', 's', 'e', 'w'] as Side[]) {
+    const along = side === 'n' || side === 's', from = along ? x0 : z0, to = along ? x1 : z1;
+    const ops = openings.filter(o => o.side === side).sort((p, q) => p.a - q.a);
+    const seg = (a: number, c: number, h0: number, h1: number, style: BlockStyle = 'mosaic') => {
+      if (c - a < 0.05) return;
+      const [bx0, bz0, bx1, bz1] = side === 'n' ? [a, z0 + 0.05, c, z0 + 0.05 + T] : side === 's' ? [a, z1 - 0.05 - T, c, z1 - 0.05]
+        : side === 'w' ? [x0 + 0.05, a, x0 + 0.05 + T, c] : [x1 - 0.05 - T, a, x1 - 0.05, c];
+      f.box(bx0, bz0, bx1, bz1, h0, h1, style, style === 'mosaic' ? shop.wall : undefined);
+    };
+    const floor = upstairs ? y0 : KERB;
+    let cursor = from;
+    for (const o of ops) {
+      seg(cursor, o.a, y0, y1);
+      if (upstairs && o.glass) { seg(o.a, o.b, y0, y0 + 1.0); seg(o.a, o.b, y0 + 2.2, y1); }
+      else {
+        if (o.glass) { seg(o.a, o.b, floor, 0.6); seg(o.a, o.b, 0.6, 2.9, 'glass'); }
+        seg(o.a, o.b, floor + 2.75, y1);
+      }
+      cursor = o.b;
+    }
+    seg(cursor, to, y0, y1);
+  }
+}
+
+/** Ceiling and lights under a storey's top at y (round the stair's well). */
+function lights(f: Fitter, shop: Shop, y: number, well?: [number, number, number, number]) {
+  const [x0, z0, x1, z1] = shop.rect;
+  const holes = [shop.shaft, well].filter((h): h is [number, number, number, number] => !!h);
+  for (const [a, c, d, e] of minusHoles([x0 + 0.3, z0 + 0.3, x1 - 0.3, z1 - 0.3], holes)) f.shape(a, c, d, e, y - 0.12, y - 0.02, 'painted', 0xf4f2ee);
+  for (let x = x0 + 2.5; x < x1 - 1.5; x += 4) for (let z = z0 + 2.5; z < z1 - 1.5; z += 4) {
+    if (holes.some(h => x > h[0] - 1 && x < h[2] + 1 && z > h[1] - 1 && z < h[3] + 1)) continue;
+    f.shape(x - 0.6, z - 0.3, x + 0.6, z + 0.3, y - 0.15, y - 0.12, 'light');
+  }
 }
 
 /** Invisible storeys from y0 to y1 over a rect, leaving a hole for the shaft. */
@@ -242,7 +297,7 @@ function mass(f: Fitter, [x0, z0, x1, z1]: [number, number, number, number], hol
 }
 
 /** A waist-high parapet round a roof you can reach. */
-function parapet(f: Fitter, [x0, z0, x1, z1]: [number, number, number, number], top: number, color: number) {
+export function parapet(f: Fitter, [x0, z0, x1, z1]: [number, number, number, number], top: number, color: number) {
   const h = top + 1.0, t = 0.25;
   f.box(x0, z0, x1, z0 + t, top, h, 'mosaic', color);
   f.box(x0, z1 - t, x1, z1, top, h, 'mosaic', color);

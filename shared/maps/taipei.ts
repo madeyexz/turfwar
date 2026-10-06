@@ -1,47 +1,51 @@
 import { MapBuilder } from './builder';
 import {
-  AREA, BRANDS, EXPRESSWAY, HEDGES, LOTS, POIS, RED_HOUSE, ROADS, START, XIMEN_SHOPS, XIMEN_SOLIDS,
+  AREA, BRANDS, EXPRESSWAY, HEDGES, LOTS, POIS, RED_HOUSE, ROADS, XIMEN_SHOPS, XIMEN_SOLIDS,
 } from './taipei-data';
-import { taipeiCover } from './taipei-cover';
+import { AMMO, LANES, PLAY, POINTS, SPAWNS, compact, laneClears } from './taipei-compact';
+import { Kit, taipeiCover } from './taipei-cover';
+import { heights } from './taipei-heights';
+import { EMEI, streetCover } from './taipei-streets';
 import { mrtExit, parkedCars, streetFurniture, type Keep, type Shift } from './taipei-decor';
-import { INTERIOR_BUILDINGS, interiors } from './taipei-interiors';
+import { SHOPS, interiors, replaced } from './taipei-interiors';
+import { OPENED, PASSAGES, openings } from './taipei-passages';
 import { TAIPEI_VEHICLES, parkTaipeiVehicles } from './taipei-vehicles';
-import { minusHoles, underpass, underpassGround } from './taipei-underpass';
 import type { BlockStyle, Decor, MapDef, SignStyle } from './types';
 
 /**
- * Taipei: Ximending (西門町), taken 1:1 from the user's game 臺北狂飆 / TAIPEI RUSH
- * (taipei-gta.vercel.app, used with its author's permission). The street plan, every building
- * volume and collision box, the Ximen gateway, the cinema and arcade, the Red House, the Civic
- * Blvd expressway and the shop signs all come from shared/maps/taipei-data.ts, which
- * tools/import-taipei.ts extracts from that game's built code; nothing is moved or redesigned.
+ * Taipei: Ximending (西門町), from the user's game 臺北狂飆 / TAIPEI RUSH (taipei-gta.vercel.app,
+ * used with its author's permission). The street plan, every building volume and collision box,
+ * the Ximen gateway, the cinema and arcade, the Red House, the Civic Blvd expressway and the shop
+ * signs all come from shared/maps/taipei-data.ts, which tools/import-taipei.ts extracts from that
+ * game's built code.
  *
- * The playable area is the source's own: the nine Ximending blocks between Huanhe Rd (環河南路)
- * and Zhonghua Rd (中華路), from the Civic Blvd (市民大道) median down through Zhongxiao W. Rd
- * (忠孝西路) to the Red House (西門紅樓). Our game only lays an overlay on it:
- *   SWAT (team 0) deploys on Civic Blvd under the expressway (north);
- *   Militia (team 1, Sabotage attackers) deploys on Zhongxiao W. Rd outside Ximen station, where
- *     the source game starts its player;
+ * The playable area is the dense core of the source's: the nine Ximending blocks between Huanhe Rd
+ * (環河南路) and Zhonghua Rd (中華路), Civic Blvd (市民大道) and Zhongxiao W. Rd (忠孝西路), with one
+ * carriageway of each boulevard kept as a ring road round them (taipei-compact.ts). The rest of the
+ * source (the far carriageways, the Red House, the city) is the backdrop. Our game lays an overlay
+ * on it:
+ *   SWAT (team 0) deploys behind a police cordon on Civic Blvd's sidewalk, under the expressway;
+ *   Militia (team 1, Sabotage attackers) behind a barricade at the south end of Xining S. Rd;
  *   A — Cinema Street (電影街): Wuchang St in front of the walk-in cinema lobby;
  *   B — the Tomas Bear game arcade (湯瑪熊歡樂城), whose ground floor opens onto Hanzhong St;
- *   C–E are landmarks bots roam to: the Red House, the Ximen gateway and the Emei St stage.
- * Plus ammo crates and the playable bounds.
+ *   C–E are landmarks bots roam to: the night market, the Ximen gateway and the Emei St stage.
+ * Plus ammo crates and the drivable vehicles on the ring road.
  *
  * The look of the district, its street furniture and the skyline (with Taipei 101) come from the
  * source too, as a dressing set the renderer loads on demand (taipei-decor.ts places it and its
- * colliders); taipei-interiors.ts and taipei-underpass.ts add enterable shops, roof access and the
- * Ximen station underpass. Approximations: median floors follow the junction gaps by rule, and the
- * source's traffic and pedestrians are not carried over.
+ * colliders); taipei-interiors.ts adds enterable shops, passages through the blocks and roof
+ * access, taipei-cover.ts the street cover. Approximations: median floors follow the junction gaps
+ * by rule, and the source's traffic and pedestrians are not carried over.
  *
- * Coordinates: the source's (+x east, +z south, metres), shifted so the area is centred on 0.
+ * Coordinates: the source's (+x east, +z south, metres), shifted so the playable area is centred on 0.
  */
-const OX = (AREA.x0 + AREA.x1) / 2, OZ = (AREA.z0 + AREA.z1) / 2;
-const HALF_X = (AREA.x1 - AREA.x0) / 2, HALF_Z = (AREA.z1 - AREA.z0) / 2;
+const OX = (PLAY.x0 + PLAY.x1) / 2, OZ = (PLAY.z0 + PLAY.z1) / 2;
+const HALF_X = (PLAY.x1 - PLAY.x0) / 2, HALF_Z = (PLAY.z1 - PLAY.z0) / 2;
 /** Source sidewalks and pedestrian streets stand 15 cm above the asphalt. */
 const KERB = 0.15;
 /** Medians are 20 cm floors; the source plants hedges on some. */
 const MEDIAN = 0.2;
-/** How far past the bounds the city is built as a backdrop. */
+/** How far past the source's area the city is built as a backdrop. */
 const BACKDROP = 45;
 
 type B = MapBuilder;
@@ -97,8 +101,7 @@ function paving(b: B) {
       j1++;
     }
     for (let jj = j; jj <= j1; jj++) for (let ii = i; ii <= i1; ii++) done.add(`${ii},${jj}`);
-    // Less the stair wells down to the Ximen station underpass.
-    for (const [x0, z0, x1, z1] of minusHoles([xs[i], zs[j], xs[i1 + 1], zs[j1 + 1]])) boxAt(b, x0, z0, x1, z1, -0.35, KERB, 'paving', 0xd8d6d0);
+    boxAt(b, xs[i], zs[j], xs[i1 + 1], zs[j1 + 1], -0.35, KERB, 'paving', 0xd8d6d0);
   }
 }
 
@@ -213,10 +216,15 @@ function expressway(b: B) {
  * (the 'taipei' dressing set: facades, signs, shopfronts, the cinema and arcade interiors), so its
  * boxes only collide, each with the surface it stands for.
  */
+/** Every enterable building: the shops with roof access and the passages through the blocks. */
+const ALL_SHOPS = [...SHOPS, ...PASSAGES];
+
 function ximending(b: B) {
-  for (const [x0, z0, x1, z1, y0, y1, tag] of XIMEN_SOLIDS) {
-    // Buildings with enterable ground floors are built by taipei-interiors.ts.
-    if (tag === 'building' && INTERIOR_BUILDINGS.some(r => r[0] === x0 && r[1] === z0 && r[2] === x1 && r[3] === z1 && r[4] === y1)) continue;
+  for (const box of XIMEN_SOLIDS) {
+    const [x0, z0, x1, z1, y0, y1, tag] = box;
+    // Buildings with enterable ground floors are built by taipei-interiors.ts and taipei-passages.ts.
+    if (tag === 'building' && replaced(ALL_SHOPS, box)) continue;
+    if (OPENED.some(o => o.every((v, i) => v === box[i]))) continue;
     const surface = tag === 'pole' ? 'metal' : tag === 'prop' ? (y1 - y0 > 2 ? 'metal' : 'concrete') : 'concrete';
     b.box(X((x0 + x1) / 2), tag === 'floor' ? 0 : y0, Z((z0 + z1) / 2), x1 - x0, y1 - (tag === 'floor' ? 0 : y0), z1 - z0, 'invisible', surface);
   }
@@ -287,13 +295,12 @@ function gateway(b: B) {
 export function taipei(): MapDef {
   const b = new MapBuilder({
     id: 'taipei', name: 'Taipei', region: 'XIMENDING 西門町 / TAIPEI',
-    description: 'Ximending from 臺北狂飆: neon pedestrian streets, Cinema Street, the arcade and the Red House under the Civic Blvd expressway.',
+    description: 'Ximending from 臺北狂飆: neon pedestrian streets, Cinema Street, the arcade and the night market, ringed by a road under the Civic Blvd expressway.',
     theme: 'taipei', halfX: HALF_X, halfZ: HALF_Z, seed: 101, roll: 0, ridge: 0,
     sabotage: { sites: ['A', 'B'], attackerSpawn: 1 },
     // Low evening sun from the west, down Wuchang and Emei streets.
     sun: { x: -0.78, y: 0.4, z: 0.2 },
-    // Flat streets, but for the pit of the Ximen station underpass (taipei-underpass.ts).
-    ground: underpassGround({ X, Z, ox: OX, oz: OZ }),
+    ground: () => 0,
   });
   b.buildTerrain(4);
 
@@ -309,18 +316,10 @@ export function taipei(): MapDef {
   signage(b);
   gateway(b);
 
-  // ---- Overlay: bases, sites, landmarks and ammo ------------------------------------------
-  // SWAT on Civic Blvd's south carriageway, under the expressway, facing south into Ximending.
-  const spawn = (team: 0 | 1, x: number, z: number, yaw: number) => b.spawn(team, X(x), floorAt(x, z), Z(z), yaw);
-  for (let i = 0; i < 12; i++) spawn(0, -790 + (i % 6) * 5, -292 + Math.floor(i / 6) * 4.5, Math.PI);
-  // Militia on Zhongxiao W. Rd by the Ximen gateway, just west of where the source starts its player, facing north.
-  for (let i = 0; i < 12; i++) spawn(1, START.x - 35 + (i % 6) * 5, Math.floor(i / 6) ? START.z : -151.5, 0);
-  b.point('A', 'Cinema Street 電影街', X(-839), floorAt(-839, -251.5), Z(-251.5), 7);
-  b.point('B', 'Arcade 湯瑪熊歡樂城', X(-746.5), KERB, Z(-224.5), 7);
-  b.point('C', 'Red House 西門紅樓', X(-750), KERB, Z(-110), 8);
-  b.point('D', 'Ximen Gateway 西門町牌樓', X(-757), KERB, Z(-184), 6);
-  b.point('E', 'Emei St Stage 峨眉街', X(-757), KERB, Z(-207), 6);
-  for (const [x, z] of [[-826, -253], [-757, -238], [-813, -207], [-770, -110], [-860.5, -206], [-715.5, -230]]) b.ammoCrate(X(x), floorAt(x, z), Z(z));
+  // ---- Overlay: bases, sites, landmarks and ammo (taipei-compact.ts) ------------------------
+  for (const [team, x, z, yaw] of SPAWNS) b.spawn(team, X(x), floorAt(x, z), Z(z), yaw);
+  for (const [id, [x, z, r, name]] of Object.entries(POINTS)) b.point(id as keyof typeof POINTS, name, X(x), floorAt(x, z), Z(z), r);
+  for (const [x, z] of AMMO) b.ammoCrate(X(x), floorAt(x, z), Z(z));
 
   // ---- Drivable vehicles (shared/maps/taipei-vehicles.ts) ----------------------------------
   parkTaipeiVehicles(b, X, Z, floorAt);
@@ -333,14 +332,38 @@ export function taipei(): MapDef {
     ...b.pickups.map(p => [p.x, p.z, 1.6] as [number, number, number]),
     ...TAIPEI_VEHICLES.map(([kind, x, z]) => [X(x), Z(z), vehicleRoom[kind] ?? 3.4] as [number, number, number]),
   ];
-  const cuts = [...interiors(b, shift), ...underpass(b, shift, [-160 - 12.4, -160 + 12.4])];
-  // Nothing of the street dressing (look or collider) stands where a vehicle parks.
-  // Nor round the spawns, crates and vehicle spots.
-  const clear = keep.flatMap(([x, z, r]) => [x - r, 0.05, z - r, x + r, 3, z + r]);
-  clear.push(...taipeiCover(b, shift, keep));
+  const cuts = [...interiors(b, shift, ALL_SHOPS), ...openings(b, shift)];
+  // Nothing of the street dressing (look or collider) stands on the ring road, where a vehicle
+  // parks, nor round the spawns and crates; the cover keeps off the lanes too.
+  const lanes = [...LANES, ...EMEI];
+  const kit = new Kit(b, shift, keep, lanes);
+  taipeiCover(kit);
+  compact(kit);
+  heights(kit);
+  streetCover(kit);
+  const clear = [...keep.flatMap(([x, z, r]) => [x - r, 0.05, z - r, x + r, 3, z + r]), ...laneClears(lanes, X, Z), ...kit.clear];
   streetFurniture(b, shift, keep, cuts, clear);
-  parkedCars(b, shift, keep);
+  parkedCars(b, shift, keep, lanes);
   mrtExit(b, shift, KERB);
 
-  return b.build();
+  return outsideAsScenery(b.build());
+}
+
+/**
+ * Past the bounds the source's city is only scenery: its collision boxes go (drawn ones become
+ * shapes), which keeps the solid count and the navigation build to the playable area.
+ */
+function outsideAsScenery(def: MapDef): MapDef {
+  const { minX, maxX, minZ, maxZ } = def.bounds, m = 2;
+  const out = (s: MapDef['solids'][number]) => s.maxX < minX - m || s.minX > maxX + m || s.maxZ < minZ - m || s.minZ > maxZ + m;
+  const index = new Int32Array(def.solids.length).fill(-1);
+  const solids: MapDef['solids'] = [];
+  def.solids.forEach((s, i) => { if (!out(s)) { index[i] = solids.length; solids.push(s); } });
+  const decor: Decor[] = def.decor.map(d => {
+    if (d.kind !== 'block') return d;
+    const s = def.solids[d.solid];
+    if (index[d.solid] >= 0) return { ...d, solid: index[d.solid] };
+    return { kind: 'shape', min: [s.minX, s.minY, s.minZ], max: [s.maxX, s.maxY, s.maxZ], style: d.style, ...(d.color === undefined ? {} : { color: d.color }) };
+  });
+  return { ...def, solids, decor };
 }

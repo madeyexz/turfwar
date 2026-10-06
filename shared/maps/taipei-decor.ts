@@ -1,7 +1,6 @@
 import type { Surface } from '../collision';
 import type { MapBuilder } from './builder';
 import { CAR_BAYS, MRT_EXIT, SCOOTER_ROWS, STREET_SOLIDS } from './taipei-furniture';
-import { minusHoles } from './taipei-underpass';
 import type { BlockStyle, Decor } from './types';
 
 /**
@@ -13,6 +12,24 @@ export interface Shift { X: (x: number) => number; Z: (z: number) => number; ox:
 
 /** Places the dressing must leave clear: spawns, ammo crates and bomb sites (x, z, radius in map coordinates). */
 export type Keep = [number, number, number][];
+
+/** Split a rect around holes (all [x0, z0, x1, z1]); returns the pieces left. */
+export function minusHoles(r: [number, number, number, number], holes: [number, number, number, number][]) {
+  let parts = [r];
+  for (const [hx0, hz0, hx1, hz1] of holes) {
+    const next: [number, number, number, number][] = [];
+    for (const [x0, z0, x1, z1] of parts) {
+      if (hx1 <= x0 || hx0 >= x1 || hz1 <= z0 || hz0 >= z1) { next.push([x0, z0, x1, z1]); continue; }
+      if (hz0 > z0) next.push([x0, z0, x1, hz0]);
+      if (hz1 < z1) next.push([x0, hz1, x1, z1]);
+      const a = Math.max(z0, hz0), c = Math.min(z1, hz1);
+      if (hx0 > x0) next.push([x0, a, hx0, c]);
+      if (hx1 < x1) next.push([hx1, a, x1, c]);
+    }
+    parts = next;
+  }
+  return parts;
+}
 const blocked = (keep: Keep, x0: number, z0: number, x1: number, z1: number) =>
   keep.some(([x, z, r]) => x > x0 - r && x < x1 + r && z > z0 - r && z < z1 + r);
 
@@ -54,15 +71,17 @@ const CAR_COLORS = [0xf2f2f0, 0x1c1c1e, 0x9aa0a6, 0x2a3f6a, 0x8a1c1c, 0xd8d8d4, 
 
 /**
  * Parked cars and taxis in the source's numbered car bays (where its traffic parks): about two in
- * three bays taken, one car in four a yellow taxi. Each blocks as a car-sized box.
+ * three bays taken, one car in four a yellow taxi, none on the ring road's drive lanes (source
+ * rects). Each blocks as a car-sized box.
  */
-export function parkedCars(b: MapBuilder, s: Shift, keep: Keep) {
+export function parkedCars(b: MapBuilder, s: Shift, keep: Keep, lanes: [number, number, number, number][]) {
   const cars: number[] = [], taxis: number[] = [];
   for (const [x, z, heading] of CAR_BAYS) {
     const r = hash(x, z);
     if (r > 0.68) continue;
     const X = s.X(x), Z = s.Z(z), along = Math.abs(Math.sin(heading)) > 0.5;
     const w = along ? 4.5 : 1.8, d = along ? 1.8 : 4.5;
+    if (lanes.some(([x0, z0, x1, z1]) => x + w / 2 > x0 && x - w / 2 < x1 && z + d / 2 > z0 && z - d / 2 < z1)) continue;
     if (blocked(keep, X - w / 2, Z - d / 2, X + w / 2, Z + d / 2)) continue;
     const taxi = r < 0.17;
     // Bays run along the kerb; cars park either way round.
