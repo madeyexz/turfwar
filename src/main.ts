@@ -616,6 +616,8 @@ async function boot() {
   const stepFrames = (n: number, render = true) => { for (let i = 0; i < n; i++) { simNow += 1000 / 30; step(1 / 30, simNow, render && i === n - 1); } return n; };
   if (params.get('autostart') || benchMode) void start();
   if (import.meta.env.DEV) Object.assign(window, { __lb: { get game() { return game; }, get bench() { return bench; }, renderer, assets, step: stepFrames, start } });
+  // Dev-only trailer director (trailer/README.md): scripted shots driven frame by frame by the capture tools.
+  if (import.meta.env.DEV && params.has('trailer')) void import('./game/trailer').then(m => m.installTrailer({ get game() { return game; }, renderer, step: stepFrames }));
 }
 
 void boot().catch(error => {

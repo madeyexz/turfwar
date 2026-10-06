@@ -129,6 +129,8 @@ export class Game {
   private running = true;
   private myTeam = 0;
   onExit?: () => void;
+  /** Dev-only (`?trailer`, src/game/trailer.ts): places a cinematic camera after the game's own, before rendering. */
+  trailerHook?: (dt: number) => void;
   /** Online servers rotate battlefields; the host page rebuilds the scene for the new map. */
   onMapChange?: (mapId: string) => void;
   readonly mapId: string;
@@ -453,6 +455,7 @@ export class Game {
     this.hud.binoculars(this.player.alive && this.player.binoculars && this.player.ads > 0.5, mag);
     this.hud.zoomTag(this.player.alive && !this.player.binoculars && !this.viewmodel.overlay && this.player.ads > 0.85 && mag >= 1.5 ? mag : undefined);
     this.updateEngines(state);
+    this.trailerHook?.(dt);
     if (render) this.renderer.render(this.time);
 
     // ---- HUD ----
