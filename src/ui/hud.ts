@@ -103,7 +103,7 @@ export class Hud {
         <div class="binos-read"><span data-k="binoRange">RNG ---- M</span><span data-k="binoBearing">BRG 000°</span><span data-k="binoMag">10×</span></div>
       </div>
       <div class="minimap panel"><canvas width="380" height="380"></canvas></div>
-      <div class="sb">
+      <div class="sb" data-k="sb">
         <div class="sb-side t0"><div class="sb-avs" data-k="av0"></div><div class="sb-score">${L('team.short.0', 'small')}<b data-k="s0">0</b><i class="pips"><i data-k="p0"></i></i></div></div>
         <div class="sb-clock" data-k="clockBox"><b data-k="clock">0:00</b><small data-k="round"></small></div>
         <div class="sb-side t1"><div class="sb-score">${L('team.short.1', 'small')}<b data-k="s1">0</b><i class="pips"><i data-k="p1"></i></i></div><div class="sb-avs" data-k="av1"></div></div>
@@ -426,6 +426,35 @@ export class Hud {
       if (order !== this.avatarOrder[team]) { this.avatarOrder[team] = order; for (const s of list) box.appendChild(this.avatars.get(s.id)!); }
     }
     for (const [id, a] of this.avatars) if (!live.has(id)) { a.remove(); this.avatars.delete(id); }
+    this.fitScoreBar();
+  }
+
+  private fitAt = 0;
+  /**
+   * Touch screens: the score bar shares the top edge with the round buttons (menu, scoreboard, chat,
+   * store, wherever the player put them), so it shrinks to the room between them, and when the soldier
+   * chips would get too small to read (6v6 on a small phone, every 24v24) it drops them and keeps the
+   * scores and the clock. Twice a second is plenty: it changes with the roster, the layout or a turn.
+   */
+  private fitScoreBar() {
+    const now = performance.now();
+    if (now - this.fitAt < 500) return;
+    this.fitAt = now;
+    const sb = this.el.sb;
+    if (!document.body.classList.contains('touch')) { sb.classList.remove('sb-tight'); sb.style.removeProperty('--sbs'); return; }
+    const W = innerWidth;
+    let reserve = 8;
+    for (const b of Array.from(document.querySelectorAll<HTMLElement>('#touch .tc-btn:not([hidden])'))) {
+      const r = b.getBoundingClientRect();
+      if (!r.width || r.top > 46) continue;
+      reserve = Math.max(reserve, (r.left + r.right) / 2 < W / 2 ? r.right + 12 : W - r.left + 12);
+    }
+    const room = Math.max(120, W - 2 * reserve);
+    const MAX = 0.78, MIN_CHIPS = 0.55;
+    sb.classList.remove('sb-tight');
+    let scale = Math.min(MAX, room / Math.max(1, sb.offsetWidth));
+    if (scale < MIN_CHIPS) { sb.classList.add('sb-tight'); scale = Math.min(MAX, room / Math.max(1, sb.offsetWidth)); }
+    sb.style.setProperty('--sbs', Math.max(0.45, scale).toFixed(3));
   }
 
   // ---- Events ---------------------------------------------------------------------------------
@@ -559,6 +588,8 @@ export class Hud {
   scoreboard(show: boolean, state: MatchState, myId: number) {
     const wasHidden = this.el.board.hidden;
     this.el.board.hidden = !show;
+    // Touch screens lift the open board over the controls so a finger can scroll a 24-a-side list.
+    if (wasHidden === show) document.body.classList.toggle('hud-board', show);
     const now = performance.now();
     if (!show || (!wasHidden && now - this.boardAt < 250)) return;
     this.boardAt = now;
@@ -705,7 +736,7 @@ export class Hud {
   }
   net(text: string) { this.set('net', text); }
   fps(text: string) { this.set('fps', text); }
-  dispose() { clearTimeout(this.toastTimer); this.stopLang(); this.root.remove(); }
+  dispose() { clearTimeout(this.toastTimer); this.stopLang(); this.root.remove(); document.body.classList.remove('hud-board'); }
 }
 
 function escape(s: string) { return s.replace(/[&<>"']/g, c => `&#${c.charCodeAt(0)};`); }

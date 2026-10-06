@@ -30,6 +30,10 @@
   font-family: var(--font);
   color: var(--ink);
   background: #05090c;
+  /* Phones turned sideways must not inflate the text: iOS Safari scales type up in landscape unless
+     told not to, which made every menu and dialog oversized there. */
+  -webkit-text-size-adjust: 100%;
+  text-size-adjust: 100%;
 }
 * { box-sizing: border-box; }
 body { margin: 0; overflow: hidden; user-select: none; }
