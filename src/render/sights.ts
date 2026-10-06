@@ -34,15 +34,20 @@ const SDF = /* glsl */ `
 
 const scratch = { v: new THREE.Vector3(), d: new THREE.Vector3(), vp: new THREE.Vector4(), m: new THREE.Matrix4() };
 
-/** Red dot / holo window: lightly coated glass with an emissive reticle projected at infinity. */
+/**
+ * Red dot / holo window: lightly coated glass with an emissive reticle projected at infinity. The tube
+ * red dot has a round objective with an amber coating and a small, crisp 2 MOA dot; the holographic
+ * sight a wide rectangular window with a faint blue AR coating and its 68 MOA ring round a 1 MOA dot.
+ */
 export function windowMaterial(mesh: THREE.Mesh, sight: Sight) {
-  const [hz, hy] = sight.half ?? [sight.radius, sight.radius];
+  const [hz, hy] = sight.half ?? [sight.radius, sight.radius], holo = sight.kind === 'holo';
   const material = new THREE.ShaderMaterial({
     transparent: true, depthWrite: false, premultipliedAlpha: true, side: THREE.DoubleSide, toneMapped: false,
     uniforms: {
       uAim: { value: new THREE.Vector2() }, uScale: { value: 720 }, uColor: { value: new THREE.Color() }, uStyle: { value: 0 },
-      uTint: { value: new THREE.Color(sight.kind === 'holo' ? 0x6b8fb0 : 0xa4805a) }, uCenter: { value: sight.center.clone() },
+      uTint: { value: new THREE.Color(holo ? 0x4f8fe0 : 0xd8782e) }, uCenter: { value: sight.center.clone() },
       uHalf: { value: new THREE.Vector2(hz, hy) }, uRound: { value: sight.half ? 0 : 1 },
+      uDot: { value: holo ? 0.0042 : 0.0029 }, uHalo: { value: holo ? 0.00005 : 0.000018 },
     },
     vertexShader: /* glsl */ `
       varying vec3 vLocal; varying vec3 vNormalV; varying vec3 vView;
@@ -54,14 +59,14 @@ export function windowMaterial(mesh: THREE.Mesh, sight: Sight) {
       }`,
     fragmentShader: /* glsl */ `
       uniform vec2 uAim; uniform float uScale; uniform vec3 uColor; uniform int uStyle; uniform vec3 uTint;
-      uniform vec3 uCenter; uniform vec2 uHalf; uniform float uRound;
+      uniform vec3 uCenter; uniform vec2 uHalf; uniform float uRound; uniform float uDot; uniform float uHalo;
       varying vec3 vLocal; varying vec3 vNormalV; varying vec3 vView;
       ${SDF}
       void main() {
         // Reticle in viewport-height units around the projected aim point (at infinity along the sight axis).
         vec2 p = (gl_FragCoord.xy - uAim) / uScale;
         float aa = 0.8 / uScale, d = length(p), ret = 0.0;
-        if (uStyle == 0) ret = fill(d, 0.0042, aa);
+        if (uStyle == 0) ret = fill(d, uDot, aa);
         else if (uStyle == 1) {
           ret = max(fill(d, 0.0024, aa), fill(abs(d - 0.044), 0.0014, aa));
           // Short ticks inside the ring at 3, 6 and 9 o'clock.
@@ -75,15 +80,15 @@ export function windowMaterial(mesh: THREE.Mesh, sight: Sight) {
           ret = max(fill(s, 0.001, aa), fill(d, 0.0017, aa));
         }
         // LED bloom: a soft halo round the dot (drawn here so the reticle keeps its hue instead of blowing out to white).
-        float halo = exp(-d * d / 0.00005) * 0.45;
+        float halo = exp(-d * d / uHalo) * 0.45;
         // Glass: a faint coating tint, darker at the frame, a soft diagonal sheen and a fresnel edge.
         vec2 q = (vLocal.zy - uCenter.zy) / uHalf;
         float e = uRound > 0.5 ? length(q) : max(abs(q.x), abs(q.y));
         float edge = smoothstep(0.7, 1.0, e);
         float sheen = smoothstep(0.28, 0.0, abs(q.x * 0.55 + q.y - 0.45)) * 0.05 + smoothstep(0.12, 0.0, abs(q.x * 0.55 + q.y + 0.1)) * 0.025;
         float fres = pow(1.0 - abs(dot(normalize(-vView), vNormalV)), 3.0) * 0.25;
-        float a = 0.025 + edge * 0.1 + sheen + fres;
-        vec3 glass = uTint * (0.02 + edge * 0.06) + vec3(sheen + fres * 0.5) * 0.6;
+        float a = 0.04 + edge * 0.1 + sheen + fres;
+        vec3 glass = uTint * (0.035 + edge * 0.07) + vec3(sheen + fres * 0.5) * 0.6;
         // Premultiplied: the reticle covers what is behind it (crisp and saturated on bright skies), the halo adds light.
         vec3 col = glass * (1.0 - ret) + uColor * (ret * 1.35 + halo * 0.8);
         gl_FragColor = vec4(col, clamp(a * (1.0 - ret) + ret + halo * 0.25, 0.0, 1.0));

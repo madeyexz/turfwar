@@ -13,7 +13,7 @@ import { lensMaterial, windowMaterial, type Sight } from './sights';
  * profiles, chamfered housings, clamps, screws and knurled turrets on a picatinny rail, then merged
  * into one mesh per material: anodised body (vertex-coloured, so steel, rail and accent rings need no
  * extra draw call), rubber, coated glass and glowing fibre/tritium. In first person the see-through
- * window (red dot, holo) and the ocular lens (ACOG, scopes) are separate meshes with the sight-picture
+ * window (the tube red dot's round objective, the holo's rectangular window) and the ocular lens (ACOG, scopes) are separate meshes with the sight-picture
  * materials of sights.ts. Iron sights are modelled too (front post and rear aperture, three-dot pistol
  * sights). The fitted optic's axis is the sight line the view model centres when aiming.
  */
@@ -129,7 +129,7 @@ type Bucket = keyof typeof MATERIALS | 'window' | 'lens';
 const C = {
   anodised: 0x1c1f23, rail: 0x15171a, rubber: 0x0d0d0e, steel: 0x6d737a, screw: 0x8f969d, socket: 0x050506, inner: 0x060708,
   coatBlue: 0x3a5f8a, coatAmber: 0x9a6a2a, coatGreen: 0x2f6f52, coatViolet: 0x4a3a6a,
-  white: 0xe6e4dc, tritium: 0x0a7a26, red: 0xff2a1a, amber: 0xffa21e,
+  bezel: 0x3a3e44, white: 0xe6e4dc, tritium: 0x0a7a26, red: 0xff2a1a, amber: 0xffa21e,
 };
 /** Accent ring/cap colour by optic. */
 const ACCENT: Record<OpticId, number> = { irons: 0x888888, reflex: 0xb3332a, holo: 0xd9772a, acog: 0xc9932f, x4: 0x3f74b8, x6: 0x2f9a8c };
@@ -424,79 +424,135 @@ function band(a: [number, number][], xa: number, b: [number, number][], xb: numb
   g.computeVertexNormals();
   return g;
 }
+
 /**
- * Thin-walled window frame (rounded rectangle, `wall` thick) from its rear face at x = 0 forward to
- * x = -length, opening out by `flare` toward the front, round the window centre. With the flare
- * 1 + length / eye relief, its inner and outer walls are seen edge-on from the aiming eye: the hood
- * frames the window with only its thin rear rim, without a tunnel of walls round the view.
+ * Rubber lens cap for the end of a tube of radius r at x (side -1: the objective, 1: the ocular),
+ * hinged on its rim at angle `hinge` round the axis (π/2 the top, -π/2 the bottom) and swung open by
+ * `swing` radians, with the band that holds it on the tube and the strap out to the hinge; `depth` is its skirt.
  */
-function windowFrame(hz: number, hy: number, r: number, wall: number, length: number, flare: number, k: number) {
-  const fz = hz * flare, fy = hy * flare;
-  const inRear = loop(hz, hy, r, k), outRear = loop(hz + wall, hy + wall, r + wall, k);
-  const inFront = loop(fz, fy, r * flare, k), outFront = loop(fz + wall, fy + wall, r * flare + wall, k);
-  return mergeGeometries([band(outRear, 0, outFront, -length), band(inRear, 0, inFront, -length), band(outRear, 0, inRear, 0), band(outFront, -length, inFront, -length)])!;
+function lensCap(kit: Kit, x: number, axis: number, r: number, side: -1 | 1, hinge: number, swing: number, depth = 0.0052) {
+  const s = kit.seg(40), rc = r + 0.0011, t = 0.0015;
+  // Closed, its face sits on the tube end and the skirt reaches back over the tube (the lathe runs toward -x).
+  const cup = lathe([[0, -0.0004], [rc * 0.6, -0.0002], [rc + 0.0004, 0], [rc + 0.0009, 0.0006], [rc + 0.0009, depth], [rc + 0.0001, depth], [rc + 0.0001, t], [0, t]], s);
+  if (side < 0) cup.rotateY(Math.PI);
+  const ch = Math.cos(hinge), sh = Math.sin(hinge), h = rc + 0.0009;
+  cup.translate(0, -sh * h, -ch * h)
+    .applyMatrix4(new THREE.Matrix4().makeRotationAxis(new THREE.Vector3(0, ch, -sh), -side * swing))
+    .translate(0, sh * h, ch * h);
+  kit.add('rubber', cup, C.rubber, x, axis);
+  const bx = x - side * 0.0075;
+  kit.add('rubber', lathe([[r + 0.0001, 0], [r + 0.0009, 0.0004], [r + 0.0009, 0.0036], [r + 0.0001, 0.004]], s), C.rubber, bx + 0.002, axis);
+  kit.add('rubber', roundedBox(0.0075, 0.0016, 0.0068, 0.0006), C.rubber, x - side * 0.0035, axis + sh * (r + 0.0011), ch * (r + 0.0011));
 }
 
 /**
- * Open reflex sight (micro red dot, RMR style): low plate, rear LED emitter below the window line,
- * thin window frame with a large coated window, slim sloped ears, side buttons. Rifles mount it on a
- * narrow riser at co-witness height; pistols cut it into the slide.
+ * Tube red dot (Aimpoint T-2 / Comp M4 style): a short cylinder with a round ocular ring and a hooded
+ * objective bell, flip-up rubber lens caps (front up, rear down), a knurled brightness knob on the
+ * camera side and capped adjustment turrets, on a tall cantilever mount (rifles) or a low saddle on
+ * the slide (pistols). From the eye it is a round tube: the thick ocular ring and a thin band of the
+ * dark bore (it flares toward the objective, so it never becomes a tunnel) ring a round field.
  */
-function reflexDot(kit: Kit, rifle: boolean, relief: number): Built {
-  const s = kit.seg(32), k = kit.seg(8);
-  const g = rifle ? 1.2 : 1.12, hz = 0.0108 * g, hy = 0.0086 * g, r = 0.0042 * g, wall = 0.0012, plate = 0.0032, depth = 0.0045;
-  const pl = 0.036 * g, pw = 0.021 * g, front = -pl / 2 + 0.0008, rear = front + depth;
-  let base = 0;
+function tubeDot(kit: Kit, rifle: boolean, relief: number): Built {
+  const s = kit.seg(48), k = rifle ? 1 : 0.72;
+  const R = 0.0152 * k, Ro = 0.0166 * k, Rf = 0.0182 * k, ri = 0.0114 * k, L = rifle ? 0.05 : 0.036;
+  const rear = L / 2, front = rear - L, rf = Math.min(Rf - 0.0014 * k, ri * (relief + L) / relief * 0.9);
+  let axis: number;
   if (rifle) {
-    // Narrow riser under the window, forward of the eye: from behind, only the thin plate shows below the window.
-    const x0 = front - 0.003, x1 = front + 0.03, mid = (x0 + x1) / 2, top = rail(kit, x0, x1, 0);
+    // Cantilever: a clamp base on the rail and an arm leaning forward to a ring round the tube's front half.
+    const x0 = -0.004, x1 = 0.03, top = rail(kit, x0 - 0.002, x1 + 0.002, 0);
     railClamp(kit, x0, x1, top, [x0 + 0.008, x1 - 0.008]);
-    const riser = 0.011;
-    kit.add('body', roundedBox(x1 - x0 - 0.004, riser, 0.014, 0.002), C.anodised, mid, top + riser / 2);
-    for (const sz of [-1, 1]) kit.add('body', roundedBox(x1 - x0 - 0.014, riser * 0.4, 0.0006, 0.0015), C.rail, mid, top + riser * 0.5, sz * 0.0071);
-    base = top + riser;
+    kit.add('body', roundedBox(x1 - x0, 0.005, 0.02, 0.0015), C.anodised, (x0 + x1) / 2, top + 0.0025);
+    axis = top + 0.036;
+    const bt = top + 0.005, ring = 0.014, xr = front + 0.0035 + ring / 2, arm = axis - ri - 0.0006 - bt;
+    kit.add('body', slab([[x1, 0], [x0, 0], [xr - ring / 2, arm], [xr + ring / 2 + 0.004, arm], [x1, arm * 0.35]], 0.014), C.anodised, 0, bt);
+    // Lightening pockets on both faces of the arm.
+    for (const sz of [-1, 1]) kit.add('body', slab([[x1 - 0.008, 0.003], [x0 + 0.001, 0.003], [xr - 0.001, arm - 0.0045], [xr + ring / 2 + 0.002, arm - 0.0045], [x1 - 0.008, arm * 0.3]], 0.0008), C.socket, 0, bt, sz * 0.0068);
+    // Split ring with two cap screws a side.
+    kit.add('body', lathe([[R, 0], [R + 0.003, 0.001], [R + 0.004, 0.003], [R + 0.004, ring - 0.003], [R + 0.003, ring - 0.001], [R, ring]], s), C.anodised, xr + ring / 2, axis);
+    for (const sz of [-1, 1]) kit.add('body', roundedBox(ring + 0.0002, 0.0042, 0.003, 0.0008), C.anodised, xr, axis, sz * (R + 0.0054));
+    for (const sz of [-1, 1]) kit.add('body', roundedBox(ring + 0.0003, 0.0004, 0.0062, 0.0001), C.socket, xr, axis, sz * (R + 0.0039));
+    for (const sz of [-1, 1]) for (const sx of [-1, 1]) screw(kit, xr + sx * 0.0036, axis + 0.0021, sz * (R + 0.0054), 'y', 1, 0.0013);
+  } else {
+    // Low saddle on the slide, under the bore.
+    const base = 0.0032;
+    axis = base + R + 0.0012;
+    kit.add('body', roundedBox(L * 0.78, base, 0.017, 0.002), C.anodised, rear - L * 0.48, base / 2);
+    const sh = axis - ri - 0.0006 - base;
+    kit.add('body', roundedBox(L * 0.6, sh, 0.015, 0.0015), C.anodised, rear - L * 0.48, base + sh / 2);
+    screw(kit, rear - L * 0.15, base, 0.006, 'y', 1, 0.001);
   }
-  const win = base + plate + wall + hy;
-  // Plate: full width under the window, narrowing behind it so little shows below the window from the eye.
-  const fl = depth + 0.006, rw = pw * 0.62;
-  kit.add('body', roundedBox(fl, plate, pw, 0.0025), C.anodised, front + fl / 2, base + plate / 2);
-  kit.add('body', roundedBox(pl - fl + 0.002, plate, rw, 0.0025), C.anodised, front + fl + (pl - fl) / 2 - 0.001, base + plate / 2);
-  kit.add('body', windowFrame(hz, hy, r, wall, depth, 1 + depth / relief, k), C.anodised, rear, win);
-  // Emitter: a low, narrow block at the back of the plate, below the window's lower edge as seen from the eye.
-  const ex = pl / 2 - 0.0075 * g, eh = 0.0024;
-  kit.add('body', roundedBox(0.012 * g, eh, rw * 0.9, 0.001), C.anodised, ex, base + plate + eh / 2);
-  kit.add('body', roundedBox(0.0004, 0.0011, 0.0026, 0.0002), C.socket, ex - 0.006 * g, base + plate + eh * 0.5);
-  for (const sz of [-1, 1]) kit.add('rubber', cyl(0.0014, 0.0012, 'z', s), C.rubber, front + fl / 2, base + plate * 0.5, sz * (pw / 2 + 0.0004));
-  screw(kit, ex - 0.009 * g, base + plate, 0, 'y', 1, 0.0011);
-  kit.add('window', pane(2 * hz, 2 * hy, r), C.white, rear - 0.0012, win);
-  return { length: pl, window: win, rear, sight: { kind: 'dot', center: kit.at(rear - 0.0012, win), radius: hz, half: [hz, hy] } };
+  // Body: ocular ring with a dark grip band, slim tube, an objective bell with a thin accent ring.
+  const bell = L * 0.58, Rg = Ro + 0.0003;
+  const body = lathe([[ri, 0], [Ro - 0.0008, 0], [Ro, 0.0008], [Ro, 0.0024], [Rg, 0.0028], [Rg, 0.0082 * k], [Ro, 0.0086 * k], [R, 0.0106 * k],
+    [R, bell], [Rf, bell + 0.007 * k], [Rf, L - 0.0008], [Rf - 0.0008, L], [rf, L]], s);
+  kit.add('body', body, p => {
+    const h = -p.x, r = Math.hypot(p.y, p.z);
+    if (r > Ro + 0.0001 && h > 0.0026) return C.rail;
+    return h > bell + 0.0068 * k && h < bell + 0.0095 * k && r > Rf - 0.0002 ? ACCENT.reflex : C.anodised;
+  }, rear, axis);
+  kit.add('body', lathe([[ri, 0], [rf, L]], s), C.inner, rear, axis);
+  // Brightness knob facing the camera, capped elevation and windage turrets.
+  const kx = rear - L * 0.4;
+  kit.add('body', cyl(R * 0.66, 0.0042, 'z', s), C.anodised, kx, axis, R - 0.0004 + 0.0021);
+  kit.add('body', knurl(R * 0.6, 0.0062 * k + 0.0016, kit.detail === 'high' ? 24 : 12, 'z'), C.anodised, kx, axis, R + 0.0038 + (0.0062 * k + 0.0016) / 2);
+  kit.add('body', cyl(R * 0.5, 0.0008, 'z', s), C.steel, kx, axis, R + 0.0058 + 0.0062 * k);
+  kit.add('body', roundedBox(0.0006, R * 0.5, 0.0006, 0.0001), C.white, kx, axis + R * 0.25, R + 0.0062 + 0.0062 * k);
+  turret(kit, kx, axis + R - 0.0008, 0, 0.0052 * k + 0.0008, 'y', C.steel, 1, true);
+  turret(kit, kx, axis, -(R - 0.0008), 0.0052 * k + 0.0008, 'z', C.steel, -1, true);
+  lensCap(kit, front, axis, Rf, -1, Math.PI / 2, 2.7);
+  // The rear cap (a shallow one) hangs back from the ocular's lower rim, edge-on to the eye: a thin band over the mount below the ring.
+  if (rifle) lensCap(kit, rear, axis, Rg, 1, -Math.PI / 2, Math.PI / 2 - Math.atan2(Rg, relief), 0.0026);
+  // The coated objective: the window the dot is projected on.
+  const wx = front + 0.0035;
+  kit.add('window', disc(rf, s), C.coatAmber, wx, axis);
+  return { length: rifle ? 0.06 : L, window: axis, rear, sight: { kind: 'dot', center: kit.at(wx, axis), radius: rf } };
 }
 
 /**
- * Holographic sight (EXPS style), low profile: narrow clamp base, a battery housing wedged under a
- * thin flared hood, side buttons and a transverse battery cap; the coated window fills the hood's rear.
+ * Holographic sight (EOTech 552 / EXPS style): a big "TV screen" hood with thick walls and rounded
+ * corners round a wide rectangular window, on a body that runs from a transverse battery tube at the
+ * front to a control panel with rubber buttons behind and below the window, on a quick-detach base.
+ * The hood's outer walls are nearly straight and its bore opens toward the front, so from the eye the
+ * inner walls show only as a thin band inside the thick rear bezel.
  */
 function holoSight(kit: Kit, relief: number): Built {
-  const s = kit.seg(32), k = kit.seg(8), top = rail(kit, -0.034, 0.03, 0);
-  const baseH = 0.0055, bw = 0.019;
-  kit.add('body', roundedBox(0.062, baseH, bw, 0.0018), C.anodised, -0.002, top + baseH / 2);
-  railClamp(kit, -0.03, 0.026, top, [-0.024, -0.006]);
+  const s = kit.seg(32), k = kit.seg(8), top = rail(kit, -0.036, 0.032, 0);
+  const baseH = 0.0055, bw = 0.02;
+  kit.add('body', roundedBox(0.066, baseH, bw, 0.0018), C.anodised, -0.002, top + baseH / 2);
+  railClamp(kit, -0.032, 0.028, top, [-0.026, -0.008]);
   // Quick-detach lever along the left of the base.
-  kit.add('body', slab([[-0.014, -0.0018], [0.014, -0.0015], [0.0155, 0.0], [0.014, 0.0017], [-0.014, 0.002], [-0.0155, 0.0]], 0.0026), C.anodised, 0.004, top + 0.0024, 0.0142);
-  kit.add('body', cyl(0.0026, 0.0022, 'z', s), C.anodised, -0.009, top + 0.0024, 0.0155);
-  const hz = 0.0174, hy = 0.013, wall = 0.0013, L = 0.015, flare = 1 + L / relief, rear = 0.012, front = rear - L;
-  const floorFront = top + baseH + 0.003, win = floorFront + wall + hy * flare, floorRear = win - hy - wall;
-  // Battery housing: a wedge under the hood's floor, narrower than the hood.
-  kit.add('body', slab([[front - 0.004, top + baseH - 0.0006], [rear - 0.0015, top + baseH - 0.0006], [rear - 0.0015, floorRear - 0.0003], [front, floorFront - 0.0003]], 0.021), C.anodised, 0, 0);
-  kit.add('body', windowFrame(hz, hy, 0.0034, wall, L, flare, k), C.anodised, rear, win);
-  // A thin rear rim in a lighter finish, so the hood's edge reads against dark backgrounds.
-  kit.add('body', windowFrame(hz + wall, hy + wall, 0.0034 + wall, 0.0005, 0.0012, 1.01, k), C.rail, rear + 0.0006, win);
-  for (const x of [rear - 0.006, rear - 0.0125]) kit.add('rubber', cyl(0.0022, 0.0012, 'z', s), C.rubber, x, top + baseH + 0.0042, 0.0108);
-  kit.add('body', knurl(0.0046, 0.005, 14, 'z'), C.anodised, front + 0.002, top + baseH + 0.0012, -0.0122);
-  kit.add('body', cyl(0.004, 0.001, 'z', s), C.steel, front + 0.002, top + baseH + 0.0012, -0.0151);
-  for (const x of [front - 0.001, rear - 0.004]) screw(kit, x, top + baseH * 0.5, bw / 2, 'z', 1, 0.0011);
-  kit.add('window', pane(2 * hz, 2 * hy, 0.0034), C.white, rear - 0.0015, win);
-  return { length: 0.064, window: win, rear: rear + 0.0006, sight: { kind: 'holo', center: kit.at(rear - 0.0015, win), radius: hz, half: [hz, hy] } };
+  kit.add('body', slab([[-0.014, -0.0018], [0.014, -0.0015], [0.0155, 0.0], [0.014, 0.0017], [-0.014, 0.002], [-0.0155, 0.0]], 0.0026), C.anodised, 0.004, top + 0.0024, 0.0152);
+  kit.add('body', cyl(0.0026, 0.0022, 'z', s), C.anodised, -0.009, top + 0.0024, 0.0165);
+  for (const x of [-0.03, 0.026]) screw(kit, x, top + baseH * 0.5, bw / 2, 'z', 1, 0.0011);
+  const hz = 0.0184, hy = 0.0136, r = 0.0058, wall = 0.0034, L = 0.02, rear = 0.013, front = rear - L;
+  const fo = 1 + 0.4 * L / relief, fi = Math.min(1 + L / relief - 0.02, ((hz + wall) * fo - 0.0012) / hz);
+  // The body is tall enough that the battery tube in front stays below the window's lower edge as seen from the eye.
+  const deck = top + baseH, bodyTop = deck + 0.0135, win = bodyTop + wall + hy;
+  // Hood: thick rear bezel, straight-ish outer walls, a dark bore.
+  const outRear = loop(hz + wall, hy + wall, r + wall, k), outFront = loop((hz + wall) * fo, (hy + wall) * fo, (r + wall) * fo, k);
+  const inRear = loop(hz, hy, r, k), inFront = loop(hz * fi, hy * fi, r * fi, k);
+  kit.add('body', mergeGeometries([band(outRear, 0, outFront, -L), band(outRear, 0, inRear, 0), band(outFront, -L, inFront, -L)])!, C.anodised, rear, win);
+  kit.add('body', band(inRear, 0, inFront, -L), C.inner, rear, win);
+  // A raised, lighter bezel face round the window, so the hood's thick edge reads as a frame against dark scenes.
+  kit.add('body', band(loop(hz + wall - 0.0007, hy + wall - 0.0007, r + wall - 0.0007, k), 0, loop(hz + 0.0007, hy + 0.0007, r + 0.0007, k), 0), C.bezel, rear + 0.0003, win);
+  // Body under the hood: battery tube in front, sloped control panel behind the window.
+  const bx0 = front - 0.016, bx1 = rear + 0.013, bh = bodyTop - deck;
+  kit.add('body', slab([[bx0, 0], [bx1, 0], [bx1, bh * 0.78], [bx1 - 0.005, bh + 0.0004], [bx0 + 0.004, bh + 0.0004], [bx0, bh * 0.55]], 0.03), C.anodised, 0, deck);
+  for (const sz of [-1, 1]) kit.add('body', roundedBox(bx1 - bx0 - 0.014, bh * 0.45, 0.0006, 0.001), C.rail, (bx0 + bx1) / 2 + 0.002, deck + bh * 0.5, sz * 0.0151);
+  // Rubber buttons on the rear panel: brightness up/down and night vision.
+  for (const [z, w] of [[-0.0092, 0.0074], [0, 0.0074], [0.0092, 0.0058]] as const) {
+    kit.add('rubber', roundedBox(0.003, bh * 0.52, w, 0.0012), C.rubber, bx1 + 0.0009, deck + bh * 0.4, z);
+  }
+  kit.add('body', roundedBox(0.0004, 0.0004, 0.0022, 0.0001), C.white, bx1 + 0.0026, deck + bh * 0.48, -0.0092);
+  kit.add('body', roundedBox(0.0004, 0.0004, 0.0022, 0.0001), C.white, bx1 + 0.0026, deck + bh * 0.48, 0);
+  // Transverse battery tube with a knurled cap facing the camera.
+  const bx = front - 0.0085, by = deck + 0.0048, bl = 0.034;
+  kit.add('body', cyl(0.0052, bl, 'z', s), C.anodised, bx, by);
+  kit.add('body', knurl(0.006, 0.0046, kit.detail === 'high' ? 18 : 9, 'z'), C.anodised, bx, by, bl / 2 + 0.0023);
+  kit.add('body', cyl(0.0046, 0.0008, 'z', s), C.steel, bx, by, bl / 2 + 0.005);
+  kit.add('body', cyl(0.0056, 0.002, 'z', s), C.anodised, bx, by, -bl / 2 - 0.001);
+  kit.add('window', pane(2 * hz, 2 * hy, r), C.coatBlue, rear - 0.0015, win);
+  return { length: 0.068, window: win, rear: rear + 0.0006, sight: { kind: 'holo', center: kit.at(rear - 0.0015, win), radius: hz, half: [hz, hy] } };
 }
 
 /** Prism sight (ACOG style): mount with thumb nuts, forged body with a top fibre-optic channel, objective bell with sunshade, rubber eyepiece. */
@@ -590,9 +646,9 @@ export function topAt(model: THREE.Object3D, x0: number, x1: number) {
 
 /**
  * How far in front of the eye each sight sits when aimed (m, eye to its rear sighting surface). The
- * view model sets the weapon by it. As in modern shooters, the eye sits just behind a holo or red dot,
- * so its thin-framed window fills the centre of the view and the low mount and receiver drop below it
- * (the holo's window spans about half the screen height, a red dot's about a quarter); scopes fill the
+ * view model sets the weapon by it. As in modern shooters, the eye sits just behind a holo or red dot:
+ * the holo's wide rectangular window, framed by its thick hood, spans about half the screen height; the
+ * tube red dot sits a little further out, a round field inside its dark ocular ring; scopes fill the
  * view like an eyepiece. Iron sights sit further out: a small, thin rear aperture with the front post
  * inside it and only a little of the receiver below; pistols are held at arm's length.
  */
@@ -630,7 +686,7 @@ function opticModel(weapons: Map<string, THREE.Object3D>, id: WeaponId, optic: O
     o = { group: kit.build(`Optic_${optic}`, first), sightLine: f.axis, eyeX: built.rear, relief, sight: built.sight };
   } else {
     let built: Built;
-    if (optic === 'reflex') built = reflexDot(kit, fit.kind !== 'pistol', relief);
+    if (optic === 'reflex') built = tubeDot(kit, fit.kind !== 'pistol', relief);
     else if (optic === 'holo') built = holoSight(kit, relief);
     else built = prismSight(kit, FIBRE[first ? settings.reticleColor : 'amber']);
     const top = topAt(model, fit.optic - built.length / 2, fit.optic + built.length / 2);
