@@ -86,9 +86,11 @@ export class Driving {
     // Cars and scooters: the camera swings back behind the body once you stop looking around.
     if (!heli && this.lookIdle > 1.2 && speed > 2) this.camYaw = wrapAngle(this.camYaw) * Math.exp(-dt * 2.5);
     const key = (action: ActionId) => !!input?.down(action);
+    // Keys are all or nothing; the touch stick gives part throttle and part steering.
+    const amount = (action: ActionId) => input?.amount(action) ?? 0;
     const controls: VehicleInput = {
-      throttle: Number(key('throttle')) - Number(key('brake')),
-      steer: Number(key('steerRight')) - Number(key('steerLeft')),
+      throttle: amount('throttle') - amount('brake'),
+      steer: amount('steerRight') - amount('steerLeft'),
       brake: !heli && key('handbrake'),
       lift: heli ? Number(key('climb')) - Number(key('descend')) : 0,
       yaw: heli ? this.camYaw : v.yaw,
