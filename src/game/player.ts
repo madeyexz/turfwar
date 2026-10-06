@@ -1,6 +1,7 @@
 import { CollisionWorld } from '../../shared/collision';
 import { clamp, dirFromAngles, type Vec3 } from '../../shared/math';
 import { MOVE, createMoveState, eyeHeight, isSprinting, stepMovement, type MoveEvents, type MoveInput, type MoveState } from '../../shared/movement';
+import type { Obstacle } from '../../shared/obstacles';
 import type { Soldier } from '../../shared/match/state';
 import { DEFAULT_WEAPONS, RIDER_AIM, STAMINA, oneHanded, pelletCone, weaponStats, type Attachments, type Slot, type WeaponDef, type WeaponId } from '../../shared/weapons';
 import type { Input } from './input';
@@ -183,7 +184,8 @@ export class LocalPlayer {
   eye(): Vec3 { const p = this.renderPos(); return { x: p.x, y: p.y + eyeHeight(p) + this.stepOffset - this.landDip, z: p.z }; }
   aimDir(): Vec3 { return dirFromAngles(this.yaw, this.pitch); }
 
-  update(dt: number, input: Input | undefined, world: CollisionWorld, active: boolean, blockFire: boolean): FrameResult {
+  /** `obstacles`: the vehicles' bodies as we see them (they block, carry us on their roofs and push us aside). */
+  update(dt: number, input: Input | undefined, world: CollisionWorld, active: boolean, blockFire: boolean, obstacles?: readonly Obstacle[]): FrameResult {
     const result: FrameResult = { shots: [], reloadStarted: false, switched: false, dryFire: false, move: { jumped: false, landed: 0, slideStarted: false, stepped: 0 } };
     const can = active && this.alive && !!input;
     // ---- Look ----
@@ -234,7 +236,7 @@ export class LocalPlayer {
       this.accumulator += Math.min(dt, 0.1);
       while (this.accumulator >= STEP) {
         this.prev = { x: this.m.x, y: this.m.y, z: this.m.z, crouch: this.m.crouch };
-        const e = stepMovement(world, this.m, moveInput, STEP, this.team);
+        const e = stepMovement(world, this.m, moveInput, STEP, this.team, obstacles);
         result.move.jumped ||= e.jumped; result.move.slideStarted ||= e.slideStarted;
         result.move.landed = Math.max(result.move.landed, e.landed); result.move.stepped += e.stepped;
         this.accumulator -= STEP;

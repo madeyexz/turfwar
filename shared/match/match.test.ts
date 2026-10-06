@@ -29,7 +29,7 @@ const report = (s: Soldier, over: Partial<Parameters<typeof reportState>[3]> = {
 /** Start the match and skip the round-start freeze. */
 const goLive = (state: MatchState, ctx: SimContext) => { resetMatch(state, ctx); tick(state, ctx, state.config.freezeTime + 0.1); };
 
-const ASYMMETRIC = ['ochre', 'crane', 'tower', 'pipeline', 'timbertown', 'taipei', 'xinyi', 'taipei101'];
+const ASYMMETRIC = ['ochre', 'crane', 'tower', 'pipeline', 'timbertown', 'taipei', 'xinyi', 'taipei101', 'memorial'];
 
 describe('maps and navigation', () => {
   for (const id of MAP_IDS) {

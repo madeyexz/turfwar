@@ -663,6 +663,7 @@ async function start(action: Action) {
   unwatchRooms();
   inMenu = false;
   audio.start();
+  if (params.has('audiodebug')) void import('./audio-probe').then(m => m.startAudioProbe(audio));
   audio.stopMusic();
   const teamChoice = team === 'auto' ? undefined : (Number(team) as Team);
   const botSkill = Math.max(0.1, Math.min(0.95, Number(skill) || 0.45));

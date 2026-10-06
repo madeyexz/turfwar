@@ -94,6 +94,15 @@ export const THEMES: Record<ThemeId, Theme> = {
     sunColor: new THREE.Color(0xffbf86), sunIntensity: 3.2, hemiSky: new THREE.Color(0xd8d8e0), hemiGround: new THREE.Color(0x8c7866), hemiIntensity: 1.7,
     planet: null, exposure: 1.0, urban: true,
   },
+  // Memorial Hall (中正紀念堂) at golden hour: a soft blue sky warming to amber at the horizon, low
+  // sun on the white marble, green lawns; the hemisphere keeps the galleries under the hall readable.
+  memorial: {
+    id: 'memorial', ground: 'moss', rock: 'lichen', dirt: 'path',
+    groundTint: new THREE.Color(0.62, 1.0, 0.46), rockTint: new THREE.Color(0.92, 0.92, 0.88), dirtTint: new THREE.Color(1.05, 0.98, 0.86),
+    skyTop: new THREE.Color(0x4f7cb8), skyHorizon: new THREE.Color(0xf2c896), fog: new THREE.Color(0xd8c4ac), fogDensity: 0.0026,
+    sunColor: new THREE.Color(0xffd4a4), sunIntensity: 3.0, hemiSky: new THREE.Color(0xc4d4ec), hemiGround: new THREE.Color(0x9a8a72), hemiIntensity: 1.6,
+    planet: null, exposure: 1.0, urban: true,
+  },
 };
 
 /** Terrain: world-space planar ground with triplanar rock on slopes and dirt along a splat channel. */

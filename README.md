@@ -183,6 +183,29 @@ standing spots exceeds 45 m (`shared/maps/taipei101.test.ts`). Glass stops bulle
 The city below — the shared Taipei skyline (less the 101), Xinyi's lots and a seeded fill of blocks
 over the basin's flat ground — is the client-only `taipei101` dressing set (`src/render/cityfill.ts`),
 lit by a golden-hour theme (`highrise`) through clear window glass. No vehicles.
+**Memorial Hall** (中正紀念堂, 1v1 and 6v6) is a compact arena in and around the National Chiang Kai-shek
+Memorial Hall in Taipei, stylised to the game's low-poly look (`shared/maps/memorial*.ts`). The white
+hall stands on a three-tier base under its blue glazed octagonal roof: a terrace with marble balustrades
+on each tier (4.5, 9 and 13.5 m), the broad 89-step grand staircase up the west face in three flights
+(30 + 30 + 29) with a landing at each terrace, a straight rear staircase east and side stairs hugging the
+north and south faces. The memorial chamber holds the seated bronze statue on its plinth (a simple,
+dignified figure), inscription panels (decorative, not legible), the coffered ceiling with the sun
+emblem, the tall bronze doors swung open, honour-guard posts (no figures) and rope lines. The museum
+fills the base: the entrance hall under the grand staircase, exhibition rooms with glass and wood
+display cases, a lecture hall, a library, the gift shop, the east lobby, and the double-height Gallery
+Hall under the upper gallery's balconies, with switchback stairwells (lifts beside them) up into the
+chamber. **A** is the Gallery Hall, **B** the chamber before the statue; landmarks C–E are the grand
+staircase's upper landing, the north garden and the gift shop. SWAT deploys on the east forecourt,
+Militia on the slice of Liberty Square in front of the grand staircase; screen walls with one
+gateway each and spirit screens close the bases off from the gardens, which are rooms of clipped hedge
+with pines, a pavilion and a lotus pond. The National Theater, the National Concert Hall and the Liberty
+Square gate stand to the west as backdrop. Golden-hour light. About 130 × 97 m; no vehicles.
+`shared/maps/memorial.test.ts` checks that no eye-level line between two places a soldier can stand
+runs longer than 55 m except down the grand staircase's axis, that SWAT reaches each site 1.5–2.5 s
+ahead of Militia (1.8 s at both), that bots reach every room, floor, terrace, stair and garden, and that
+Militia bots arm each site. Because B is above A, a site is armed and disarmed only on its own floor
+(within 2.5 m of the site's height, `onSite` in `shared/match/combat.ts`), and bots plan toward their
+goal's floor.
 
 Every map has ammo crates (one more stands in each base) and open team bases. Sabotage lists only the
 maps with bomb sites.
@@ -219,8 +242,16 @@ any driving. A body reduced to 0 wrecks: it explodes (7 m blast),
 kills its crew and stays as a charred hulk until the round ends. Crashes (speed lost against walls,
 hard landings, a pilotless helicopter falling) damage the body. A driven car or scooter faster than
 6 m/s hurts enemies it touches. No friendly fire on a crewed vehicle; an empty one is fair game.
-Vehicles are not obstacles for soldiers or each other, the rotor does not collide, and bots ignore
-vehicles. Models are built procedurally (`src/render/vehicles.ts`); engines, the scooter's buzz and
+Vehicles are solid (`blocks` in `shared/vehicles.ts`, oriented boxes in `shared/obstacles.ts`): a
+car's lower body and cabin, a scooter's small box, the helicopter's cabin and tail boom (crouch to
+pass under it; the rotor never collides). Soldiers stop against them, jump onto them and stand on
+their roofs (a moving vehicle drives out from under them; riding on one is not supported), and a
+moving vehicle pushes them aside, shoving them off their feet above 6 m/s. Vehicles bounce off each
+other, sharing the impact by mass (crash damage as against walls); a rammed driverless vehicle is
+shoved by the host. Grenades bounce off them. Bots plan round vehicles at their parking spots (the
+navigation grid counts them as solids) and steer round them wherever they are. Scooter riders stay
+seated facing the bike: the torso twists toward the aim at most about 60°, the arms bring the
+weapon round. Models are built procedurally (`src/render/vehicles.ts`); engines, the scooter's buzz and
 the rotor chop are synthesized.
 
 ## Controls
@@ -311,6 +342,17 @@ the rotor chop are synthesized.
   then rides a scooter through drifts both ways while firing sideways, with two identities. It
   expects zero corrections, every rider shot accepted from its claimed muzzle, the other client
   seeing the vehicles move and the rider turned to its aim, and a rejected teleport.
+- Vehicle bodies on the server: a soldier's report may not walk into a vehicle's body (deeper than
+  the vehicle's own speed explains, and deeper than where he stood: a vehicle driving onto him is
+  not his fault); vehicle roofs count as floors; a moving vehicle nearby adds its speed to the
+  movement budget (shoves). A driver's report may not drive into another vehicle's body the same
+  way, and a vehicle nearby adds to its budget (pushed). Driving clients bounce off the other
+  vehicles' latest replicated poses; the host hands a rammed driverless vehicle the blow (from the
+  rammer's velocity at its previous report, by mass) and steps driverless vehicles against the rest.
+  `bun scripts/collisioncheck.ts ws://127.0.0.1:<port> <db>` (local only): a driver creeps into
+  another client's soldier standing in the road (pushed aside, no corrections either side, never
+  inside the car in the server's frames), backs into a parked car (shoved, no corrections), and a
+  report inside a parked car is corrected.
 - Client-side: own movement is predicted with the shared controller; remote soldiers and grenades
   are interpolated ~100 ms behind from the frame; a rejected position snaps the client back; dropped
   (idle) clients rejoin automatically.
@@ -465,7 +507,11 @@ half-resolution bloom). Budgets: merged static geometry per material, one draw c
 at most three dynamic point lights (pooled muzzle/explosion flashes), pooled effects. Remote soldiers
 use a crowd level of detail: off-screen soldiers are hidden and not animated; on screen, full
 animation and shadows within 30 m, half-rate animation to 70 m, quarter rate beyond. Remote gunfire
-beyond 110 m is not drawn and gunshot audio is limited to 85 m and six voices per frame. The largest
+beyond 110 m is not drawn and gunshot audio is limited to 85 m, six voices per frame and 14 ringing at
+once (a near shot takes the oldest's place). Every sound leaves the mix when its last source ends
+(`src/voices.ts`): Chrome otherwise keeps rendering finished voices until garbage collection, and a long
+firefight starved the audio thread into seconds-long dropouts. `?audiodebug` logs the mix's levels,
+compressor reduction and audio-clock rate (below 1 means the audio thread is falling behind). The largest
 room (24v24, 48 soldiers) is lighter than the 100-soldier matches this engine was
 measured with (Solo 50v50 on Meridian: 59.9 fps average on an M3 Pro, Chrome, medium).
 
@@ -524,6 +570,7 @@ shared/        Pure TypeScript shared by browser, tests and the SpacetimeDB modu
                  Timbertown) and eight originals (Cinder, Frostline, Verdant, Ochre, Citadel,
                  Railyard, Skyline, Meridian), plus Taipei and Taipei 101 · Xinyi (taipei-data.ts and
                  xinyi-data.ts, generated from 臺北狂飆) and Taipei 101 · 88F (taipei101.ts),
+                 xinyi-data.ts, generated from 臺北狂飆) and Memorial Hall (memorial*.ts),
                  with ladders, bomb sites and ammo crates
   match/         State, rounds and bomb, combat validation, economy, bots, navigation, packed frame
 src/           Browser client: lobby, game loop, prediction, rendering, view model, soldiers, HUD, store, audio, net

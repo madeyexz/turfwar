@@ -2,9 +2,10 @@ import type { CollisionWorld } from '../collision';
 import { chestPoint, hitShape, raycastSoldier } from '../hitbox';
 import type { MapDef } from '../maps/types';
 import { dist3, type Vec3 } from '../math';
-import { createMoveState, eyeHeight } from '../movement';
+import { MOVE, createMoveState, eyeHeight } from '../movement';
 import { GRENADE, HEALTH, HIGH_EXPLOSIVE, STAMINA, pelletCone, pelletDirs, zoneDamage, type HitZone, type WeaponDef } from '../weapons';
-import { VEHICLES, raycastVehicle, vehicleCenter, type Vehicle } from '../vehicles';
+import { VEHICLES, obstaclesOf, raycastVehicle, vehicleCenter, type Vehicle } from '../vehicles';
+import { deepestOverlap, resolveObstacles } from '../obstacles';
 import type { Body } from '../world';
 import { CASH, award, statsOf } from './economy';
 import type { NavGraph } from './nav';
@@ -32,6 +33,15 @@ export const isHostile = (a: number, b: number) => a !== b || a === -1;
 export const MOVE_SLACK = { speed: 14, max: 6 };
 
 /**
+ * A bomb site is armed and disarmed on its own floor: within `reach` of its centre across the
+ * floor and within SITE_FLOOR of its height, so a site under another floor (Memorial Hall's
+ * Gallery Hall under the chamber) is not reached from the storey above or below it.
+ */
+export const SITE_FLOOR = 2.5;
+export const onSite = (p: { x: number; y: number; z: number }, x: number, y: number, z: number, reach: number) =>
+  Math.hypot(p.x - x, p.z - z) < reach && Math.abs(y - p.y) < SITE_FLOOR;
+
+/**
  * Which base a team deploys from. Militia attacks in Sabotage; a map whose attacking side is its
  * team-0 base swaps the bases for that mode.
  */
@@ -45,17 +55,28 @@ export function sideOf(state: MatchState, map: MapDef, team: Team): Team {
 export function spawnSoldier(state: MatchState, ctx: SimContext, s: Soldier) {
   const side = sideOf(state, ctx.map, s.team);
   const options = ctx.map.spawns.filter(p => p.team === side);
+  // A vehicle driven onto a slot mid-round (they park back at their spots every round) rules it out.
+  const vehicles = state.vehicles.length ? obstaclesOf(state.vehicles) : undefined;
   // Prefer the slot with the most room from soldiers already standing in the base.
   let best = options[0], bestScore = -Infinity;
   for (const o of options) {
     let near = Infinity;
     for (const other of state.soldiers) if (other.alive && other.id !== s.id && other.team === s.team) near = Math.min(near, Math.hypot(other.m.x - o.x, other.m.z - o.z));
     // A slot someone already stands on is the last resort (big rooms fill every slot).
-    const score = near < 1.3 ? near - 20 : Math.min(near, 12) + ctx.random() * 2;
+    let score = near < 1.3 ? near - 20 : Math.min(near, 12) + ctx.random() * 2;
+    if (vehicles && deepestOverlap(vehicles, o, MOVE.radius + 0.3, MOVE.standHeight).depth > 0) score -= 100;
     if (score > bestScore) { bestScore = score; best = o; }
   }
   s.m = createMoveState(best.x + (ctx.random() - 0.5) * 0.5, best.y, best.z + (ctx.random() - 0.5) * 0.5);
   s.m.y = ctx.world.groundHeight(s.m.x, s.m.z, best.y + 1, 0.3);
+  if (vehicles) {
+    // Every slot taken by a vehicle: step out of its way (the walls still win).
+    const pos = { x: s.m.x, y: s.m.y, z: s.m.z };
+    if (resolveObstacles(vehicles, pos, MOVE.radius, MOVE.standHeight)) {
+      ctx.world.resolveCylinder(pos, MOVE.radius, MOVE.standHeight, s.team);
+      s.m.x = pos.x; s.m.z = pos.z; s.m.y = ctx.world.groundHeight(pos.x, pos.z, best.y + 1, 0.3);
+    }
+  }
   s.yaw = best.yaw; s.pitch = 0;
   s.alive = true; s.health = HEALTH.max; s.stamina = STAMINA.max;
   s.weapon = 0; s.reloadLeft = 0; s.fireCooldown = 0; s.switchLeft = statsOf(s, 0).equipTime;

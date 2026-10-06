@@ -1,4 +1,5 @@
 import { CollisionWorld, terrainHeight } from './collision';
+import { near, raycastObstacle, type Obstacle } from './obstacles';
 
 /** Thrown M67 frags, integrated under plain gravity. */
 export const PHYSICS_STEP = 1 / 120;
@@ -25,8 +26,11 @@ export interface Body {
 export const BODY_RADIUS: Record<BodyKind, number> = { grenade: 0.09 };
 const RESTITUTION = 0.38;
 
-/** Semi-implicit Euler under gravity, then sphere collision against static solids and terrain. */
-export function stepBodies(bodies: Body[], dt: number, world: CollisionWorld | undefined) {
+/**
+ * Semi-implicit Euler under gravity, then sphere collision against static solids, terrain and
+ * `obstacles` (vehicles' bodies, taken as still for the step).
+ */
+export function stepBodies(bodies: Body[], dt: number, world: CollisionWorld | undefined, obstacles?: readonly Obstacle[]) {
   if (dt <= 0) return;
   for (let i = bodies.length - 1; i >= 0; i--) {
     const b = bodies[i];
@@ -34,17 +38,22 @@ export function stepBodies(bodies: Body[], dt: number, world: CollisionWorld | u
     const ox = b.x, oy = b.y, oz = b.z;
     b.x += b.vx * dt; b.y += b.vy * dt; b.z += b.vz * dt;
     b.age += dt;
-    if (world) collide(b, ox, oy, oz, world);
+    if (world) collide(b, ox, oy, oz, world, obstacles);
   }
 }
 
-function collide(b: Body, ox: number, oy: number, oz: number, world: CollisionWorld) {
+function collide(b: Body, ox: number, oy: number, oz: number, world: CollisionWorld, obstacles?: readonly Obstacle[]) {
   const r = BODY_RADIUS[b.kind];
   const dx = b.x - ox, dy = b.y - oy, dz = b.z - oz;
   const len = Math.hypot(dx, dy, dz);
   if (len > 1e-6) {
     const dir = { x: dx / len, y: dy / len, z: dz / len };
-    const hit = world.raycast({ x: ox, y: oy, z: oz }, dir, len + r, -2);
+    let hit: { t: number; normal: { x: number; y: number; z: number } } | null = world.raycast({ x: ox, y: oy, z: oz }, dir, len + r, -2);
+    for (const ob of obstacles ?? []) {
+      if (!near(ob, ox, oz, len + r)) continue;
+      const h = raycastObstacle({ x: ox, y: oy, z: oz }, dir, ob, hit ? hit.t : len + r);
+      if (h) hit = h;
+    }
     if (hit) {
       // Reflect velocity about the surface normal and back off to the contact point.
       const n = hit.normal, vn = b.vx * n.x + b.vy * n.y + b.vz * n.z;
