@@ -9,7 +9,8 @@ import { settings } from './game/settings';
 import type { GameLink } from './game/link';
 import { OfflineLink } from './game/offline';
 import { Bench, BENCH_SECONDS, benchReport, type BenchResult } from './game/bench';
-import { onlineAvailable, onlineConfig, connectOnline, watchRooms, type OnlineEntry, type PublicRoom } from './net/online';
+import { onlineAvailable, onlineConfig, connectOnline, watchRooms, OnlineLink, type OnlineEntry, type PublicRoom } from './net/online';
+import { matchJoined, matchLeft, setSuper, startAnalytics, track, type PlayKind, type Reason } from './analytics';
 import { LevelView } from './render/level';
 import { THEMES } from './render/materials';
 import { QUALITY, Renderer } from './render/renderer';
@@ -17,7 +18,7 @@ import { renderTheme, THEME_START } from './theme';
 import { SettingsMenu, type GraphicsQuality, type SettingsTab } from './ui/settingsmenu';
 import { cjkFontReady } from './ui/fonts';
 import { drawMapThumb } from './ui/mapthumb';
-import { L, applyI18n, escapeHtml as esc, isZh, mapName as localMapName, mapRegion, modeName, onLang, plural, serverError, sizeName, t, type Key } from './ui/i18n';
+import { L, applyI18n, escapeHtml as esc, isZh, lang, mapName as localMapName, mapRegion, modeName, onLang, plural, serverError, sizeName, t, type Key } from './ui/i18n';
 import './style.css';
 import './menu.css';
 import './ui/lang-zh.css';
@@ -188,6 +189,8 @@ let roomsState: 'connecting' | 'live' | 'offline' = 'offline';
 let stopRooms: (() => void) | undefined;
 let roomsGen = 0;
 let roomsRetry: ReturnType<typeof setTimeout> | undefined;
+/** "Server offline" is reported to analytics once per page, not on every retry. */
+let roomsErrorShown = false;
 function watchLobbyRooms() {
   unwatchRooms();
   if (!online.ok || benchMode) { refresh(); return; }
@@ -197,6 +200,7 @@ function watchLobbyRooms() {
     roomsState = state;
     if (state === 'offline') {
       rooms = [];
+      if (!roomsErrorShown) { roomsErrorShown = true; track('error_shown', { where: 'rooms', message: 'server offline' }); }
       // The server may come back: try again while the lobby stays open.
       roomsRetry = setTimeout(() => { if (gen === roomsGen && inMenu) watchLobbyRooms(); }, 5000);
     }
@@ -574,7 +578,9 @@ const options = new SettingsMenu(document.body, {
 });
 
 // Language switch (Settings): the lobby's own text follows at once.
-onLang(() => {
+onLang(next => {
+  setSuper({ lang: next });
+  track('language_changed', { to: next }, { set: { lang: next } });
   applyI18n(menu);
   $('#quick-maps').dataset.key = '';
   if (benchPanel) { benchPanel.remove(); if (benchResult) showBenchResult(benchResult); }
@@ -611,6 +617,10 @@ let gestured = false;
 syncOptions();
 refresh();
 watchLobbyRooms();
+track('lobby_view', {});
+// Analytics loads once the lobby is on screen, when the browser is idle: never in the way of the game.
+const idle = (fn: () => void) => ('requestIdleCallback' in window ? requestIdleCallback(fn, { timeout: 3000 }) : setTimeout(fn, 1500));
+idle(() => startAnalytics({ lang: lang(), online_db: online.ok ? server.database ?? '' : '' }));
 
 /** Loops the menu theme once the player has interacted (browsers block audio before a gesture). */
 function menuMusic() {
@@ -658,6 +668,8 @@ async function start(action: Action) {
     store.set('name', name); store.set('mode', mode); store.set('team', team); store.set('skill', skill); store.set('botsFill', botsFill);
     saveFilters();
   }
+  const kinds: Record<Action, PlayKind> = { play: 'online', room: 'room', solo: 'solo', range: 'practice', private: 'private', code: 'code' };
+  track('play_clicked', { kind: kinds[action], size: sizeOf(size).label, mode: modeF, map: mapF }, { set: { name, lang: lang(), quality } });
   starting = action; closePop(false); refresh();
   options.hide();
   status.textContent = '';
@@ -684,6 +696,7 @@ async function start(action: Action) {
         : new OfflineLink(rules.mapId, name, teamChoice, { ...(rules.mode === 'sabotage' ? SABOTAGE : ELIMINATION), teamSize: perTeam(), botSkill, freeBuy: params.has('freebuy') });
   } catch (error) {
     status.textContent = t('lobby.couldNotJoin', { error: serverError((error as Error).message) });
+    track('error_shown', { where: 'join', message: String((error as Error)?.message ?? error).slice(0, 120) });
     starting = undefined; joiningRoom = -1;
     inMenu = !benchMode; menuMusic();
     watchLobbyRooms(); refresh();
@@ -694,6 +707,7 @@ async function start(action: Action) {
   if (backdrop) { renderer.scene.remove(backdrop.group); backdrop = undefined; backdropMap = undefined; }
   const linkMap = link.state()?.mapId ?? rules.mapId;
   launch(link, linkMap);
+  joined(link, linkMap);
   menu.hidden = true;
   document.body.classList.remove('menu-open');
   await game?.input.lock()?.catch?.(() => undefined);
@@ -704,13 +718,34 @@ function launch(link: GameLink, map: string) {
   if (benchMode && !bench) startBench(game);
   game.onMapChange = next => { game?.stop(true); launch(link, next); };
   game.onExit = () => {
+    leftMatch('menu');
     game?.stop(); game = undefined;
+    track('lobby_view', {});
     document.body.classList.add('menu-open'); menu.hidden = false;
     syncOptions();
     inMenu = !benchMode; menuMusic();
     watchLobbyRooms(); refresh();
   };
 }
+/** Analytics: we are in a match (once per link; online map rotations keep the same session). */
+function joined(link: GameLink, map: string) {
+  const state = link.state(), me = state?.soldiers.find(s => s.id === link.myId());
+  const config = state?.config;
+  const info = link.roomInfo?.();
+  matchJoined({
+    online: link.mode === 'online', ...(info ? { room: info.code || `public-${info.room}` } : {}), map,
+    mode: config?.mode ?? 'elimination', size: config?.practice ? 'practice' : sizeLabel(config?.teamSize ?? perTeam()), team: me?.team === 1 ? 'militia' : 'swat',
+  });
+  if (link instanceof OnlineLink) link.onDrop = () => leftMatch('disconnect');
+}
+/** Analytics: the match is over for us (sent once per match). */
+function leftMatch(reason: Reason) {
+  const link = game?.link, me = link?.state()?.soldiers.find(s => s.id === link.myId());
+  matchLeft(reason, { kills: me?.kills ?? 0, deaths: me?.deaths ?? 0 });
+}
+// Closing the tab mid-match: match_left goes out by beacon.
+addEventListener('pagehide', () => leftMatch('close'));
+
 const typing = (e: KeyboardEvent) => { const t = e.target as HTMLElement | null; return !!t && (t.tagName === 'INPUT' || t.tagName === 'TEXTAREA' || t.isContentEditable); };
 document.addEventListener('keydown', e => {
   if (e.code === 'KeyM' && game && !game.input.locked && e.target === document.body) game.onExit?.();
@@ -830,5 +865,6 @@ async function boot() {
 
 void boot().catch(error => {
   console.error(error);
+  track('error_shown', { where: 'boot', message: String((error as Error)?.message ?? error).slice(0, 120) });
   status.textContent = t('lobby.unableToStart', { error: (error as Error).message });
 });

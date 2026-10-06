@@ -1,0 +1,277 @@
+import type { Infer } from 'spacetimedb';
+import { DbConnection } from '../module_bindings';
+import type AdminPlayersRow from '../module_bindings/admin_players_table';
+import type AdminRoomsRow from '../module_bindings/admin_rooms_table';
+import type AdminDailyRow from '../module_bindings/admin_daily_table';
+import type AdminOverviewRow from '../module_bindings/admin_overview_table';
+import { countByCountry, countryOf } from '../../shared/tzcountry';
+import './admin.css';
+
+/**
+ * The owner's dashboard at /admin (not linked from the game, not indexed). It holds no secrets:
+ * the owner types the admin key once, `admin_login` checks its hash inside the module and marks this
+ * browser's SpacetimeDB identity as an admin, and the `admin_*` views then stream the data (they
+ * return nothing to anyone else). Only "this browser is logged in" is remembered, never the key.
+ * The database comes from the same build variables as the game, so a dev preview shows the dev
+ * database and production the production one.
+ */
+type Player = Infer<typeof AdminPlayersRow>;
+type Room = Infer<typeof AdminRoomsRow>;
+type Day = Infer<typeof AdminDailyRow>;
+type Overview = Infer<typeof AdminOverviewRow>;
+
+const POSTHOG = 'https://us.posthog.com/project/649207';
+const env = import.meta.env as Record<string, string | undefined>;
+let uri = env.VITE_SPACETIMEDB_URI;
+const database = env.VITE_SPACETIMEDB_DATABASE ?? '';
+if (uri === 'same-origin') uri = `${location.protocol === 'https:' ? 'wss' : 'ws'}://${location.host}/stdb/`;
+// Its own identity, not the game's: closing this tab must never drop the owner's soldier from a match.
+const TOKEN_KEY = `lawbreaker.admin.token:${uri}:${database}`;
+const FLAG_KEY = `lawbreaker.admin.loggedIn:${uri}:${database}`;
+const store = {
+  get: (k: string) => { try { return localStorage.getItem(k); } catch { return null; } },
+  set: (k: string, v: string) => { try { localStorage.setItem(k, v); } catch { /* storage disabled */ } },
+  del: (k: string) => { try { localStorage.removeItem(k); } catch { /* storage disabled */ } },
+};
+
+const esc = (s: string) => s.replace(/[&<>"']/g, c => `&#${c.charCodeAt(0)};`);
+const num = (n: number | bigint) => Number(n).toLocaleString('en-US');
+const DAY_MS = 86_400_000;
+const ago = (d: Date) => {
+  const s = Math.max(0, (Date.now() - d.getTime()) / 1000);
+  return s < 60 ? 'just now' : s < 3600 ? `${Math.floor(s / 60)} min ago` : s < 86400 ? `${Math.floor(s / 3600)} h ago` : `${Math.floor(s / 86400)} d ago`;
+};
+const shortDate = (d: Date) => d.toISOString().slice(0, 10);
+const titleCase = (id: string) => id.replace(/(^|[-_ ])(\w)/g, (_m, sep: string, c: string) => `${sep ? ' ' : ''}${c.toUpperCase()}`);
+
+const root = document.querySelector<HTMLDivElement>('#admin')!;
+root.innerHTML = `
+  <header class="top">
+    <h1>Turf War <em>Admin</em></h1>
+    <span class="db" title="SpacetimeDB database"><i class="dot wait" id="conn"></i>Database <b>${esc(database || 'none')}</b></span>
+    <span class="spacer"></span>
+    <nav class="links"><a href="${POSTHOG}" target="_blank" rel="noopener noreferrer">PostHog ↗</a><button type="button" class="btn" id="logout" hidden>Log out</button></nav>
+  </header>
+  <main id="body"></main>`;
+const body = root.querySelector<HTMLElement>('#body')!;
+const connDot = root.querySelector<HTMLElement>('#conn')!;
+const logoutBtn = root.querySelector<HTMLButtonElement>('#logout')!;
+
+let conn: DbConnection | undefined;
+let loggingIn = false;
+/** The line under the login form: an error, or a plain note. */
+let message = '';
+let messageError = true;
+let playerLimit = 100;
+let sortKey: keyof Player | 'country' = 'lastSeen';
+let sortDir: 1 | -1 = -1;
+const setConn = (s: 'wait' | 'live' | 'off') => { connDot.className = `dot ${s}`; connDot.title = s === 'live' ? 'Connected' : s === 'wait' ? 'Connecting' : 'Disconnected'; };
+
+function status() { return conn ? [...conn.db.adminStatus.iter()][0] : undefined; }
+const isAdmin = () => !!status()?.admin;
+
+// ---- Login -------------------------------------------------------------------------------
+
+function renderLogin() {
+  logoutBtn.hidden = true;
+  const s = status();
+  const now = BigInt(Date.now()) * 1000n;
+  const lockedUntil = s && s.failures >= 5 ? Number((s.windowStart.microsSinceUnixEpoch + 600_000_000n - now) / 60_000_000n) + 1 : 0;
+  body.innerHTML = `
+    <form class="login" id="login" autocomplete="off">
+      <h2>Admin login</h2>
+      <p>Enter the admin key. This browser stays logged in; the key itself is never stored.</p>
+      <label for="key">Admin key</label>
+      <div class="row"><input id="key" type="password" autocomplete="current-password" spellcheck="false" required ${conn ? '' : 'disabled'}>
+      <button class="btn primary" type="submit" ${conn && !loggingIn ? '' : 'disabled'}>${loggingIn ? '…' : 'Log in'}</button></div>
+      <p class="msg${(message ? messageError : lockedUntil > 0) ? '' : ' ok'}" role="status">${esc(message || (!conn ? 'Connecting…' : lockedUntil > 0 ? `Too many attempts; try again in ${lockedUntil} min.` : ''))}</p>
+    </form>`;
+  const form = body.querySelector<HTMLFormElement>('#login')!;
+  const input = form.querySelector<HTMLInputElement>('#key')!;
+  input.focus();
+  form.addEventListener('submit', e => {
+    e.preventDefault();
+    const key = input.value;
+    input.value = '';
+    if (!conn || !key || loggingIn) return;
+    loggingIn = true; message = ''; messageError = true; renderLogin();
+    conn.reducers.adminLogin({ key }).then(() => {
+      // The admin_status view says how it went (a wrong key returns normally so its failure is counted).
+      setTimeout(() => {
+        loggingIn = false;
+        const s = status();
+        if (s?.admin) { store.set(FLAG_KEY, '1'); message = ''; render(); return; }
+        const left = Math.max(0, 5 - (s?.failures ?? 0));
+        message = left > 0 ? `Wrong key. ${left} attempt${left === 1 ? '' : 's'} left in this 10-minute window.` : 'Wrong key. Too many attempts; try again in 10 minutes.';
+        render();
+      }, 400);
+    }, (error: unknown) => {
+      loggingIn = false;
+      message = String((error as Error)?.message ?? error).replace(/^.*?:\s*/, '') || 'Login failed.';
+      render();
+    });
+  });
+}
+
+// ---- Dashboard ---------------------------------------------------------------------------
+
+function dashboard() {
+  const db = conn!.db;
+  const o: Overview | undefined = [...db.adminOverview.iter()][0];
+  const players = [...db.adminPlayers.iter()];
+  const rooms = [...db.adminRooms.iter()].sort((a, b) => b.humans - a.humans || a.room - b.room);
+  const days = [...db.adminDaily.iter()].sort((a, b) => a.day - b.day);
+  const now = Date.now();
+  const startOfToday = Date.UTC(new Date().getUTCFullYear(), new Date().getUTCMonth(), new Date().getUTCDate());
+  const first = (p: Player) => p.firstSeen.toDate().getTime(), last = (p: Player) => p.lastSeen.toDate().getTime();
+  const count = (f: (p: Player) => boolean) => players.filter(f).length;
+  const tile = (label: string, value: number | bigint | string, note = '', hero = false) => `<div class="tile${hero ? ' hero' : ''}"><small>${label}</small><b>${typeof value === 'string' ? value : num(value)}</b>${note ? `<span>${note}</span>` : ''}</div>`;
+  const tiles = [
+    tile('Online now', o?.onlineNow ?? 0, `${num(o?.rooms ?? 0)} room${o?.rooms === 1 ? '' : 's'} open`, true),
+    tile('Total players', players.length, 'ever seen'),
+    tile('New today', count(p => first(p) >= startOfToday), 'UTC day'),
+    tile('New 7 d', count(p => first(p) >= now - 7 * DAY_MS)),
+    tile('New 30 d', count(p => first(p) >= now - 30 * DAY_MS)),
+    tile('Active 24 h', count(p => last(p) >= now - DAY_MS)),
+    tile('Active 7 d', count(p => last(p) >= now - 7 * DAY_MS)),
+    tile('Matches played', o?.playerMatches ?? 0, 'player-matches finished'),
+  ].join('');
+
+  const roomRows = rooms.map(r => `<tr><td>${r.code ? `<span class="tag">#${esc(r.code)}</span>` : '<span class="tag">public</span>'}</td><td>${esc(titleCase(r.mapId))}</td><td>${esc(titleCase(r.mode))}</td>
+    <td>${r.size}v${r.size}</td><td class="num">${r.humans}</td><td class="num">${r.bots}</td><td class="num">${r.round}</td><td><span class="tag${r.phase === 'live' ? ' live' : ''}">${esc(r.phase)}</span></td></tr>`).join('');
+
+  const countries = countByCountry(players.map(p => p.tz));
+  const top = countries.slice(0, 10), max = Math.max(1, ...top.map(([, n]) => n));
+  const countryList = top.length ? `<ul class="countries">${top.map(([c, n]) => `<li>${esc(c)}<span>${num(n)} · ${Math.round((n / players.length) * 100)}%</span><div class="bar"><i style="width:${(n / max) * 100}%"></i></div></li>`).join('')}</ul>` : '<div class="empty">No players yet.</div>';
+
+  body.innerHTML = `
+    <div class="tiles">${tiles}</div>
+    <div class="grid2">
+      <section class="card"><h2>Last 30 days <small>new and active players per UTC day</small></h2>
+        <div class="legend"><span><i style="background:var(--accent-dim)"></i>Active</span><span><i style="background:var(--amber)"></i>New</span></div>
+        <div class="chart">${chart(days)}</div></section>
+      <section class="card"><h2>Where from <small>time zone → country, estimate</small></h2>${countryList}</section>
+    </div>
+    <section class="card"><h2>Live rooms <small>${rooms.length ? `${num(o?.humansInRooms ?? 0)} human${o?.humansInRooms === 1 ? '' : 's'} in ${rooms.length} room${rooms.length === 1 ? '' : 's'}` : 'none open'}</small></h2>
+      ${rooms.length ? `<div class="scroll"><table><thead><tr><th>Room</th><th>Map</th><th>Mode</th><th>Size</th><th class="num">Humans</th><th class="num">Bots</th><th class="num">Round</th><th>Phase</th></tr></thead><tbody>${roomRows}</tbody></table></div>` : '<div class="empty">No rooms open: nobody is playing online right now.</div>'}
+    </section>
+    <section class="card"><h2>Players <small>${num(players.length)} · sorted by ${sortLabel()}</small></h2>${playerTable(players)}</section>
+    <footer>Updates live. Players are identities that said hello or joined a room; ids are anonymous. Career numbers from <code>profile</code>.
+      <button type="button" class="btn revoke" id="revoke">Sign out all admins</button></footer>`;
+  body.querySelectorAll<HTMLButtonElement>('th button[data-sort]').forEach(b => b.addEventListener('click', () => {
+    const k = b.dataset.sort as typeof sortKey;
+    if (sortKey === k) sortDir = sortDir === 1 ? -1 : 1; else { sortKey = k; sortDir = k === 'name' || k === 'country' || k === 'tz' ? 1 : -1; }
+    render();
+    body.querySelector<HTMLButtonElement>(`th button[data-sort="${k}"]`)?.focus();
+  }));
+  body.querySelector('#more')?.addEventListener('click', () => { playerLimit += 200; render(); });
+  body.querySelector('#revoke')?.addEventListener('click', () => {
+    // After rotating the key, or when a device is lost: every browser (this one too) must log in again.
+    if (!confirm(`Sign every admin browser out of ${database}? Each one will need the admin key again.`)) return;
+    store.del(FLAG_KEY);
+    message = 'Every admin session was signed out.'; messageError = false;
+    void conn?.reducers.adminRevokeAll({}).catch(() => undefined);
+  });
+}
+
+const COLUMNS: { key: keyof Player | 'country'; label: string; num?: boolean }[] = [
+  { key: 'name', label: 'Name' }, { key: 'lastSeen', label: 'Last seen' }, { key: 'firstSeen', label: 'First seen' },
+  { key: 'sessions', label: 'Sessions', num: true }, { key: 'matches', label: 'Matches', num: true }, { key: 'kills', label: 'Kills', num: true },
+  { key: 'country', label: 'Country' }, { key: 'tz', label: 'Time zone' }, { key: 'lang', label: 'Lang' }, { key: 'id', label: 'Id' },
+];
+const sortLabel = () => `${COLUMNS.find(c => c.key === sortKey)?.label.toLowerCase()}, ${sortDir === 1 ? 'ascending' : 'descending'}`;
+
+function playerTable(players: Player[]) {
+  if (!players.length) return '<div class="empty">No players yet.</div>';
+  const value = (p: Player): string | number => sortKey === 'country' ? countryOf(p.tz)
+    : sortKey === 'lastSeen' || sortKey === 'firstSeen' ? p[sortKey].toDate().getTime() : (p[sortKey] as string | number);
+  const sorted = [...players].sort((a, b) => {
+    const x = value(a), y = value(b);
+    return (typeof x === 'number' && typeof y === 'number' ? x - y : String(x).localeCompare(String(y))) * sortDir;
+  });
+  const head = COLUMNS.map(c => {
+    const on = c.key === sortKey;
+    return `<th class="${c.num ? 'num' : ''}"${on ? ` aria-sort="${sortDir === 1 ? 'ascending' : 'descending'}"` : ''}><button type="button" data-sort="${c.key}" class="${on ? `sorted ${sortDir === 1 ? 'asc' : 'desc'}` : ''}">${c.label}</button></th>`;
+  }).join('');
+  const rows = sorted.slice(0, playerLimit).map(p => {
+    const lastSeen = p.lastSeen.toDate(), firstSeen = p.firstSeen.toDate();
+    return `<tr><td>${esc(p.name || '—')}</td><td title="${lastSeen.toISOString()}">${ago(lastSeen)}</td><td title="${firstSeen.toISOString()}">${shortDate(firstSeen)}</td>
+      <td class="num">${num(p.sessions)}</td><td class="num">${num(p.matches)}</td><td class="num">${num(p.kills)}</td>
+      <td>${esc(countryOf(p.tz))}</td><td class="tz" title="${esc(p.tz)}">${esc(p.tz || '—')}</td><td>${esc(p.lang || '—')}</td><td class="id">${esc(p.id)}</td></tr>`;
+  }).join('');
+  const more = sorted.length > playerLimit ? `<button type="button" class="btn more" id="more">Show more (${num(sorted.length - playerLimit)} left)</button>` : '';
+  return `<div class="scroll"><table><thead><tr>${head}</tr></thead><tbody>${rows}</tbody></table></div>${more}`;
+}
+
+/** New and active players per day: bars for active, a line for new; quiet days filled in up to today. */
+function chart(rows: Day[]) {
+  const today = Math.floor(Date.now() / DAY_MS);
+  const byDay = new Map(rows.map(r => [r.day, r]));
+  const days = Array.from({ length: 30 }, (_, i) => today - 29 + i);
+  const data = days.map(d => ({ day: d, active: byDay.get(d)?.activePlayers ?? 0, fresh: byDay.get(d)?.newPlayers ?? 0 }));
+  // Narrow screens draw a narrower chart, so its labels keep a readable size.
+  const narrow = innerWidth < 600;
+  const W = narrow ? 360 : 600, H = 220, L = 30, R = 8, T = 10, B = 26;
+  const max = Math.max(1, ...data.map(d => Math.max(d.active, d.fresh)));
+  const step = max <= 5 ? 1 : Math.ceil(max / 4 / 5) * 5;
+  const top = Math.ceil(max / step) * step;
+  const x = (i: number) => L + ((W - L - R) / data.length) * i;
+  const y = (v: number) => T + (H - T - B) * (1 - v / top);
+  const bw = ((W - L - R) / data.length) * 0.7;
+  let svg = `<svg viewBox="0 0 ${W} ${H}" role="img" aria-label="New and active players per day, last 30 days">`;
+  for (let v = 0; v <= top; v += step) svg += `<line class="grid" x1="${L}" x2="${W - R}" y1="${y(v)}" y2="${y(v)}"/><text x="${L - 6}" y="${y(v) + 4}" text-anchor="end">${v}</text>`;
+  data.forEach((d, i) => {
+    const date = new Date(d.day * DAY_MS).toISOString().slice(0, 10);
+    svg += `<rect class="bar" x="${x(i) + ((W - L - R) / data.length - bw) / 2}" y="${y(d.active)}" width="${bw}" height="${Math.max(0, H - B - y(d.active))}"><title>${date}: ${d.active} active, ${d.fresh} new</title></rect>`;
+    if (narrow ? i % 7 === 1 : i % 5 === 4 || i === 0) svg += `<text x="${x(i) + (W - L - R) / data.length / 2}" y="${H - 8}" text-anchor="middle">${date.slice(5)}</text>`;
+  });
+  const cx = (i: number) => x(i) + (W - L - R) / data.length / 2;
+  svg += `<polyline class="new" points="${data.map((d, i) => `${cx(i)},${y(d.fresh)}`).join(' ')}"/>`;
+  data.forEach((d, i) => { if (d.fresh) svg += `<circle class="newdot" cx="${cx(i)}" cy="${y(d.fresh)}" r="3"><title>${d.fresh} new</title></circle>`; });
+  return `${svg}</svg>`;
+}
+
+// ---- Wiring ------------------------------------------------------------------------------
+
+let frame = 0;
+function render() {
+  cancelAnimationFrame(frame);
+  frame = requestAnimationFrame(() => {
+    if (conn && isAdmin()) { logoutBtn.hidden = false; dashboard(); return; }
+    // Remembered as logged in, but the server says no (revoked, or a new key): back to the login.
+    if (conn && status() && store.get(FLAG_KEY)) store.del(FLAG_KEY);
+    if (!conn && store.get(FLAG_KEY)) { body.innerHTML = '<div class="empty">Connecting…</div>'; return; }
+    renderLogin();
+  });
+}
+
+logoutBtn.addEventListener('click', () => {
+  store.del(FLAG_KEY);
+  message = 'Logged out.'; messageError = false;
+  void conn?.reducers.adminLogout({}).catch(() => undefined).finally(render);
+});
+
+function connect() {
+  if (!uri || !database) { setConn('off'); body.innerHTML = '<div class="empty">No SpacetimeDB server is configured for this build (VITE_SPACETIMEDB_URI / VITE_SPACETIMEDB_DATABASE).</div>'; return; }
+  setConn('wait');
+  DbConnection.builder().withUri(uri).withDatabaseName(database).withToken(store.get(TOKEN_KEY) ?? undefined)
+    .onConnect((c, _identity, token) => {
+      store.set(TOKEN_KEY, token);
+      for (const t of [c.db.adminStatus, c.db.adminOverview, c.db.adminRooms, c.db.adminPlayers, c.db.adminDaily]) {
+        t.onInsert(render); t.onDelete(render);
+      }
+      c.subscriptionBuilder()
+        .onApplied(() => { conn = c; setConn('live'); render(); })
+        .onError(() => { setConn('off'); messageError = true; message = 'This database has no admin views yet (publish the module first).'; render(); })
+        .subscribe(['SELECT * FROM admin_status', 'SELECT * FROM admin_overview', 'SELECT * FROM admin_rooms', 'SELECT * FROM admin_players', 'SELECT * FROM admin_daily']);
+    })
+    .onConnectError(() => { setConn('off'); conn = undefined; messageError = true; message = 'Cannot reach the server; retrying…'; render(); setTimeout(connect, 5000); })
+    .onDisconnect(() => { setConn('off'); conn = undefined; messageError = true; message = 'Disconnected; reconnecting…'; render(); setTimeout(connect, 3000); })
+    .build();
+}
+
+render();
+connect();
+// Relative times ("3 min ago") and today's counts move on without new data.
+setInterval(() => { if (conn && isAdmin() && !document.hidden && !body.contains(document.activeElement)) render(); }, 30_000);
+addEventListener('resize', () => { if (conn && isAdmin()) render(); });

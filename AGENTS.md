@@ -26,6 +26,8 @@ Improve playable gunplay, map flow, animation, and multiplayer—not only the HU
   navigation, the packed per-tick frame, and the simulation tick.
 - `src/game/`: client loop, player prediction/input, Solo link, settings, performance check.
 - `src/net/online.ts`: SpacetimeDB connection, replicated state, interpolation, and intents.
+- `src/analytics.ts`: PostHog product analytics (lazy, guarded; see README "Players, analytics and the admin page").
+- `admin/index.html`, `src/admin/`: the owner's `/admin` dashboard (admin-key login checked in the module; admin-only views).
 - Other `src/` modules: rendering, soldier/viewmodel animation, effects, HUD, and audio.
 - `spacetimedb/src/index.ts`: tables, reducers, lifecycle, and scheduled match tick.
 - `src/module_bindings/`: generated client bindings; regenerate after module API changes.

@@ -33,6 +33,8 @@ import type { GameLink } from './link';
 import { Driving } from './driving';
 import { LocalPlayer } from './player';
 import { isMagnified, settings } from './settings';
+import { ownedOf, purchaseOf, type BuyRequest, type Owned } from './purchases';
+import { roundEnded, track } from '../analytics';
 
 type Sample = { x: number; y: number; z: number; vx: number; vy: number; vz: number; yaw: number; pitch: number; crouch: number };
 /** Remote soldiers closer than this get full animation and shadows; up to LOD_MID, half rate. */
@@ -54,6 +56,8 @@ export class Game {
   private remotes = new Map<number, Remote>();
   private hud: Hud;
   private buymenu: BuyMenu;
+  /** Store requests waiting for the host to apply them (analytics counts only real purchases). */
+  private buying: { req: BuyRequest; before: Owned; at: number }[] = [];
   private crates: CratesView;
   private sites: BombSitesView;
   private map: ReturnType<typeof loadMap>;
@@ -156,8 +160,8 @@ export class Game {
     this.hud = new Hud(container, def);
     this.hud.onMenu = () => this.onExit?.();
     this.buymenu = new BuyMenu(container, {
-      buy: item => { this.link.buy(item); this.audio.ui(); },
-      attach: (weapon, attachment) => { this.link.attach(weapon, attachment); this.audio.ui(); },
+      buy: item => { this.requested({ kind: 'item', item }); this.link.buy(item); this.audio.ui(); },
+      attach: (weapon, attachment) => { this.requested({ kind: 'attach', weapon, attachment }); this.link.attach(weapon, attachment); this.audio.ui(); },
     }, assets);
     // The key that closed the menu must not reopen it next frame.
     this.buymenu.onClose = () => { this.input.clear(); void this.input.lock(); };
@@ -213,6 +217,7 @@ export class Game {
     if (state.mapId !== this.mapId && this.onMapChange) { this.onMapChange(state.mapId); return; }
     const myId = link.myId();
     const me = state.soldiers.find(s => s.id === myId);
+    if (me && this.buying.length) this.confirmPurchases(me, !!state.config.freeBuy);
     if (state.phase === 'ended' && !this.endShown) { this.endShown = true; this.buymenu.close(); document.exitPointerLock?.(); }
     if (state.phase !== 'ended') this.endShown = false;
     const sabotage = modeOf(state, this.map.def) === 'sabotage';
@@ -784,6 +789,22 @@ export class Game {
     return { point, target, zone, wall: target === -1 ? wall : null };
   }
 
+  /** A store button was pressed: remember what we owned, to see later whether the host sold it. */
+  private requested(req: BuyRequest) {
+    const me = this.link.state()?.soldiers.find(s => s.id === this.link.myId());
+    if (me) this.buying.push({ req, before: ownedOf(me), at: performance.now() });
+  }
+
+  /** Purchases the host has applied since they were requested (refused ones expire after 3 s). */
+  private confirmPurchases(me: Soldier, free: boolean) {
+    const now = performance.now(), after = ownedOf(me);
+    this.buying = this.buying.filter(b => {
+      const bought = purchaseOf(b.req, b.before, after, free);
+      if (bought) track('store_purchase', bought);
+      return !bought && now - b.at < 3000;
+    });
+  }
+
   private handleEvent(e: MatchEvent, state: MatchState, myId: number) {
     const find = (id: number) => state.soldiers.find(s => s.id === id);
     const me = find(myId);
@@ -851,6 +872,7 @@ export class Game {
         } else if (e.phase === 'over') {
           const won = e.winner === -1 ? undefined : e.winner === this.myTeam;
           this.audio.roundEnd(won);
+          roundEnded({ won: e.winner === (me?.team ?? this.myTeam), mode: modeOf(state, this.map.def), map: this.mapId });
           const title = e.winner === -1 ? t('hud.roundDraw') : t('hud.winsRound', { team: teamName(e.winner).toUpperCase() });
           this.hud.announce(title, roundReason(e.reason), e.winner === -1 ? 'var(--ink)' : e.winner === 0 ? 'var(--aegis)' : 'var(--crimson)');
         }
@@ -871,6 +893,10 @@ export class Game {
         }
         if (e.action === 'hit' && this.seated?.index === e.vehicle && e.id !== myId) this.player.shake = Math.min(2, this.player.shake + 0.3);
         if (e.action === 'wreck' && e.id === myId) this.hud.hit('kill');
+        if (e.action === 'enter' && e.id === myId) {
+          const kind = state.vehicles.find(v => v.id === e.vehicle)?.kind;
+          if (kind) track('vehicle_entered', { kind });
+        }
         break;
       }
       case 'explosion': {

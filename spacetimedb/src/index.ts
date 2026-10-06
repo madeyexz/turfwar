@@ -1,4 +1,4 @@
-import { ScheduleAt, type Identity } from 'spacetimedb';
+import { Identity, ScheduleAt, Timestamp } from 'spacetimedb';
 import { schema, table, t, SenderError, type ReducerCtx, type InferSchema } from 'spacetimedb/server';
 import { loadMap, loadNav } from '../../shared/maps/index';
 import { cleanCode, filterError, isRoomSize, mapsFor, newRoomRules, nextRoomRules, pickRoom, roomCode, type RoomFilter, type RoomView } from '../../shared/match/rooms';
@@ -15,6 +15,9 @@ import { ATTACHMENTS, DEFAULT_WEAPONS, STAMINA, WEAPONS, normalizeAttachments, t
 import { newRoundStats, type BuyItem } from '../../shared/match/economy';
 import { BODY_RADIUS, type Body } from '../../shared/world';
 import { VEHICLE_KINDS, type Vehicle, type VehicleKind } from '../../shared/vehicles';
+import { cleanHello } from '../../shared/hello';
+import * as Admin from './admin';
+import { AdminError, dailyRows, dayOf, forAdmin, playerRows, type AdminStore } from './admin';
 
 /**
  * Authoritative multiplayer: the same shared match simulation the offline client runs, executed
@@ -155,13 +158,36 @@ const vehicleInboxTable = table({ name: 'vehicle_inbox' }, {
   aimYaw: t.f32().default(0), aimPitch: t.f32().default(0),
 });
 
+/**
+ * Who has played, per identity (private: only the database owner reads it, with `spacetime sql`;
+ * `scripts/players.ts` summarises it). A row is made when an identity first says `hello` or joins
+ * a room; each later connection counts a session. The lobby's room-list connections have throwaway
+ * identities that never join, so they are not counted. `tz` and `lang` are what the browser
+ * reports (IANA zone, BCP 47 tag): rough "where from" without IP addresses. Per-connection
+ * bookkeeping only; it never loads a match.
+ */
+const seenTable = table({ name: 'player_seen' }, {
+  identity: t.identity().primaryKey(), firstSeen: t.timestamp(), lastSeen: t.timestamp(), sessions: t.u32(), tz: t.string(), lang: t.string(),
+  /** The callsign of the latest join. */
+  name: t.string(),
+});
+
+/** Days each player was active (key = identity hex + ':' + UTC day): the admin page's daily actives. Private. */
+const dayTable = table({ name: 'player_day' }, { key: t.string().primaryKey(), day: t.u32().index('btree'), identity: t.identity() });
+
+/** Identities logged in to the admin dashboard with the admin key (see admin.ts). Private. */
+const adminTable = table({ name: 'admin' }, { identity: t.identity().primaryKey(), grantedAt: t.timestamp() });
+/** Failed admin logins per identity in the current 10-minute window (the rate limit). Private. */
+const adminAttemptTable = table({ name: 'admin_attempt' }, { identity: t.identity().primaryKey(), windowStart: t.timestamp(), failures: t.u32() });
+
 const tickTable = table({ name: 'tick_schedule' }, { scheduledId: t.u64().primaryKey().autoInc(), scheduledAt: t.scheduleAt(), room: t.u8().default(0) });
 
 const spacetimedb = schema({
   match: matchTable, clock: clockTable, soldier: soldierTable, roster: rosterTable, frame: frameTable, botBrain: brainTable,
   point: pointTable, body: bodyTable, player: playerTable, inbox: inboxTable, command: commandTable, history: historyTable,
   matchEvent: eventTable, tickSchedule: tickTable, profile: profileTable, counter: counterTable,
-  vehicle: vehicleTable, vehicleInbox: vehicleInboxTable,
+  vehicle: vehicleTable, vehicleInbox: vehicleInboxTable, playerSeen: seenTable,
+  playerDay: dayTable, admin: adminTable, adminAttempt: adminAttemptTable,
 });
 export default spacetimedb;
 
@@ -511,9 +537,25 @@ function leaveRoom(ctx: Ctx, player: { soldierId: number; room: number }) {
   if (humansIn(ctx, player.room) === 0) closeRoom(ctx, player.room);
 }
 
-/** Put the caller into `room` (leaving any other room first). */
+/** Note that the caller is here now (made on first sight); `info` updates its time zone, language or callsign. */
+function markSeen(ctx: Ctx, info: { tz?: string; lang?: string; name?: string } = {}) {
+  const row = ctx.db.playerSeen.identity.find(ctx.sender);
+  if (row) ctx.db.playerSeen.identity.update({ ...row, lastSeen: ctx.timestamp, ...info });
+  else ctx.db.playerSeen.insert({ identity: ctx.sender, firstSeen: ctx.timestamp, lastSeen: ctx.timestamp, sessions: 1, tz: info.tz ?? '', lang: info.lang ?? '', name: info.name ?? '' });
+  markDay(ctx);
+}
+
+/** One `player_day` row per player per UTC day they were active. */
+function markDay(ctx: Ctx) {
+  const day = dayOf(micros(ctx));
+  const key = `${ctx.sender.toHexString()}:${day}`;
+  if (!ctx.db.playerDay.key.find(key)) ctx.db.playerDay.insert({ key, day, identity: ctx.sender });
+}
+
+/** Put the caller into `room` (leaving any other room first). Every way in (quick_play, quick_join, join, create_room, join_room, join_public) ends here. */
 function enterRoom(ctx: Ctx, room: number, name: string, team: number) {
   const clean = name.replace(/[^\p{L}\p{N} _\-.]/gu, '').trim().slice(0, 16) || 'Operator';
+  markSeen(ctx, { name: clean });
   const existing = ctx.db.player.identity.find(ctx.sender);
   if (existing && existing.room === room && ctx.db.soldier.id.find(existing.soldierId)) return;
   if (existing && ctx.db.soldier.id.find(existing.soldierId)) leaveRoom(ctx, existing);
@@ -564,6 +606,14 @@ function matchmake(ctx: Ctx, name: string, filter: RoomFilter, team: number) {
 
 // Rooms open on demand (Quick Play, private rooms); nothing to set up at publish time.
 export const init = spacetimedb.init(() => {});
+
+/** A known player connecting again counts a session (unknown identities wait for `hello` or a join). */
+export const onConnect = spacetimedb.clientConnected(ctx => {
+  const row = ctx.db.playerSeen.identity.find(ctx.sender);
+  if (!row) return;
+  ctx.db.playerSeen.identity.update({ ...row, lastSeen: ctx.timestamp, sessions: row.sessions + 1 });
+  markDay(ctx);
+});
 
 export const onDisconnect = spacetimedb.clientDisconnected(ctx => {
   const player = ctx.db.player.identity.find(ctx.sender);
@@ -703,6 +753,9 @@ export const joinPublic = spacetimedb.reducer({ name: t.string(), room: t.u8(), 
   enterRoom(ctx, room, name, team);
 });
 
+/** Sent once after connecting: the browser's time zone and language (cleaned and capped: tz 64, lang 16). */
+export const hello = spacetimedb.reducer({ tz: t.string(), lang: t.string() }, (ctx, { tz, lang }) => { markSeen(ctx, cleanHello(tz, lang)); });
+
 export const leave = spacetimedb.reducer({}, ctx => {
   const player = mySoldier(ctx);
   ctx.db.player.identity.delete(ctx.sender);
@@ -795,3 +848,106 @@ export const say = spacetimedb.reducer({ text: t.string(), team: t.bool() }, (ct
   const event: MatchEvent = { type: 'chat', id: soldier.id, name: soldier.name, team: soldier.team as Team, text: clean, teamOnly: team };
   ctx.db.matchEvent.insert({ seq: 0, json: JSON.stringify(event), room: player.room });
 });
+
+// ---- Admin dashboard ----------------------------------------------------------------------
+// The owner logs in with the admin key (hashed and compared in the module, see admin.ts); the views
+// below return rows only to identities in `admin`, nothing to anyone else. Read-only views of slow
+// tables (no soldier, frame or clock reads), evaluated only for their subscribers.
+
+function adminStore(ctx: Ctx): AdminStore {
+  const id = (hex: string) => Identity.fromString(hex);
+  return {
+    isAdmin: hex => !!ctx.db.admin.identity.find(id(hex)),
+    grant: hex => { if (!ctx.db.admin.identity.find(id(hex))) ctx.db.admin.insert({ identity: id(hex), grantedAt: ctx.timestamp }); },
+    revoke: hex => { ctx.db.admin.identity.delete(id(hex)); },
+    revokeAll: () => { for (const r of [...ctx.db.admin.iter()]) ctx.db.admin.identity.delete(r.identity); },
+    attempts: hex => {
+      const r = ctx.db.adminAttempt.identity.find(id(hex));
+      return r ? { windowStart: r.windowStart.microsSinceUnixEpoch, failures: r.failures } : undefined;
+    },
+    setAttempts: (hex, a) => {
+      const identity = id(hex);
+      if (!a) { ctx.db.adminAttempt.identity.delete(identity); return; }
+      const row = { identity, windowStart: new Timestamp(a.windowStart), failures: a.failures };
+      if (ctx.db.adminAttempt.identity.find(identity)) ctx.db.adminAttempt.identity.update(row); else ctx.db.adminAttempt.insert(row);
+    },
+  };
+}
+const asSender = (e: unknown): never => { throw e instanceof AdminError ? new SenderError(e.message) : e; };
+
+/**
+ * Log in to the admin dashboard with the admin key. A wrong key returns normally (so its failure
+ * is recorded; a thrown error would roll it back) and the caller's `admin_status` shows it; after
+ * five failures in ten minutes every attempt is refused with an error until the window passes.
+ */
+export const adminLogin = spacetimedb.reducer({ key: t.string() }, (ctx, { key }) => {
+  try { Admin.adminLogin(adminStore(ctx), ctx.sender.toHexString(), key, micros(ctx)); } catch (e) { asSender(e); }
+});
+
+/** Leave the admin dashboard (this identity only). */
+export const adminLogout = spacetimedb.reducer({}, ctx => { Admin.adminLogout(adminStore(ctx), ctx.sender.toHexString()); });
+
+/** Sign out every admin session (after rotating the key, or a lost device). Admins only. */
+export const adminRevokeAll = spacetimedb.reducer({}, ctx => {
+  try { Admin.adminRevokeAll(adminStore(ctx), ctx.sender.toHexString()); } catch (e) { asSender(e); }
+});
+
+/** The admin check of a view (read-only): is this identity in `admin`? */
+const viewAdmins = (db: { admin: { identity: { find(id: Identity): unknown } } }) => ({ isAdmin: (hex: string) => !!db.admin.identity.find(Identity.fromString(hex)) });
+
+/** The caller's own login state: admin or not, and failed attempts in the current window. */
+export const adminStatus = spacetimedb.view({ name: 'admin_status', public: true },
+  t.array(t.row('AdminStatusRow', { admin: t.bool(), failures: t.u32(), windowStart: t.timestamp() })),
+  ctx => {
+    const attempt = ctx.db.adminAttempt.identity.find(ctx.sender);
+    return [{ admin: !!ctx.db.admin.identity.find(ctx.sender), failures: attempt?.failures ?? 0, windowStart: attempt?.windowStart ?? Timestamp.UNIX_EPOCH }];
+  });
+
+/** Totals: online now (players in rooms), rooms, players ever, career numbers. */
+export const adminOverview = spacetimedb.view({ name: 'admin_overview', public: true },
+  t.array(t.row('AdminOverviewRow', {
+    onlineNow: t.u32(), rooms: t.u32(), humansInRooms: t.u32(), totalPlayers: t.u32(), profiles: t.u32(),
+    playerMatches: t.u32(), roundsPlayed: t.u32(), kills: t.u32(), admins: t.u32(),
+  })),
+  ctx => forAdmin(viewAdmins(ctx.db), ctx.sender.toHexString(), () => {
+    let rooms = 0, humans = 0, profiles = 0, playerMatches = 0, roundsPlayed = 0, kills = 0;
+    for (const m of ctx.db.match.iter()) { rooms++; humans += m.humans; }
+    for (const p of ctx.db.profile.iter()) { profiles++; playerMatches += p.matchesPlayed; roundsPlayed += p.roundsPlayed; kills += p.kills; }
+    return [{
+      onlineNow: Number(ctx.db.player.count()), rooms, humansInRooms: humans, totalPlayers: Number(ctx.db.playerSeen.count()), profiles,
+      playerMatches, roundsPlayed, kills, admins: Number(ctx.db.admin.count()),
+    }];
+  }));
+
+/** Live rooms: map, mode, size, humans, bots, round and phase (code '' = public). */
+export const adminRooms = spacetimedb.view({ name: 'admin_rooms', public: true },
+  t.array(t.row('AdminRoomRow', {
+    room: t.u8(), code: t.string(), mapId: t.string(), mode: t.string(), size: t.u8(), humans: t.u32(), bots: t.u32(), round: t.u32(), phase: t.string(),
+  })),
+  ctx => forAdmin(viewAdmins(ctx.db), ctx.sender.toHexString(), () => [...ctx.db.match.iter()].map(m => {
+    let config: { mode?: string; teamSize?: number } = {};
+    try { config = JSON.parse(m.configJson); } catch { /* listed with defaults */ }
+    let bots = 0;
+    for (const r of ctx.db.roster.room.filter(m.id)) if (r.bot) bots++;
+    return { room: m.id, code: m.code, mapId: m.mapId, mode: config.mode ?? 'elimination', size: config.teamSize ?? 6, humans: m.humans, bots, round: m.score0 + m.score1 + 1, phase: m.phase };
+  })));
+
+/** Every player seen, by an anonymous short id (never the identity), with career numbers; newest activity first. */
+export const adminPlayers = spacetimedb.view({ name: 'admin_players', public: true },
+  t.array(t.row('AdminPlayerRow', {
+    id: t.string(), name: t.string(), firstSeen: t.timestamp(), lastSeen: t.timestamp(), sessions: t.u32(), tz: t.string(), lang: t.string(),
+    matches: t.u32(), kills: t.u32(),
+  })),
+  ctx => forAdmin(viewAdmins(ctx.db), ctx.sender.toHexString(), () => {
+    const seen = [...ctx.db.playerSeen.iter()].map(s => ({ ...s, identity: s.identity.toHexString(), firstSeen: s.firstSeen.microsSinceUnixEpoch, lastSeen: s.lastSeen.microsSinceUnixEpoch }));
+    const profiles = [...ctx.db.profile.iter()].map(p => ({ ...p, identity: p.identity.toHexString() }));
+    return playerRows(seen, profiles).map(r => ({ ...r, firstSeen: new Timestamp(r.firstSeen), lastSeen: new Timestamp(r.lastSeen) }));
+  }));
+
+/** New and active players per UTC day, the 30 days up to the latest activity. */
+export const adminDaily = spacetimedb.view({ name: 'admin_daily', public: true },
+  t.array(t.row('AdminDayRow', { day: t.u32(), date: t.string(), newPlayers: t.u32(), activePlayers: t.u32() })),
+  ctx => forAdmin(viewAdmins(ctx.db), ctx.sender.toHexString(), () => {
+    const seen = [...ctx.db.playerSeen.iter()].map(s => ({ identity: '', firstSeen: s.firstSeen.microsSinceUnixEpoch, lastSeen: s.lastSeen.microsSinceUnixEpoch, sessions: 0, tz: '', lang: '' }));
+    return dailyRows(seen, day => [...ctx.db.playerDay.day.filter(day)].length);
+  }));
