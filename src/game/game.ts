@@ -9,7 +9,7 @@ import { seatFor } from '../../shared/match/vehicles';
 import { WEAPONS, pelletCone, pelletDirs, weaponStats, type HitZone, type WeaponId } from '../../shared/weapons';
 import { CASH, CRATE_REACH, canBuyWeapons, inBase } from '../../shared/match/economy';
 import { seatOf, shieldedIds, sideOf } from '../../shared/match/combat';
-import { BOMB_REACH, modeOf } from '../../shared/match/sim';
+import { BOMB_REACH, modeOf, onSite } from '../../shared/match/sim';
 import type { Assets } from '../assets';
 import { Audio, type EngineVoice } from '../audio';
 import { BodiesView } from '../render/bodies';
@@ -627,7 +627,7 @@ export class Game {
     const m = this.player.m;
     return sites.findIndex(id => {
       const p = this.map.def.points.find(x => x.id === id);
-      return !!p && Math.hypot(p.x - m.x, p.z - m.z) < BOMB_REACH && (!state.bomb.armed || state.bomb.site === sites.indexOf(id));
+      return !!p && onSite(p, m.x, m.y, m.z, BOMB_REACH) && (!state.bomb.armed || state.bomb.site === sites.indexOf(id));
     });
   }
 

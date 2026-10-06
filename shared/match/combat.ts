@@ -33,6 +33,15 @@ export const isHostile = (a: number, b: number) => a !== b || a === -1;
 export const MOVE_SLACK = { speed: 14, max: 6 };
 
 /**
+ * A bomb site is armed and disarmed on its own floor: within `reach` of its centre across the
+ * floor and within SITE_FLOOR of its height, so a site under another floor (Memorial Hall's
+ * Gallery Hall under the chamber) is not reached from the storey above or below it.
+ */
+export const SITE_FLOOR = 2.5;
+export const onSite = (p: { x: number; y: number; z: number }, x: number, y: number, z: number, reach: number) =>
+  Math.hypot(p.x - x, p.z - z) < reach && Math.abs(y - p.y) < SITE_FLOOR;
+
+/**
  * Which base a team deploys from. Militia attacks in Sabotage; a map whose attacking side is its
  * team-0 base swaps the bases for that mode.
  */

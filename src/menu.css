@@ -278,6 +278,7 @@
 #menu [data-theme='taipei'] { --swatch: #ff5ad8; }
 #menu [data-theme='xinyi'] { --swatch: #5fd0c0; }
 #menu [data-theme='highrise'] { --swatch: #f2c06a; }
+#menu [data-theme='memorial'] { --swatch: #3a6ad0; }
 
 /* ---- Tighter screens ---- */
 @media (max-width: 1180px) {

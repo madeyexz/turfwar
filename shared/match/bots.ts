@@ -3,7 +3,7 @@ import { clamp, dirFromAngles, wrapAngle, type Vec3 } from '../math';
 import { MOVE, eyeHeight, stepMovement, type MoveInput } from '../movement';
 import { blocksHeight, near, penetration, type Obstacle } from '../obstacles';
 import { GRENADE, STAMINA } from '../weapons';
-import { eyeOf, feetOf, resolvePellets, resolveShot, sideOf, spreadFor, throwGrenadeFrom, traceShot, weaponOf, type SimContext } from './combat';
+import { eyeOf, feetOf, onSite, resolvePellets, resolveShot, sideOf, spreadFor, throwGrenadeFrom, traceShot, weaponOf, type SimContext } from './combat';
 import { findPath, nearestNode } from './nav';
 import { ATTACKERS, type BotBrain, type MatchState, type Soldier } from './state';
 
@@ -67,14 +67,14 @@ function chooseGoal(state: MatchState, ctx: SimContext, bot: Soldier, brain: Bot
     const p = sites[site];
     const near = attacking || state.bomb.armed ? SITE_STOP * 0.4 : p.radius * 0.8;
     const angle = ctx.random() * Math.PI * 2, r = ctx.random() * near;
-    brain.goal = 'site'; brain.goalX = p.x + Math.cos(angle) * r; brain.goalZ = p.z + Math.sin(angle) * r;
+    brain.goal = 'site'; brain.goalX = p.x + Math.cos(angle) * r; brain.goalZ = p.z + Math.sin(angle) * r; brain.goalY = p.y;
     return;
   }
   const enemies = state.soldiers.filter(s => s.alive && s.team !== bot.team);
   if (enemies.length && (state.roundClock > 35 || ctx.random() < 0.25)) {
     let nearest = enemies[0], best = Infinity;
     for (const e of enemies) { const d = Math.hypot(e.m.x - bot.m.x, e.m.z - bot.m.z); if (d < best) { best = d; nearest = e; } }
-    brain.goal = 'hunt'; brain.goalX = nearest.m.x; brain.goalZ = nearest.m.z; brain.goalLeft = 4 + ctx.random() * 3;
+    brain.goal = 'hunt'; brain.goalX = nearest.m.x; brain.goalZ = nearest.m.z; brain.goalY = nearest.m.y; brain.goalLeft = 4 + ctx.random() * 3;
     return;
   }
   // Landmarks, weighted toward the enemy's half of the map.
@@ -86,7 +86,7 @@ function chooseGoal(state: MatchState, ctx: SimContext, bot: Soldier, brain: Bot
     if (score > bestScore) { bestScore = score; best = p; }
   }
   const angle = ctx.random() * Math.PI * 2, r = ctx.random() * best.radius;
-  brain.goal = 'roam'; brain.goalX = best.x + Math.cos(angle) * r; brain.goalZ = best.z + Math.sin(angle) * r;
+  brain.goal = 'roam'; brain.goalX = best.x + Math.cos(angle) * r; brain.goalZ = best.z + Math.sin(angle) * r; brain.goalY = best.y;
 }
 
 function plan(ctx: SimContext, bot: Soldier, brain: BotBrain, tx: number, ty: number, tz: number) {
@@ -188,7 +188,8 @@ export function updateBot(state: MatchState, ctx: SimContext, bot: Soldier, dt: 
   if (!brain.goal || brain.goalLeft <= 0) chooseGoal(state, ctx, bot, brain);
   if (brain.repath <= 0) {
     if (target && !visible && state.time - brain.lastSeen < 2.2) plan(ctx, bot, brain, brain.seenX, brain.seenY, brain.seenZ);
-    else plan(ctx, bot, brain, brain.goalX, bot.m.y, brain.goalZ);
+    // Toward the goal's floor (a site or landmark on an upper storey is not the one under it).
+    else plan(ctx, bot, brain, brain.goalX, brain.goalY ?? bot.m.y, brain.goalZ);
     brain.repath = 2.5 + ctx.random() * 2;
   }
   let moveX = 0, moveZ = 0;
@@ -284,11 +285,11 @@ export function updateBot(state: MatchState, ctx: SimContext, bot: Soldier, dt: 
   // ---- Sabotage: hold E on the site (standing still) to arm or disarm --------------
   bot.using = false;
   if (sabotage && !visible && bot.m.grounded) {
-    const site = state.bomb.armed ? state.bomb.site : bot.team === ATTACKERS ? sitesOf(ctx).findIndex(p => Math.hypot(p.x - bot.m.x, p.z - bot.m.z) < SITE_STOP) : -1;
+    const site = state.bomb.armed ? state.bomb.site : bot.team === ATTACKERS ? sitesOf(ctx).findIndex(p => onSite(p, bot.m.x, bot.m.y, bot.m.z, SITE_STOP)) : -1;
     const p = site >= 0 ? sitesOf(ctx)[site] : undefined;
     const busy = state.bomb.by !== -1 && state.bomb.by !== bot.id;
     const myJob = state.bomb.armed ? bot.team !== ATTACKERS : bot.team === ATTACKERS;
-    if (p && myJob && !busy && Math.hypot(p.x - bot.m.x, p.z - bot.m.z) < SITE_STOP) { bot.using = true; moveX = 0; moveZ = 0; }
+    if (p && myJob && !busy && onSite(p, bot.m.x, bot.m.y, bot.m.z, SITE_STOP)) { bot.using = true; moveX = 0; moveZ = 0; }
   }
 
   // ---- Vehicles in the way: the nav grid knows only where they park, so walk round the bodies ----

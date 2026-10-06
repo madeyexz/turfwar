@@ -438,6 +438,7 @@ const MAPS_ZH: Record<MapId, { name: string; region: string }> = {
   taipei: { name: '西門町', region: '西門町 / 台北' },
   xinyi: { name: '台北101・信義', region: '信義區 / 台北' },
   taipei101: { name: '台北101・88F', region: '高樓辦公層 / 信義區' },
+  memorial: { name: '中正紀念堂', region: '中正區 / 台北' },
 };
 
 /** Attachment names: the optics in Taiwan players' words (紅點, 全像, ACOG, 倍鏡). */
