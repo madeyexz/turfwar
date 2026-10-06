@@ -7,6 +7,7 @@ import { fbm } from '../../shared/maps/builder';
 import type { BlockStyle, Decor, MapDef, RampStyle } from '../../shared/maps/types';
 import { rng } from '../../shared/math';
 import { addDressing } from './dressing';
+import { CJK_STACK, UI_STACK, cjkFontReady } from '../ui/fonts';
 import { shieldMaterial, surfaceMaterial, terrainMaterial, type Theme } from './materials';
 
 const TEAM_COLORS = [new THREE.Color(0x3aa0ff), new THREE.Color(0xff4a3a)];
@@ -121,13 +122,16 @@ export class LevelView {
     });
     for (const l of map.ladders ?? []) this.ladder(l);
     this.flush();
-    if (signs.length) this.group.add(signMesh(signs));
     if (!theme.urban) this.scatter();
     // Maps with a dressing set bring their own skyline in place of the generic mountain ring.
     const dressed = map.decor.some(d => d.kind === 'dressing');
     if (!dressed) this.horizon();
-    /** Resolves once the map's dressing sets and model instances are built (they load on demand). */
-    this.ready = addDressing(this.group, map.decor).catch(e => console.warn('dressing failed', e));
+    // Signs bake their text into a canvas: wait for the Chinese face so they never keep a fallback font.
+    const signsBuilt = signs.length
+      ? cjkFontReady(signs.map(s => s.text + (s.sub ?? '')).join('')).then(() => { this.group.add(signMesh(signs)); })
+      : Promise.resolve();
+    /** Resolves once the map's signs, dressing sets and model instances are built (they load on demand). */
+    this.ready = Promise.all([signsBuilt, addDressing(this.group, map.decor).catch(e => console.warn('dressing failed', e))]).then(() => undefined);
   }
   readonly ready: Promise<void>;
 
@@ -886,7 +890,7 @@ function bannerTexture(team: 0 | 1) {
   if (team === 0) { ctx.moveTo(128, 70); ctx.lineTo(200, 120); ctx.lineTo(200, 200); ctx.lineTo(128, 250); ctx.lineTo(56, 200); ctx.lineTo(56, 120); ctx.closePath(); }
   else { ctx.moveTo(60, 80); ctx.lineTo(196, 80); ctx.lineTo(128, 240); ctx.closePath(); }
   ctx.stroke();
-  ctx.fillStyle = accent; ctx.font = 'bold 28px system-ui, sans-serif'; ctx.textAlign = 'center';
+  ctx.fillStyle = accent; ctx.font = `bold 28px ${UI_STACK}`; ctx.textAlign = 'center';
   ctx.fillText(team === 0 ? 'AEGIS' : 'CRIMSON', 128, 290);
   const tex = new THREE.CanvasTexture(canvas); tex.colorSpace = THREE.SRGBColorSpace;
   return tex;
@@ -1050,7 +1054,7 @@ function shopfrontMaterial() {
 }
 
 type SignDecor = Extract<Decor, { kind: 'sign' }>;
-const SIGN_FONT = `'PingFang TC','Noto Sans TC','Microsoft JhengHei','Heiti TC',sans-serif`;
+const SIGN_FONT = CJK_STACK;
 
 /**
  * Every sign of the map in one draw: each sign is painted once into a shared canvas atlas (text,

@@ -2,6 +2,7 @@ import * as THREE from 'three';
 import type { MapDef } from '../../shared/maps/types';
 import type { BombState } from '../../shared/match/state';
 import { glowPool } from './pickups';
+import { UI_STACK } from '../ui/fonts';
 
 const SITE = 0xff7a2a, ARMED = 0xff2a1a;
 /** Seconds from arming to detonation (BeGone's 40 s bomb clock), for the blink rate. */
@@ -13,7 +14,7 @@ function letterTexture(letter: string) {
   const g = c.getContext('2d')!;
   g.strokeStyle = '#fff'; g.lineWidth = 10;
   g.beginPath(); g.arc(128, 128, 112, 0, Math.PI * 2); g.stroke();
-  g.fillStyle = '#fff'; g.font = '700 190px Rajdhani, "Arial Narrow", sans-serif'; g.textAlign = 'center'; g.textBaseline = 'middle';
+  g.fillStyle = '#fff'; g.font = `700 190px ${UI_STACK}`; g.textAlign = 'center'; g.textBaseline = 'middle';
   g.fillText(letter, 128, 140);
   return new THREE.CanvasTexture(c);
 }
