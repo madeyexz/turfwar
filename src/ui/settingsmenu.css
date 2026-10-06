@@ -50,16 +50,49 @@
 .lb-settings .bench-link:hover { color: var(--accent); }
 .lb-settings .credits { margin: 0; font-size: 12px; color: #7c8e94; line-height: 1.35; }
 
-/* Controls tab: key chips and what they do, two columns when there is room. */
-.lb-settings .keys { display: grid; grid-template-columns: 1fr 1fr; gap: 2px 26px; margin: 0; }
-.lb-settings .keys > div { display: grid; grid-template-columns: 108px 1fr; align-items: center; gap: 10px; padding: 6px 0; border-bottom: 1px solid rgba(190, 236, 244, 0.07); }
-.lb-settings .keys dt { display: flex; flex-wrap: wrap; gap: 3px; }
-.lb-settings .keys kbd { min-width: 22px; padding: 1px 6px; text-align: center; font-size: 12px; color: var(--ink); text-transform: none; letter-spacing: 0.04em; }
-.lb-settings .keys dd { margin: 0; font-size: 13px; font-weight: 600; color: var(--muted); text-transform: none; letter-spacing: 0.03em; }
+/* In-game: tabs under Resume; a fixed height so switching tabs does not resize the panel. */
+.lb-settings:not(.lobby) .panel { height: min(720px, calc(100dvh - 32px)); max-height: none; overflow: hidden; }
+.lb-settings:not(.lobby) .tabs { margin: 0 0 -4px; align-self: stretch; border-bottom: 1px solid rgba(190, 236, 244, 0.12); }
+.lb-settings:not(.lobby) .pane { flex: 1 1 auto; min-height: 0; overflow-y: auto; padding: 2px 8px 2px 0; margin-right: -8px;
+  scrollbar-width: thin; scrollbar-color: rgba(190, 236, 244, 0.2) transparent; }
+.lb-settings:not(.lobby) .resume, .lb-settings:not(.lobby) footer, .lb-settings:not(.lobby) header { flex: none; }
+
+/* Controls tab: every action, its key and an optional second key, Reset per row. */
+.lb-settings .kb { display: flex; flex-direction: column; gap: 14px; text-transform: none; letter-spacing: 0.02em; }
+.lb-settings .kb-top { display: flex; align-items: center; justify-content: space-between; gap: 8px 14px; flex-wrap: wrap; }
+.lb-settings .kb-top p { flex: 1 1 260px; margin: 0; font-size: 12px; color: var(--muted); line-height: 1.35; }
+.lb-settings .kb-btn { padding: 5px 10px; font-size: 12px; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; background: rgba(255, 255, 255, 0.04); border: 1px solid var(--line); color: var(--muted); }
+.lb-settings .kb-btn:hover { color: var(--ink); border-color: rgba(127, 246, 255, 0.5); }
+.lb-settings .kb-btn.primary { color: #031013; background: var(--accent); border-color: var(--accent); }
+.lb-settings .kb-group h3 { margin: 0 0 4px; font-size: 12px; font-weight: 700; letter-spacing: 0.2em; text-transform: uppercase; color: var(--accent); }
+.lb-settings .kb-row { display: grid; grid-template-columns: minmax(0, 1fr) 96px 96px 28px; align-items: center; gap: 6px; padding: 3px 0; border-bottom: 1px solid rgba(190, 236, 244, 0.07); }
+.lb-settings .kb-name { font-size: 13px; font-weight: 600; color: var(--muted); }
+.lb-settings .kb-row:hover .kb-name, .lb-settings .kb-row.changed .kb-name { color: var(--ink); }
+.lb-settings .kb-cap { display: block; height: 26px; padding: 0 6px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; text-align: center; line-height: 22px;
+  font-size: 12px; font-weight: 700; letter-spacing: 0.04em; text-transform: none; color: var(--ink);
+  background: rgba(255, 255, 255, 0.06); border: 1px solid rgba(190, 236, 244, 0.28); border-bottom-width: 3px; border-radius: 3px; }
+.lb-settings button.kb-cap:hover { border-color: var(--accent); }
+.lb-settings .kb-cap.empty { color: var(--muted); background: none; border-style: dashed; border-bottom-width: 1px; line-height: 24px; }
+.lb-settings .kb-cap.capturing { color: #031013; background: var(--accent); border-color: var(--accent); animation: kb-pulse 1s ease-in-out infinite; }
+.lb-settings .kb-cap.clash { border-color: var(--amber); color: var(--amber); }
+.lb-settings .kb-cap.fixed { color: var(--muted); }
+@keyframes kb-pulse { 50% { opacity: 0.6; } }
+.lb-settings .kb-reset { display: grid; place-items: center; width: 28px; height: 26px; padding: 0; background: none; border: 1px solid transparent; border-radius: 3px; color: var(--muted); }
+.lb-settings .kb-reset svg { width: 15px; height: 15px; stroke: currentColor; stroke-width: 2.2; stroke-linecap: round; stroke-linejoin: round; }
+.lb-settings .kb-reset:not(:disabled):hover { color: var(--ink); border-color: var(--line); }
+.lb-settings .kb-reset:disabled { opacity: 0.2; cursor: default; }
+.lb-settings .kb-msg { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 8px; margin: 4px 0 8px; padding: 8px 10px; font-size: 12px; line-height: 1.35; color: var(--ink);
+  background: rgba(127, 246, 255, 0.08); border-left: 2px solid var(--accent); }
+.lb-settings .kb-msg.warn { background: rgba(255, 180, 90, 0.1); border-left-color: var(--amber); }
+.lb-settings .kb-msg > span { flex: 1 1 220px; }
+.lb-settings .kb-problem { color: var(--amber); }
+.lb-settings .kb-msg kbd { text-transform: none; }
+.lb-settings .kb-note { margin: 0; font-size: 12px; line-height: 1.4; color: #7c8e94; }
 
 @media (max-width: 560px) {
   .lb-settings .row { grid-template-columns: 1fr; gap: 6px; }
-  .lb-settings.lobby .sliders, .lb-settings .keys { grid-template-columns: 1fr; }
+  .lb-settings.lobby .sliders { grid-template-columns: 1fr; }
+  .lb-settings .kb-row { grid-template-columns: minmax(0, 1fr) 74px 74px 26px; }
   .lb-settings.lobby .panel { height: calc(100dvh - 32px); }
   .lb-settings.lobby header { padding-left: 16px; }
   .lb-settings.lobby h2 { display: none; }

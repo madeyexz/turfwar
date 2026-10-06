@@ -7,6 +7,8 @@ import {
   type AttachmentCategory, type AttachmentId, type Attachments, type WeaponClass, type WeaponDef, type WeaponId,
 } from '../../shared/weapons';
 import { StorePreview, type PreviewItem } from './storepreview';
+import { matches, type ActionId } from '../game/keybinds';
+import { kbd, kbdCode, keyHtml } from './keys';
 import { L, applyI18n, attachmentName, onLang, t, weaponClass, type Key } from './i18n';
 
 type Tab = 'primary' | 'secondary' | 'tactical' | 'attachments';
@@ -118,7 +120,7 @@ export class BuyMenu {
     this.root.innerHTML = `
       <header>
         ${L('store.title', 'h2')}
-        <nav class="tabs"><kbd>Q</kbd>${TABS.map(tab => L(`store.tab.${tab.id}`, 'button', `type="button" data-tab="${tab.id}"`)).join('')}<kbd>E</kbd></nav>
+        <nav class="tabs"><span data-kb="storePrevTab">${kbd('storePrevTab')}</span>${TABS.map(tab => L(`store.tab.${tab.id}`, 'button', `type="button" data-tab="${tab.id}"`)).join('')}<span data-kb="storeNextTab">${kbd('storeNextTab')}</span></nav>
         <div class="clock"></div>
         <div class="cash">${L('store.cash', 'small')}<b></b><span class="spent"></span></div>
         <button type="button" class="close" data-close aria-label="${t('store.close')}" data-i18n-aria-label="store.close">✕</button>
@@ -176,10 +178,10 @@ export class BuyMenu {
       if (!this.open || (e.target as HTMLElement | null)?.tagName === 'INPUT') return;
       const c = e.code;
       const digit = /^(Digit|Numpad)(\d)$/.exec(c);
-      if (c === 'Escape' || c === 'KeyB') this.close();
+      if (c === 'Escape' || matches('store', c)) this.close();
       else if (digit) { const i = (Number(digit[2]) + 9) % 10; if (this.entries[i]) this.select(this.entries[i].key); }
       else if (c === 'Enter' || c === 'NumpadEnter' || c === 'Space') this.purchase();
-      else if (c === 'KeyQ' || c === 'KeyE') this.setTab(TABS[(TABS.findIndex(t => t.id === this.tab) + (c === 'KeyE' ? 1 : 3)) % 4].id);
+      else if (matches('storePrevTab', c) || matches('storeNextTab', c)) this.setTab(TABS[(TABS.findIndex(t => t.id === this.tab) + (matches('storeNextTab', c) ? 1 : 3)) % 4].id);
       else if (c === 'ArrowUp' || c === 'ArrowDown') this.move(c === 'ArrowDown' ? 1 : -1);
       else if (c === 'ArrowLeft' || c === 'ArrowRight') {
         if (this.tab === 'attachments') this.stepGun(c === 'ArrowRight' ? 1 : -1);
@@ -187,6 +189,16 @@ export class BuyMenu {
       } else return;
       e.preventDefault(); e.stopPropagation();
     }, true);
+    // The store key bound to a mouse button (or the wheel) closes it too; tab keys likewise page.
+    const mouse = (code: string, e: Event) => {
+      if (!this.open) return;
+      if (matches('store', code)) this.close();
+      else if (matches('storePrevTab', code) || matches('storeNextTab', code)) this.setTab(TABS[(TABS.findIndex(t => t.id === this.tab) + (matches('storeNextTab', code) ? 1 : 3)) % 4].id);
+      else return;
+      e.preventDefault();
+    };
+    this.root.addEventListener('mousedown', e => { if (e.button > 0) mouse(`Mouse${e.button}`, e); });
+    this.root.addEventListener('wheel', e => { if (e.deltaY && !(e.target as HTMLElement).closest('.side, .info')) mouse(e.deltaY > 0 ? 'WheelDown' : 'WheelUp', e); });
   }
 
   get open() { return !this.root.hidden; }
@@ -358,7 +370,8 @@ export class BuyMenu {
     this.el.keys.innerHTML = (this.tab === 'attachments'
       ? [`<kbd>↑</kbd><kbd>↓</kbd> ${t('store.k.browse')}`, `<kbd>1</kbd>–<kbd>9</kbd> ${t('store.k.option')}`, `<kbd>←</kbd><kbd>→</kbd> ${t('store.k.weapon')}`, `<kbd>Enter</kbd> ${t('store.k.fit')}`]
       : [`<kbd>1</kbd>–<kbd>9</kbd> ${t('store.k.select')}`, `<kbd>←</kbd><kbd>→</kbd> ${t('store.k.browse')}`, `<kbd>Enter</kbd> / ${t('store.k.buy')}`])
-      .concat([`<kbd>Q</kbd><kbd>E</kbd> ${t('store.k.tabs')}`, `<kbd>B</kbd> / <kbd>Esc</kbd> ${t('store.k.close')}`]).map(s => `<span>${s}</span>`).join('');
+      .concat([`${kbd('storePrevTab')}${kbd('storeNextTab')} ${t('store.k.tabs')}`, `${kbd('store')} / ${kbdCode('Escape')} ${t('store.k.close')}`]).map(s => `<span>${s}</span>`).join('');
+    this.root.querySelectorAll<HTMLElement>('[data-kb]').forEach(el => { el.innerHTML = kbd(el.dataset.kb as ActionId); });
     this.showPreview();
   }
 
@@ -380,12 +393,12 @@ export class BuyMenu {
     const gun = (slot: 0 | 1) => {
       const id = me.weapons[slot], mods = fittedNames(me.attachments[id]);
       const active = (this.tab === (slot ? 'secondary' : 'primary')) || (this.tab === 'attachments' && this.pick === id);
-      return `<button type="button" class="lo${active ? ' on' : ''}" data-lo="${slot}"><kbd>${slot ? 2 : 3}</kbd><small>${t(slot ? 'store.lo.secondary' : 'store.lo.primary')}</small><b>${WEAPONS[id].name}</b><span class="mods">${mods.length ? mods.join(' · ') : t('store.noAttachments')}</span></button>`;
+      return `<button type="button" class="lo${active ? ' on' : ''}" data-lo="${slot}">${kbd(slot ? 'secondary' : 'primary')}<small>${t(slot ? 'store.lo.secondary' : 'store.lo.primary')}</small><b>${WEAPONS[id].name}</b><span class="mods">${mods.length ? mods.join(' · ') : t('store.noAttachments')}</span></button>`;
     };
     const he = me.grenadeHE ? ` · ${t('store.he')}` : '';
     return gun(0) + gun(1)
-      + `<button type="button" class="lo knife" data-lo="knife" tabindex="-1"><kbd>1</kbd><small>${t('store.lo.melee')}</small><b>${t('store.knife')}</b><span class="mods">${t('store.alwaysCarried')}</span></button>`
-      + `<button type="button" class="lo${this.tab === 'tactical' ? ' on' : ''}${me.grenades ? '' : ' none'}" data-lo="tactical"><kbd>4</kbd><small>${t('store.lo.tactical')}</small><b>${me.grenades ? 'M67' : t('store.empty')}</b><span class="mods">${me.grenades ? `${t('store.frag')}${he}` : me.grenadeHE ? t('store.heReady') : t('store.noGrenade')}</span></button>`;
+      + `<button type="button" class="lo knife" data-lo="knife" tabindex="-1">${kbd('knife')}<small>${t('store.lo.melee')}</small><b>${t('store.knife')}</b><span class="mods">${t('store.alwaysCarried')}</span></button>`
+      + `<button type="button" class="lo${this.tab === 'tactical' ? ' on' : ''}${me.grenades ? '' : ' none'}" data-lo="tactical">${kbd('grenade')}<small>${t('store.lo.tactical')}</small><b>${me.grenades ? 'M67' : t('store.empty')}</b><span class="mods">${me.grenades ? `${t('store.frag')}${he}` : me.grenadeHE ? t('store.heReady') : t('store.noGrenade')}</span></button>`;
   }
 
   private badge(e: Entry) {
@@ -444,7 +457,7 @@ export class BuyMenu {
       const rows: [string, string, string][] = he
         ? [[t('bar.damage'), `${GRENADE.damage} → ${GRENADE.damage + HIGH_EXPLOSIVE.damage}`, 'up'], [t('store.blast'), `${GRENADE.radius} → ${GRENADE.radius + HIGH_EXPLOSIVE.radius} m`, 'down'], [t('store.appliesTo'), t('store.everyM67'), '']]
         : [[t('bar.damage'), `${GRENADE.damage + (withHE ? HIGH_EXPLOSIVE.damage : 0)}${withHE ? ' (HE)' : ''}`, ''], [t('store.blast'), `${GRENADE.radius + (withHE ? HIGH_EXPLOSIVE.radius : 0)} m`, ''], [t('store.fuse'), t('common.seconds', { n: GRENADE.fuse }), ''], [t('store.carry'), t('store.carryN', { n: GRENADE.max }), '']];
-      const blurb = t(he ? 'store.heNote' : 'store.m67Note');
+      const blurb = he ? t('store.heNote') : t('store.m67Note', { key: kbd('grenade') });
       return `<div class="stats"><p class="note">${blurb}</p><ul class="deltas">${rows.map(([k, v, c]) => `<li class="${c}"><span>${k}</span><b>${v}</b></li>`).join('')}</ul></div>${this.action(e)}`;
     }
     if (e.attachment && e.weapon) {
@@ -468,11 +481,11 @@ export class BuyMenu {
   private titleHtml(e: Entry, me: Soldier) {
     if (e.item === 'grenade' || e.item === 'highExplosive') {
       const he = e.item === 'highExplosive';
-      return `<h3>${he ? t('store.he') : 'M67'}</h3><small>${t(he ? 'store.heTitle' : 'store.m67Title')}</small>`;
+      return `<h3>${he ? t('store.he') : 'M67'}</h3><small>${he ? t('store.heTitle') : t('store.m67Title', { key: keyHtml('grenade') })}</small>`;
     }
     if (e.attachment && e.weapon) return `<h3>${attName(e.attachment)}</h3><small>${t('store.slotOn', { slot: SLOT(ATTACHMENTS[e.attachment].category).name, weapon: WEAPONS[e.weapon].name })}</small>`;
     const w = WEAPONS[e.item as WeaponId], mods = fittedNames(me.attachments[w.id]);
-    return `<h3>${w.name}</h3><small>${CLASS(w.class)} · ${t(w.slot === 0 ? 'store.primaryKey' : 'store.secondaryKey')}${mods.length ? ` · ${mods.join(' · ')}` : ''}</small>`;
+    return `<h3>${w.name}</h3><small>${CLASS(w.class)} · ${t(w.slot === 0 ? 'store.primaryKey' : 'store.secondaryKey', { key: keyHtml(w.slot === 0 ? 'primary' : 'secondary') })}${mods.length ? ` · ${mods.join(' · ')}` : ''}</small>`;
   }
 
   /** Point the 3D preview (and its title) at the hovered or selected item, wearing what it would have. */

@@ -218,13 +218,13 @@ export class LocalPlayer {
     const wantsFire = can && input!.fire && !blockFire && !this.binoculars;
     if (wantsFire) this.sprintBlock = 0.2;
     // Stamina (BeGone): sprinting drains it, jumping costs a chunk, and at 30 or less you are slowed and cannot sprint.
-    const sprintKey = can && (input!.down('ShiftLeft') || input!.down('ShiftRight'));
+    const sprintKey = can && input!.down('sprint');
     const canSprint = this.sprinting ? this.stamina > 0 : this.stamina > STAMINA.tired + STAMINA.sprintStart;
-    const jumpKey = can && input!.down('Space') && this.stamina >= STAMINA.jump;
+    const jumpKey = can && input!.down('jump') && this.stamina >= STAMINA.jump;
     const moveInput: MoveInput = can ? {
-      forward: Number(input!.down('KeyW')) - Number(input!.down('KeyS')),
-      strafe: Number(input!.down('KeyD')) - Number(input!.down('KeyA')),
-      yaw: this.yaw, jump: jumpKey, crouch: input!.down('KeyC') || input!.down('ControlLeft'),
+      forward: Number(input!.down('forward')) - Number(input!.down('back')),
+      strafe: Number(input!.down('right')) - Number(input!.down('left')),
+      yaw: this.yaw, jump: jumpKey, crouch: input!.down('crouch'),
       sprint: sprintKey && canSprint && this.sprintBlock <= 0,
       ads: (input!.aim && w.class !== 'melee' && this.reloadLeft <= 0 && this.switchLeft < 0.1 && !this.rider) || this.binoculars,
       speed: w.speed * (this.tired ? 0.8 : 1),
@@ -253,17 +253,17 @@ export class LocalPlayer {
 
     // ---- Weapon actions ----
     if (can) {
-      // While scoped, the wheel steps a sniper scope's magnification instead of cycling weapons.
-      const wheel = input!.consumeWheel();
+      // While scoped, next / previous weapon (the wheel) step a sniper scope's magnification instead.
+      const wheel = Number(input!.take('nextWeapon')) - Number(input!.take('prevWeapon'));
       const scoped = this.ads > 0.6 && hasSecondZoom(this.weapon) && !this.binoculars;
-      if (input!.take('KeyZ') && !this.rider) { this.binoculars = !this.binoculars; this.zoomLevel = 0; result.zoomed = true; }
+      if (input!.take('binoculars') && !this.rider) { this.binoculars = !this.binoculars; this.zoomLevel = 0; result.zoomed = true; }
       if (scoped && wheel !== 0) { this.zoomLevel = this.zoomLevel ? 0 : 1; result.zoomed = true; }
       else if (this.throwLeft <= 0) {
         let to: Slot | undefined;
-        if (input!.take('Digit1')) to = 2;
-        if (input!.take('Digit2')) to = 1;
-        if (input!.take('Digit3')) to = 0;
-        if (input!.take('KeyQ')) to = this.lastSlot;
+        if (input!.take('knife')) to = 2;
+        if (input!.take('secondary')) to = 1;
+        if (input!.take('primary')) to = 0;
+        if (input!.take('lastWeapon')) to = this.lastSlot;
         if (wheel !== 0) {
           // Cycle to the next slot this hand can hold (a rider skips two-handed weapons and the knife).
           to = this.slot;
@@ -271,10 +271,10 @@ export class LocalPlayer {
         }
         if (to !== undefined && to !== this.slot && this.usable(to)) this.swap(to, result);
       }
-      if (input!.take('KeyR')) this.startReload(result);
+      if (input!.take('reload')) this.startReload(result);
       // An empty magazine reloads by itself (when there are spare rounds).
       if (this.slot !== 2 && this.ammo[this.slot] <= 0 && this.switchLeft <= 0 && this.throwLeft <= 0) this.startReload(result);
-      const throwKey = input!.take('Digit4') || input!.take('KeyG');
+      const throwKey = input!.take('grenade');
       if (throwKey && !this.rider && this.grenades > 0 && this.throwLeft <= 0 && this.reloadLeft <= 0) {
         this.throwLeft = 0.32; this.grenades--; this.sinceThrow = 0; this.binoculars = false;
       }

@@ -16,7 +16,7 @@ runner (`bun` / `bunx`, never npm/npx).
 
 | Area | Implemented |
 | --- | --- |
-| Lobby | Callsign and team at the top, then three filters: **size** (1v1 / 6v6 / 24v24), **mode** (Any / Elimination / Sabotage) and **map** (Any, a map card from the picker with a plan of the map, its region or bomb sites and who is playing there, or one of the shortcuts beside it). **Play online** joins the fullest public room whose current mode and map match (Any matches anything) or opens a new one with those rules; its label sums the choice up ("6v6 · Sabotage · Taipei") and the line under it says which room it would join. **Live rooms** below lists the rooms the same filters match (map, mode, players, round, Join), with "showing N of M · clear filters" or links to other sizes when the filters hide some. The bottom row: *Solo vs bots* (the filters, Any picked at random; bot difficulty), *Practice* (the map filter; no bots, free store), *Private room* (the filters, Any picked at random; bots on or off; you get a 4-letter code) and a *# code* box to join one. A map the size or mode cannot host goes back to Any with a note; the filters are remembered. Options: language (English / 繁體中文), graphics, crosshair, scope view, reticle, sensitivity and aim sensitivity, field of view, volume, controls. In a match, Esc or P opens the same settings; F toggles fullscreen. |
+| Lobby | Callsign and team at the top, then three filters: **size** (1v1 / 6v6 / 24v24), **mode** (Any / Elimination / Sabotage) and **map** (Any, a map card from the picker with a plan of the map, its region or bomb sites and who is playing there, or one of the shortcuts beside it). **Play online** joins the fullest public room whose current mode and map match (Any matches anything) or opens a new one with those rules; its label sums the choice up ("6v6 · Sabotage · Taipei") and the line under it says which room it would join. **Live rooms** below lists the rooms the same filters match (map, mode, players, round, Join), with "showing N of M · clear filters" or links to other sizes when the filters hide some. The bottom row: *Solo vs bots* (the filters, Any picked at random; bot difficulty), *Practice* (the map filter; no bots, free store), *Private room* (the filters, Any picked at random; bots on or off; you get a 4-letter code) and a *# code* box to join one. A map the size or mode cannot host goes back to Any with a note; the filters are remembered. Options: language (English / 繁體中文), graphics, crosshair, scope view, reticle, sensitivity and aim sensitivity, field of view, volume, and a Controls tab where every key can be rebound (see [Controls](#controls)). In a match, Esc or P opens the same settings (Options and Controls tabs); F toggles fullscreen. |
 | Language | English and Traditional Chinese (Taiwan, 繁體中文): every lobby, settings, HUD, store, scoreboard and end-of-match string (`src/ui/i18n.ts`; SWAT 特警, Militia 民兵, Elimination 殲滅戰, Sabotage 爆破戰, maps by their Chinese names such as 西門町 and 台北101・信義; guns keep their real names). It follows the browser (zh-TW, zh-HK, zh-Hant read Chinese) until a choice is saved in Settings; `?lang=zh-TW` / `?lang=en` overrides it for the visit. Switching applies at once, in the lobby and in a match; kill-feed lines and toasts already on screen keep their language until they fade. Text the server sends (cash award reasons, room errors) stays English on the wire and is translated in the client. |
 | Teams | **SWAT** (team 0, navy tactical kit) and **Militia** (team 1, desert and olive irregulars). In Sabotage Militia attacks and SWAT defends. No friendly fire. |
 | Rounds | 4 s freeze at round start (buy, no moving), the round, a 5 s round-over pause; first team to **10 round wins** takes the match, then 10 s on the result screen and a new match. Nobody respawns inside a round; everyone respawns at the next round start. Dead players spectate their killer immediately (RMB cycles players); their chat is hidden from the living. |
@@ -256,6 +256,27 @@ the rotor chop are synthesized.
 
 ## Controls
 
+These are the defaults. **Settings → Controls** (the lobby's gear or ? button, or Esc / P in a match)
+rebinds every action: click a key cap, press a key, mouse button or wheel click (Esc cancels); each
+action takes a second key in the next column, has its own Reset, and *Reset all to defaults* restores
+everything. A key already used where the action works is reported inline with Swap or Cancel
+(a swap that would leave an action without a key, or put a key where it clashes, is not offered).
+Changes apply at once and every hint follows them (HUD prompts, the vehicle panel, the store, the
+menu header, spectating). Bindings are physical key positions (`KeyboardEvent.code`), so AZERTY and
+Dvorak keep the same layout of controls, labelled with the keyboard's own letters where the browser
+reports them. They are saved per browser under `lawbreaker.keys` (only the changed actions, with a
+format version, so later changes to defaults still reach the rest). The action map is
+`src/game/keybinds.ts`; every key read in the game goes through it.
+
+Actions belong to contexts: on foot, at the wheel (cars and scooters; a scooter rider also shoots),
+flying, the back seat, the store and the menu. Two actions may share a key only when their contexts
+never overlap, which is why driving reuses W/A/S/D, Space and C/Ctrl. Reserved: **Esc** (always opens
+and closes the menu and cancels a rebind; browsers release the mouse on it), the **Cmd / Windows** keys
+(the system's) and **Caps Lock** (it toggles instead of being held). Inside the store the arrows,
+digits, Enter, Space and clicks pick and buy, and in the menu clicks, Tab, Enter and Space work the
+menu, so actions that also work there cannot use them; the wheel cannot drive held actions or
+fullscreen. On touch-only screens the Controls tab is read-only.
+
 | Input | Action |
 | --- | --- |
 | WASD · mouse | Move · look |
@@ -274,7 +295,7 @@ the rotor chop are synthesized.
 | On a scooter: mouse · LMB · R · 1 · 2 · 3 | Aim (independent of the steering) · fire · reload · one-handed weapons only |
 | In the helicopter: W · S · A · D · Space · C or Ctrl · mouse | Forward · back · strafe · climb · descend · turn |
 | V | Vehicle camera: chase view or the driver's seat |
-| Esc · M | Release the mouse (pauses solo; click to resume) · back to the lobby |
+| Esc or P · M | Menu: release the mouse (pauses solo; Resume or Esc / P to go back) · from the menu, back to the lobby |
 
 ## Multiplayer architecture
 
@@ -575,8 +596,7 @@ screens can exceed 60. The lobby also has Low / Medium / High graphics presets (
   limits the server allows.
 - Every client receives every soldier's pose (no interest management), and every tick writes the
   full soldier set to the database's durable log.
-- Third-person camera (V), key rebinding and the toggle/hold options for crouch and accuracy are not
-  implemented.
+- Third-person camera (V) and the toggle/hold options for crouch and accuracy are not implemented.
 - First-person and third-person animation is code-driven on CC0 clips; there are no authored
   weapon-specific reload animations, fingers are posed procedurally, and a soldier on a ladder shows
   the airborne pose (the clip library has no climb).

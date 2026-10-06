@@ -27,6 +27,7 @@ import { VehiclesView, vehicleName } from '../render/vehicles';
 import { BuyMenu } from '../ui/buymenu';
 import { SettingsMenu } from '../ui/settingsmenu';
 import { Hud, weaponLabel } from '../ui/hud';
+import { kbd } from '../ui/keys';
 import { mapName, roundReason, t, teamName } from '../ui/i18n';
 import { Input } from './input';
 import type { GameLink } from './link';
@@ -222,12 +223,12 @@ export class Game {
     if (state.phase !== 'ended') this.endShown = false;
     const sabotage = modeOf(state, this.map.def) === 'sabotage';
     const active = this.input.locked && !this.buymenu.open && !this.hud.chatting;
-    // Esc (the browser frees the mouse) or P opens the in-game menu; Esc / P again (or Resume) closes it.
+    // Esc (the browser frees the mouse) or the menu key (P) opens the in-game menu; Esc / P again (or Resume) closes it.
     const released = !this.input.locked && !this.buymenu.open && !this.hud.chatting && state.phase !== 'ended';
     this.hud.released(false, false);
     if (this.input.locked) this.menu.hide();
     else if (released && !this.menu.open) { this.menu.show(link.mode === 'offline'); this.menuAt = performance.now(); }
-    if (this.menu.open && performance.now() - this.menuAt > 250 && (this.input.take('Escape') || this.input.take('KeyP'))) {
+    if (this.menu.open && performance.now() - this.menuAt > 250 && (this.input.takeCode('Escape') || this.input.take('menu'))) {
       this.menu.hide(); this.input.clear(); void this.input.lock();
     }
     const side = me ? sideOf(state, this.map.def, me.team) : 0;
@@ -237,21 +238,21 @@ export class Game {
     this.nearVehicle = me?.alive && !this.seated && !(myJob && site >= 0) ? this.vehicleNear(state, me) : -1;
 
     // ---- Hotkeys ----
-    if (active && this.input.take('KeyP')) document.exitPointerLock?.();
+    if (active && this.input.take('menu')) document.exitPointerLock?.();
     if (active) {
       // The store is open anywhere: weapons only sell in base during buy time, attachments always.
-      if (this.input.take('KeyB') && me) { this.buymenu.show(this.player.weapons[this.player.slot === 2 ? 0 : this.player.slot]); this.input.clear(); }
-      const chat = this.input.take('Enter') ? false : this.input.take('KeyT') ? true : undefined;
+      if (this.input.take('store') && me) { this.buymenu.show(this.player.weapons[this.player.slot === 2 ? 0 : this.player.slot]); this.input.clear(); }
+      const chat = this.input.take('chat') ? false : this.input.take('teamChat') ? true : undefined;
       if (chat !== undefined) { this.input.clear(); this.hud.openChat(chat, text => this.link.say(text, chat)); }
-      if (this.input.take('KeyE') && me?.alive) {
-        // E: out of the vehicle we sit in, into the one in reach, else the ammo crate.
+      // Use (E): into the vehicle in reach, else the ammo crate; seated, exit (E) gets us out.
+      if ((this.seated ? this.input.take('exitVehicle') : this.input.take('use')) && me?.alive) {
         const i = this.crates.nearest(this.player.m.x, this.player.m.y, this.player.m.z, CRATE_REACH);
         if (this.seated) { link.exitVehicle(); this.audio.door(); }
         else if (this.nearVehicle >= 0) { link.enterVehicle(this.nearVehicle); this.audio.door(); }
         else if (i >= 0) { link.useCrate(i); this.audio.ui(); }
       }
     }
-    this.hud.scoreboard(this.input.down('Tab'), state, myId);
+    this.hud.scoreboard(this.input.down('scoreboard'), state, myId);
 
     // ---- Server reconciliation ----
     // Vehicles: the host decides who sits where. Taking the wheel starts prediction from its pose;
@@ -289,8 +290,8 @@ export class Game {
     }
     if (this.player.alive) this.showWeapon(this.viewmodel, this.player);
 
-    // ---- Bomb: hold E still on a site ----
-    this.player.using = active && myJob && !seat && state.roundPhase === 'live' && this.input.down('KeyE');
+    // ---- Bomb: hold use (E) still on a site ----
+    this.player.using = active && myJob && !seat && state.roundPhase === 'live' && this.input.down('use');
     this.player.frozen = state.phase === 'live' && state.roundPhase === 'freeze' && !state.config.practice;
 
     // ---- Local player ----
@@ -480,7 +481,7 @@ export class Game {
       const buyLeft = free ? -1 : Math.max(0, state.config.buyTime - state.roundClock);
       this.buymenu.update(me, buyWindow, buyLeft, free);
       const showBuy = !!me && buyWindow && (free || !me.alive || inBase(me, this.map.def, side)) && !this.buymenu.open;
-      this.hud.buyHint(showBuy ? (free ? t('hud.store') : t('hud.storeLeft', { n: Math.ceil(buyLeft) })) : undefined);
+      this.hud.buyHint(showBuy ? (free ? t('hud.store', { key: kbd('store') }) : t('hud.storeLeft', { key: kbd('store'), n: Math.ceil(buyLeft) })) : undefined);
       this.hud.prompt(this.promptText(state, me, site, myJob));
       this.hud.vehicle(this.vehicleInfo(state));
       const bomb = state.bomb;
@@ -543,10 +544,10 @@ export class Game {
     const host = seated ? state.vehicles[seated.index] : undefined;
     if (!seated || !host) return undefined;
     const v = this.driving.v ?? host, spec = VEHICLES[v.kind];
-    const k = (key: string) => `<kbd>${key}</kbd>`;
-    const keys = seated.seat === 1 ? `${t('hud.passenger')} · ${k('E')}${t('hud.exit')}`
-      : v.kind === 'heli' ? `${k('W')}${k('A')}${k('S')}${k('D')}${t('hud.fly')} · ${t('hud.mouseTurn')} · ${k('SPACE')}${t('hud.up')} · ${k('C')}${t('hud.down')} · ${k('V')}${t('hud.view')} · ${k('E')}${t('hud.exit')}`
-      : `${k('W')}${k('S')}${t('hud.drive')} · ${k('A')}${k('D')}${t('hud.steer')} · ${k('SPACE')}${t('hud.drift')}${v.kind === 'scooter' ? ` · ${k(t('key.lmb'))}${t('hud.fire')}` : ''} · ${k('V')}${t('hud.view')} · ${k('E')}${t('hud.exit')}`;
+    const k = kbd;
+    const keys = seated.seat === 1 ? `${t('hud.passenger')} · ${k('exitVehicle')}${t('hud.exit')}`
+      : v.kind === 'heli' ? `${k('throttle')}${k('steerLeft')}${k('brake')}${k('steerRight')}${t('hud.fly')} · ${t('hud.mouseTurn')} · ${k('climb')}${t('hud.up')} · ${k('descend')}${t('hud.down')} · ${k('vehicleView')}${t('hud.view')} · ${k('exitVehicle')}${t('hud.exit')}`
+      : `${k('throttle')}${k('brake')}${t('hud.drive')} · ${k('steerLeft')}${k('steerRight')}${t('hud.steer')} · ${k('handbrake')}${t('hud.drift')}${v.kind === 'scooter' ? ` · ${k('fire')}${t('hud.fire')}` : ''} · ${k('vehicleView')}${t('hud.view')} · ${k('exitVehicle')}${t('hud.exit')}`;
     const floor = this.map.world.groundHeight(v.x, v.z, v.y + 0.1, 0.5);
     return { name: vehicleName(v), speed: speedOf(v), altitude: v.kind === 'heli' ? v.y - floor : undefined, health: host.health, max: spec.health, keys };
   }
@@ -640,12 +641,12 @@ export class Game {
     const near = state.vehicles[this.nearVehicle];
     if (me?.alive && near && !this.seated) {
       const name = vehicleName(near);
-      return `<kbd>E</kbd> ${near.driver >= 0 ? t('hud.rideAlong', { name }) : t(near.kind === 'car' ? 'hud.enterCar' : near.kind === 'scooter' ? 'hud.enterScooter' : 'hud.enterHeli', { name })}`;
+      return `${kbd('use')} ${near.driver >= 0 ? t('hud.rideAlong', { name }) : t(near.kind === 'car' ? 'hud.enterCar' : near.kind === 'scooter' ? 'hud.enterScooter' : 'hud.enterHeli', { name })}`;
     }
     if (!me?.alive || state.roundPhase !== 'live') return '';
-    if (site >= 0 && myJob) return state.bomb.armed ? t('hud.holdDisarm', { key: '<kbd>E</kbd>' }) : t('hud.holdArm', { key: '<kbd>E</kbd>', site: this.map.def.sabotage!.sites[site] });
+    if (site >= 0 && myJob) return state.bomb.armed ? t('hud.holdDisarm', { key: kbd('use') }) : t('hud.holdArm', { key: kbd('use'), site: this.map.def.sabotage!.sites[site] });
     if (this.crates.nearest(this.player.m.x, this.player.m.y, this.player.m.z, CRATE_REACH) >= 0 && this.player.slot !== 2) {
-      return `<kbd>E</kbd> ${t('hud.crate')}${me.round.crate || state.config.freeBuy ? '' : ` ($${CASH.crate})`}`;
+      return `${kbd('use')} ${t('hud.crate')}${me.round.crate || state.config.freeBuy ? '' : ` ($${CASH.crate})`}`;
     }
     return '';
   }
@@ -654,7 +655,7 @@ export class Game {
   private spectate(state: MatchState, me: Soldier | undefined, positions: Map<number, THREE.Vector3>, dt: number, active: boolean) {
     const cam = this.renderer.camera;
     const living = state.soldiers.filter(s => s.alive && s.id !== me?.id && positions.has(s.id));
-    if (active && this.input.take('Mouse2') && living.length) {
+    if (active && this.input.take('aim') && living.length) {
       const i = living.findIndex(s => s.id === this.spectating);
       this.spectating = living[(i + 1) % living.length].id;
     }
