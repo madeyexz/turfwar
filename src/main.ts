@@ -530,7 +530,8 @@ function setTab(next: Tab, focus = false) {
 const audio = new Audio();
 const onClick = (attr: string, fn: (value: string, el: HTMLElement) => void) => menu.addEventListener('click', e => {
   const el = (e.target as HTMLElement).closest<HTMLElement>(`[data-${attr}]`);
-  if (!el || !menu.contains(el) || (el as HTMLButtonElement).disabled) return;
+  // The menu itself carries data-tab (for styling): only its descendants are controls.
+  if (!el || el === menu || !menu.contains(el) || (el as HTMLButtonElement).disabled) return;
   fn(el.dataset[attr.replace(/-(\w)/g, (_, c: string) => c.toUpperCase())]!, el);
   audio.ui();
 });
