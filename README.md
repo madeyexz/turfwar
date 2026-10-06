@@ -14,7 +14,8 @@ runner (`bun` / `bunx`, never npm/npx).
 
 | Area | Implemented |
 | --- | --- |
-| Lobby | Callsign and team, then **Play online**: pick 1v1 / 6v6 / 24v24 and press **Quick Play** (the fullest public room of that size, or a new one), or open *Create private room* (mode, map, bots; you get a 4-letter code) / *Join with code*. A live **Public rooms** list on the right joins any open room directly. **Play offline**: *Play vs bots* (mode, size, map, difficulty) or *Practice range* (no bots, free store). Options: graphics, crosshair, scope view, reticle, sensitivity and aim sensitivity, field of view, volume, controls. In a match, Esc or P opens the same settings; F toggles fullscreen. |
+| Lobby | Callsign and team, then **Play online**: pick 1v1 / 6v6 / 24v24 and press **Quick Play** (the fullest public room of that size, or a new one), or open *Create private room* (mode, map, bots; you get a 4-letter code) / *Join with code*. A live **Public rooms** list on the right joins any open room directly. **Play offline**: *Play vs bots* (mode, size, map, difficulty) or *Practice range* (no bots, free store). Options: language (English / 繁體中文), graphics, crosshair, scope view, reticle, sensitivity and aim sensitivity, field of view, volume, controls. In a match, Esc or P opens the same settings; F toggles fullscreen. |
+| Language | English and Traditional Chinese (Taiwan, 繁體中文): every lobby, settings, HUD, store, scoreboard and end-of-match string (`src/ui/i18n.ts`; SWAT 特警, Militia 民兵, Elimination 殲滅戰, Sabotage 爆破戰, maps by their Chinese names such as 西門町 and 台北101・信義; guns keep their real names). It follows the browser (zh-TW, zh-HK, zh-Hant read Chinese) until a choice is saved in Settings; `?lang=zh-TW` / `?lang=en` overrides it for the visit. Switching applies at once, in the lobby and in a match; kill-feed lines and toasts already on screen keep their language until they fade. Text the server sends (cash award reasons, room errors) stays English on the wire and is translated in the client. |
 | Teams | **SWAT** (team 0, navy tactical kit) and **Militia** (team 1, desert and olive irregulars). In Sabotage Militia attacks and SWAT defends. No friendly fire. |
 | Rounds | 4 s freeze at round start (buy, no moving), the round, a 5 s round-over pause; first team to **10 round wins** takes the match, then 10 s on the result screen and a new match. Nobody respawns inside a round; everyone respawns at the next round start. Dead players spectate their killer immediately (RMB cycles players); their chat is hidden from the living. |
 | Elimination `[E]` | 120 s rounds. Kill the whole other team. If time runs out with both teams alive the round is a draw: it replays and nobody scores. When the last two players trade kills the team that killed last wins. |
@@ -393,6 +394,13 @@ texture, sound and line of code here is original or CC0/OFL.
   cobblestone architecture of the BeGone maps): Poly Haven, CC0 1.0, fetched by `tools/fetch-textures.ts`; see
   `public/assets/tex/LICENSE.txt`.
 - Font: Rajdhani by Indian Type Foundry, SIL Open Font License 1.1 (`public/fonts/OFL.txt`).
+- Chinese font: Noto Sans TC by Google and Adobe, SIL Open Font License 1.1
+  (`public/fonts/NotoSansTC-OFL.txt`), from google/fonts. `tools/subset-font.ts` (`bun tools/subset-font.ts`;
+  needs `uv`, or Python with fontTools and brotli) cuts the variable font to weights 500–900 and to the
+  characters the game uses (every Chinese character in `src/`, `shared/` and `index.html`, Taiwan's 4,808
+  common characters from `tools/font/edu-standard-4808.txt`, CJK punctuation, Bopomofo and full-width forms):
+  `public/fonts/noto-sans-tc.woff2`, about 1.4 MB and 5,084 glyphs, loaded only for Chinese text
+  (`unicode-range`). `src/ui/font.test.ts` fails when the source uses a character the font lacks.
 - Taipei map layout: the Ximending quarter of *臺北狂飆 / TAIPEI RUSH* (https://taipei-gta.vercel.app)
   — its streets, buildings, signs and landmarks — used with the author's permission and extracted by
   `tools/import-taipei.ts` into `shared/maps/taipei-data.ts`. Its shop names are that game's own parody
@@ -484,7 +492,7 @@ shared/        Pure TypeScript shared by browser, tests and the SpacetimeDB modu
 src/           Browser client: lobby, game loop, prediction, rendering, view model, soldiers, HUD, store, audio, net
 spacetimedb/   SpacetimeDB module (tables, scheduled tick, validated reducers)
 scripts/       Local load test and simulation benchmark
-tools/         Reproducible CC0 asset import, sound and texture fetch scripts, and the Taipei and Xinyi map imports
+tools/         Reproducible CC0 asset import, sound and texture fetch scripts, the Taipei and Xinyi map imports and the Chinese font subset
 dev/           Development preview pages
 ```
 

@@ -3,12 +3,14 @@ import type { CollisionWorld } from '../../shared/collision';
 import { loadMap } from '../../shared/maps';
 import type { MapDef } from '../../shared/maps/types';
 import { statsOf } from '../../shared/match/economy';
-import { ATTACKERS, TEAM_NAMES, TEAM_SHORT, type MatchState, type Soldier, type Team } from '../../shared/match/state';
+import { ATTACKERS, type MatchState, type Soldier, type Team } from '../../shared/match/state';
 import { ATTACHMENTS, ATTACHMENT_SLOTS, HEALTH, STAMINA, WEAPONS, type AttachmentCategory, type WeaponId } from '../../shared/weapons';
 import type { CareerStats } from '../game/link';
 import type { LocalPlayer } from '../game/player';
 import { isMagnified, settings } from '../game/settings';
 import { RETICLE_CSS } from '../render/sights';
+import { UI_STACK } from './fonts';
+import { L, applyI18n, causeName, mapName, modeName, onLang, rewardReason, t, teamName, teamShort } from './i18n';
 
 const TEAM_CSS = ['var(--aegis)', 'var(--crimson)'];
 const TEAM_HEX = ['#4aa8ff', '#ff5544'];
@@ -27,8 +29,10 @@ const initials = (name: string) => {
   const parts = name.toUpperCase().split(/[^\p{L}\p{N}]+/u).filter(Boolean);
   return parts.length > 1 ? parts[0][0] + parts[parts.length - 1][0] : (parts[0] ?? '?').slice(0, 2);
 };
-/** Kill feed label for a weapon id or cause ('knife', 'grenade', 'fall', 'bomb'). */
-const weaponLabel = (w: string) => w === 'grenade' ? 'M67' : WEAPONS[w as WeaponId]?.name ?? w.toUpperCase();
+/** Kill feed label for a weapon id or cause ('knife', 'grenade', 'fall', 'bomb', 'vehicle', 'crash', 'roadkill'). */
+export const weaponLabel = (w: string) => causeName(w, w === 'grenade' ? 'M67' : w === 'knife' ? undefined : WEAPONS[w as WeaponId]?.name);
+/** The weapon in hand: guns by name, the knife in the current language. */
+const heldName = (id: WeaponId, english: string) => id === 'knife' ? t('cause.knife') : english;
 const binoTicks = () => {
   let s = '';
   for (let i = -50; i <= 50; i += 5) if (i) s += `<line x1="${i}" y1="${i % 10 ? -1 : -2.2}" x2="${i}" y2="0"/>${i % 20 ? '' : `<text x="${i}" y="-3.4">${Math.abs(i)}</text>`}`;
@@ -70,6 +74,8 @@ export class Hud {
   private v = new THREE.Vector3();
   private fwd = new THREE.Vector3();
   private eye = new THREE.Vector3();
+  private stopLang: () => void;
+  private last?: { end?: [MatchState, number, CareerStats[] | undefined]; spectate?: [string | undefined, number]; released?: boolean; chatTeam?: boolean };
 
   constructor(parent: HTMLElement, private map: MapDef) {
     try { this.world = loadMap(map.id).world; } catch { /* dev maps without a registry entry: no line-of-sight checks */ }
@@ -96,9 +102,9 @@ export class Hud {
       </div>
       <div class="minimap panel"><canvas width="380" height="380"></canvas></div>
       <div class="sb">
-        <div class="sb-side t0"><div class="sb-avs" data-k="av0"></div><div class="sb-score"><small>${TEAM_SHORT[0]}</small><b data-k="s0">0</b><i class="pips"><i data-k="p0"></i></i></div></div>
+        <div class="sb-side t0"><div class="sb-avs" data-k="av0"></div><div class="sb-score">${L('team.short.0', 'small')}<b data-k="s0">0</b><i class="pips"><i data-k="p0"></i></i></div></div>
         <div class="sb-clock" data-k="clockBox"><b data-k="clock">0:00</b><small data-k="round"></small></div>
-        <div class="sb-side t1"><div class="sb-score"><small>${TEAM_SHORT[1]}</small><b data-k="s1">0</b><i class="pips"><i data-k="p1"></i></i></div><div class="sb-avs" data-k="av1"></div></div>
+        <div class="sb-side t1"><div class="sb-score">${L('team.short.1', 'small')}<b data-k="s1">0</b><i class="pips"><i data-k="p1"></i></i></div><div class="sb-avs" data-k="av1"></div></div>
       </div>
       <div class="sb-sub" data-k="sub"></div>
       <div class="bomb" data-k="bomb" hidden><div class="sites" data-k="sites"></div><span data-k="bombText"></span><div class="track"><i data-k="bombBar"></i></div></div>
@@ -115,10 +121,10 @@ export class Hud {
       <div class="progress" data-k="progress" hidden><span data-k="progressText"></span><div class="track"><i data-k="progressBar"></i></div></div>
       <div class="toast" data-k="toast"></div>
       <div class="announce" data-k="announce"><b></b><small></small></div>
-      <div class="chat" data-k="chat"><div class="lines" data-k="chatLines"></div><label class="chat-input" data-k="chatBox" hidden><span data-k="chatLabel">ALL</span><input maxlength="75" autocomplete="off" spellcheck="false"></label></div>
+      <div class="chat" data-k="chat"><div class="lines" data-k="chatLines"></div><label class="chat-input" data-k="chatBox" hidden><span data-k="chatLabel">${t('hud.chatAll')}</span><input maxlength="75" autocomplete="off" spellcheck="false"></label></div>
       <div class="vitals" data-k="vitals">
-        <div class="meter health" data-k="healthMeter"><span>HP</span><div class="track"><i data-k="healthBar"></i></div><b data-k="health">100</b></div>
-        <div class="meter stamina" data-k="staminaMeter"><span>STA</span><div class="track"><i data-k="staminaBar"></i><u></u></div><b data-k="stamina">100</b></div>
+        <div class="meter health" data-k="healthMeter">${L('hud.hp')}<div class="track"><i data-k="healthBar"></i></div><b data-k="health">100</b></div>
+        <div class="meter stamina" data-k="staminaMeter">${L('hud.sta')}<div class="track"><i data-k="staminaBar"></i><u></u></div><b data-k="stamina">100</b></div>
         <div class="cash" data-k="cash">$0</div>
       </div>
       <div class="arms" data-k="arms">
@@ -128,10 +134,10 @@ export class Hud {
         <div class="slots" data-k="slots"></div>
       </div>
       <div class="buyhint" data-k="buyhint" hidden></div>
-      <div class="vehicle panel" data-k="vehicle" hidden><div class="vrow"><b data-k="vName"></b><span class="vread"><b data-k="vSpeed">0</b><small>KM/H</small></span><span class="vread" data-k="vAltBox"><b data-k="vAlt">0</b><small>M ALT</small></span></div><div class="track"><i data-k="vHealth"></i></div><small class="vkeys" data-k="vKeys"></small></div>
+      <div class="vehicle panel" data-k="vehicle" hidden><div class="vrow"><b data-k="vName"></b><span class="vread"><b data-k="vSpeed">0</b>${L('hud.kmh', 'small')}</span><span class="vread" data-k="vAltBox"><b data-k="vAlt">0</b>${L('hud.alt', 'small')}</span></div><div class="track"><i data-k="vHealth"></i></div><small class="vkeys" data-k="vKeys"></small></div>
       <div class="spectate" data-k="spectate" hidden></div>
       <div class="zoomtag" data-k="zoomtag" hidden></div>
-      <div class="released panel" data-k="released" hidden><b data-k="releasedTitle"></b><span>Click to resume · <kbd>M</kbd> leave match</span></div>
+      <div class="released panel" data-k="released" hidden><b data-k="releasedTitle"></b><span>${L('hud.clickResume')} · <kbd>M</kbd> ${L('hud.leave')}</span></div>
       <div class="scoreboard panel" data-k="board" hidden></div>
       <div class="end panel" data-k="end" hidden></div>
       <div class="fps" data-k="fps"></div>`;
@@ -154,6 +160,20 @@ export class Hud {
       } else if (e.code === 'Escape') { e.preventDefault(); this.closeChat(); }
     });
     this.input.addEventListener('blur', () => this.closeChat());
+    this.stopLang = onLang(() => this.relabel());
+  }
+
+  /** Language changed: static labels now, the per-tick text on its next update, open panels redrawn. */
+  private relabel() {
+    applyI18n(this.root);
+    this.cache.clear();
+    this.boardAt = 0;
+    const l = this.last;
+    if (!l) return;
+    if (l.chatTeam !== undefined) this.set('chatLabel', t(l.chatTeam ? 'hud.chatTeamLabel' : 'hud.chatAll'));
+    if (l.spectate) this.spectate(...l.spectate);
+    if (l.released !== undefined) this.released(!this.el.released.hidden, l.released);
+    if (l.end) this.matchEnd(...l.end);
   }
 
   private set(key: string, value: string, prop: 'text' | 'html' | 'width' = 'text') {
@@ -317,8 +337,8 @@ export class Hud {
     const phase = state.phase === 'warmup' ? 'warmup' : state.phase === 'ended' ? 'ended' : armed ? 'armed' : state.roundPhase;
     this.el.clockBox.dataset.phase = phase;
     this.set('clock', practice ? clock(cfg.roundTime - state.phaseLeft) : clock(state.phaseLeft));
-    this.set('round', practice ? 'PRACTICE' : phase === 'warmup' ? 'WARMUP' : phase === 'ended' ? 'MATCH OVER' : phase === 'freeze' ? `ROUND ${state.round} · BUY` : phase === 'over' ? 'ROUND OVER' : `ROUND ${state.round}`);
-    this.set('sub', practice ? 'PRACTICE RANGE · FREE STORE' : `${cfg.mode === 'sabotage' ? 'SABOTAGE' : 'ELIMINATION'} · FIRST TO ${cfg.roundsToWin}`);
+    this.set('round', practice ? t('hud.practice') : phase === 'warmup' ? t('hud.warmup') : phase === 'ended' ? t('hud.matchOver') : phase === 'freeze' ? t('hud.roundBuy', { n: state.round }) : phase === 'over' ? t('hud.roundOver') : t('hud.round', { n: state.round }));
+    this.set('sub', practice ? t('hud.practiceSub') : t('hud.modeSub', { mode: modeName(cfg.mode), n: cfg.roundsToWin }));
     for (const t of [0, 1] as const) {
       this.set(`s${t}`, String(state.scores[t]));
       this.set(`p${t}`, `${Math.min(100, state.scores[t] / Math.max(1, cfg.roundsToWin) * 100)}%`, 'width');
@@ -331,8 +351,8 @@ export class Hud {
       this.set('sites', sites.map((id, i) => `<b class="${b.site === i ? (b.armed ? 'armed' : b.by >= 0 ? 'busy' : '') : b.armed ? 'inert' : ''}">${id}</b>`).join(''), 'html');
       const site = sites[b.site] ?? '';
       const attacking = me?.team === ATTACKERS;
-      const text = b.armed ? (b.by >= 0 ? `DISARMING ${site}` : `BOMB ARMED · ${site} · ${clock(state.phaseLeft)}`)
-        : b.by >= 0 ? `ARMING ${site}` : attacking ? 'ARM A BOMB SITE' : 'DEFEND THE BOMB SITES';
+      const text = b.armed ? (b.by >= 0 ? t('hud.disarming', { site }) : t('hud.bombArmed', { site, clock: clock(state.phaseLeft) }))
+        : b.by >= 0 ? t('hud.arming', { site }) : t(attacking ? 'hud.armSite' : 'hud.defendSites');
       this.set('bombText', text);
       this.el.bomb.classList.toggle('armed', b.armed);
       this.el.bomb.classList.toggle('busy', b.by >= 0);
@@ -352,11 +372,11 @@ export class Hud {
     this.el.arms.classList.toggle('dead', !me?.alive);
     // Weapon in hand, then the magazine / reserve: only with an Ammo Counter fitted (BeGone), then the loadout keys.
     const w = p.weapon, melee = w.class === 'melee', counter = w.attachments.counter === 'ammoCounter';
-    this.set('weapon', w.name);
+    this.set('weapon', heldName(w.id, w.name));
     this.set('atts', '', 'html');
     const ammo = p.ammo[p.slot as 0 | 1] ?? 0;
     // Without a counter the panel is a plain list of what you carry (key, weapon), the one in hand lit.
-    const carried = [[3, WEAPONS[p.weapons[0]].name, p.slot === 0], [2, WEAPONS[p.weapons[1]].name, p.slot === 1], [1, 'Knife', p.slot === 2],
+    const carried = [[3, WEAPONS[p.weapons[0]].name, p.slot === 0], [2, WEAPONS[p.weapons[1]].name, p.slot === 1], [1, t('cause.knife'), p.slot === 2],
       [4, `M67 ×${p.grenades}${me?.grenadeHE ? ' HE' : ''}`, false]] as [number, string, boolean][];
     const list = `<ul class="carried">${carried.map(([k, name, on]) => `<li class="${on ? 'on' : ''}${k === 4 && !p.grenades ? ' none' : ''}"><kbd>${k}</kbd>${name}</li>`).join('')}</ul>`;
     this.set('ammo', counter && !melee ? `${ammo}<small>/ ${p.reserve[p.slot as 0 | 1]}</small>` : list, 'html');
@@ -365,7 +385,7 @@ export class Hud {
     this.el.ammo.classList.toggle('empty', counter && !melee && ammo === 0);
     this.set('reload', `${p.reloading ? (1 - p.reloadLeft / p.reloadTotal) * 100 : 0}%`, 'width');
     const slot = (key: number, name: string, on: boolean, extra = '') => `<span class="${on ? 'on' : ''}"><kbd>${key}</kbd>${name}${extra}</span>`;
-    this.set('slots', slot(1, 'KNIFE', p.slot === 2) + slot(2, WEAPONS[p.weapons[1]].name, p.slot === 1) + slot(3, WEAPONS[p.weapons[0]].name, p.slot === 0)
+    this.set('slots', slot(1, t('hud.knife'), p.slot === 2) + slot(2, WEAPONS[p.weapons[1]].name, p.slot === 1) + slot(3, WEAPONS[p.weapons[0]].name, p.slot === 0)
       + `<span class="nade${p.grenades > 0 ? '' : ' none'}"><kbd>4</kbd>M67 ×${p.grenades}${me?.grenadeHE ? '<em>HE</em>' : ''}</span>`, 'html');
   }
 
@@ -430,7 +450,7 @@ export class Hud {
     const item = document.createElement('div');
     if (mine) item.className = 'me';
     const name = (s?: Soldier) => s ? `<span class="t${s.team}">${escape(s.name)}</span>` : '';
-    item.innerHTML = `${killer && killer !== victim && killer.id !== victim?.id ? name(killer) : ''}<span class="wpn">${escape(weaponLabel(weapon))}${head ? '<span class="hs" title="Headshot"></span>' : ''}</span>${name(victim)}`;
+    item.innerHTML = `${killer && killer !== victim && killer.id !== victim?.id ? name(killer) : ''}<span class="wpn">${escape(weaponLabel(weapon))}${head ? `<span class="hs" title="${t('hud.headshot')}"></span>` : ''}</span>${name(victim)}`;
     const feed = this.el.feed;
     feed.prepend(item);
     while (feed.children.length > 6) feed.lastElementChild!.remove();
@@ -456,7 +476,7 @@ export class Hud {
   /** Cash award popup ("+$500 KILL"); several stack under the crosshair. */
   reward(amount: number, reason: string) {
     const e = document.createElement('div');
-    e.innerHTML = `+$${amount.toLocaleString('en-US')} <small>${escape(reason)}</small>`;
+    e.innerHTML = `+$${amount.toLocaleString('en-US')} <small>${escape(rewardReason(reason))}</small>`;
     const box = this.el.rewards;
     box.prepend(e);
     while (box.children.length > 5) box.lastElementChild!.remove();
@@ -489,8 +509,9 @@ export class Hud {
 
   /** "SPECTATING name · RMB next" while dead, or hidden. */
   spectate(name: string | undefined, team: number) {
+    (this.last ??= {}).spectate = [name, team];
     this.el.spectate.hidden = name === undefined;
-    if (name !== undefined) this.set('spectate', `<small>SPECTATING</small><b style="color:${TEAM_CSS[team] ?? 'var(--ink)'}">${escape(name)}</b><small><kbd>RMB</kbd> NEXT</small>`, 'html');
+    if (name !== undefined) this.set('spectate', `<small>${t('hud.spectating')}</small><b style="color:${TEAM_CSS[team] ?? 'var(--ink)'}">${escape(name)}</b><small><kbd>${t('key.rmb')}</kbd> ${t('hud.next')}</small>`, 'html');
   }
 
   /** Context prompt under the crosshair (HTML allowed, e.g. "<kbd>E</kbd> ARM BOMB"), or hidden. */
@@ -528,7 +549,7 @@ export class Hud {
   /** Store reminder during buy time (e.g. "B STORE · 14s"), or hidden. */
   buyHint(text: string | undefined) {
     this.el.buyhint.hidden = !text;
-    if (text) this.set('buyhint', escape(text).replace(/^B\b/, '<kbd>B</kbd>'), 'html');
+    if (text) this.set('buyhint', escape(text).replace(/^B /, '<kbd>B</kbd> '), 'html');
   }
 
   /** Tab: per team name, K, D, A, score, cash (own team only) and alive state; sorted like BeGone (kills, then fewest deaths). */
@@ -542,18 +563,18 @@ export class Hud {
     const table = (team: Team) => {
       const rows = state.soldiers.filter(s => s.team === team).sort((a, b) => b.kills - a.kills || a.deaths - b.deaths || b.score - a.score);
       const cash = team === myTeam;
-      return `<section class="t${team}"><h3><span>${TEAM_NAMES[team]}</span><small>${rows.filter(s => s.alive).length}/${rows.length} ALIVE</small><b>${state.scores[team]}</b></h3>
-        <table><tr><th>Player</th><th>K</th><th>D</th><th>A</th><th>Score</th><th>${cash ? 'Cash' : ''}</th></tr>${rows.map(s => `<tr class="${s.id === myId ? 'me' : ''}${s.alive ? '' : ' dead'}"><td><i class="life"></i>${escape(s.name)}${s.bot ? '<span class="bot">BOT</span>' : ''}</td><td>${s.kills}</td><td>${s.deaths}</td><td>${s.assists}</td><td>${s.score}</td><td class="money">${cash ? `$${s.money.toLocaleString('en-US')}` : ''}</td></tr>`).join('')}</table></section>`;
+      return `<section class="t${team}"><h3><span>${teamName(team)}</span><small>${t('hud.alive', { n: rows.filter(s => s.alive).length, m: rows.length })}</small><b>${state.scores[team]}</b></h3>
+        <table><tr><th>${t('hud.player')}</th><th>${t('hud.k')}</th><th>${t('hud.d')}</th><th>${t('hud.a')}</th><th>${t('hud.score')}</th><th>${cash ? t('hud.cash') : ''}</th></tr>${rows.map(s => `<tr class="${s.id === myId ? 'me' : ''}${s.alive ? '' : ' dead'}"><td><i class="life"></i>${escape(s.name)}${s.bot ? `<span class="bot">${t('hud.bot')}</span>` : ''}</td><td>${s.kills}</td><td>${s.deaths}</td><td>${s.assists}</td><td>${s.score}</td><td class="money">${cash ? `$${s.money.toLocaleString('en-US')}` : ''}</td></tr>`).join('')}</table></section>`;
     };
     const cfg = state.config;
-    this.set('board', `<header>${escape(this.map.name)} · ${cfg.mode === 'sabotage' ? 'SABOTAGE' : 'ELIMINATION'} · ROUND ${state.round} · FIRST TO ${cfg.roundsToWin}</header>${table(0)}${table(1)}`, 'html');
+    this.set('board', `<header>${escape(t('hud.boardHead', { map: mapName(this.map.id, this.map.name), mode: modeName(cfg.mode), n: state.round, m: cfg.roundsToWin }))}</header>${table(0)}${table(1)}`, 'html');
   }
 
   /** Chat line: team messages are prefixed *TEAM* on a team-tinted background, dead players' *DEAD*. */
   chatLine(name: string, team: number, text: string, teamOnly: boolean, dead: boolean) {
     const line = document.createElement('div');
     line.className = `line${teamOnly ? ` team t${team}` : ''}`;
-    line.innerHTML = `${dead ? '<em>*DEAD*</em>' : ''}${teamOnly ? '<em>*TEAM*</em>' : ''}<b class="t${team}">${escape(name)}:</b> ${escape(text)}`;
+    line.innerHTML = `${dead ? `<em>${t('hud.chatDead')}</em>` : ''}${teamOnly ? `<em>${t('hud.chatTeam')}</em>` : ''}<b class="t${team}">${escape(name)}:</b> ${escape(text)}`;
     const box = this.el.chatLines;
     box.appendChild(line);
     while (box.children.length > 8) box.firstElementChild!.remove();
@@ -564,7 +585,8 @@ export class Hud {
   openChat(team: boolean, send: (text: string) => void) {
     this.chatSend = send;
     this.chatOpen = true;
-    this.set('chatLabel', team ? 'TEAM' : 'ALL');
+    (this.last ??= {}).chatTeam = team;
+    this.set('chatLabel', t(team ? 'hud.chatTeamLabel' : 'hud.chatAll'));
     this.el.chatBox.classList.toggle('team', team);
     this.el.chatBox.hidden = false;
     this.el.chat.classList.add('open');
@@ -613,7 +635,7 @@ export class Hud {
         ctx.strokeStyle = color; ctx.lineWidth = 3;
         ctx.beginPath(); ctx.arc(def.x * scale, def.z * scale, Math.max(6, def.radius) * scale, 0, Math.PI * 2); ctx.stroke();
         upright(def.x, def.z, () => {
-          ctx.fillStyle = color; ctx.font = 'bold 26px Rajdhani, sans-serif'; ctx.fillText(id, 0, 1);
+          ctx.fillStyle = color; ctx.font = `bold 26px ${UI_STACK}`; ctx.fillText(id, 0, 1);
           if (armed && blink) { ctx.fillStyle = '#ff3a2a'; ctx.beginPath(); ctx.arc(0, 20, 7, 0, Math.PI * 2); ctx.fill(); }
         });
       });
@@ -648,33 +670,35 @@ export class Hud {
   matchEnd(state: MatchState, myTeam: number, career?: CareerStats[]) {
     const show = state.phase === 'ended';
     this.el.end.hidden = !show;
+    (this.last ??= {}).end = [state, myTeam, career];
     if (!show) return;
     const w = state.winner;
     const top = [...state.soldiers].sort((a, b) => b.score - a.score || b.kills - a.kills).slice(0, 5);
-    this.set('end', `<small>${w === -1 ? 'MATCH DRAWN' : `${TEAM_NAMES[w].toUpperCase()} WIN THE MATCH`}</small>
-      <h2 style="color:${w === -1 ? 'var(--ink)' : TEAM_CSS[w]}">${w === -1 ? 'DRAW' : w === myTeam ? 'VICTORY' : 'DEFEAT'}</h2>
-      <div class="final"><b class="t0">${TEAM_SHORT[0]} ${state.scores[0]}</b><span>—</span><b class="t1">${state.scores[1]} ${TEAM_SHORT[1]}</b></div>
-      <table><tr><th></th><th>Player</th><th>K</th><th>D</th><th>A</th><th>Score</th></tr>${top.map((s, i) => `<tr${s.team === myTeam ? ' class="mine"' : ''}><td>${i + 1}</td><td class="t${s.team}">${escape(s.name)}</td><td>${s.kills}</td><td>${s.deaths}</td><td>${s.assists}</td><td>${s.score}</td></tr>`).join('')}</table>
+    this.set('end', `<small>${w === -1 ? t('hud.matchDrawn') : t('hud.winMatch', { team: teamName(w).toUpperCase() })}</small>
+      <h2 style="color:${w === -1 ? 'var(--ink)' : TEAM_CSS[w]}">${t(w === -1 ? 'hud.draw' : w === myTeam ? 'hud.victory' : 'hud.defeat')}</h2>
+      <div class="final"><b class="t0">${teamShort(0)} ${state.scores[0]}</b><span>—</span><b class="t1">${state.scores[1]} ${teamShort(1)}</b></div>
+      <table><tr><th></th><th>${t('hud.player')}</th><th>${t('hud.k')}</th><th>${t('hud.d')}</th><th>${t('hud.a')}</th><th>${t('hud.score')}</th></tr>${top.map((s, i) => `<tr${s.team === myTeam ? ' class="mine"' : ''}><td>${i + 1}</td><td class="t${s.team}">${escape(s.name)}</td><td>${s.kills}</td><td>${s.deaths}</td><td>${s.assists}</td><td>${s.score}</td></tr>`).join('')}</table>
       ${career?.length ? this.careerTable(career) : ''}
-      <p>New match in ${Math.ceil(state.phaseLeft)}s</p>
-      <div class="actions">${this.onRestart ? '<button data-act="restart">Play again</button>' : ''}<button data-act="menu">Leave match</button></div>`, 'html');
+      <p>${t('hud.newMatchIn', { n: Math.ceil(state.phaseLeft) })}</p>
+      <div class="actions">${this.onRestart ? `<button data-act="restart">${t('hud.playAgain')}</button>` : ''}<button data-act="menu">${t('hud.leaveMatch')}</button></div>`, 'html');
   }
 
   /** Top five of the server leaderboard, plus my own row if I'm further down. */
   private careerTable(career: CareerStats[]) {
     const mine = career.findIndex(c => c.mine);
     const rows = career.map((c, i) => ({ c, i })).filter(({ i }) => i < 5 || i === mine);
-    return `<h4>Server leaderboard</h4><table class="career"><tr><th></th><th>Player</th><th>K</th><th>D</th><th>A</th><th>HS</th><th>Rounds</th><th>Matches</th></tr>${rows.map(({ c, i }) => `<tr${c.mine ? ' class="me"' : ''}><td>${i + 1}</td><td>${escape(c.name)}</td><td>${c.kills}</td><td>${c.deaths}</td><td>${c.assists}</td><td>${c.headshots}</td><td>${c.roundsWon}/${c.roundsPlayed}</td><td>${c.matchesWon}/${c.matchesPlayed}</td></tr>`).join('')}</table>`;
+    return `<h4>${t('hud.leaderboard')}</h4><table class="career"><tr><th></th><th>${t('hud.player')}</th><th>${t('hud.k')}</th><th>${t('hud.d')}</th><th>${t('hud.a')}</th><th>${t('hud.hs')}</th><th>${t('hud.rounds')}</th><th>${t('hud.matches')}</th></tr>${rows.map(({ c, i }) => `<tr${c.mine ? ' class="me"' : ''}><td>${i + 1}</td><td>${escape(c.name)}</td><td>${c.kills}</td><td>${c.deaths}</td><td>${c.assists}</td><td>${c.headshots}</td><td>${c.roundsWon}/${c.roundsPlayed}</td><td>${c.matchesWon}/${c.matchesPlayed}</td></tr>`).join('')}</table>`;
   }
 
   /** Mouse released mid-game: solo is paused; online the match carries on. */
   released(show: boolean, solo: boolean) {
     this.el.released.hidden = !show;
-    if (show) this.set('releasedTitle', solo ? 'Paused' : 'Mouse released — the match continues');
+    if (show) (this.last ??= {}).released = solo;
+    if (show) this.set('releasedTitle', t(solo ? 'set.paused' : 'hud.released'));
   }
   net(text: string) { this.set('net', text); }
   fps(text: string) { this.set('fps', text); }
-  dispose() { clearTimeout(this.toastTimer); this.root.remove(); }
+  dispose() { clearTimeout(this.toastTimer); this.stopLang(); this.root.remove(); }
 }
 
 function escape(s: string) { return s.replace(/[&<>"']/g, c => `&#${c.charCodeAt(0)};`); }

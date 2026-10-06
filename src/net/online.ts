@@ -12,6 +12,7 @@ import { roundLength } from '../../shared/match/sim';
 import { decodeFrame, type DecodedFrame, type FramePose } from '../../shared/match/frame';
 import { DEFAULT_WEAPONS, STAMINA, WEAPONS, normalizeAttachments, weaponStats, type AttachmentId, type Attachments, type Slot, type WeaponId } from '../../shared/weapons';
 import { newRoundStats, type BuyItem } from '../../shared/match/economy';
+import { plural, t } from '../ui/i18n';
 
 type RosterRow = Infer<typeof RosterTable>;
 
@@ -197,11 +198,11 @@ export class OnlineLink implements GameLink {
   }
 
   status() {
-    if (this.disconnected) return 'DISCONNECTED';
+    if (this.disconnected) return t('net.disconnected');
     const humans = this.view?.soldiers.filter(s => !s.bot).length ?? 0;
     const info = this.roomInfo();
-    const room = info ? (info.code ? `ROOM ${info.code} · ${info.size}` : `QUICK PLAY ${info.size}`) : 'ONLINE';
-    return `${room} · ${humans} PLAYER${humans === 1 ? '' : 'S'} · ${Math.round(this.pingMs)} MS`;
+    const room = info ? (info.code ? t('net.room', { code: info.code, size: info.size }) : t('net.quick', { size: info.size })) : t('net.online');
+    return `${room} · ${plural('net.players', humans)} · ${Math.round(this.pingMs)} MS`;
   }
 
   report(r: ClientReport) {
@@ -284,18 +285,18 @@ export async function watchRooms(onChange: (rooms: PublicRoom[]) => void, onStat
 export async function connectOnline(name: string, team: Team | undefined, how: OnlineEntry, status: (s: string) => void): Promise<OnlineLink> {
   const { uri, database } = onlineConfig();
   if (!uri || !database) throw new Error('No SpacetimeDB server configured.');
-  status('Connecting to SpacetimeDB…');
+  status(t('net.connecting'));
   const { DbConnection } = await import('../module_bindings');
   const tokenKey = `lawbreaker.token:${uri}:${database}`;
   let token: string | undefined;
   try { token = localStorage.getItem(tokenKey) ?? undefined; } catch { /* storage disabled */ }
   return new Promise<OnlineLink>((resolve, reject) => {
     let link: OnlineLink | undefined;
-    const timer = setTimeout(() => reject(new Error('Timed out connecting to the match server.')), 20_000);
+    const timer = setTimeout(() => reject(new Error(t('net.timeout'))), 20_000);
     const conn = DbConnection.builder().withUri(uri).withDatabaseName(database).withToken(token)
       .onConnect((connection, identity, nextToken) => {
         try { localStorage.setItem(tokenKey, nextToken); } catch { /* anonymous identity still works */ }
-        status('Joining the battlefield…');
+        status(t('net.joining'));
         link = new OnlineLink(connection, identity);
         connection.subscriptionBuilder()
           .onApplied(async () => {
@@ -309,12 +310,12 @@ export async function connectOnline(name: string, team: Team | undefined, how: O
               wait();
             } catch (error) { clearTimeout(timer); reject(error); }
           })
-          .onError(() => { clearTimeout(timer); reject(new Error('Subscription failed.')); })
+          .onError(() => { clearTimeout(timer); reject(new Error(t('net.subscription'))); })
           // Rooms (match rows), players and career stats; the room's own roster, frame and events
           // follow once we know our room. `soldier` and `body` are server-side detail.
           .subscribe(['SELECT * FROM match', 'SELECT * FROM player', 'SELECT * FROM profile']);
       })
-      .onConnectError((_ctx, error) => { clearTimeout(timer); reject(new Error(`Could not reach the match server (${error?.message ?? 'connection refused'}).`)); })
+      .onConnectError((_ctx, error) => { clearTimeout(timer); reject(new Error(t('net.unreachable', { error: error?.message ?? t('net.refused') }))); })
       .onDisconnect(() => { link?.markDisconnected(); })
       .build();
     void conn;

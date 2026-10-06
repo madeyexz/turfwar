@@ -7,36 +7,22 @@ import {
   type AttachmentCategory, type AttachmentId, type Attachments, type WeaponClass, type WeaponDef, type WeaponId,
 } from '../../shared/weapons';
 import { StorePreview, type PreviewItem } from './storepreview';
+import { L, applyI18n, attachmentName, onLang, t, weaponClass, type Key } from './i18n';
 
 type Tab = 'primary' | 'secondary' | 'tactical' | 'attachments';
-const TABS: { id: Tab; title: string }[] = [
-  { id: 'primary', title: 'Primary' }, { id: 'secondary', title: 'Secondary' }, { id: 'tactical', title: 'Tactical' }, { id: 'attachments', title: 'Attachments' },
-];
+const TABS: { id: Tab }[] = [{ id: 'primary' }, { id: 'secondary' }, { id: 'tactical' }, { id: 'attachments' }];
 const PRIMARY: WeaponId[] = ['mp5', 'm4a1', 'm1014', 'm110', 'm249'];
 const SECONDARY: WeaponId[] = ['m9a1', 'mp7'];
-const CLASS: Record<WeaponClass, string> = { melee: 'Melee', pistol: 'Pistol', smg: 'Submachine gun', rifle: 'Assault rifle', shotgun: 'Shotgun', sniper: 'Sniper rifle', lmg: 'Light machine gun' };
+const CLASS = (c: WeaponClass) => weaponClass(c);
 /** Attachment slots on the gun: one item each, so gadgets in different slots stack. */
-const SLOT: Record<AttachmentCategory, { name: string; empty: string }> = {
-  optic: { name: 'Optic', empty: 'Iron Sight' }, muzzle: { name: 'Muzzle', empty: 'Bare muzzle' }, laser: { name: 'Laser', empty: 'Empty' },
-  light: { name: 'Light', empty: 'Empty' }, counter: { name: 'Counter', empty: 'Empty' }, magazine: { name: 'Magazine', empty: 'Standard' },
-  stock: { name: 'Stock', empty: 'Standard' }, ammo: { name: 'Ammo', empty: 'Standard rounds' },
+const SLOT_EMPTY: Record<AttachmentCategory, Key> = {
+  optic: 'slot.empty.optic', muzzle: 'slot.empty.muzzle', laser: 'slot.empty.none', light: 'slot.empty.none', counter: 'slot.empty.none',
+  magazine: 'slot.empty.standard', stock: 'slot.empty.standard', ammo: 'slot.empty.ammo',
 };
-const NOTES: Partial<Record<AttachmentId, string>> = {
-  irons: 'The free default sights. Choosing them takes the fitted optic off.',
-  reflex: 'Tube red dot: a small, crisp dot through a round tube; a little zoom.',
-  holo: 'Holographic sight: a wide window and a ring-and-dot reticle; more zoom and steadier aim.',
-  acog: 'Magnified 4× prism scope for mid-range fights.',
-  x4: 'Pistol scope: 4× magnification on the M9A1.',
-  x6: 'Sniper scope: 6× magnification for the M110.',
-  ammoCounter: 'Without it you do not see your ammo: shows the magazine and spare rounds on the gun and the HUD.',
-  laser: 'Tightens hip-fire. The beam is visible — others can see it.',
-  flashlight: 'Lights a cone ahead of you; adds a little recoil.',
-  suppressor: 'Hides your tracer and muzzle flash and keeps you off enemy minimaps. Slightly less damage.',
-  extendedClip: 'More rounds per magazine; a little heavier.',
-  recoilPad: 'Softens recoil; a little heavier.',
-  explosiveAmmo: 'Hard-hitting rounds, especially to the head. Smaller magazine.',
-  incendiaryAmmo: 'Burning rounds that hit the body harder. Smaller magazine.',
-};
+const SLOT = (c: AttachmentCategory) => ({ name: t(`slot.${c}`), empty: t(SLOT_EMPTY[c]) });
+const attName = (id: AttachmentId) => attachmentName(id, ATTACHMENTS[id].name);
+/** One line on what each attachment does (`note.<id>` in i18n). */
+const note = (id: AttachmentId) => t(`note.${id}`);
 
 // BeGone's stats recovered from the derived WeaponDef (see `derive` in shared/weapons.ts).
 const acc = (w: WeaponDef) => 100 - w.spread.hip / 0.35;
@@ -50,28 +36,28 @@ const clamp01 = (n: number) => Math.max(0, Math.min(1, n));
 const signed = (n: number, unit = '') => `${n > 0 ? '+' : n < 0 ? '−' : '±'}${Math.abs(round1(n))}${unit}`;
 
 /** Stat bars: 0..1 fill, the number compared, its label and whether more is better. */
-interface Bar { name: string; fill: (w: WeaponDef) => number; num: (w: WeaponDef) => number; label: (w: WeaponDef) => string; unit?: string; less?: boolean }
+interface Bar { name: Key; fill: (w: WeaponDef) => number; num: (w: WeaponDef) => number; label: (w: WeaponDef) => string; unit?: string; less?: boolean }
 const BARS: Bar[] = [
-  { name: 'Damage', fill: w => clamp01(w.damage.body * w.pellets / 90), num: w => w.damage.body * w.pellets, label: w => w.pellets > 1 ? `${w.damage.body}×${w.pellets}` : `${w.damage.body}` },
-  { name: 'Headshot', fill: w => clamp01(w.damage.head * w.pellets / 160), num: w => w.damage.head * w.pellets, label: w => w.pellets > 1 ? `${w.damage.head}×${w.pellets}` : `${w.damage.head}` },
-  { name: 'Fire rate', fill: w => clamp01(1 / w.interval / 13), num: w => 1 / w.interval, label: w => `${round1(1 / w.interval)}/s`, unit: '/s' },
-  { name: 'Accuracy', fill: w => clamp01((acc(w) - 25) / 75), num: acc, label: w => `${round1(acc(w))}` },
-  { name: 'Aim acc.', fill: w => clamp01((zoomAcc(w) - 35) / 65), num: zoomAcc, label: w => `${round1(zoomAcc(w))}` },
-  { name: 'Recoil', fill: w => clamp01(kick(w) / 12), num: kick, label: w => `${round1(kick(w))}`, less: true },
-  { name: 'Mobility', fill: w => clamp01((w.speed * 100 - 80) / 30), num: w => w.speed * 100, label: w => `${Math.round(w.speed * 100)}%`, unit: '%' },
+  { name: 'bar.damage', fill: w => clamp01(w.damage.body * w.pellets / 90), num: w => w.damage.body * w.pellets, label: w => w.pellets > 1 ? `${w.damage.body}×${w.pellets}` : `${w.damage.body}` },
+  { name: 'bar.headshot', fill: w => clamp01(w.damage.head * w.pellets / 160), num: w => w.damage.head * w.pellets, label: w => w.pellets > 1 ? `${w.damage.head}×${w.pellets}` : `${w.damage.head}` },
+  { name: 'bar.rate', fill: w => clamp01(1 / w.interval / 13), num: w => 1 / w.interval, label: w => `${round1(1 / w.interval)}/s`, unit: '/s' },
+  { name: 'bar.accuracy', fill: w => clamp01((acc(w) - 25) / 75), num: acc, label: w => `${round1(acc(w))}` },
+  { name: 'bar.aimAcc', fill: w => clamp01((zoomAcc(w) - 35) / 65), num: zoomAcc, label: w => `${round1(zoomAcc(w))}` },
+  { name: 'bar.recoil', fill: w => clamp01(kick(w) / 12), num: kick, label: w => `${round1(kick(w))}`, less: true },
+  { name: 'bar.mobility', fill: w => clamp01((w.speed * 100 - 80) / 30), num: w => w.speed * 100, label: w => `${Math.round(w.speed * 100)}%`, unit: '%' },
 ];
 
 /** Stat changes from fitting `id` to `wid` instead of what's in its slot. */
 function changes(wid: WeaponId, fitted: Attachments, id: AttachmentId) {
   const base = weaponStats(wid, fitted), next = weaponStats(wid, withAttachment(fitted, id));
   const list = ([
-    ['Head damage', next.damage.head - base.damage.head, 1, ''], ['Body damage', next.damage.body - base.damage.body, 1, ''], ['Limb damage', next.damage.limb - base.damage.limb, 1, ''],
-    ['Magazine', next.magazine - base.magazine, 1, ''], ['Hip accuracy', acc(next) - acc(base), 1, ''], ['Aim accuracy', zoomAcc(next) - zoomAcc(base), 1, ''],
-    ['Recoil', kick(next) - kick(base), -1, ''], ['Aim recoil', zoomKick(next) - zoomKick(base), -1, ''], ['Move speed', (next.speed - base.speed) * 100, 1, '%'],
-  ] as [string, number, number, string][]).filter(([, d]) => Math.abs(d) > 0.01)
-    .map(([name, d, good, unit]) => ({ name, up: d * good > 0, text: signed(d, unit) }));
+    ['stat.head', next.damage.head - base.damage.head, 1, ''], ['stat.body', next.damage.body - base.damage.body, 1, ''], ['stat.limb', next.damage.limb - base.damage.limb, 1, ''],
+    ['stat.magazine', next.magazine - base.magazine, 1, ''], ['stat.hipAcc', acc(next) - acc(base), 1, ''], ['stat.aimAcc', zoomAcc(next) - zoomAcc(base), 1, ''],
+    ['stat.recoil', kick(next) - kick(base), -1, ''], ['stat.aimRecoil', zoomKick(next) - zoomKick(base), -1, ''], ['stat.move', (next.speed - base.speed) * 100, 1, '%'],
+  ] as [Key, number, number, string][]).filter(([, d]) => Math.abs(d) > 0.01)
+    .map(([key, d, good, unit]) => ({ name: t(key), up: d * good > 0, text: signed(d, unit) }));
   const zoom = magnify(next) - magnify(base);
-  if (Math.abs(zoom) > 0.01) list.unshift({ name: 'Zoom', up: zoom > 0, text: `${round1(magnify(base))}× → ${round1(magnify(next))}×` });
+  if (Math.abs(zoom) > 0.01) list.unshift({ name: t('stat.zoom'), up: zoom > 0, text: `${round1(magnify(base))}× → ${round1(magnify(next))}×` });
   return { base, next, list };
 }
 
@@ -83,13 +69,15 @@ function withAttachment(fitted: Attachments, id: AttachmentId): Attachments {
 }
 
 const isFitted = (fitted: Attachments, id: AttachmentId) => fitted[ATTACHMENTS[id].category] === id || (id === 'irons' && !fitted.optic);
-const fittedNames = (fitted: Attachments = {}) => ATTACHMENT_SLOTS.map(c => fitted[c]).filter((a): a is AttachmentId => !!a && a !== 'irons').map(a => ATTACHMENTS[a].name);
+const fittedNames = (fitted: Attachments = {}) => ATTACHMENT_SLOTS.map(c => fitted[c]).filter((a): a is AttachmentId => !!a && a !== 'irons').map(attName);
 
 interface Entry {
   key: string; name: string; sub: string; price: number;
   /** '' for sale, or the state shown instead of the price. */
   state: '' | 'equipped' | 'owned' | 'fitted' | 'default' | 'carried';
   disabled: boolean; reason?: string;
+  /** Can't afford it (the badge turns red). */
+  short?: boolean;
   item?: BuyItem; weapon?: WeaponId; attachment?: AttachmentId;
 }
 
@@ -121,6 +109,7 @@ export class BuyMenu {
   private signature = '';
   private preview: StorePreview;
   private el: Record<'tabs' | 'clock' | 'cash' | 'spent' | 'loadout' | 'side' | 'title' | 'info' | 'keys', HTMLElement>;
+  private stopLang: () => void;
 
   constructor(parent: HTMLElement, private actions: { buy(item: BuyItem): void; attach(weapon: WeaponId, attachment: AttachmentId): void }, assets?: Assets) {
     this.root = document.createElement('div');
@@ -128,11 +117,11 @@ export class BuyMenu {
     this.root.hidden = true;
     this.root.innerHTML = `
       <header>
-        <h2>Store</h2>
-        <nav class="tabs"><kbd>Q</kbd>${TABS.map(t => `<button type="button" data-tab="${t.id}">${t.title}</button>`).join('')}<kbd>E</kbd></nav>
+        ${L('store.title', 'h2')}
+        <nav class="tabs"><kbd>Q</kbd>${TABS.map(tab => L(`store.tab.${tab.id}`, 'button', `type="button" data-tab="${tab.id}"`)).join('')}<kbd>E</kbd></nav>
         <div class="clock"></div>
-        <div class="cash"><small>Cash</small><b></b><span class="spent"></span></div>
-        <button type="button" class="close" data-close aria-label="Close store">✕</button>
+        <div class="cash">${L('store.cash', 'small')}<b></b><span class="spent"></span></div>
+        <button type="button" class="close" data-close aria-label="${t('store.close')}" data-i18n-aria-label="store.close">✕</button>
       </header>
       <section class="loadout"></section>
       <div class="body">
@@ -148,6 +137,7 @@ export class BuyMenu {
     this.el = { tabs: q('.tabs'), clock: q('.clock'), cash: q('.cash b'), spent: q('.spent'), loadout: q('.loadout'), side: q('.side'), title: q('.title'), info: q('.info'), keys: q('.keys') };
     this.preview = new StorePreview(assets);
     q('.stage').prepend(this.preview.el);
+    this.stopLang = onLang(() => { applyI18n(this.root); this.preview.relabel(); this.render(true); });
 
     this.root.addEventListener('click', e => {
       const t = e.target as HTMLElement;
@@ -221,7 +211,7 @@ export class BuyMenu {
   }
 
   /** Free the preview's GL context now (optional: it is also released a while after closing). */
-  dispose() { this.root.hidden = true; this.preview.stop(); this.preview.release(); }
+  dispose() { this.root.hidden = true; this.stopLang(); this.preview.stop(); this.preview.release(); }
 
   /** Refresh cash, buy window and owned/fitted state (re-renders only when something changed). */
   update(me: Soldier | undefined, canBuyWeapons: boolean, buyLeft: number, free: boolean) {
@@ -296,7 +286,7 @@ export class BuyMenu {
   /** Why weapons can't be bought right now. */
   private closedReason() {
     const l = this.last!;
-    return l.buyLeft > 0 ? 'Return to your base to buy weapons' : 'Buy time is over — weapons are sold at the start of the next round';
+    return t(l.buyLeft > 0 ? 'store.returnToBase' : 'store.buyOver');
   }
 
   private render(force = false) {
@@ -314,7 +304,7 @@ export class BuyMenu {
     if (!force && sig === this.signature) return;
     this.signature = sig;
     this.el.tabs.querySelectorAll<HTMLElement>('[data-tab]').forEach(b => b.classList.toggle('on', b.dataset.tab === this.tab));
-    this.el.cash.textContent = free ? 'FREE' : money(me.money);
+    this.el.cash.textContent = free ? t('store.free') : money(me.money);
     this.el.cash.classList.toggle('free', free);
     const cost = (price: number) => free ? 0 : price;
     const shortBy = (price: number) => free ? 0 : Math.max(0, price - me.money);
@@ -327,15 +317,16 @@ export class BuyMenu {
         const state = me.weapons[slot] === id ? 'equipped' : me.owned.includes(id) ? 'owned' : '';
         const price = state ? 0 : cost(w.price), short = shortBy(price);
         entries.push({
-          key: id, name: w.name, sub: CLASS[w.class], price, state, item: id,
+          key: id, name: w.name, sub: CLASS(w.class), price, state, item: id,
           disabled: state === 'equipped' || !canBuy || short > 0,
-          reason: state === 'equipped' ? undefined : !canBuy ? this.closedReason() : short ? `Need ${money(short)} more` : undefined,
+          reason: state === 'equipped' ? undefined : !canBuy ? this.closedReason() : short ? t('store.need', { money: money(short) }) : undefined,
+          short: state !== 'equipped' && canBuy && short > 0,
         });
       }
     } else if (this.tab === 'tactical') {
       const full = me.grenades >= GRENADE.max, gShort = shortBy(GRENADE.price), heShort = shortBy(HIGH_EXPLOSIVE.price);
-      entries.push({ key: 'grenade', name: 'M67', sub: 'Frag grenade', price: cost(GRENADE.price), state: full ? 'carried' : '', item: 'grenade', disabled: full || gShort > 0, reason: full ? 'You carry one M67 at a time — throw it to buy another' : gShort ? `Need ${money(gShort)} more` : undefined });
-      entries.push({ key: 'highExplosive', name: 'High Explosive', sub: 'M67 upgrade', price: cost(HIGH_EXPLOSIVE.price), state: me.grenadeHE ? 'fitted' : '', item: 'highExplosive', disabled: me.grenadeHE || heShort > 0, reason: !me.grenadeHE && heShort ? `Need ${money(heShort)} more` : undefined });
+      entries.push({ key: 'grenade', name: 'M67', sub: t('store.frag'), price: cost(GRENADE.price), state: full ? 'carried' : '', item: 'grenade', disabled: full || gShort > 0, reason: full ? t('store.oneM67') : gShort ? t('store.need', { money: money(gShort) }) : undefined, short: !full && gShort > 0 });
+      entries.push({ key: 'highExplosive', name: t('store.he'), sub: t('store.heUpgrade'), price: cost(HIGH_EXPLOSIVE.price), state: me.grenadeHE ? 'fitted' : '', item: 'highExplosive', disabled: me.grenadeHE || heShort > 0, reason: !me.grenadeHE && heShort ? t('store.need', { money: money(heShort) }) : undefined, short: !me.grenadeHE && heShort > 0 });
     } else {
       const wid = this.pick!, fitted = me.attachments[wid] ?? {};
       if (!this.slots(wid).includes(this.slot)) this.slot = 'optic';
@@ -344,11 +335,11 @@ export class BuyMenu {
         const a = ATTACHMENTS[id];
         if (!fitsWeapon(a, wid)) continue;
         const on = isFitted(fitted, id), price = id === 'irons' ? 0 : cost(attachmentPrice(a, wid)), short = shortBy(price);
-        const summary = changes(wid, fitted, id).list.slice(0, 2).map(x => `${x.text} ${x.name.toLowerCase()}`).join(' · ');
+        const summary = changes(wid, fitted, id).list.slice(0, 2).map(x => t('stat.summary', { text: x.text, name: x.name, lower: x.name.toLowerCase() })).join(' · ');
         entries.push({
-          key: id, name: a.name, sub: on ? (id === 'irons' ? 'Free default' : 'On your gun') : id === 'irons' ? 'Free default' : summary, price,
+          key: id, name: attName(id), sub: on ? t(id === 'irons' ? 'store.freeDefault' : 'store.onYourGun') : id === 'irons' ? t('store.freeDefault') : summary, price,
           state: on ? (id === 'irons' ? 'default' : 'fitted') : '', weapon: wid, attachment: id,
-          disabled: on || short > 0, reason: !on && short ? `Need ${money(short)} more` : undefined,
+          disabled: on || short > 0, reason: !on && short ? t('store.need', { money: money(short) }) : undefined, short: !on && short > 0,
         });
       }
     }
@@ -365,20 +356,21 @@ export class BuyMenu {
     this.el.side.innerHTML = this.tab === 'attachments' ? this.slotsHtml(me, sel) : this.cardsHtml(entries, sel);
     this.el.info.innerHTML = sel ? this.infoHtml(sel, me) : '';
     this.el.keys.innerHTML = (this.tab === 'attachments'
-      ? ['<kbd>↑</kbd><kbd>↓</kbd> browse', '<kbd>1</kbd>–<kbd>9</kbd> option', '<kbd>←</kbd><kbd>→</kbd> weapon', '<kbd>Enter</kbd> fit']
-      : ['<kbd>1</kbd>–<kbd>9</kbd> select', '<kbd>←</kbd><kbd>→</kbd> browse', '<kbd>Enter</kbd> / double-click buy'])
-      .concat(['<kbd>Q</kbd><kbd>E</kbd> tabs', '<kbd>B</kbd> / <kbd>Esc</kbd> close']).map(s => `<span>${s}</span>`).join('');
+      ? [`<kbd>↑</kbd><kbd>↓</kbd> ${t('store.k.browse')}`, `<kbd>1</kbd>–<kbd>9</kbd> ${t('store.k.option')}`, `<kbd>←</kbd><kbd>→</kbd> ${t('store.k.weapon')}`, `<kbd>Enter</kbd> ${t('store.k.fit')}`]
+      : [`<kbd>1</kbd>–<kbd>9</kbd> ${t('store.k.select')}`, `<kbd>←</kbd><kbd>→</kbd> ${t('store.k.browse')}`, `<kbd>Enter</kbd> / ${t('store.k.buy')}`])
+      .concat([`<kbd>Q</kbd><kbd>E</kbd> ${t('store.k.tabs')}`, `<kbd>B</kbd> / <kbd>Esc</kbd> ${t('store.k.close')}`]).map(s => `<span>${s}</span>`).join('');
     this.showPreview();
   }
 
   private renderClock() {
     const { canBuy, buyLeft, free } = this.last!;
     let cls = 'open', label: string, time = '', frac = 0;
-    if (free) { label = 'Free store'; time = 'Practice'; cls = 'free'; }
-    else if (canBuy && buyLeft > 0) { label = 'Buy time'; time = `${Math.ceil(buyLeft)}s`; frac = buyLeft / this.buyTotal; if (buyLeft <= 5) cls = 'open low'; }
-    else if (canBuy) { label = 'Weapons'; time = 'On sale'; }
-    else if (buyLeft > 0) { label = 'Outside base'; time = `${Math.ceil(buyLeft)}s`; frac = buyLeft / this.buyTotal; cls = 'away'; }
-    else { label = 'Weapons closed'; time = 'Gear still on sale'; cls = 'closed'; }
+    const secs = () => t('common.seconds', { n: Math.ceil(buyLeft) });
+    if (free) { label = t('store.c.free'); time = t('store.c.practice'); cls = 'free'; }
+    else if (canBuy && buyLeft > 0) { label = t('store.c.buy'); time = secs(); frac = buyLeft / this.buyTotal; if (buyLeft <= 5) cls = 'open low'; }
+    else if (canBuy) { label = t('store.c.weapons'); time = t('store.c.onSale'); }
+    else if (buyLeft > 0) { label = t('store.c.outside'); time = secs(); frac = buyLeft / this.buyTotal; cls = 'away'; }
+    else { label = t('store.c.closed'); time = t('store.c.gear'); cls = 'closed'; }
     this.el.clock.className = `clock ${cls}`;
     this.el.clock.innerHTML = `<small>${label}</small><b>${time}</b><i><u style="width:${(clamp01(frac) * 100).toFixed(1)}%"></u></i>`;
   }
@@ -388,60 +380,60 @@ export class BuyMenu {
     const gun = (slot: 0 | 1) => {
       const id = me.weapons[slot], mods = fittedNames(me.attachments[id]);
       const active = (this.tab === (slot ? 'secondary' : 'primary')) || (this.tab === 'attachments' && this.pick === id);
-      return `<button type="button" class="lo${active ? ' on' : ''}" data-lo="${slot}"><kbd>${slot ? 2 : 3}</kbd><small>${slot ? 'Secondary' : 'Primary'}</small><b>${WEAPONS[id].name}</b><span class="mods">${mods.length ? mods.join(' · ') : 'No attachments'}</span></button>`;
+      return `<button type="button" class="lo${active ? ' on' : ''}" data-lo="${slot}"><kbd>${slot ? 2 : 3}</kbd><small>${t(slot ? 'store.lo.secondary' : 'store.lo.primary')}</small><b>${WEAPONS[id].name}</b><span class="mods">${mods.length ? mods.join(' · ') : t('store.noAttachments')}</span></button>`;
     };
-    const he = me.grenadeHE ? ' · High Explosive' : '';
+    const he = me.grenadeHE ? ` · ${t('store.he')}` : '';
     return gun(0) + gun(1)
-      + `<button type="button" class="lo knife" data-lo="knife" tabindex="-1"><kbd>1</kbd><small>Melee</small><b>Knife</b><span class="mods">Always carried</span></button>`
-      + `<button type="button" class="lo${this.tab === 'tactical' ? ' on' : ''}${me.grenades ? '' : ' none'}" data-lo="tactical"><kbd>4</kbd><small>Tactical</small><b>${me.grenades ? 'M67' : 'Empty'}</b><span class="mods">${me.grenades ? `Frag grenade${he}` : me.grenadeHE ? 'High Explosive ready' : 'No grenade'}</span></button>`;
+      + `<button type="button" class="lo knife" data-lo="knife" tabindex="-1"><kbd>1</kbd><small>${t('store.lo.melee')}</small><b>${t('store.knife')}</b><span class="mods">${t('store.alwaysCarried')}</span></button>`
+      + `<button type="button" class="lo${this.tab === 'tactical' ? ' on' : ''}${me.grenades ? '' : ' none'}" data-lo="tactical"><kbd>4</kbd><small>${t('store.lo.tactical')}</small><b>${me.grenades ? 'M67' : t('store.empty')}</b><span class="mods">${me.grenades ? `${t('store.frag')}${he}` : me.grenadeHE ? t('store.heReady') : t('store.noGrenade')}</span></button>`;
   }
 
   private badge(e: Entry) {
-    const [cls, text] = e.state === 'equipped' ? ['eq', 'Equipped'] : e.state === 'owned' ? ['own', 'Owned'] : e.state === 'fitted' ? ['eq', 'Fitted']
-      : e.state === 'default' ? ['eq', 'In use'] : e.state === 'carried' ? ['eq', 'Carrying'] : [e.reason?.startsWith('Need') ? 'short' : 'price', e.price ? money(e.price) : 'Free'];
+    const [cls, text] = e.state === 'equipped' ? ['eq', t('badge.equipped')] : e.state === 'owned' ? ['own', t('badge.owned')] : e.state === 'fitted' ? ['eq', t('badge.fitted')]
+      : e.state === 'default' ? ['eq', t('badge.inUse')] : e.state === 'carried' ? ['eq', t('badge.carrying')] : [e.short ? 'short' : 'price', e.price ? money(e.price) : t('common.free')];
     return `<em class="badge ${cls}">${text}</em>`;
   }
 
   private cardsHtml(entries: Entry[], sel?: Entry) {
     return `<div class="cards">${entries.map((e, i) => `<button type="button" data-key="${e.key}" class="card${e === sel ? ' sel' : ''}${e.state ? ` ${e.state}` : ''}${e.disabled && !e.state ? ' locked' : ''}"><kbd>${i < 10 ? (i + 1) % 10 : ''}</kbd><span><b>${e.name}</b><small>${e.sub}</small></span>${this.badge(e)}</button>`).join('')}</div>`
-      + (this.tab === 'tactical' ? '<p class="aside">Grenades and upgrades sell anywhere, any time.</p>' : '<p class="aside">Bought weapons stay yours for the match — swap between them free during buy time.</p>');
+      + `<p class="aside">${t(this.tab === 'tactical' ? 'store.asideTactical' : 'store.asideWeapons')}</p>`;
   }
 
   /** Attachments: weapon picker, then the gun's slots; the open slot lists its options. */
   private slotsHtml(me: Soldier, sel?: Entry) {
     const wid = this.pick!, fitted = me.attachments[wid] ?? {}, owned = this.ownedGuns(me);
-    let html = `<div class="picker"><button type="button" class="step" data-step="-1" aria-label="Previous weapon">‹</button><div>${owned.map(id => {
+    let html = `<div class="picker"><button type="button" class="step" data-step="-1" aria-label="${t('store.prevWeapon')}">‹</button><div>${owned.map(id => {
       const n = fittedNames(me.attachments[id]).length;
       const held = me.weapons.includes(id) ? '' : ' spare';
       return `<button type="button" data-pick="${id}" class="${id === wid ? 'on' : ''}${held}">${WEAPONS[id].name}${n ? `<small>${n}</small>` : ''}</button>`;
-    }).join('')}</div><button type="button" class="step" data-step="1" aria-label="Next weapon">›</button></div><div class="mounts">`;
+    }).join('')}</div><button type="button" class="step" data-step="1" aria-label="${t('store.nextWeapon')}">›</button></div><div class="mounts">`;
     for (const c of this.slots(wid)) {
       const on = fitted[c], open = c === this.slot;
-      const name = on && on !== 'irons' ? ATTACHMENTS[on].name : SLOT[c].empty;
+      const name = on && on !== 'irons' ? attName(on) : SLOT(c).empty;
       const opts = this.entries.map((e, i) => ({ e, i })).filter(({ e }) => e.attachment && ATTACHMENTS[e.attachment].category === c);
-      html += `<div class="slot open${open ? ' current' : ''}${on && on !== 'irons' ? ' filled' : ''}"><button type="button" class="slot-head" data-slot="${c}"><small>${SLOT[c].name}</small><b>${name}${c === 'optic' && !on ? ' <i>default</i>' : ''}</b><span class="chev"></span></button>`;
+      html += `<div class="slot open${open ? ' current' : ''}${on && on !== 'irons' ? ' filled' : ''}"><button type="button" class="slot-head" data-slot="${c}"><small>${SLOT(c).name}</small><b>${name}${c === 'optic' && !on ? ` <i>${t('store.default')}</i>` : ''}</b><span class="chev"></span></button>`;
       html += `<div class="opts">${opts.map(({ e, i }) => `<button type="button" data-key="${e.key}" class="opt${e === sel ? ' sel' : ''}${e.state ? ` ${e.state}` : ''}${e.disabled && !e.state ? ' locked' : ''}"><kbd>${i < 10 ? (i + 1) % 10 : ''}</kbd><span><b>${e.name}</b><small>${e.sub}</small></span>${this.badge(e)}</button>`).join('')}</div>`;
       html += '</div>';
     }
     return html + '</div>';
   }
 
-  private bars(w: WeaponDef, ref?: WeaponDef, only?: string[]) {
+  private bars(w: WeaponDef, ref?: WeaponDef, only?: Key[]) {
     return `<div class="bars">${BARS.filter(b => !only || only.includes(b.name)).map(b => {
       const d = ref && ref !== w ? b.num(w) - b.num(ref) : 0, good = (d > 0) !== !!b.less;
       const delta = Math.abs(d) > 0.05 ? `<em class="${good ? 'up' : 'down'}">${signed(d, b.unit)}</em>` : '<em></em>';
-      return `<div class="bar${b.less ? ' less' : ''}"><span>${b.name}</span><div class="track"><i style="width:${(b.fill(w) * 100).toFixed(1)}%"></i>${ref && ref !== w ? `<u style="left:${(b.fill(ref) * 100).toFixed(1)}%"></u>` : ''}</div><b>${b.label(w)}</b>${delta}</div>`;
+      return `<div class="bar${b.less ? ' less' : ''}"><span>${t(b.name)}</span><div class="track"><i style="width:${(b.fill(w) * 100).toFixed(1)}%"></i>${ref && ref !== w ? `<u style="left:${(b.fill(ref) * 100).toFixed(1)}%"></u>` : ''}</div><b>${b.label(w)}</b>${delta}</div>`;
     }).join('')}</div>`;
   }
 
   /** The primary action with its price and, when it can't be done, why. */
   private action(e: Entry, extra = '') {
-    const label = e.state === 'equipped' ? 'Equipped' : e.state === 'fitted' ? 'Fitted' : e.state === 'default' ? 'In use' : e.state === 'carried' ? 'Carrying'
-      : e.state === 'owned' ? 'Equip · free' : e.key === 'irons' ? 'Use iron sights · free'
-      : `Buy ${e.price ? money(e.price) : '· free'}`;
+    const label = e.state === 'equipped' ? t('badge.equipped') : e.state === 'fitted' ? t('badge.fitted') : e.state === 'default' ? t('badge.inUse') : e.state === 'carried' ? t('badge.carrying')
+      : e.state === 'owned' ? t('store.equipFree') : e.key === 'irons' ? t('store.useIrons')
+      : e.price ? t('store.buy', { price: money(e.price) }) : t('store.buyFree');
     const done = !!e.state && e.state !== 'owned';
-    const l = this.last!, after = !done && !l.free && e.price > 0 && e.price <= l.me.money ? `<p class="after">Leaves you <b>${money(l.me.money - e.price)}</b></p>` : '';
-    return `<div class="act${done ? ' done' : ''}"><small>${done ? 'You have it' : e.state === 'owned' ? 'Owned · swap free' : 'Price'}</small><strong>${done ? '✓' : e.state === 'owned' ? 'Free' : e.price ? money(e.price) : 'Free'}</strong>${after}`
+    const l = this.last!, after = !done && !l.free && e.price > 0 && e.price <= l.me.money ? `<p class="after">${t('store.leaves', { money: money(l.me.money - e.price) })}</p>` : '';
+    return `<div class="act${done ? ' done' : ''}"><small>${t(done ? 'store.haveIt' : e.state === 'owned' ? 'store.ownedSwap' : 'store.price')}</small><strong>${done ? '✓' : e.state === 'owned' ? t('common.free') : e.price ? money(e.price) : t('common.free')}</strong>${after}`
       + `<button type="button" class="buy" data-buy ${e.disabled ? 'disabled' : ''}>${label}${e.disabled ? '' : ' <kbd>Enter</kbd>'}</button>`
       + `${e.reason ? `<p class="why">${e.reason}</p>` : ''}${extra}</div>`;
   }
@@ -450,25 +442,25 @@ export class BuyMenu {
     if (e.item === 'grenade' || e.item === 'highExplosive') {
       const he = e.item === 'highExplosive', withHE = he || me.grenadeHE;
       const rows: [string, string, string][] = he
-        ? [['Damage', `${GRENADE.damage} → ${GRENADE.damage + HIGH_EXPLOSIVE.damage}`, 'up'], ['Blast radius', `${GRENADE.radius} → ${GRENADE.radius + HIGH_EXPLOSIVE.radius} m`, 'down'], ['Applies to', 'Every M67 you throw', '']]
-        : [['Damage', `${GRENADE.damage + (withHE ? HIGH_EXPLOSIVE.damage : 0)}${withHE ? ' (HE)' : ''}`, ''], ['Blast radius', `${GRENADE.radius + (withHE ? HIGH_EXPLOSIVE.radius : 0)} m`, ''], ['Fuse', `${GRENADE.fuse}s`, ''], ['Carry', `${GRENADE.max} at a time · not restocked`, '']];
-      const note = he ? 'A bigger charge: much more damage in a tighter blast.' : 'Cook and throw with 4. Kills pay $900.';
-      return `<div class="stats"><p class="note">${note}</p><ul class="deltas">${rows.map(([k, v, c]) => `<li class="${c}"><span>${k}</span><b>${v}</b></li>`).join('')}</ul></div>${this.action(e)}`;
+        ? [[t('bar.damage'), `${GRENADE.damage} → ${GRENADE.damage + HIGH_EXPLOSIVE.damage}`, 'up'], [t('store.blast'), `${GRENADE.radius} → ${GRENADE.radius + HIGH_EXPLOSIVE.radius} m`, 'down'], [t('store.appliesTo'), t('store.everyM67'), '']]
+        : [[t('bar.damage'), `${GRENADE.damage + (withHE ? HIGH_EXPLOSIVE.damage : 0)}${withHE ? ' (HE)' : ''}`, ''], [t('store.blast'), `${GRENADE.radius + (withHE ? HIGH_EXPLOSIVE.radius : 0)} m`, ''], [t('store.fuse'), t('common.seconds', { n: GRENADE.fuse }), ''], [t('store.carry'), t('store.carryN', { n: GRENADE.max }), '']];
+      const blurb = t(he ? 'store.heNote' : 'store.m67Note');
+      return `<div class="stats"><p class="note">${blurb}</p><ul class="deltas">${rows.map(([k, v, c]) => `<li class="${c}"><span>${k}</span><b>${v}</b></li>`).join('')}</ul></div>${this.action(e)}`;
     }
     if (e.attachment && e.weapon) {
       const fitted: Attachments = me.attachments[e.weapon] ?? {};
       const a = ATTACHMENTS[e.attachment];
       const { base, next, list } = changes(e.weapon, fitted, e.attachment);
       const current = fitted[a.category];
-      const replaces = current && current !== e.attachment ? `<p class="swap">Replaces <b>${ATTACHMENTS[current].name}</b></p>` : '';
+      const replaces = current && current !== e.attachment ? `<p class="swap">${t('store.replaces', { name: attName(current) })}</p>` : '';
       const rows = list.map(c => `<li class="${c.up ? 'up' : 'down'}"><span>${c.name}</span><b>${c.text}</b></li>`).join('');
-      return `<div class="stats"><p class="note">${NOTES[e.attachment] ?? ''}</p><div class="split"><ul class="deltas">${rows || `<li><span>${e.state ? 'On your gun' : 'No stat change'}</span></li>`}</ul>${this.bars(next, base, ['Damage', 'Accuracy', 'Aim acc.', 'Recoil', 'Mobility'])}</div></div>${this.action(e, replaces)}`;
+      return `<div class="stats"><p class="note">${note(e.attachment)}</p><div class="split"><ul class="deltas">${rows || `<li><span>${t(e.state ? 'store.onYourGun' : 'store.noChange')}</span></li>`}</ul>${this.bars(next, base, ['bar.damage', 'bar.accuracy', 'bar.aimAcc', 'bar.recoil', 'bar.mobility'])}</div></div>${this.action(e, replaces)}`;
     }
     const id = e.item as WeaponId, w = weaponStats(id, me.attachments[id]), slot = w.slot as 0 | 1;
     const equippedId = me.weapons[slot], current = weaponStats(equippedId, me.attachments[equippedId]);
-    const compare = equippedId === id ? 'Your equipped weapon' : `Compared with your <b>${current.name}</b> <u></u>`;
-    const facts = `<dl><dt>Magazine</dt><dd>${w.magazine} / ${w.reserve}</dd><dt>Reload</dt><dd>${w.reload}s</dd><dt>Fire</dt><dd>${w.auto ? 'Auto' : 'Semi'}</dd><dt>Zoom</dt><dd>${round1(magnify(w))}×</dd><dt>Velocity</dt><dd>${w.velocity} m/s</dd></dl>`;
-    const customize = me.owned.includes(id) ? `<button type="button" class="link" data-customize="${id}">Customize attachments →</button>` : '';
+    const compare = equippedId === id ? t('store.yourWeapon') : `${t('store.compared', { name: current.name })} <u></u>`;
+    const facts = `<dl><dt>${t('store.f.magazine')}</dt><dd>${w.magazine} / ${w.reserve}</dd><dt>${t('store.f.reload')}</dt><dd>${t('common.seconds', { n: w.reload })}</dd><dt>${t('store.f.fire')}</dt><dd>${t(w.auto ? 'store.f.auto' : 'store.f.semi')}</dd><dt>${t('store.f.zoom')}</dt><dd>${round1(magnify(w))}×</dd><dt>${t('store.f.velocity')}</dt><dd>${w.velocity} m/s</dd></dl>`;
+    const customize = me.owned.includes(id) ? `<button type="button" class="link" data-customize="${id}">${t('store.customize')}</button>` : '';
     return `<div class="stats"><p class="cmp">${compare}</p>${this.bars(w, current)}${facts}</div>${this.action(e, customize)}`;
   }
 
@@ -476,11 +468,11 @@ export class BuyMenu {
   private titleHtml(e: Entry, me: Soldier) {
     if (e.item === 'grenade' || e.item === 'highExplosive') {
       const he = e.item === 'highExplosive';
-      return `<h3>${he ? 'High Explosive' : 'M67'}</h3><small>${he ? 'M67 upgrade · lasts the match' : 'Frag grenade · tactical · key 4'}</small>`;
+      return `<h3>${he ? t('store.he') : 'M67'}</h3><small>${t(he ? 'store.heTitle' : 'store.m67Title')}</small>`;
     }
-    if (e.attachment && e.weapon) return `<h3>${ATTACHMENTS[e.attachment].name}</h3><small>${SLOT[ATTACHMENTS[e.attachment].category].name} slot · on ${WEAPONS[e.weapon].name}</small>`;
+    if (e.attachment && e.weapon) return `<h3>${attName(e.attachment)}</h3><small>${t('store.slotOn', { slot: SLOT(ATTACHMENTS[e.attachment].category).name, weapon: WEAPONS[e.weapon].name })}</small>`;
     const w = WEAPONS[e.item as WeaponId], mods = fittedNames(me.attachments[w.id]);
-    return `<h3>${w.name}</h3><small>${CLASS[w.class]} · ${w.slot === 0 ? 'Primary · key 3' : 'Secondary · key 2'}${mods.length ? ` · ${mods.join(' · ')}` : ''}</small>`;
+    return `<h3>${w.name}</h3><small>${CLASS(w.class)} · ${t(w.slot === 0 ? 'store.primaryKey' : 'store.secondaryKey')}${mods.length ? ` · ${mods.join(' · ')}` : ''}</small>`;
   }
 
   /** Point the 3D preview (and its title) at the hovered or selected item, wearing what it would have. */
@@ -496,7 +488,7 @@ export class BuyMenu {
       const wid = this.pick!, fitted = me.attachments[wid] ?? {};
       const id = key as AttachmentId | undefined;
       const att = id && ATTACHMENTS[id] ? withAttachment(fitted, id) : fitted;
-      item = { kind: 'weapon', id: wid, attachments: att, focus: this.slot, label: `${SLOT[this.slot].name}${id && ATTACHMENTS[id] ? ` · ${ATTACHMENTS[id].name}` : ''}` };
+      item = { kind: 'weapon', id: wid, attachments: att, focus: this.slot, label: `${SLOT(this.slot).name}${id && ATTACHMENTS[id] ? ` · ${attName(id)}` : ''}` };
     } else if (key && key in WEAPONS) item = { kind: 'weapon', id: key as WeaponId, attachments: me.attachments[key as WeaponId] ?? {} };
     if (item) this.preview.show(item);
   }
