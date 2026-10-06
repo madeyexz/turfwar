@@ -354,7 +354,7 @@ describe('bots and vehicles', () => {
         expect(deepestOverlap(obstacles, { x: nav.x[i], y: nav.y[i], z: nav.z[i] }, MOVE.radius * 0.8, MOVE.standHeight).depth, `${id} node ${i}`).toBe(0);
       }
     }
-  });
+  }, 30_000); // builds every map's navigation grid
 
   it('a bot heading through a car steers round it and gets past', () => {
     const car = parked('car', 0, 0, Math.PI / 2);
