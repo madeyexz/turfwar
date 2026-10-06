@@ -4,7 +4,9 @@ import {
   HELI_CEILING, RUN_OVER_SPEED, ROTOR_SPINUP, VEHICLES, createVehicle, exitSpot, forwardOf, idleVehicleInput, maxSlack, reachOf,
   seatPosition, slackSpeed, speedOf, stepVehicle, vehicleBlocked, vehicleGround, type Vehicle,
 } from '../vehicles';
+import { oneHanded } from '../weapons';
 import { MOVE_SLACK, applyDamage, damageVehicle, seatOf, type SimContext } from './combat';
+import { statsOf } from './economy';
 import type { MatchState, Soldier, VehicleReport } from './state';
 
 export { seatOf } from './combat';
@@ -49,6 +51,8 @@ export function enterVehicle(state: MatchState, ctx: SimContext, id: number, ind
   if (seat === undefined) return false;
   if (seat === 0) { v.driver = id; v.slack = maxSlack(v.kind); } else v.passenger = id;
   s.reloadLeft = 0; s.using = false; s.ads = false; s.sprint = false;
+  // A scooter rider draws a one-handed weapon (the secondary is always a pistol or an SMG).
+  if (seat === 0 && VEHICLES[v.kind].driverArms && !oneHanded(statsOf(s))) { s.weapon = 1; s.switchLeft = statsOf(s, 1).equipTime; }
   seatSoldier(s, v, seat);
   ctx.emit({ type: 'vehicle', action: 'enter', vehicle: v.id, id, seat });
   return true;
@@ -123,7 +127,9 @@ export function reportVehicle(state: MatchState, ctx: SimContext, id: number, r:
   v.x = r.x; v.y = r.y; v.z = r.z; v.vx = r.vx * k; v.vy = r.vy * k; v.vz = r.vz * k;
   v.yaw = r.yaw; v.pitch = clamp(r.pitch, -0.6, 0.6); v.roll = clamp(r.roll, -0.6, 0.6);
   v.grounded = v.y - floor < 0.1;
-  s.yaw = r.yaw;
+  // The driver faces the heading; a scooter rider looks (and aims) wherever the mouse points.
+  const aim = spec.driverArms && Number.isFinite(r.aimYaw) && Number.isFinite(r.aimPitch);
+  s.yaw = aim ? r.aimYaw! : r.yaw; s.pitch = aim ? clamp(r.aimPitch!, -1.5, 1.5) : 0;
   if (crash > spec.crashSpeed) damageVehicle(state, ctx, v, id, (crash - spec.crashSpeed) * spec.crashDamage, 'crash');
   placeCrew(state, v);
   return true;

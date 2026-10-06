@@ -196,6 +196,12 @@ function derive(b: Base, d: Required<Delta>, attachments: Attachments): WeaponDe
 const cache = new Map<string, WeaponDef>();
 const ZERO: Required<Delta> = { zoomFov: 0, zoomAccuracy: 0, accuracy: 0, recoil: 0, zoomRecoil: 0, move: 0, magazine: 0, head: 0, body: 0, limb: 0 };
 
+/** One-handed weapons (pistols and SMGs): what a scooter rider can fire while steering with the other hand. */
+export const oneHanded = (w: Pick<WeaponDef, 'class'>) => w.class === 'pistol' || w.class === 'smg';
+
+/** Firing from a moving scooter: extra spread (degrees, added to the cone) and heavier one-handed recoil. */
+export const RIDER_AIM = { spread: 1.6, recoil: 1.3 };
+
 /** Stats of `id` with its fitted attachments (cached). Iron sights count when no optic is fitted. */
 export function weaponStats(id: WeaponId, attachments: Attachments = {}): WeaponDef {
   const key = `${id}|${attachKey(attachments)}`;

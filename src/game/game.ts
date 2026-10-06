@@ -22,6 +22,7 @@ import { THEMES } from '../render/materials';
 import { QUALITY, type Renderer } from '../render/renderer';
 import { SoldierView } from '../render/soldier';
 import { ViewModel } from '../render/viewmodel';
+import { SkidMarks } from '../render/skids';
 import { VehiclesView, vehicleName } from '../render/vehicles';
 import { BuyMenu } from '../ui/buymenu';
 import { SettingsMenu } from '../ui/settingsmenu';
@@ -104,6 +105,10 @@ export class Game {
   private selfView?: SoldierView;
   /** Running engines and rotors we can hear. */
   private engines = new Map<number, EngineVoice>();
+  /** Rubber on the road and smoke off sliding tyres; the screech of the nearest skids. */
+  private skids = new SkidMarks();
+  private skidding = new Map<number, number>();
+  private screeches = new Map<number, EngineVoice>();
 
   /** Rebuild a view model only when the weapon or its attachments change. */
   private showWeapon(vm: ViewModel, p: LocalPlayer) {
@@ -140,7 +145,7 @@ export class Game {
     renderer.scene.add(this.bodies.group);
     this.crates = new CratesView(assets, def.pickups);
     this.sites = new BombSitesView(def);
-    renderer.scene.add(this.crates.group, this.sites.group, this.vehicles.group);
+    renderer.scene.add(this.crates.group, this.sites.group, this.vehicles.group, this.skids.mesh);
     this.input = new Input(renderer.renderer.domElement);
     this.input.sensitivity = settings.sensitivity;
     const me = link.state()?.soldiers.find(s => s.id === link.myId());
@@ -182,8 +187,9 @@ export class Game {
     this.menu.dispose();
     this.renderer.scene.remove(this.level.group, this.effects.group, this.bodies.group, this.crates.group, this.sites.group, this.vehicles.group);
     this.vehicles.dispose();
-    for (const e of this.engines.values()) e.stop();
-    this.engines.clear();
+    this.renderer.scene.remove(this.skids.mesh); this.skids.dispose();
+    for (const e of [...this.engines.values(), ...this.screeches.values()]) e.stop();
+    this.engines.clear(); this.screeches.clear();
     if (this.selfView) { this.selfView.dispose(); this.selfView.root.removeFromParent(); this.selfView.gun.removeFromParent(); }
     for (const r of this.remotes.values()) { r.view.dispose(); r.view.gun.removeFromParent(); }
     this.viewmodel.root.removeFromParent();
@@ -250,10 +256,18 @@ export class Game {
     const wasSeated = this.seated;
     this.seated = seat ? { index: seat.vehicle.id, seat: seat.seat } : undefined;
     if (this.driving.active && (seat?.seat !== 0 || seat.vehicle.id !== this.driving.v!.id)) this.driving.end();
-    if (seat?.seat === 0 && !this.driving.active) { this.driving.begin(seat.vehicle); this.player.binoculars = false; }
+    if (seat?.seat === 0 && !this.driving.active) {
+      this.driving.begin(seat.vehicle); this.player.binoculars = false; this.player.ads = 0;
+      // A scooter rider shoots one-handed: bring up the sidearm if the weapon in hand needs two.
+      this.player.rider = this.driving.armed;
+      const drawn = this.player.rider ? this.player.drawOneHanded() : undefined;
+      if (drawn !== undefined) { link.switchWeapon(drawn); this.audio.equip(this.player.weapon.id); }
+    }
     if (wasSeated && !seat && me?.alive && this.wasAlive) this.player.correct(me);
     this.player.riding = !!seat;
-    this.hud.driving = this.driving.active;
+    this.player.rider = this.driving.armed;
+    // Drivers have no crosshair or weapon panel; a scooter rider keeps both.
+    this.hud.driving = this.driving.active && !this.driving.armed;
     if (me) {
       this.myTeam = me.team;
       if (me.alive && !this.wasAlive) { this.player.spawnFrom(me); this.spectating = -1; this.shownWeapon = ''; }
@@ -278,19 +292,29 @@ export class Game {
     // ---- Local player ----
     const look = active ? { x: this.input.lookX, y: this.input.lookY } : { x: 0, y: 0 };
     if (this.driving.active) {
-      // At the wheel: the controls fly the vehicle; we ride in the driver's seat (no walking, no weapon).
+      // At the wheel: the controls fly the vehicle; we ride in the driver's seat (no walking). Car and
+      // helicopter drivers have no weapon; a scooter rider aims with the mouse (below).
       const e = this.driving.update(dt, active && state.phase !== 'ended' ? this.input : undefined, this.map.world, this.player.frozen);
       if (e.impact > 5) this.audio.crash(e.impact);
       const v = this.driving.renderPose()!;
       this.player.seat(seatPosition(v, 0), VEHICLES[v.kind].sit, v);
+      this.aimRider(state);
     } else if (seat) {
       // Passenger: carried on the seat of the vehicle as rendered; look and shoot as usual.
       const p = this.vehicles.pose(seat.vehicle.id);
       if (p) this.player.seat(seatPosition({ ...p, kind: seat.vehicle.kind }, seat.seat), VEHICLES[seat.vehicle.kind].sit, { vx: p.vx, vy: 0, vz: p.vz });
     }
-    const result = this.driving.active
+    const aimed = { yaw: this.player.yaw, pitch: this.player.pitch };
+    const result = this.driving.active && !this.driving.armed
       ? this.player.update(dt, undefined, this.map.world, false, true)
       : this.player.update(dt, active ? this.input : undefined, this.map.world, active && state.phase !== 'ended', this.player.frozen || state.roundPhase === 'over');
+    if (this.driving.armed) {
+      // Recoil kicks the rider's camera (the aim follows the camera, not the other way round).
+      this.driving.camPitch += this.player.pitch - aimed.pitch;
+      this.driving.camYaw += wrapAngle(this.player.yaw - aimed.yaw);
+      this.driving.camPitch = Math.max(-0.9, Math.min(this.driving.firstPerson ? 0.9 : 0.6, this.driving.camPitch));
+      if (result.shots.length) this.driving.aiming();
+    }
     if (result.move.jumped) this.audio.jump();
     if (result.move.landed > 4) this.audio.land(result.move.landed);
     if (result.move.slideStarted) this.audio.slide();
@@ -333,6 +357,7 @@ export class Game {
     const renderTime = now - link.interpDelay - 0.02;
     const driven = this.driving.renderPose();
     this.vehicles.update(dt, renderTime, driven ? { id: driven.id, pose: driven } : undefined);
+    this.updateSkids(state, dt);
     const rides = new Map<number, { v: Vehicle; seat: number }>();
     for (const v of state.vehicles) { if (v.driver >= 0) rides.set(v.driver, { v, seat: 0 }); if (v.passenger >= 0) rides.set(v.passenger, { v, seat: 1 }); }
     const positions = new Map<number, THREE.Vector3>();
@@ -349,8 +374,11 @@ export class Game {
       const vp = ride ? this.vehicles.pose(ride.v.id) : undefined;
       if (ride && vp) {
         const p = seatPosition({ ...vp, kind: ride.v.kind }, ride.seat);
-        sample = { ...sample, x: p.x, y: p.y, z: p.z, vx: 0, vy: 0, vz: 0, yaw: ride.seat === 0 ? vp.yaw : sample.yaw, crouch: VEHICLES[ride.v.kind].sit };
+        // A scooter's crew looks and aims freely (legs on the bike); other drivers face the heading.
+        const free = ride.seat === 1 || VEHICLES[ride.v.kind].driverArms;
+        sample = { ...sample, x: p.x, y: p.y, z: p.z, vx: 0, vy: 0, vz: 0, yaw: free ? sample.yaw : vp.yaw, crouch: VEHICLES[ride.v.kind].sit };
       }
+      const hips = ride && vp && VEHICLES[ride.v.kind].exposed ? vp.yaw : undefined;
       r.pos.set(sample.x, sample.y, sample.z); r.crouch = sample.crouch; r.yaw = sample.yaw; r.pitch = sample.pitch;
       positions.set(id, r.pos);
       lodSphere.center.set(sample.x, sample.y + 1, sample.z);
@@ -358,7 +386,7 @@ export class Game {
       r.view.setLod(!frustum.intersectsSphere(lodSphere) ? 3 : distance < LOD_NEAR ? 0 : distance < LOD_MID ? 1 : 2);
       const weapon: WeaponId = s.weapon === 2 ? 'knife' : s.weapons[s.weapon];
       r.view.update(dt, {
-        x: sample.x, y: sample.y, z: sample.z, vx: sample.vx, vy: sample.vy, vz: sample.vz, yaw: sample.yaw, pitch: sample.pitch, crouch: sample.crouch,
+        x: sample.x, y: sample.y, z: sample.z, vx: sample.vx, vy: sample.vy, vz: sample.vz, yaw: sample.yaw, hips, pitch: sample.pitch, crouch: sample.crouch,
         grounded: s.m.grounded, sprint: s.sprint, ads: s.ads, slide: s.m.slideTime > 0, alive: s.alive, weapon, attachments: s.attachments[weapon], using: s.using,
         reloading: s.reloadLeft > 0 ? 1 - s.reloadLeft / 2 : 0, firing: s.sinceShot < 0.15,
       });
@@ -386,13 +414,16 @@ export class Game {
     const cam = this.renderer.camera;
     this.updateSelfView(dt);
     if (this.player.alive && this.driving.active) {
-      // Chase camera (or the driver's seat with V); no weapon in hand.
+      // Chase camera (or the driver's seat with V).
       this.driving.placeCamera(cam, this.map.world);
       const v = this.driving.v!;
       const targetFov = settings.fov + Math.min(14, speedOf(v) * 0.35);
       cam.fov += (targetFov - cam.fov) * Math.min(1, dt * 4);
       cam.updateProjectionMatrix();
-      for (const vm of [this.viewmodel, this.otherViewmodel]) if (vm) { vm.root.visible = false; vm.torch.intensity = 0; }
+      // A scooter rider in first person holds the weapon in view; otherwise no weapon in view.
+      if (this.driving.armed && this.driving.firstPerson) this.viewmodel.update(dt, this.player, look);
+      else { this.viewmodel.root.visible = false; this.viewmodel.torch.intensity = 0; }
+      if (this.otherViewmodel) { this.otherViewmodel.root.visible = false; this.otherViewmodel.torch.intensity = 0; }
       this.hud.spectate(undefined, 0);
     } else if (this.player.alive) {
       const eye = this.player.eye();
@@ -471,6 +502,27 @@ export class Game {
     return best;
   }
 
+  /**
+   * Where the driver looks; a scooter rider aims there. The crosshair is the camera's centre (chase
+   * or first person): the shot leaves the rider's eye toward whatever the camera ray meets (a wall,
+   * a vehicle or an enemy as rendered), so it lands under the crosshair without parallax.
+   */
+  private aimRider(state: MatchState) {
+    const d = this.driving, cam = this.renderer.camera;
+    const viewYaw = d.placeCamera(cam, this.map.world);
+    d.aimYaw = viewYaw; d.aimPitch = 0;
+    if (!d.armed) return;
+    cam.updateMatrixWorld();
+    const dir = cam.getWorldDirection(new THREE.Vector3());
+    const hit = this.trace(cam.position, dir, this.player.weapon.range + 15, state);
+    const eye = this.player.eye();
+    const dx = hit.point.x - eye.x, dy = hit.point.y - eye.y, dz = hit.point.z - eye.z, len = Math.hypot(dx, dy, dz);
+    const yaw = len > 2 ? Math.atan2(-dx, -dz) : Math.atan2(-dir.x, -dir.z);
+    const pitch = len > 2 ? Math.asin(dy / len) : Math.asin(Math.max(-1, Math.min(1, dir.y)));
+    this.player.yaw = yaw; this.player.pitch = pitch;
+    d.aimYaw = yaw; d.aimPitch = pitch;
+  }
+
   /** HUD vehicle panel: name, speed, altitude above the floor (helicopter), body health, controls. */
   private vehicleInfo(state: MatchState) {
     const seated = this.seated;
@@ -480,7 +532,7 @@ export class Game {
     const k = (key: string) => `<kbd>${key}</kbd>`;
     const keys = seated.seat === 1 ? `PASSENGER · ${k('E')}EXIT`
       : v.kind === 'heli' ? `${k('W')}${k('A')}${k('S')}${k('D')}FLY · MOUSE TURN · ${k('SPACE')}UP · ${k('C')}DOWN · ${k('V')}VIEW · ${k('E')}EXIT`
-      : `${k('W')}${k('S')}DRIVE · ${k('A')}${k('D')}STEER · ${k('SPACE')}BRAKE · ${k('V')}VIEW · ${k('E')}EXIT`;
+      : `${k('W')}${k('S')}DRIVE · ${k('A')}${k('D')}STEER · ${k('SPACE')}DRIFT${v.kind === 'scooter' ? ` · ${k('LMB')}FIRE` : ''} · ${k('V')}VIEW · ${k('E')}EXIT`;
     const floor = this.map.world.groundHeight(v.x, v.z, v.y + 0.1, 0.5);
     return { name: vehicleName(v), speed: speedOf(v), altitude: v.kind === 'heli' ? v.y - floor : undefined, health: host.health, max: spec.health, keys };
   }
@@ -496,11 +548,28 @@ export class Game {
       this.renderer.scene.add(this.selfView.root, this.selfView.gun);
     }
     const p = seatPosition(v!, 0), held = this.player.slot === 2 ? 'knife' : this.player.weapons[this.player.slot];
+    const pl = this.player;
     this.selfView.root.visible = true;
+    // Legs on the bike, torso and weapon turned to the aim.
     this.selfView.update(dt, {
-      x: p.x, y: p.y, z: p.z, vx: 0, vy: 0, vz: 0, yaw: v!.yaw, pitch: 0, crouch: VEHICLES.scooter.sit, grounded: true, sprint: false, ads: false,
-      slide: false, alive: true, weapon: held, attachments: this.player.attachments[held], reloading: 0, firing: false,
+      x: p.x, y: p.y, z: p.z, vx: 0, vy: 0, vz: 0, yaw: this.driving.aimYaw, hips: v!.yaw, pitch: this.driving.aimPitch, crouch: VEHICLES.scooter.sit,
+      grounded: true, sprint: false, ads: false, slide: false, alive: true, weapon: held, attachments: pl.attachments[held],
+      reloading: pl.reloading ? 1 - pl.reloadLeft / pl.reloadTotal : 0, firing: false,
     });
+  }
+
+  /** Skid marks and tyre smoke under every nearby sliding car and scooter (ours from its predicted pose). */
+  private updateSkids(state: MatchState, dt: number) {
+    const cam = this.renderer.camera.position;
+    const list: Parameters<SkidMarks['update']>[1] = [];
+    for (const v of state.vehicles) {
+      if (v.wrecked || v.kind === 'heli') continue;
+      const mine = this.driving.v?.id === v.id ? this.driving.v : undefined;
+      const pose = mine ?? this.vehicles.pose(v.id);
+      if (!pose || Math.hypot(pose.x - cam.x, pose.z - cam.z) > 140) continue;
+      list.push({ id: v.id, pose: { kind: v.kind, x: pose.x, y: pose.y, z: pose.z, yaw: pose.yaw, vx: pose.vx, vz: pose.vz, grounded: mine ? mine.grounded : true }, braking: !!mine && this.driving.braking });
+    }
+    this.skidding = this.skids.update(dt, list, this.map.world, this.effects);
   }
 
   /** Engines and rotors: ours at full level, others placed in the world (the nearest few). */
@@ -525,6 +594,22 @@ export class Game {
       voice.set(rpm, mine ? undefined : listener, mine ? undefined : { x: p.x, y: p.y + 1, z: p.z });
     }
     for (const [id, voice] of this.engines) if (!running.has(id)) { voice.stop(); this.engines.delete(id); }
+    // Tyre screech: the two nearest skids.
+    const sliding = state.vehicles
+      .filter(v => v.kind !== 'heli' && (this.skidding.get(v.id) ?? 0) > (this.screeches.has(v.id) ? 0.01 : 0.08))
+      .map(v => ({ v, pose: this.driving.v?.id === v.id ? this.driving.v : this.vehicles.pose(v.id) }))
+      .filter(c => c.pose && Math.hypot(c.pose.x - cam.x, c.pose.z - cam.z) < 70)
+      .sort((a, b) => Math.hypot(a.pose!.x - cam.x, a.pose!.z - cam.z) - Math.hypot(b.pose!.x - cam.x, b.pose!.z - cam.z))
+      .slice(0, 2);
+    const screeching = new Set<number>();
+    for (const { v, pose } of sliding) {
+      let voice = this.screeches.get(v.id);
+      if (!voice) { voice = this.audio.screech(v.kind as 'car' | 'scooter'); if (!voice) continue; this.screeches.set(v.id, voice); }
+      screeching.add(v.id);
+      const mine = this.seated?.index === v.id;
+      voice.set(this.skidding.get(v.id)!, mine ? undefined : listener, mine ? undefined : { x: pose!.x, y: pose!.y + 0.3, z: pose!.z });
+    }
+    for (const [id, voice] of this.screeches) if (!screeching.has(id)) { voice.stop(); this.screeches.delete(id); }
   }
 
   /** Index of the bomb site the player stands on (within reach of its centre), or -1. */
@@ -625,10 +710,19 @@ export class Game {
   private shoot(origin: Vec3, dir: Vec3, range: number, state: MatchState) {
     const w = this.player.weapon;
     const melee = w.class === 'melee';
-    this.viewmodel.fire();
     const cam = this.renderer.camera;
     cam.updateMatrixWorld();
-    const muzzle = this.viewmodel.muzzleWorld(cam, this.renderer.viewCamera);
+    // A scooter rider seen from the chase camera fires from the third-person body on the seat.
+    const rider = this.driving.armed && !this.driving.firstPerson ? this.selfView : undefined;
+    let muzzle: THREE.Vector3;
+    if (rider) {
+      rider.shoot();
+      const v = this.driving.v!;
+      muzzle = rider.muzzleWorld().add(new THREE.Vector3(v.vx, 0, v.vz).multiplyScalar(1 / 60));
+    } else {
+      this.viewmodel.fire();
+      muzzle = this.viewmodel.muzzleWorld(cam, this.renderer.viewCamera);
+    }
     if (!melee) {
       this.audio.gunshot(w.id, undefined, undefined, w.suppressed);
       if (!w.suppressed) this.effects.flash(muzzle, 0xffc070, 4, 0.05, 7);
@@ -740,6 +834,7 @@ export class Game {
           // Every round deploys everyone fresh in their base: full magazines, health and stamina,
           // survivors included (they keep their gear, the server refills it).
           if (me?.alive) { this.player.spawnFrom(me); this.shownWeapon = ''; }
+          this.skids.clear();
           this.audio.roundStart();
           const sabotage = modeOf(state, this.map.def) === 'sabotage';
           const goal = !sabotage ? 'Eliminate the enemy team' : me?.team === ATTACKERS ? 'Arm the bomb or eliminate SWAT' : 'Defend the sites or eliminate the Militia';

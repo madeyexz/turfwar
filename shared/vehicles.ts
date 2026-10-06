@@ -41,6 +41,14 @@ export interface VehicleSpec {
   runOver: number;
   /** Speed lost in one impact above which the body takes crash damage, and damage per m/s beyond it. */
   crashSpeed: number; crashDamage: number;
+  /**
+   * Handbrake drift (cars and scooters): lateral grip while sliding (fraction of `grip`), how much
+   * of the body's turn the velocity follows while sliding (1 = none of the slide), the yaw-rate
+   * boost of a handbrake turn, and how fast the locked wheels bleed speed (m/s²).
+   */
+  drift: { grip: number; follow: number; yaw: number; bleed: number };
+  /** The driver has a hand free to shoot one-handed weapons (pistols and SMGs) while riding. */
+  driverArms: boolean;
 }
 
 export const VEHICLES: Record<VehicleKind, VehicleSpec> = {
@@ -52,6 +60,7 @@ export const VEHICLES: Record<VehicleKind, VehicleSpec> = {
     box: { w: 0.92, l: 2.25, h: 1.42, y0: 0.14, c: 0 },
     seats: [{ x: -0.4, y: 0.14, z: -0.05 }, { x: 0.4, y: 0.14, z: -0.05 }], sit: 1,
     reach: 2.2, exposed: false, runOver: 7, crashSpeed: 11, crashDamage: 14,
+    drift: { grip: 0.14, follow: 0.3, yaw: 1.7, bleed: 3.5 }, driverArms: false,
   },
   scooter: {
     name: 'SCOOTER', verb: 'RIDE', health: 160,
@@ -61,6 +70,7 @@ export const VEHICLES: Record<VehicleKind, VehicleSpec> = {
     box: { w: 0.3, l: 0.92, h: 0.95, y0: 0.08, c: 0 },
     seats: [{ x: 0, y: 0.32, z: 0.02 }, { x: 0, y: 0.36, z: -0.5 }], sit: 0.75,
     reach: 1.6, exposed: true, runOver: 3.5, crashSpeed: 10, crashDamage: 6,
+    drift: { grip: 0.32, follow: 0.55, yaw: 1.35, bleed: 3 }, driverArms: true,
   },
   heli: {
     name: 'HELICOPTER', verb: 'FLY', health: 800,
@@ -70,6 +80,7 @@ export const VEHICLES: Record<VehicleKind, VehicleSpec> = {
     box: { w: 1.05, l: 3.2, h: 2.3, y0: 0.3, c: -1.2 },
     seats: [{ x: -0.4, y: 0.4, z: 0.85 }, { x: 0.4, y: 0.4, z: 0.85 }], sit: 1,
     reach: 2.4, exposed: false, runOver: 0, crashSpeed: 7, crashDamage: 26,
+    drift: { grip: 1, follow: 1, yaw: 1, bleed: 0 }, driverArms: false,
   },
 };
 
@@ -256,16 +267,62 @@ function stepGroundForces(v: Vehicle, spec: VehicleSpec, input: VehicleInput, li
       vf = vf > 0.3 ? Math.max(0, vf - spec.brake * dt) : Math.max(-spec.reverse, vf - spec.accel * 0.6 * -throttle * dt);
     } else vf = approach(vf, 0, spec.drag * dt);
     const handbrake = live && input.brake;
-    if (handbrake) vf = approach(vf, 0, spec.brake * 0.6 * dt);
+    // Locked rear wheels bleed speed gently (the handbrake is for sliding, W/S brake hard).
+    if (handbrake) vf = approach(vf, 0, spec.drift.bleed * dt);
     vf -= vf * Math.abs(vf) * 0.0015 * dt;
-    // Steering turns the body; reversing steers the other way, and grip drops at speed.
+    const slide = slideOf(spec, vf, vr, handbrake);
+    // Steering turns the body; reversing steers the other way, and grip drops at speed. A handbrake
+    // turn swings the tail round faster.
     const sf = clamp(vf / 5, -1, 1) * (1 - 0.4 * clamp(Math.abs(vf) / spec.maxSpeed, 0, 1));
-    v.yaw = wrapAngle(v.yaw - v.steer * spec.steer * sf * dt * (handbrake ? 1.35 : 1));
-    vr *= Math.exp(-(handbrake ? spec.grip * 0.18 : spec.grip) * dt);
+    const turn = v.steer * spec.steer * sf * dt * (handbrake ? spec.drift.yaw : 1);
+    // Gripping tyres carry the velocity round with the body; sliding ones let the body turn under
+    // it (the slip angle grows), until grip pulls the velocity back in line or counter-steer
+    // swings the nose back toward it.
+    const follow = 1 + (spec.drift.follow - 1) * slide;
+    const carry = v.yaw - turn * follow;
+    const cf = forwardOf(carry), cr = rightOf(carry);
+    const wx = cf.x * vf + cr.x * vr, wz = cf.z * vf + cr.z * vr;
+    v.yaw = wrapAngle(v.yaw - turn);
     const nf = forwardOf(v.yaw), nr = rightOf(v.yaw);
+    vf = wx * nf.x + wz * nf.z; vr = wx * nr.x + wz * nr.z;
+    vr *= Math.exp(-spec.grip * (1 + (spec.drift.grip - 1) * slide) * dt);
     v.vx = nf.x * vf + nr.x * vr; v.vz = nf.z * vf + nr.z * vr;
+    // Throttle on a sideways body never pushes the speed past the top speed.
+    const speed = Math.hypot(v.vx, v.vz);
+    if (speed > spec.maxSpeed) { v.vx *= spec.maxSpeed / speed; v.vz *= spec.maxSpeed / speed; }
   }
   v.vy -= GRAVITY * dt;
+}
+
+/**
+ * How much the tyres slide (0 gripping .. 1 sliding): fully with the handbrake on; otherwise the
+ * slip angle (between heading and velocity) of a moving body loosens them part of the way, so a
+ * drift released at a big angle slides on for a moment before it catches.
+ */
+function slideOf(spec: VehicleSpec, vf: number, vr: number, handbrake: boolean) {
+  if (handbrake) return 1;
+  const speed = Math.hypot(vf, vr);
+  if (speed < 3) return 0;
+  const slip = Math.atan2(Math.abs(vr), Math.abs(vf));
+  return 0.6 * clamp((slip - 0.1) / 0.4, 0, 1) * clamp((speed - 3) / 4, 0, 1);
+}
+
+/** Signed slip angle (radians) between the heading and the ground velocity; positive slides right. */
+export function slipAngle(v: Pick<Vehicle, 'vx' | 'vz' | 'yaw'>) {
+  const f = forwardOf(v.yaw), r = rightOf(v.yaw);
+  const vf = v.vx * f.x + v.vz * f.z, vr = v.vx * r.x + v.vz * r.z;
+  return Math.hypot(vf, vr) < 0.5 ? 0 : Math.atan2(vr, Math.abs(vf));
+}
+
+/**
+ * Tyre skid (0..1) of a car or scooter for effects: a sliding body at speed, or locked wheels
+ * dragged along with the handbrake (`braking`, known only for the vehicle we drive).
+ */
+export function skidOf(v: Pick<Vehicle, 'kind' | 'vx' | 'vz' | 'yaw' | 'grounded'>, braking = false) {
+  if (v.kind === 'heli' || !v.grounded) return 0;
+  const speed = Math.hypot(v.vx, v.vz);
+  const slide = clamp((Math.abs(slipAngle(v)) - 0.12) / 0.3, 0, 1) * clamp((speed - 4) / 5, 0, 1);
+  return Math.max(slide, braking ? clamp((speed - 3) / 8, 0, 0.7) : 0);
 }
 
 function stepHeliForces(v: Vehicle, spec: VehicleSpec, input: VehicleInput, live: boolean, dt: number) {

@@ -224,7 +224,7 @@ export class OnlineLink implements GameLink {
   vehicleReport(r: VehicleReport) {
     if (this.reportsInFlight > 3) return;
     this.reportsInFlight++;
-    void this.conn.reducers.vehicleReport(r).catch(() => undefined).finally(() => { this.reportsInFlight--; });
+    void this.conn.reducers.vehicleReport({ ...r, aimYaw: r.aimYaw ?? r.yaw, aimPitch: r.aimPitch ?? 0 }).catch(() => undefined).finally(() => { this.reportsInFlight--; });
   }
   say(text: string, team: boolean) { void this.conn.reducers.say({ text, team }).catch(() => undefined); }
   grenade(o: Vec3, d: Vec3) { void this.conn.reducers.grenade({ ox: o.x, oy: o.y, oz: o.z, dx: d.x, dy: d.y, dz: d.z }).catch(() => undefined); }

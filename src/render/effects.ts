@@ -1,6 +1,6 @@
 import * as THREE from 'three';
 
-interface Particle { mesh: THREE.Mesh | THREE.Sprite; velocity: THREE.Vector3; life: number; maxLife: number; gravity: number; grow: number; fade: boolean }
+interface Particle { mesh: THREE.Mesh | THREE.Sprite; velocity: THREE.Vector3; life: number; maxLife: number; gravity: number; grow: number; fade: boolean; alpha: number }
 interface Tracer { mesh: THREE.Mesh; from: THREE.Vector3; dir: THREE.Vector3; total: number; head: number; speed: number; length: number }
 interface Light { light: THREE.PointLight; life: number; maxLife: number; intensity: number }
 
@@ -128,6 +128,15 @@ export class Effects {
     }
   }
 
+  /** A puff of white tyre smoke off a sliding wheel; it drifts with the car a little, rises and spreads. */
+  tyreSmoke(at: THREE.Vector3, carry: THREE.Vector3, strength: number, scale = 1) {
+    const s = new THREE.Sprite(new THREE.SpriteMaterial({ map: this.smoke, color: 0xe8e6e2, transparent: true, depthWrite: false, opacity: 0.5 * strength }));
+    s.position.set(at.x + (Math.random() - 0.5) * 0.3, at.y, at.z + (Math.random() - 0.5) * 0.3);
+    s.scale.setScalar(0.5 * scale);
+    const v = carry.clone().add(new THREE.Vector3((Math.random() - 0.5) * 1.2, 0.5 + Math.random() * 0.6, (Math.random() - 0.5) * 1.2));
+    this.add(s, v, 0.9 + Math.random() * 0.7, -0.4, 1.6, true, 0.25 + 0.35 * strength);
+  }
+
   /** Team-coloured implosion when a soldier respawns (and a violet one for graviton blasts). */
   burst(at: THREE.Vector3, color = 0x8ff6ff) {
     this.flash(at, color, 25, 0.25, 14);
@@ -139,9 +148,9 @@ export class Effects {
     }
   }
 
-  private add(mesh: THREE.Mesh | THREE.Sprite, velocity: THREE.Vector3, life: number, gravity: number, grow: number, fade: boolean) {
+  private add(mesh: THREE.Mesh | THREE.Sprite, velocity: THREE.Vector3, life: number, gravity: number, grow: number, fade: boolean, alpha = 1) {
     this.group.add(mesh);
-    this.particles.push({ mesh, velocity, life, maxLife: life, gravity, grow, fade });
+    this.particles.push({ mesh, velocity, life, maxLife: life, gravity, grow, fade, alpha });
     if (this.particles.length > 400) { const old = this.particles.shift()!; this.dispose(old.mesh); }
   }
 
@@ -158,7 +167,7 @@ export class Effects {
       p.velocity.y -= p.gravity * dt;
       p.mesh.position.addScaledVector(p.velocity, dt);
       if (p.grow) p.mesh.scale.multiplyScalar(1 + p.grow * dt);
-      if (p.fade) (p.mesh.material as THREE.Material & { opacity: number }).opacity = Math.min(1, p.life / p.maxLife * 1.5) * ((p.mesh as THREE.Sprite).isSprite ? 0.8 : 1);
+      if (p.fade) (p.mesh.material as THREE.Material & { opacity: number }).opacity = Math.min(1, p.life / p.maxLife * 1.5) * ((p.mesh as THREE.Sprite).isSprite ? 0.8 : 1) * p.alpha;
     }
     for (let i = this.tracers.length - 1; i >= 0; i--) {
       const t = this.tracers[i];

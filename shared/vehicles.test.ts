@@ -3,9 +3,10 @@ import { CollisionWorld } from './collision';
 import { MAP_IDS, loadMap } from './maps/index';
 import { rng } from './math';
 import {
-  HELI_CEILING, VEHICLES, createVehicle, exitSpot, forwardOf, idleVehicleInput, raycastVehicle, seatPosition, speedOf, stepVehicle,
+  HELI_CEILING, VEHICLES, createVehicle, exitSpot, forwardOf, idleVehicleInput, raycastVehicle, seatPosition, skidOf, slipAngle, speedOf, stepVehicle,
   vehicleBlocked, type Vehicle, type VehicleInput,
 } from './vehicles';
+import { eyeOf } from './match/combat';
 import { decodeFrame, encodeFrame } from './match/frame';
 import {
   addSoldier, createContext, createMatch, enterVehicle, exitVehicle, fireShot, reportState, reportVehicle, resetMatch, seatOf, startRound,
@@ -58,6 +59,52 @@ describe('vehicle physics', () => {
     }
     expect(impact).toBeGreaterThan(3);
     expect(vehicleBlocked(world, v)).toBe(false);
+  });
+
+  it('handbrake drift: the slip angle grows, counter-steer recovers, speed bleeds gently and never passes the top speed', () => {
+    const flat = new CollisionWorld([], [], { x0: -2000, z0: -2000, spacing: 1000, n: 5, heights: new Float32Array(25) }, { minX: -1900, maxX: 1900, minZ: -1900, maxZ: 1900 });
+    const slips: Record<string, number> = {};
+    for (const kind of ['car', 'scooter'] as const) {
+      const spec = VEHICLES[kind];
+      const v = createVehicle(0, { kind, x: 0, y: 0, z: 0, yaw: 0 });
+      let fastest = 0;
+      const run = (input: Partial<VehicleInput>, seconds: number, each?: () => void) => {
+        for (let i = 0; i < Math.round(seconds / STEP); i++) {
+          stepVehicle(flat, v, { ...idleVehicleInput(v.yaw, true), ...input }, STEP);
+          fastest = Math.max(fastest, speedOf(v));
+          each?.();
+        }
+      };
+      run({ throttle: 1 }, 4);
+      const entry = speedOf(v);
+      expect(entry).toBeGreaterThan(spec.maxSpeed * 0.8);
+      // A plain turn grips: the body and its velocity turn together.
+      run({ throttle: 1, steer: 1 }, 0.4);
+      expect(Math.abs(slipAngle(v))).toBeLessThan(0.05);
+      // Handbrake through the turn: the heading turns faster than the velocity, so the slip grows.
+      let peak = 0;
+      const yaw0 = v.yaw;
+      run({ throttle: 1, steer: 1, brake: true }, 0.9, () => { peak = Math.max(peak, Math.abs(slipAngle(v))); });
+      slips[kind] = peak;
+      expect(peak).toBeGreaterThan(kind === 'car' ? 0.45 : 0.15);
+      expect(v.yaw - yaw0).toBeLessThan(-0.8); // it swung round (steering right lowers yaw)
+      expect(skidOf(v, true)).toBeGreaterThan(0.2);
+      // Speed bleeds, gently: lost some, kept most.
+      expect(speedOf(v)).toBeLessThan(entry - 1);
+      expect(speedOf(v)).toBeGreaterThan(entry * 0.6);
+      // Counter-steer, handbrake off: the slide catches and the slip closes.
+      run({ throttle: 1, steer: -1 }, 0.5);
+      expect(Math.abs(slipAngle(v))).toBeLessThan(0.08);
+      run({ throttle: 1 }, 0.3);
+      expect(Math.abs(slipAngle(v))).toBeLessThan(0.02);
+      expect(skidOf(v)).toBe(0);
+      // Released without counter-steer it still straightens, a little later.
+      run({ throttle: 1, steer: 1, brake: true }, 0.9);
+      run({ throttle: 0.5 }, 0.8);
+      expect(Math.abs(slipAngle(v))).toBeLessThan(0.05);
+      expect(fastest).toBeLessThanOrEqual(spec.maxSpeed + 1e-9);
+    }
+    expect(slips.car).toBeGreaterThan(slips.scooter); // the scooter slides lighter
   });
 
   it('the helicopter waits for its rotor, climbs, hovers, flies, respects the ceiling and lands', () => {
@@ -116,9 +163,9 @@ const besides = (state: MatchState, ctx: SimContext, s: Soldier, i: number) => {
   const p = exitSpot(ctx.world, state.vehicles[i], 0);
   s.m.x = p.x; s.m.y = p.y; s.m.z = p.z; s.m.vx = s.m.vz = 0; s.m.grounded = true;
 };
-const vreport = (v: Vehicle, over: Partial<Vehicle> = {}) => {
+const vreport = (v: Vehicle, over: Partial<Vehicle> = {}, aim?: { aimYaw: number; aimPitch: number }) => {
   const n = { ...v, ...over };
-  return { vehicle: v.id, x: n.x, y: n.y, z: n.z, vx: n.vx, vy: n.vy, vz: n.vz, yaw: n.yaw, pitch: n.pitch, roll: n.roll };
+  return { vehicle: v.id, x: n.x, y: n.y, z: n.z, vx: n.vx, vy: n.vy, vz: n.vz, yaw: n.yaw, pitch: n.pitch, roll: n.roll, ...aim };
 };
 
 describe('vehicles in a match', () => {
@@ -213,6 +260,35 @@ describe('vehicles in a match', () => {
     const before = a.corrections;
     expect(reportVehicle(state, ctx, a.id, vreport(parked, { x: parked.x + 2 }), 0.2)).toBe(false);
     expect(a.corrections).toBe(before + 1);
+  });
+
+  it('a drifting driver reports within the server limits: no corrections, never over the speed cap', () => {
+    for (const kind of ['car', 'scooter'] as const) {
+      const { ctx, state } = setup();
+      const a = addSoldier(state, ctx, { name: 'A', team: 0, bot: false });
+      goLive(state, ctx);
+      // The parked one with the most open road ahead.
+      const clear = (i: number) => { const s = ctx.map.vehicles![i], f = forwardOf(s.yaw); return ctx.world.raycast({ x: s.x, y: s.y + 0.7, z: s.z }, { x: f.x, y: 0, z: f.z }, 200)?.t ?? 200; };
+      const index = ctx.map.vehicles!.map((s, i) => i).filter(i => ctx.map.vehicles![i].kind === kind).sort((p, q) => clear(q) - clear(p))[0];
+      besides(state, ctx, a, index);
+      expect(enterVehicle(state, ctx, a.id, index)).toBe(true);
+      const v = state.vehicles[index];
+      const sim = { ...v };
+      const before = a.corrections;
+      let peak = 0;
+      // Up to speed, a handbrake drift one way, counter-steer, and one the other way: 20 Hz reports.
+      const plan = (k: number): Partial<VehicleInput> =>
+        k < 25 ? { throttle: 1 } : k < 40 ? { throttle: 1, steer: 1, brake: true } : k < 50 ? { throttle: 1, steer: -1 } : k < 62 ? { throttle: 0.6, steer: -1, brake: true } : { throttle: 0.5 };
+      for (let k = 0; k < 75; k++) {
+        for (let i = 0; i < 6; i++) stepVehicle(ctx.world, sim, { ...idleVehicleInput(sim.yaw, true), ...plan(k) }, 1 / 120);
+        peak = Math.max(peak, Math.abs(slipAngle(sim)));
+        expect(speedOf(sim)).toBeLessThanOrEqual(VEHICLES[kind].maxSpeed + 1e-6);
+        expect(reportVehicle(state, ctx, a.id, vreport(sim), 0.05), `${kind} report ${k}`).toBe(true);
+        tickMatch(state, ctx, 0.05);
+      }
+      expect(a.corrections, kind).toBe(before);
+      expect(peak, kind).toBeGreaterThan(0.12);
+    }
   });
 
   it('the helicopter cannot lift before its rotor spins up on the server, then flies within its ceiling', () => {
@@ -314,6 +390,75 @@ describe('vehicles in a match', () => {
     expect(events.some(e => e.type === 'kill' && e.victim === a.id && e.killer === shooter.id)).toBe(true);
     expect(events.some(e => e.type === 'explosion' && e.weapon === 'vehicle')).toBe(true);
     expect(enterVehicle(state, ctx, shooter.id, car)).toBe(false);
+  });
+
+  it('a scooter rider shoots one-handed weapons through the validated fire path; car drivers still cannot', () => {
+    const { ctx, state, events } = setup({ ...PRACTICE_CONFIG });
+    const r = addSoldier(state, ctx, { name: 'Rider', team: 0, bot: false });
+    const d = addSoldier(state, ctx, { name: 'Driver', team: 0, bot: false });
+    const enemy = addSoldier(state, ctx, { name: 'Enemy', team: 1, bot: false });
+    goLive(state, ctx);
+    const scooter = taipeiSpot('scooter').index, car = taipeiSpot('car').index;
+    // Holding a rifle, the rider draws the sidearm on mounting.
+    r.weapons[0] = 'm4a1'; r.weapon = 0;
+    besides(state, ctx, r, scooter);
+    expect(enterVehicle(state, ctx, r.id, scooter)).toBe(true);
+    expect(r.weapon).toBe(1);
+    besides(state, ctx, d, car); enterVehicle(state, ctx, d.id, car);
+    tick(state, ctx, 1); // finish drawing
+    const v = state.vehicles[scooter];
+    // Aim reports turn the rider (not the bike); a car driver still faces its heading.
+    const side = v.yaw + Math.PI / 2;
+    expect(reportVehicle(state, ctx, r.id, vreport(v, {}, { aimYaw: side, aimPitch: 0.1 }), 0.05)).toBe(true);
+    expect(r.yaw).toBeCloseTo(side, 5); expect(r.pitch).toBeCloseTo(0.1, 5);
+    expect(v.yaw).not.toBeCloseTo(side, 2);
+    const cv = state.vehicles[car];
+    expect(reportVehicle(state, ctx, d.id, vreport(cv, {}, { aimYaw: cv.yaw + 1, aimPitch: 0.3 }), 0.05)).toBe(true);
+    expect(d.yaw).toBeCloseTo(cv.yaw, 5);
+    // An enemy 8 m off the rider's left side.
+    const eye = eyeOf(r);
+    const left = { x: -Math.cos(v.yaw), z: Math.sin(v.yaw) };
+    enemy.m.x = r.m.x + left.x * 8; enemy.m.z = r.m.z + left.z * 8; enemy.m.y = ctx.world.groundHeight(enemy.m.x, enemy.m.z, r.m.y + 1, 0.3);
+    enemy.m.vx = 0; enemy.m.vz = 0;
+    const claim = (weapon: 0 | 1, from: { x: number; y: number; z: number }) => {
+      const to = { x: enemy.m.x, y: enemy.m.y + 1.2, z: enemy.m.z };
+      const n = Math.hypot(to.x - from.x, to.y - from.y, to.z - from.z);
+      return { weapon, origin: from, dir: { x: (to.x - from.x) / n, y: (to.y - from.y) / n, z: (to.z - from.z) / n }, target: enemy.id, zone: 'body' as const, point: to };
+    };
+    const shotFrom = () => { const e = events.find(x => x.type === 'shot'); return e?.type === 'shot' ? e : undefined; };
+    expect(ctx.world.lineOfSight(eye, { x: enemy.m.x, y: enemy.m.y + 1.2, z: enemy.m.z })).toBe(true);
+    // The pistol: a validated hit from the rider's eye.
+    const health = enemy.health, ammo = r.ammo[1];
+    events.splice(0);
+    expect(fireShot(state, ctx, r.id, claim(1, eye))).toBe(true);
+    expect(enemy.health).toBeLessThan(health);
+    expect(r.ammo[1]).toBe(ammo - 1);
+    expect(shotFrom()?.hit).toBe(1);
+    // The rifle needs two hands: refused (no ammo spent, no weapon switch).
+    r.fireCooldown = 0;
+    const rifleAmmo = r.ammo[0];
+    expect(fireShot(state, ctx, r.id, claim(0, eye))).toBe(false);
+    expect(r.ammo[0]).toBe(rifleAmmo); expect(r.weapon).toBe(1);
+    // A shot claimed from far off the rider's seat is fired from the server's eye instead.
+    r.fireCooldown = 0;
+    events.splice(0);
+    const far = { x: eye.x + 9, y: eye.y + 4, z: eye.z };
+    expect(fireShot(state, ctx, r.id, claim(1, far))).toBe(true);
+    const fallback = shotFrom()!;
+    expect(Math.hypot(fallback.from.x - eye.x, fallback.from.y - eye.y, fallback.from.z - eye.z)).toBeLessThan(1e-6);
+    // At speed the seat the server knows trails the client's by a report: the allowance grows with speed.
+    const f = forwardOf(v.yaw);
+    v.vx = f.x * 20; v.vz = f.z * 20;
+    r.fireCooldown = 0;
+    events.splice(0);
+    const ahead = { x: eye.x + f.x * 3, y: eye.y, z: eye.z + f.z * 3 };
+    expect(fireShot(state, ctx, r.id, claim(1, ahead))).toBe(true);
+    const leading = shotFrom()!;
+    expect(Math.hypot(leading.from.x - ahead.x, leading.from.z - ahead.z)).toBeLessThan(1e-6);
+    // The car's driver still cannot shoot (passengers and scooter riders can).
+    const dAmmo = d.ammo[1];
+    expect(fireShot(state, ctx, d.id, claim(1, eyeOf(d)))).toBe(false);
+    expect(d.ammo[1]).toBe(dAmmo);
   });
 
   it('running an enemy over hurts them; teammates are spared', () => {
