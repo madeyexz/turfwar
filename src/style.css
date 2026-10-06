@@ -1,9 +1,21 @@
 @font-face { font-family: 'Rajdhani'; font-weight: 500; font-display: swap; src: url('/fonts/rajdhani-500.woff2') format('woff2'); }
 @font-face { font-family: 'Rajdhani'; font-weight: 600; font-display: swap; src: url('/fonts/rajdhani-600.woff2') format('woff2'); }
 @font-face { font-family: 'Rajdhani'; font-weight: 700; font-display: swap; src: url('/fonts/rajdhani-700.woff2') format('woff2'); }
+/*
+ * Traditional Chinese: Noto Sans TC (OFL), subset by tools/subset-font.ts, weights 500–900 in one
+ * variable file. The unicode-range (src/ui/cjk.ts) keeps Latin on Rajdhani and stops English pages
+ * downloading it. Rajdhani's own ascent and descent keep line boxes the same height when a line
+ * holds Chinese, and size-adjust sets the ideographs to sit with Rajdhani's tall, narrow capitals.
+ */
+@font-face {
+  font-family: 'Noto Sans TC'; font-weight: 500 900; font-display: swap;
+  src: url('/fonts/noto-sans-tc.woff2') format('woff2');
+  unicode-range: U+2E80-2FDF, U+3000-303F, U+3100-312F, U+31A0-31BF, U+3400-4DBF, U+4E00-9FFF, U+F900-FAFF, U+FE10-FE1F, U+FE30-FE4F, U+FF00-FFEF;
+  size-adjust: 92%; ascent-override: 101%; descent-override: 37.6%; line-gap-override: 0%;
+}
 
 :root {
-  --font: 'Rajdhani', 'Segoe UI', system-ui, sans-serif;
+  --font: 'Rajdhani', 'Noto Sans TC', 'PingFang TC', 'Microsoft JhengHei', 'Segoe UI', system-ui, sans-serif;
   --ink: #e9f3f5;
   --muted: #9fb3b9;
   --panel: rgba(8, 16, 22, 0.62);

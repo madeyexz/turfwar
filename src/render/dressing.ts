@@ -6,6 +6,7 @@ import type { Decor } from '../../shared/maps/types';
 import { rng } from '../../shared/math';
 import { buildSkyline, type SkylineData } from './skyline';
 import { lotDetail, type LotRow } from './lotdetail';
+import { CJK_STACK, cjkFontReady } from '../ui/fonts';
 
 /**
  * Dressing sets (street furniture and skylines) and model instances. A set is plain data the
@@ -62,6 +63,8 @@ export async function addDressing(group: THREE.Group, decor: Decor[]) {
     const set = await SETS[d.set]?.();
     if (!set) { console.warn('unknown dressing set', d.set); continue; }
     if (set.district) group.add(await districtGroup(set.district, d.x, d.z, cutTest(d.cut ?? [])));
+    // Street-name plates and boards bake Chinese into a canvas: load the face first.
+    if (set.street) await cjkFontReady(set.street.plates.map(p => p[6]).join(''));
     if (set.street) group.add(streetGroup(cutStreet(set.street, d.x, d.z, cutTest([...(d.cut ?? []), ...(d.clear ?? [])])), d.x, d.z, models));
     if (set.skyline) group.add(buildSkyline(set.skyline, d.x, d.z));
     if (set.lots) group.add(lotDetail(set.lots, d.x, d.z));
@@ -241,7 +244,7 @@ function markMesh(marks: number[], ox: number, oz: number) {
 
 // ---- Sign plates ---------------------------------------------------------------------------
 
-const PLATE_FONT = `'PingFang TC','Noto Sans TC','Microsoft JhengHei','Heiti TC',sans-serif`;
+const PLATE_FONT = CJK_STACK;
 
 /** Sign art drawn into a cell: traffic signs, banners, bus and YouBike boards, street-name plates, ads. */
 function drawPlate(c: CanvasRenderingContext2D, key: string, x: number, y: number, w: number, h: number) {

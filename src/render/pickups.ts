@@ -1,6 +1,7 @@
 import * as THREE from 'three';
 import type { PickupDef } from '../../shared/maps/types';
 import type { Assets } from '../assets';
+import { UI_STACK } from '../ui/fonts';
 
 /** Stencilled side of the ammo box (yellow military lettering on transparent). */
 function stencil(lines: [string, number][], w = 256, h = 128) {
@@ -8,7 +9,7 @@ function stencil(lines: [string, number][], w = 256, h = 128) {
   const g = c.getContext('2d')!;
   g.fillStyle = '#e3cf6a'; g.textAlign = 'center'; g.textBaseline = 'middle';
   let y = h * 0.16;
-  for (const [text, size] of lines) { g.font = `700 ${size}px Rajdhani, "Arial Narrow", sans-serif`; y += size * 0.55; g.fillText(text, w / 2, y); y += size * 0.55; }
+  for (const [text, size] of lines) { g.font = `700 ${size}px ${UI_STACK}`; y += size * 0.55; g.fillText(text, w / 2, y); y += size * 0.55; }
   const tex = new THREE.CanvasTexture(c);
   tex.colorSpace = THREE.SRGBColorSpace; tex.anisotropy = 4;
   return tex;

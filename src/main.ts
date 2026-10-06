@@ -15,8 +15,11 @@ import { THEMES } from './render/materials';
 import { QUALITY, Renderer } from './render/renderer';
 import { renderTheme, THEME_START } from './theme';
 import { SettingsMenu, type GraphicsQuality, type SettingsTab } from './ui/settingsmenu';
+import { cjkFontReady } from './ui/fonts';
+import { L, applyI18n, escapeHtml as esc, isZh, mapName as localMapName, mapRegion, modeName, onLang, plural, serverError, sizeName, t, type Key } from './ui/i18n';
 import './style.css';
 import './menu.css';
+import './ui/lang-zh.css';
 
 inject();
 
@@ -40,27 +43,27 @@ type Focus = 'quick' | 'create' | 'join' | 'room' | 'bots' | 'range';
 /** How the match is reached: the old `mode` / `onlineKind` pair, still what storage and URLs speak. */
 const modeOf = (f: Focus) => f === 'bots' ? 'offline' : f === 'range' ? 'lab' : 'online';
 const kindOf = (f: Focus) => f === 'create' ? 'create' : f === 'join' ? 'code' : f === 'room' ? 'room' : 'quick';
-const MODES: Record<Mode, { tag: string; name: string }> = {
-  elimination: { tag: 'E', name: 'Elimination' },
-  sabotage: { tag: 'S', name: 'Sabotage' },
+const MODES: Record<Mode, { tag: string; readonly name: string }> = {
+  elimination: { tag: 'E', get name() { return modeName('elimination'); } },
+  sabotage: { tag: 'S', get name() { return modeName('sabotage'); } },
 };
-const esc = (s: string) => s.replace(/[&<>"']/g, c => `&#${c.charCodeAt(0)};`);
 
 const menu = document.createElement('div');
 menu.id = 'menu';
 const maps = mapSummaries();
-const mapName = (id: string) => maps.find(m => m.id === id)?.name ?? id;
+const mapName = (id: string) => localMapName(id, maps.find(m => m.id === id)?.name ?? id);
 const server = onlineConfig();
 const online = onlineAvailable();
 const vs = (n: number) => `${n}v${n}`;
-const choice = (group: string, attr: string, items: [string, string][], label?: string) =>
-  `<div class="choices segmented" id="${group}" style="--n:${items.length}"${label ? ` role="group" aria-label="${label}"` : ''}>${items.map(([v, text]) => `<button class="choice" data-${attr}="${v}"><b>${text}</b></button>`).join('')}</div>`;
+/** Segmented buttons; `items` are [value, label HTML] (labels built with `L` follow the language). */
+const choice = (group: string, attr: string, items: [string, string][], label?: Key) =>
+  `<div class="choices segmented" id="${group}" style="--n:${items.length}"${label ? ` role="group" aria-label="${t(label)}" data-i18n-aria-label="${label}"` : ''}>${items.map(([v, text]) => `<button class="choice" data-${attr}="${v}"><b>${text}</b></button>`).join('')}</div>`;
 const sizeChoice = (group: string) =>
-  `<div class="choices segmented sizes" id="${group}" style="--n:${SIZES.length}" role="group" aria-label="Room size">${SIZES.map(s => `<button class="choice" data-size="${s.id}"><b>${s.label}</b><small>${s.name}${s.perTeam > 12 ? ' · big map' : ''}</small></button>`).join('')}</div>`;
-const modeChoice = (group: string) => choice(group, 'gamemode', Object.entries(MODES).map(([id, m]) => [id, `<span class="mtag">[${m.tag}]</span> ${m.name}`]));
+  `<div class="choices segmented sizes" id="${group}" style="--n:${SIZES.length}" role="group" aria-label="${t('lobby.roomSize')}" data-i18n-aria-label="lobby.roomSize">${SIZES.map(s => `<button class="choice" data-size="${s.id}"><b>${s.label}</b><small>${L(`size.${s.id}`)}${s.perTeam > 12 ? ` · ${L('lobby.bigMap')}` : ''}</small></button>`).join('')}</div>`;
+const modeChoice = (group: string) => choice(group, 'gamemode', (Object.keys(MODES) as Mode[]).map(id => [id, `<span class="mtag">[${MODES[id].tag}]</span> ${L(`mode.${id}`)}`]));
 const mapChoice = (group: string) =>
-  `<div class="maps" id="${group}">${maps.map(m => `<button class="map" data-map="${m.id}" data-theme="${m.theme}"><b>${m.name}</b><small></small></button>`).join('')}</div>`;
-const field = (label: string, body: string) => `<div class="field"><span class="label">${label}</span>${body}</div>`;
+  `<div class="maps" id="${group}">${maps.map(m => `<button class="map" data-map="${m.id}" data-theme="${m.theme}"><b>${esc(mapName(m.id))}</b><small></small></button>`).join('')}</div>`;
+const field = (label: Key, body: string) => `<div class="field">${L(label, 'span', 'class="label"')}${body}</div>`;
 const GEAR = '<svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="3.2"/><path d="M12 2.8v2.6M12 18.6v2.6M21.2 12h-2.6M5.4 12H2.8M18.5 5.5l-1.84 1.84M7.34 16.66 5.5 18.5M18.5 18.5l-1.84-1.84M7.34 7.34 5.5 5.5"/><circle cx="12" cy="12" r="6.4"/></svg>';
 
 /*
@@ -72,54 +75,54 @@ menu.innerHTML = `
   <section class="panel">
     <header class="brand">
       <div class="tag">Lawbreaker // Frontline</div>
-      <h1>SWAT <em>vs Militia</em></h1>
-      <p class="lede">Round-based team combat · first to ten rounds.</p>
+      <h1>${L('lobby.title')} <em data-i18n="lobby.titleVs">${t('lobby.titleVs')}</em></h1>
+      ${L('lobby.lede', 'p', 'class="lede"')}
     </header>
     <div class="form">
       <div class="who">
-        <label class="callsign"><span class="label">Callsign</span><input type="text" id="callsign" maxlength="16" autocomplete="off" spellcheck="false"></label>
-        ${choice('teams', 'team', [['auto', 'Auto'], ['0', '<span class="swat">SWAT</span>'], ['1', '<span class="militia">Militia</span>']], 'Team')}
+        <label class="callsign">${L('lobby.callsign', 'span', 'class="label"')}<input type="text" id="callsign" maxlength="16" autocomplete="off" spellcheck="false"></label>
+        ${choice('teams', 'team', [['auto', L('lobby.auto')], ['0', L('team.0', 'span', 'class="swat"')], ['1', L('team.1', 'span', 'class="militia"')]], 'lobby.team')}
       </div>
 
-      <section class="block" id="online-block" aria-label="Play online">
+      <section class="block" id="online-block" aria-label="${t('lobby.playOnline')}" data-i18n-aria-label="lobby.playOnline">
         ${sizeChoice('sizes-online')}
-        <button class="deploy" id="quick" data-act="quick" disabled>Loading…</button>
+        <button class="deploy" id="quick" data-act="quick" disabled>${t('lobby.loading')}</button>
         <p class="rooms-line" id="rooms-line"><span class="conn" id="conn"><i></i></span><span id="quick-hint"></span></p>
         <p class="unavailable" id="online-off"></p>
       </section>
 
-      <div class="subs" role="group" aria-label="More ways to play">
-        <button class="sub" data-toggle="create" aria-expanded="false" aria-controls="drawer-create">Private room</button>
-        <button class="sub" data-toggle="join" aria-expanded="false" aria-controls="drawer-join">Join code</button>
-        <button class="sub" data-toggle="bots" aria-expanded="false" aria-controls="drawer-bots">Vs bots</button>
-        <button class="sub" data-toggle="range" aria-expanded="false" aria-controls="drawer-range">Practice</button>
+      <div class="subs" role="group" aria-label="${t('lobby.more')}" data-i18n-aria-label="lobby.more">
+        ${L('lobby.sub.create', 'button', 'class="sub" data-toggle="create" aria-expanded="false" aria-controls="drawer-create"')}
+        ${L('lobby.sub.join', 'button', 'class="sub" data-toggle="join" aria-expanded="false" aria-controls="drawer-join"')}
+        ${L('lobby.sub.bots', 'button', 'class="sub" data-toggle="bots" aria-expanded="false" aria-controls="drawer-bots"')}
+        ${L('lobby.sub.range', 'button', 'class="sub" data-toggle="range" aria-expanded="false" aria-controls="drawer-range"')}
       </div>
       <div class="drawer" id="drawer-create">
-        ${field('Mode', modeChoice('modes-create'))}
-        ${field('Map', mapChoice('maps-create'))}
-        ${field('Bots', choice('botsfills', 'botsfill', [['on', 'Fill empty slots'], ['off', 'Humans only']]))}
-        <button class="go" id="create-go" data-act="create">Create room</button>
-        <p class="hint">You get a four-letter code to share. Size: the chip above.</p>
+        ${field('lobby.field.mode', modeChoice('modes-create'))}
+        ${field('lobby.field.map', mapChoice('maps-create'))}
+        ${field('lobby.field.bots', choice('botsfills', 'botsfill', [['on', L('lobby.bots.on')], ['off', L('lobby.bots.off')]]))}
+        <button class="go" id="create-go" data-act="create">${t('lobby.createRoom')}</button>
+        ${L('lobby.createHint', 'p', 'class="hint"')}
       </div>
       <div class="drawer" id="drawer-join">
         <div class="code-row">
-          <input type="text" id="roomcode" maxlength="4" autocomplete="off" spellcheck="false" placeholder="ABCD" aria-label="Room code">
-          <button class="go" id="join-go" data-act="join">Join</button>
+          <input type="text" id="roomcode" maxlength="4" autocomplete="off" spellcheck="false" placeholder="ABCD" aria-label="${t('lobby.roomCode')}" data-i18n-aria-label="lobby.roomCode">
+          <button class="go" id="join-go" data-act="join">${t('common.join')}</button>
         </div>
-        <p class="hint">The host's code is on their status line (ROOM ABCD) and in their invite link.</p>
+        ${L('lobby.joinHint', 'p', 'class="hint"')}
       </div>
       <div class="drawer" id="drawer-bots">
-        ${field('Mode', modeChoice('modes-bots'))}
-        ${field('Size', sizeChoice('sizes-bots'))}
-        ${field('Map', mapChoice('maps-bots'))}
-        ${field('Bot difficulty', choice('skills', 'skill', [['0.25', 'Recruit'], ['0.45', 'Veteran'], ['0.75', 'Elite']]))}
-        <button class="go" id="bots-go" data-act="bots">Start match</button>
-        <p class="hint">Your own match, offline: bots fill both teams.</p>
+        ${field('lobby.field.mode', modeChoice('modes-bots'))}
+        ${field('lobby.field.size', sizeChoice('sizes-bots'))}
+        ${field('lobby.field.map', mapChoice('maps-bots'))}
+        ${field('lobby.field.skill', choice('skills', 'skill', [['0.25', L('lobby.skill.recruit')], ['0.45', L('lobby.skill.veteran')], ['0.75', L('lobby.skill.elite')]]))}
+        <button class="go" id="bots-go" data-act="bots">${t('lobby.startMatch')}</button>
+        ${L('lobby.botsHint', 'p', 'class="hint"')}
       </div>
       <div class="drawer" id="drawer-range">
-        ${field('Map', mapChoice('maps-range'))}
-        <button class="go" id="range-go" data-act="range">Enter the range</button>
-        <p class="hint">No bots, a free store and no round limit: try every gun and attachment, learn the routes.</p>
+        ${field('lobby.field.map', mapChoice('maps-range'))}
+        <button class="go" id="range-go" data-act="range">${t('lobby.enterRange')}</button>
+        ${L('lobby.rangeHint', 'p', 'class="hint"')}
       </div>
     </div>
     <div class="status" id="status" role="status"></div>
@@ -130,13 +133,13 @@ menu.innerHTML = `
       <div class="meta"></div>
     </div>
     <div class="browser" id="browser" hidden>
-      <div class="browser-head"><b>Public rooms</b><span id="rooms-count"></span></div>
+      <div class="browser-head">${L('lobby.publicRooms', 'b')}<span id="rooms-count"></span></div>
       <div class="browser-rows" id="rooms"></div>
     </div>
   </section>
   <div class="corner">
-    <button class="icon-btn" id="open-controls" data-tip="Controls" aria-label="Controls" aria-haspopup="dialog">?</button>
-    <button class="icon-btn" id="open-settings" data-tip="Settings" aria-label="Settings" aria-haspopup="dialog">${GEAR}</button>
+    <button class="icon-btn" id="open-controls" data-tip="${t('lobby.controls')}" data-i18n-tip="lobby.controls" aria-label="${t('lobby.controls')}" data-i18n-aria-label="lobby.controls" aria-haspopup="dialog">?</button>
+    <button class="icon-btn" id="open-settings" data-tip="${t('lobby.settings')}" data-i18n-tip="lobby.settings" aria-label="${t('lobby.settings')}" data-i18n-aria-label="lobby.settings" aria-haspopup="dialog">${GEAR}</button>
   </div>`;
 app.appendChild(menu);
 document.body.classList.add('menu-open');
@@ -174,7 +177,8 @@ const quickBtn = $<HTMLButtonElement>('#quick');
 const status = $('#status');
 if (!online.ok) {
   $('#online-block').classList.add('off');
-  $('#online-off').textContent = online.reason;
+  $('#online-off').dataset.i18n = 'lobby.noServer';
+  $('#online-off').textContent = t('lobby.noServer');
   menu.querySelectorAll<HTMLButtonElement>('#online-block button, [data-toggle="create"], [data-toggle="join"]').forEach(b => { b.disabled = true; });
 }
 
@@ -206,7 +210,8 @@ function unwatchRooms() {
   stopRooms?.(); stopRooms = undefined;
 }
 const full = (r: PublicRoom) => r.humans >= r.size * 2;
-const roomStatus = (r: PublicRoom) => r.phase === 'warmup' ? 'Warm-up' : r.phase === 'ended' ? 'Match over' : `Round ${r.round}`;
+const roomStatus = (r: PublicRoom) => r.phase === 'warmup' ? t('lobby.warmup') : r.phase === 'ended' ? t('lobby.matchOver') : t('lobby.round', { n: r.round });
+const players = (n: number, max: number) => t('common.players', { n, max });
 /** The room Quick Play would put us in: the fullest public room of our size with a free slot (as the server picks). */
 const quickTarget = () => rooms.find(r => r.size === sizeOf(size).perTeam && !full(r));
 const selectedRoom = () => rooms.find(r => r.room === roomId);
@@ -217,14 +222,14 @@ function renderLine() {
   line.hidden = !online.ok;
   if (!online.ok) return;
   const target = quickTarget();
-  const [state, text] = roomsState === 'connecting' ? ['wait', 'Connecting to the match server…']
-    : roomsState === 'offline' ? ['off', 'Server offline — Vs bots and Practice still work']
-    : target ? ['live', `Quick Play joins ${mapName(target.mapId)} · ${target.humans}/${target.size * 2} players`]
-    : rooms.length ? ['live', `No open ${sizeOf(size).label} room — Quick Play opens one`]
-    : ['live', 'No public rooms right now — Quick Play opens one'];
+  const [state, text] = roomsState === 'connecting' ? ['wait', t('lobby.connecting')]
+    : roomsState === 'offline' ? ['off', t('lobby.serverOffline')]
+    : target ? ['live', t('lobby.quickJoins', { map: mapName(target.mapId), players: players(target.humans, target.size * 2) })]
+    : rooms.length ? ['live', t('lobby.noOpenRoom', { size: sizeOf(size).label })]
+    : ['live', t('lobby.noRooms')];
   const conn = $('#conn');
   conn.className = `conn ${state}`;
-  line.title = roomsState === 'live' ? `Live · ${server.database ?? 'online'} · bots fill empty slots and step aside for players` : '';
+  line.title = roomsState === 'live' ? t('lobby.liveTitle', { db: server.database ?? 'online' }) : '';
   $('#quick-hint').textContent = text;
 }
 
@@ -237,15 +242,16 @@ function renderRooms() {
   menu.classList.toggle('has-rooms', rooms.length > 0);
   if (!rooms.length) { list.innerHTML = ''; return; }
   const humans = rooms.reduce((n, r) => n + r.humans, 0);
-  $('#rooms-count').innerHTML = `<span class="conn live"><i></i>${rooms.length} room${rooms.length === 1 ? '' : 's'} · ${humans} player${humans === 1 ? '' : 's'}</span>`;
+  $('#rooms-count').innerHTML = `<span class="conn live"><i></i>${plural('lobby.roomCount', rooms.length)} · ${plural('lobby.playerCount', humans)}</span>`;
   list.innerHTML = rooms.map(r => {
     const m = maps.find(x => x.id === r.mapId), md = MODES[r.mode] ?? MODES.elimination;
-    return `<div class="room${focus === 'room' && r.room === roomId ? ' selected' : ''}" data-room="${r.room}" data-theme="${m?.theme ?? ''}" tabindex="0" role="button" title="Room ${r.room} · ${roomStatus(r)}" aria-label="${esc(mapName(r.mapId))} ${md.name} ${sizeLabel(r.size)}, ${r.humans} of ${r.size * 2} players, ${roomStatus(r)}">
+    const aria = t('lobby.roomAria', { map: mapName(r.mapId), mode: md.name, size: sizeLabel(r.size), n: r.humans, max: r.size * 2, status: roomStatus(r) });
+    return `<div class="room${focus === 'room' && r.room === roomId ? ' selected' : ''}" data-room="${r.room}" data-theme="${m?.theme ?? ''}" tabindex="0" role="button" title="${esc(t('lobby.roomTitle', { id: r.room, status: roomStatus(r) }))}" aria-label="${esc(aria)}">
       <span class="srv"><b>${esc(mapName(r.mapId))}</b><small class="state ${r.phase}">${roomStatus(r)}</small></span>
       <span class="mode" title="${md.name}"><span class="mtag">[${md.tag}]</span><span class="mname"> ${md.name}</span></span>
       <span class="size">${sizeLabel(r.size)}</span>
       <span class="players">${r.humans}/${r.size * 2}</span>
-      <button class="join" data-joinroom="${r.room}"${full(r) || !ready || starting ? ' disabled' : ''}>${full(r) ? 'Full' : 'Join'}</button>
+      <button class="join" data-joinroom="${r.room}"${full(r) || !ready || starting ? ' disabled' : ''}>${full(r) ? t('common.full') : t('common.join')}</button>
     </div>`;
   }).join('');
 }
@@ -263,13 +269,14 @@ const shownMap = () => {
 // ---- Buttons: one per way in; labels follow the choices. ----
 let ready = false;
 let starting = false;
-let loading = 'Loading…';
+let loadFraction = -1;
+const loadingText = () => loadFraction < 0 ? t('lobby.loading') : t('lobby.loadingPct', { n: (loadFraction * 100).toFixed(0) });
 const LABELS: Record<Exclude<Focus, 'room'>, () => string> = {
-  quick: () => `Quick Play ${sizeOf(size).label}`,
-  create: () => `Create room · ${sizeOf(size).label}`,
-  join: () => 'Join',
-  bots: () => 'Start match',
-  range: () => 'Enter the range',
+  quick: () => t('lobby.quickPlaySize', { size: sizeOf(size).label }),
+  create: () => t('lobby.createRoomSize', { size: sizeOf(size).label }),
+  join: () => t('common.join'),
+  bots: () => t('lobby.startMatch'),
+  range: () => t('lobby.enterRange'),
 };
 const ACT_BUTTONS: [Exclude<Focus, 'room'>, HTMLButtonElement][] = [
   ['quick', quickBtn], ['create', $<HTMLButtonElement>('#create-go')], ['join', $<HTMLButtonElement>('#join-go')],
@@ -279,13 +286,13 @@ function syncButtons() {
   for (const [f, b] of ACT_BUTTONS) {
     const needsServer = modeOf(f) === 'online';
     b.disabled = !ready || starting || (needsServer && !online.ok) || (f === 'join' && roomCode.value.length < 4);
-    b.textContent = !ready ? (f === 'quick' || f === 'bots' || f === 'range' ? loading : LABELS[f]())
-      : starting && focus === f ? (needsServer ? 'Joining…' : 'Starting…') : LABELS[f]();
+    b.textContent = !ready ? (f === 'quick' || f === 'bots' || f === 'range' ? loadingText() : LABELS[f]())
+      : starting && focus === f ? t(needsServer ? 'lobby.joining' : 'lobby.starting') : LABELS[f]();
   }
   menu.querySelectorAll<HTMLButtonElement>('#rooms .join').forEach(b => {
     const r = rooms.find(x => x.room === Number(b.dataset.joinroom));
     b.disabled = !ready || starting || !r || full(r);
-    b.textContent = starting && focus === 'room' && r?.room === roomId ? 'Joining…' : r && full(r) ? 'Full' : 'Join';
+    b.textContent = starting && focus === 'room' && r?.room === roomId ? t('lobby.joining') : r && full(r) ? t('common.full') : t('common.join');
   });
 }
 
@@ -307,8 +314,10 @@ const refresh = () => {
       const m = maps.find(x => x.id === b.dataset.map)!;
       b.hidden = !mapFits(m);
       b.setAttribute('aria-pressed', String(m.id === mapId));
-      b.querySelector('small')!.textContent = g === 'maps-range' ? (m.big ? 'Big map' : m.region.split('/')[0].trim().toLowerCase())
-        : gameMode === 'sabotage' ? (m.sites > 1 ? 'Sites A · B' : 'Site A') : m.region.split('/')[1]?.trim().toLowerCase() ?? '';
+      const region = mapRegion(m.id, m.region).split('/');
+      b.querySelector('b')!.textContent = mapName(m.id);
+      b.querySelector('small')!.textContent = g === 'maps-range' ? (m.big ? t('lobby.bigMapChip') : region[0].trim().toLowerCase())
+        : gameMode === 'sabotage' ? t(m.sites > 1 ? 'lobby.sitesAB' : 'lobby.siteA') : region[1]?.trim().toLowerCase() ?? '';
     });
   }
   // The showcase: the map in view and one line about what you would play there.
@@ -316,18 +325,19 @@ const refresh = () => {
   const box = $('#showcase');
   const set = (title: string, meta: string) => { box.querySelector('h2')!.textContent = title; box.querySelector('.meta')!.textContent = meta; };
   const shown = maps.find(x => x.id === shownMap())!;
+  const shownName = mapName(shown.id);
   const room = focus === 'room' ? selectedRoom() : focus === 'quick' ? target : undefined;
   if (room) {
     const rm = MODES[room.mode] ?? MODES.elimination;
-    set(shown.name, `${focus === 'quick' ? 'Quick Play · ' : ''}[${rm.tag}] ${rm.name} · ${sizeLabel(room.size)} · ${room.humans}/${room.size * 2} players`);
+    set(shownName, `${focus === 'quick' ? `${t('lobby.quickPlay')} · ` : ''}[${rm.tag}] ${rm.name} · ${sizeLabel(room.size)} · ${players(room.humans, room.size * 2)}`);
   } else if (focus === 'quick') {
-    set(`${s.name} ${s.label}`, `Quick Play · [E] ⇄ [S] · map rotation${s.perTeam > 12 ? ' · big maps' : ''}`);
+    set(`${sizeName(s.id)} ${s.label}`, `${t('lobby.quickPlay')} · [E] ⇄ [S] · ${t('lobby.mapRotation')}${s.perTeam > 12 ? ` · ${t('lobby.bigMaps')}` : ''}`);
   } else if (focus === 'join') {
-    set('Private room', roomCode.value ? `Room ${roomCode.value}` : 'Enter the four-letter code');
+    set(t('lobby.privateRoom'), roomCode.value ? t('lobby.roomNamed', { code: roomCode.value }) : t('lobby.enterCode'));
   } else if (focus === 'range') {
-    set(shown.name, 'Practice range · free store');
+    set(shownName, t('lobby.rangeMeta'));
   } else {
-    set(shown.name, `${focus === 'create' ? 'Private · ' : 'Vs bots · '}[${md.tag}] ${md.name} · ${vs(s.perTeam)}${gameMode === 'sabotage' ? ` · ${shown.sites} bomb site${shown.sites > 1 ? 's' : ''}` : ''}`);
+    set(shownName, `${t(focus === 'create' ? 'lobby.privatePrefix' : 'lobby.botsPrefix')} · [${md.tag}] ${md.name} · ${vs(s.perTeam)}${gameMode === 'sabotage' ? ` · ${plural('lobby.bombSites', shown.sites)}` : ''}`);
   }
   renderLine();
   menu.querySelectorAll<HTMLElement>('#rooms .room').forEach(r => r.classList.toggle('selected', focus === 'room' && Number(r.dataset.room) === roomId));
@@ -385,9 +395,16 @@ const options = new SettingsMenu(document.body, {
     current: () => ({ volume: audio.volume, music: audio.musicVolume, quality: quality as GraphicsQuality }),
     music: v => audio.setMusicVolume(v),
     previewVolume: () => audio.cash(),
-    bench: { label: `Run the ${BENCH_SECONDS}-second performance check`, run: () => { location.search = `?bench&map=${mapId}&quality=${quality}`; } },
-    credits: 'Characters, weapons and props: CC0 packs by Quaternius. Gunshots: CC0 Free Firearm Sound Library. Textures: CC0 Poly Haven. Font: Rajdhani (OFL). No proprietary game assets.',
+    bench: { label: () => t('lobby.bench', { n: BENCH_SECONDS }), run: () => { location.search = `?bench&map=${mapId}&quality=${quality}${params.get('lang') ? `&lang=${params.get('lang')}` : ''}`; } },
+    credits: () => t('lobby.credits'),
   },
+});
+
+// Language switch (Settings): the lobby's own text follows at once.
+onLang(() => {
+  applyI18n(menu);
+  if (benchPanel) { benchPanel.remove(); if (benchResult) showBenchResult(benchResult); }
+  renderRooms(); refresh();
 });
 const openOptions = (tab: SettingsTab) => { audio.ui(); options.show(false, tab); };
 $('#open-settings').addEventListener('click', () => openOptions('options'));
@@ -479,7 +496,7 @@ async function start() {
         ? new OfflineLink(mapId, name, teamChoice, {}, true)
         : new OfflineLink(mapId, name, teamChoice, { ...(gameMode === 'sabotage' ? SABOTAGE : ELIMINATION), teamSize: sizeOf(size).perTeam, botSkill, freeBuy: params.has('freebuy') });
   } catch (error) {
-    status.textContent = `Could not join: ${(error as Error).message}`;
+    status.textContent = t('lobby.couldNotJoin', { error: serverError((error as Error).message) });
     starting = false;
     inMenu = !benchMode; menuMusic();
     watchLobbyRooms(); refresh();
@@ -550,22 +567,25 @@ function startBench(g: Game) {
   bench.onDone = result => { benchBanner?.remove(); showBenchResult(result); };
 }
 
+let benchPanel: HTMLElement | undefined;
+let benchResult: BenchResult | undefined;
 function showBenchResult(r: BenchResult) {
-  const panel = document.createElement('div');
+  const panel = benchPanel = document.createElement('div');
+  benchResult = r;
   panel.className = 'bench-panel';
   panel.innerHTML = `
-    <h2>Performance check</h2>
-    <div class="verdict ${r.meets60 ? 'ok' : 'bad'}">60 fps target ${r.meets60 ? 'met' : 'not met'} on this device</div>
-    <table>${benchReport(r).map(([k]) => `<tr><th>${k}</th><td></td></tr>`).join('')}</table>
-    <p>${r.seconds} s of scripted combat after a warm-up. Browsers cap frames at the display refresh rate, so 120 Hz screens can exceed 60. Met means an average of at least 58 fps with 95% of frames within 18.2 ms.</p>
-    <div class="actions"><button data-a="copy">Copy results</button><button data-a="again">Run again</button><button data-a="menu">Back to menu</button></div>`;
+    <h2>${t('bench.title')}</h2>
+    <div class="verdict ${r.meets60 ? 'ok' : 'bad'}">${t(r.meets60 ? 'bench.met' : 'bench.notMet')}</div>
+    <table>${benchReport(r).map(([k]) => `<tr><th>${t(k)}</th><td></td></tr>`).join('')}</table>
+    <p>${t('bench.about', { n: r.seconds })}</p>
+    <div class="actions"><button data-a="copy">${t('bench.copy')}</button><button data-a="again">${t('bench.again')}</button><button data-a="menu">${t('bench.menu')}</button></div>`;
   // Values go in as text: the GPU string comes from the driver.
   panel.querySelectorAll('td').forEach((td, i) => { td.textContent = benchReport(r)[i][1]; });
   panel.addEventListener('click', e => {
     const a = (e.target as HTMLElement).dataset.a;
-    if (a === 'copy') void navigator.clipboard?.writeText(JSON.stringify(r, null, 2)).then(() => { (e.target as HTMLElement).textContent = 'Copied'; }, () => undefined);
+    if (a === 'copy') void navigator.clipboard?.writeText(JSON.stringify(r, null, 2)).then(() => { (e.target as HTMLElement).textContent = t('bench.copied'); }, () => undefined);
     if (a === 'again') location.reload();
-    if (a === 'menu') location.href = location.pathname;
+    if (a === 'menu') location.href = location.pathname + (params.get('lang') ? `?lang=${params.get('lang')}` : '');
   });
   app.appendChild(panel);
   document.body.classList.add('bench-done');
@@ -574,7 +594,10 @@ function showBenchResult(r: BenchResult) {
 
 async function boot() {
   renderer = new Renderer(app, QUALITY[quality]);
-  assets = await loadAssets(f => { loading = `Loading ${(f * 100).toFixed(0)}%`; syncButtons(); });
+  // Chinese UI: fetch the CJK face with the assets, so the first screens never show a fallback font.
+  const fonts = isZh() ? cjkFontReady('繁體中文') : Promise.resolve();
+  assets = await loadAssets(f => { loadFraction = f; syncButtons(); });
+  await fonts;
   ready = true;
   refresh();
   if (!benchMode) {
@@ -606,7 +629,7 @@ async function boot() {
     if (bench && !bench.done) {
       bench.record(interval, performance.now() - t0);
       const left = Math.ceil(bench.remaining);
-      if (left !== benchLeft && benchBanner) { benchLeft = left; benchBanner.textContent = bench.warming ? 'Performance check · warming up' : `Performance check · ${left} s`; }
+      if (left !== benchLeft && benchBanner) { benchLeft = left; benchBanner.textContent = bench.warming ? t('bench.warming') : t('bench.left', { n: left }); }
     }
     requestAnimationFrame(loop);
   };
@@ -620,5 +643,5 @@ async function boot() {
 
 void boot().catch(error => {
   console.error(error);
-  status.textContent = `Unable to start: ${(error as Error).message}. A WebGL2 desktop browser is required.`;
+  status.textContent = t('lobby.unableToStart', { error: (error as Error).message });
 });
