@@ -8,6 +8,9 @@ import type AdminPlayerTimeRow from '../module_bindings/admin_player_time_table'
 import type AdminDailyTimeRow from '../module_bindings/admin_daily_time_table';
 import { countByCountry, countryOf } from '../../shared/tzcountry';
 import { formatPlayTime, liveSeconds } from '../../shared/playtime';
+import { hostAnswers, pingUrl, serverIdentityKey } from '../net/ping';
+import { WakeDriver, wakeProgress, wakeSeconds, type WakeLink } from '../net/wake';
+import { adminServers, chosenServer, regionName, rememberServer, type AdminServer } from './servers';
 import './admin.css';
 
 /**
@@ -15,8 +18,11 @@ import './admin.css';
  * the owner types the admin key once, `admin_login` checks its hash inside the module and marks this
  * browser's SpacetimeDB identity as an admin, and the `admin_*` views then stream the data (they
  * return nothing to anyone else). Only "this browser is logged in" is remembered, never the key.
- * The database comes from the same build variables as the game, so a dev preview shows the dev
- * database and production the production one.
+ *
+ * A switcher picks the server (src/admin/servers.ts): the build's own (production: the Singapore
+ * server) or the Maincloud databases that stay published (legacy production, dev). Each has its own
+ * admin table, so the login, the identity and the "logged in" flag are per server. The Singapore
+ * server sleeps when idle: opening this page wakes it, shown as "waking" (src/net/wake.ts).
  */
 type Room = Infer<typeof AdminRoomsRow>;
 type Day = Infer<typeof AdminDailyRow>;
@@ -28,12 +34,15 @@ type Player = Infer<typeof AdminPlayersRow> & { rounds: number; playTime: number
 
 const POSTHOG = 'https://us.posthog.com/project/649207';
 const env = import.meta.env as Record<string, string | undefined>;
-let uri = env.VITE_SPACETIMEDB_URI;
-const database = env.VITE_SPACETIMEDB_DATABASE ?? '';
-if (uri === 'same-origin') uri = `${location.protocol === 'https:' ? 'wss' : 'ws'}://${location.host}/stdb/`;
+let buildUri = env.VITE_SPACETIMEDB_URI;
+if (buildUri === 'same-origin') buildUri = `${location.protocol === 'https:' ? 'wss' : 'ws'}://${location.host}/stdb/`;
+const SERVERS = adminServers({ uri: buildUri, database: env.VITE_SPACETIMEDB_DATABASE });
+const storage = (() => { try { return localStorage; } catch { return undefined; } })();
+let server: AdminServer = chosenServer(SERVERS, storage);
 // Its own identity, not the game's: closing this tab must never drop the owner's soldier from a match.
-const TOKEN_KEY = `lawbreaker.admin.token:${uri}:${database}`;
-const FLAG_KEY = `lawbreaker.admin.loggedIn:${uri}:${database}`;
+// Per server (as before the switcher, so an existing login carries over).
+const tokenKey = () => `lawbreaker.admin.token:${serverIdentityKey(server.uri)}:${server.database}`;
+const flagKey = () => `lawbreaker.admin.loggedIn:${serverIdentityKey(server.uri)}:${server.database}`;
 const store = {
   get: (k: string) => { try { return localStorage.getItem(k); } catch { return null; } },
   set: (k: string, v: string) => { try { localStorage.setItem(k, v); } catch { /* storage disabled */ } },
@@ -51,10 +60,15 @@ const shortDate = (d: Date) => d.toISOString().slice(0, 10);
 const titleCase = (id: string) => id.replace(/(^|[-_ ])(\w)/g, (_m, sep: string, c: string) => `${sep ? ' ' : ''}${c.toUpperCase()}`);
 
 const root = document.querySelector<HTMLDivElement>('#admin')!;
+const serverLabel = (s: AdminServer) => `${s.name} · ${regionName(s.uri)} · ${s.database}`;
 root.innerHTML = `
   <header class="top">
     <h1>Turf War <em>Admin</em></h1>
-    <span class="db" title="SpacetimeDB database"><i class="dot wait" id="conn"></i>Database <b>${esc(database || 'none')}</b></span>
+    <label class="server-pick" title="Which game server to show; each has its own login">
+      <span>Server</span>
+      <select id="server">${SERVERS.map(s => `<option value="${esc(s.id)}">${esc(serverLabel(s))}</option>`).join('')}</select>
+    </label>
+    <span class="db" id="db" title="SpacetimeDB server and database"><i class="dot wait" id="conn"></i><b id="srv-name"></b><span id="srv-region"></span><span class="db-name">db <b id="srv-db"></b></span></span>
     <span class="spacer"></span>
     <nav class="links"><a href="${POSTHOG}" target="_blank" rel="noopener noreferrer">PostHog ↗</a><button type="button" class="btn" id="logout" hidden>Log out</button></nav>
   </header>
@@ -62,6 +76,7 @@ root.innerHTML = `
 const body = root.querySelector<HTMLElement>('#body')!;
 const connDot = root.querySelector<HTMLElement>('#conn')!;
 const logoutBtn = root.querySelector<HTMLButtonElement>('#logout')!;
+const serverSelect = root.querySelector<HTMLSelectElement>('#server')!;
 
 let conn: DbConnection | undefined;
 let loggingIn = false;
@@ -71,7 +86,17 @@ let messageError = true;
 let playerLimit = 100;
 let sortKey: keyof Player | 'country' = 'lastSeen';
 let sortDir: 1 | -1 = -1;
-const setConn = (s: 'wait' | 'live' | 'off') => { connDot.className = `dot ${s}`; connDot.title = s === 'live' ? 'Connected' : s === 'wait' ? 'Connecting' : 'Disconnected'; };
+const setConn = (s: 'wait' | 'live' | 'off', title: string) => { connDot.className = `dot ${s}`; connDot.title = title; };
+
+/** The header: which server, where, which database. */
+function renderServer() {
+  serverSelect.value = server.id;
+  root.querySelector('#srv-name')!.textContent = server.name;
+  root.querySelector('#srv-region')!.textContent = `· ${regionName(server.uri)} ·`;
+  root.querySelector('#srv-db')!.textContent = server.database;
+  root.querySelector<HTMLElement>('#db')!.title = `${server.uri} · database ${server.database}`;
+  document.title = `Turf War Admin · ${server.name}`;
+}
 
 function status() { return conn ? [...conn.db.adminStatus.iter()][0] : undefined; }
 const isAdmin = () => !!status()?.admin;
@@ -86,7 +111,7 @@ function renderLogin() {
   body.innerHTML = `
     <form class="login" id="login" autocomplete="off">
       <h2>Admin login</h2>
-      <p>Enter the admin key. This browser stays logged in; the key itself is never stored.</p>
+      <p>Enter the admin key for <b>${esc(server.name)}</b> (${esc(server.database)}). Each server keeps its own login; this browser stays logged in, and the key itself is never stored.</p>
       <label for="key">Admin key</label>
       <div class="row"><input id="key" type="password" autocomplete="current-password" spellcheck="false" required ${conn ? '' : 'disabled'}>
       <button class="btn primary" type="submit" ${conn && !loggingIn ? '' : 'disabled'}>${loggingIn ? '…' : 'Log in'}</button></div>
@@ -106,7 +131,7 @@ function renderLogin() {
       setTimeout(() => {
         loggingIn = false;
         const s = status();
-        if (s?.admin) { store.set(FLAG_KEY, '1'); message = ''; render(); return; }
+        if (s?.admin) { store.set(flagKey(), '1'); message = ''; render(); return; }
         const left = Math.max(0, 5 - (s?.failures ?? 0));
         message = left > 0 ? `Wrong key. ${left} attempt${left === 1 ? '' : 's'} left in this 10-minute window.` : 'Wrong key. Too many attempts; try again in 10 minutes.';
         render();
@@ -218,8 +243,8 @@ function dashboard() {
   body.querySelector('#more')?.addEventListener('click', () => { playerLimit += 200; render(); });
   body.querySelector('#revoke')?.addEventListener('click', () => {
     // After rotating the key, or when a device is lost: every browser (this one too) must log in again.
-    if (!confirm(`Sign every admin browser out of ${database}? Each one will need the admin key again.`)) return;
-    store.del(FLAG_KEY);
+    if (!confirm(`Sign every admin browser out of ${server.name} (${server.database})? Each one will need the admin key again.`)) return;
+    store.del(flagKey());
     message = 'Every admin session was signed out.'; messageError = false;
     void conn?.reducers.adminRevokeAll({}).catch(() => undefined);
   });
@@ -318,42 +343,132 @@ let frame = 0;
 function render() {
   cancelAnimationFrame(frame);
   frame = requestAnimationFrame(() => {
+    const p = driver.state.phase;
+    renderConn();
     if (conn && isAdmin()) { logoutBtn.hidden = false; dashboard(); return; }
+    logoutBtn.hidden = true;
+    if (p === 'waking' || p === 'unreachable') { wakeCard(); return; }
     // Remembered as logged in, but the server says no (revoked, or a new key): back to the login.
-    if (conn && status() && store.get(FLAG_KEY)) store.del(FLAG_KEY);
-    if (!conn && store.get(FLAG_KEY)) { body.innerHTML = '<div class="empty">Connecting…</div>'; return; }
+    if (conn && status() && store.get(flagKey())) store.del(flagKey());
+    if (!conn && p !== 'ready') { body.innerHTML = `<div class="empty">Connecting to ${esc(server.name)}…</div>`; return; }
     renderLogin();
   });
 }
 
+/** The header's dot: connected, connecting or waking (amber), or not reachable. */
+function renderConn() {
+  const p = driver.state.phase;
+  if (p === 'ready') setConn(conn ? 'live' : 'off', conn ? 'Connected' : 'Connected, but this database has no admin views');
+  else if (p === 'probing') setConn('wait', 'Connecting');
+  else if (p === 'waking') setConn('wait', 'Waking the server');
+  else setConn('off', p === 'unreachable' ? "Can't reach the server" : 'Not connected');
+}
+
+/**
+ * While the server boots: it is asleep (not down), the time so far and a bar. After 3 minutes:
+ * "Can't reach" with Retry. Redrawn whole only when that changes; the timer ticks in place.
+ */
+let wakeShown = '';
+function wakeCard() {
+  const s = driver.state, down = s.phase === 'unreachable';
+  const key = `${s.phase}|${server.id}`;
+  if (wakeShown !== key || !body.querySelector('.wake')) {
+    wakeShown = key;
+    body.innerHTML = down
+      ? `<section class="wake down"><h2><i class="dot off"></i>Can't reach the server</h2>
+          <p role="status">It did not wake up within 3 minutes. Check the server on InstaCloud, or try again.</p>
+          <button type="button" class="btn primary" id="wake-retry">Retry</button></section>`
+      : `<section class="wake"><h2><i class="dot wait"></i>Waking the server</h2>
+          <p role="status">The server is asleep to save costs — waking it up (about 30 s). It isn't down: opening this page woke it.</p>
+          <p class="note" id="wake-note"></p>
+          <div class="wake-meter" aria-hidden="true"><span class="wake-bar"><i id="wake-fill"></i></span><span class="wake-time" id="wake-time"></span></div></section>`;
+    body.querySelector('#wake-retry')?.addEventListener('click', () => driver.retry());
+  }
+  if (down) return;
+  const secs = wakeSeconds(s, performance.now());
+  body.querySelector<HTMLElement>('#wake-fill')!.style.width = `${(wakeProgress(secs * 1000) * 100).toFixed(1)}%`;
+  body.querySelector('#wake-time')!.textContent = `${secs} s`;
+  const note = s.hostUp ? 'Almost there: the machine is up and loading the database.' : secs >= 60 ? 'Taking a little longer than usual — still trying.' : '';
+  const noteEl = body.querySelector<HTMLElement>('#wake-note')!;
+  if (noteEl.textContent !== note) noteEl.textContent = note;
+  noteEl.hidden = !note;
+}
+
 logoutBtn.addEventListener('click', () => {
-  store.del(FLAG_KEY);
+  store.del(flagKey());
   message = 'Logged out.'; messageError = false;
   void conn?.reducers.adminLogout({}).catch(() => undefined).finally(render);
 });
 
-function connect() {
-  if (!uri || !database) { setConn('off'); body.innerHTML = '<div class="empty">No SpacetimeDB server is configured for this build (VITE_SPACETIMEDB_URI / VITE_SPACETIMEDB_DATABASE).</div>'; return; }
-  setConn('wait');
-  DbConnection.builder().withUri(uri).withDatabaseName(database).withToken(store.get(TOKEN_KEY) ?? undefined)
-    .onConnect((c, _identity, token) => {
-      store.set(TOKEN_KEY, token);
-      for (const t of [c.db.adminStatus, c.db.adminOverview, c.db.adminRooms, c.db.adminPlayers, c.db.adminDaily, c.db.adminPlayerTime, c.db.adminDailyTime]) {
+/**
+ * One connection to a server's admin views (the wake driver retries and says when it is waking).
+ * `live` once the views have arrived, or once the server answered but has no admin views (an older
+ * module: there is nothing to retry, the login form says so).
+ */
+function adminLink(s: AdminServer, lost: () => void): WakeLink {
+  const key = `lawbreaker.admin.token:${s.uri}:${s.database}`;
+  let c: DbConnection | undefined, stopped = false, isLive = false, ended = false;
+  let settle: { resolve(): void; reject(error: Error): void } = { resolve() {}, reject() {} };
+  const live = new Promise<void>((resolve, reject) => { settle = { resolve, reject }; });
+  live.catch(() => undefined);
+  const stop = () => { stopped = true; if (c && conn === c) conn = undefined; try { c?.disconnect(); } catch { /* already closed */ } };
+  const end = (error: Error) => {
+    if (ended || stopped) return;
+    ended = true;
+    stop();
+    if (isLive) { lost(); render(); } else settle.reject(error);
+  };
+  c = DbConnection.builder().withUri(s.uri).withDatabaseName(s.database).withToken(store.get(key) ?? undefined)
+    .onConnect((cc, _identity, token) => {
+      if (stopped) { cc.disconnect(); return; }
+      store.set(key, token);
+      for (const t of [cc.db.adminStatus, cc.db.adminOverview, cc.db.adminRooms, cc.db.adminPlayers, cc.db.adminDaily, cc.db.adminPlayerTime, cc.db.adminDailyTime]) {
         t.onInsert(render); t.onDelete(render);
       }
-      c.subscriptionBuilder()
-        .onApplied(() => { conn = c; setConn('live'); render(); })
-        .onError(() => { setConn('off'); messageError = true; message = 'This database has no admin views yet (publish the module first).'; render(); })
+      cc.subscriptionBuilder()
+        .onApplied(() => { if (stopped) return; isLive = true; conn = cc; message = ''; settle.resolve(); render(); })
+        .onError(() => {
+          if (stopped) return;
+          isLive = true; messageError = true; message = 'This database has no admin views yet (publish the module first).';
+          settle.resolve(); render();
+        })
         .subscribe(['SELECT * FROM admin_status', 'SELECT * FROM admin_overview', 'SELECT * FROM admin_rooms', 'SELECT * FROM admin_players', 'SELECT * FROM admin_daily',
           'SELECT * FROM admin_player_time', 'SELECT * FROM admin_daily_time']);
     })
-    .onConnectError(() => { setConn('off'); conn = undefined; messageError = true; message = 'Cannot reach the server; retrying…'; render(); setTimeout(connect, 5000); })
-    .onDisconnect(() => { setConn('off'); conn = undefined; messageError = true; message = 'Disconnected; reconnecting…'; render(); setTimeout(connect, 3000); })
+    // A socket that fails before the handshake reports an error and then a close: `end` keeps the first.
+    .onConnectError((_ctx, error) => end(error ?? new Error('Connection failed.')))
+    .onDisconnect(() => end(new Error('Disconnected.')))
     .build();
+  return { live, stop };
 }
 
+function makeDriver() {
+  const ping = pingUrl(server.uri);
+  const s = server;
+  return new WakeDriver<never>({
+    ping: signal => ping ? hostAnswers(ping, signal) : Promise.resolve(false),
+    connect: lost => adminLink(s, lost),
+  }, () => render(), () => undefined);
+}
+let driver = makeDriver();
+
+/** Show another server: drop this connection, remember the choice, connect (and wake) the other. */
+function switchServer(next: AdminServer) {
+  if (next.id === server.id) return;
+  driver.stop();
+  conn = undefined; loggingIn = false; message = ''; messageError = true; playerLimit = 100;
+  server = next;
+  rememberServer(server, storage);
+  renderServer();
+  driver = makeDriver();
+  driver.start();
+  render();
+}
+serverSelect.addEventListener('change', () => { const next = SERVERS.find(s => s.id === serverSelect.value); if (next) switchServer(next); });
+
+renderServer();
+driver.start();
 render();
-connect();
 // Relative times ("3 min ago") and today's counts move on without new data.
 setInterval(() => { if (conn && isAdmin() && !document.hidden && !body.contains(document.activeElement)) render(); }, 30_000);
 addEventListener('resize', () => { if (conn && isAdmin()) render(); });

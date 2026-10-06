@@ -14,6 +14,8 @@ import { DEFAULT_WEAPONS, STAMINA, WEAPONS, normalizeAttachments, weaponStats, t
 import { newRoundStats, type BuyItem } from '../../shared/match/economy';
 import { plural, t } from '../ui/i18n';
 import { setPerson } from '../analytics';
+import type { WakeLink } from './wake';
+import { serverIdentityKey } from './ping';
 
 type RosterRow = Infer<typeof RosterTable>;
 
@@ -289,16 +291,28 @@ export interface PublicRoom extends RoomView { phase: string; round: number; ser
 
 /**
  * Live list of public rooms for the lobby: a light connection that only subscribes to the room rows
- * (no joining). `onChange` fires whenever a room opens, fills or closes. Returns a stop function.
+ * (no joining). `onChange` fires whenever a room opens, fills or closes. One attempt: `live`
+ * resolves once the rooms have arrived and rejects if the connection fails first; `lost` is called
+ * (once) if it drops after that. Retrying, and telling a sleeping server from a dead one, is the
+ * caller's (src/net/wake.ts).
  */
-export async function watchRooms(onChange: (rooms: PublicRoom[]) => void, onState: (s: 'connecting' | 'live' | 'offline') => void): Promise<() => void> {
+export function watchRooms(onChange: (rooms: PublicRoom[]) => void, lost: () => void): WakeLink {
   const { uri, database } = onlineConfig();
-  if (!uri || !database) { onState('offline'); return () => {}; }
-  onState('connecting');
-  const { DbConnection } = await import('../module_bindings');
-  let conn: DbConnection | undefined, stopped = false;
+  let conn: DbConnection | undefined, stopped = false, isLive = false, ended = false;
+  let settle: { resolve(): void; reject(error: Error): void } = { resolve() {}, reject() {} };
+  const live = new Promise<void>((resolve, reject) => { settle = { resolve, reject }; });
+  live.catch(() => undefined);
+  const stop = () => { stopped = true; try { conn?.disconnect(); } catch { /* already closed */ } };
+  /** The connection failed (before live) or dropped (after): reported once. */
+  const end = (error: Error) => {
+    if (ended || stopped) return;
+    ended = true;
+    stop();
+    if (isLive) lost(); else settle.reject(error);
+  };
+  if (!uri || !database) { settle.reject(new Error('No SpacetimeDB server configured.')); return { live, stop }; }
   const emit = () => {
-    if (!conn) return;
+    if (!conn || stopped) return;
     const rooms: PublicRoom[] = [];
     for (const r of conn.db.match.iter()) {
       if (r.code !== '') continue;
@@ -311,17 +325,30 @@ export async function watchRooms(onChange: (rooms: PublicRoom[]) => void, onStat
     }
     onChange(rooms.sort((a, b) => b.humans - a.humans || a.room - b.room));
   };
-  conn = DbConnection.builder().withUri(uri).withDatabaseName(database)
-    .onConnect(c => {
-      if (stopped) { c.disconnect(); return; }
-      c.db.match.onInsert(emit); c.db.match.onUpdate(emit); c.db.match.onDelete(emit);
-      c.subscriptionBuilder().onApplied(() => { onState('live'); emit(); }).subscribe(['SELECT * FROM match']);
-    })
-    .onConnectError(() => onState('offline'))
-    .onDisconnect(() => { if (!stopped) onState('offline'); })
-    .build();
-  return () => { stopped = true; try { conn?.disconnect(); } catch { /* already closed */ } };
+  void import('../module_bindings').then(({ DbConnection }) => {
+    if (stopped) return;
+    conn = DbConnection.builder().withUri(uri).withDatabaseName(database)
+      .onConnect(c => {
+        if (stopped) { c.disconnect(); return; }
+        c.db.match.onInsert(emit); c.db.match.onUpdate(emit); c.db.match.onDelete(emit);
+        c.subscriptionBuilder()
+          .onApplied(() => { if (stopped) return; isLive = true; settle.resolve(); emit(); })
+          .onError(() => end(new Error('Subscription failed.')))
+          .subscribe(['SELECT * FROM match']);
+      })
+      // A socket that fails before the handshake reports an error and then a close: `end` keeps the first.
+      .onConnectError((_ctx, error) => end(error ?? new Error('Connection failed.')))
+      .onDisconnect(() => end(new Error('Disconnected.')))
+      .build();
+  }, (error: unknown) => end(error instanceof Error ? error : new Error(String(error))));
+  return { live, stop };
 }
+
+/**
+ * The server could not be reached (refused, timed out, dropped before we were in a room): asleep or
+ * restarting, not a refusal by the game. The lobby wakes the server and tries once more.
+ */
+export class ConnectError extends Error {}
 
 /** Connect, subscribe, enter a room and wait until our soldier exists. */
 export async function connectOnline(name: string, team: Team | undefined, how: OnlineEntry, status: (s: string) => void): Promise<OnlineLink> {
@@ -329,14 +356,25 @@ export async function connectOnline(name: string, team: Team | undefined, how: O
   if (!uri || !database) throw new Error('No SpacetimeDB server configured.');
   status(t('net.connecting'));
   const { DbConnection } = await import('../module_bindings');
-  const tokenKey = `lawbreaker.token:${uri}:${database}`;
+  const tokenKey = `lawbreaker.token:${serverIdentityKey(uri)}:${database}`;
   let token: string | undefined;
   try { token = localStorage.getItem(tokenKey) ?? undefined; } catch { /* storage disabled */ }
   return new Promise<OnlineLink>((resolve, reject) => {
     let link: OnlineLink | undefined;
-    const timer = setTimeout(() => reject(new Error(t('net.timeout'))), 20_000);
-    const conn = DbConnection.builder().withUri(uri).withDatabaseName(database).withToken(token)
+    /** Settled (in a room, or given up): a connection that opens after a timeout must not put a soldier in a room. */
+    let done = false;
+    const fail = (error: Error) => {
+      if (done) return;
+      done = true;
+      clearTimeout(timer);
+      try { conn.disconnect(); } catch { /* already closed */ }
+      reject(error);
+    };
+    // No handshake by then: the server is unreachable (asleep, restarting); after it, the join itself stalled.
+    const timer = setTimeout(() => fail(link ? new Error(t('net.timeout')) : new ConnectError(t('net.timeout'))), 20_000);
+    const conn: DbConnection = DbConnection.builder().withUri(uri).withDatabaseName(database).withToken(token)
       .onConnect((connection, identity, nextToken) => {
+        if (done) { connection.disconnect(); return; }
         try { localStorage.setItem(tokenKey, nextToken); } catch { /* anonymous identity still works */ }
         status(t('net.joining'));
         // Rough "where from" for the owner's player counts (the private player_seen table): time zone and language, no IP.
@@ -346,24 +384,29 @@ export async function connectOnline(name: string, team: Team | undefined, how: O
         link = new OnlineLink(connection, identity);
         connection.subscriptionBuilder()
           .onApplied(async () => {
+            if (done) return;
             try {
               link!.entry = { name, team: team ?? -1, how };
               await enter(connection, link!.entry);
               // Our soldier exists once the room's frame (with us in it) has arrived.
               const wait = () => {
-                if (link!.myId() >= 0 && link!.state()) { clearTimeout(timer); resolve(link!); } else setTimeout(wait, 50);
+                if (done) return;
+                if (link!.myId() >= 0 && link!.state()) { done = true; clearTimeout(timer); resolve(link!); } else setTimeout(wait, 50);
               };
               wait();
-            } catch (error) { clearTimeout(timer); reject(error); }
+            } catch (error) { fail(error as Error); }
           })
-          .onError(() => { clearTimeout(timer); reject(new Error(t('net.subscription'))); })
+          .onError(() => fail(new Error(t('net.subscription'))))
           // Rooms (match rows), players and career stats; the room's own roster, frame and events
           // follow once we know our room. `soldier` and `body` are server-side detail.
           .subscribe(['SELECT * FROM match', 'SELECT * FROM player', 'SELECT * FROM profile']);
       })
-      .onConnectError((_ctx, error) => { clearTimeout(timer); reject(new Error(t('net.unreachable', { error: error?.message ?? t('net.refused') }))); })
-      .onDisconnect(() => { link?.markDisconnected(); })
+      .onConnectError((_ctx, error) => fail(new ConnectError(t('net.unreachable', { error: error?.message ?? t('net.refused') }))))
+      .onDisconnect(() => {
+        // Dropped before we were in a room: as unreachable as a refused connection.
+        if (!done) fail(new ConnectError(t('net.unreachable', { error: t('net.refused') })));
+        link?.markDisconnected();
+      })
       .build();
-    void conn;
   });
 }

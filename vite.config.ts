@@ -61,8 +61,9 @@ export default defineConfig({
   define: { __APP_VERSION__: JSON.stringify(appVersion()) },
   server: {
     allowedHosts: true,
-    // Same-origin websocket route to a local SpacetimeDB so one preview URL serves the game and the match server.
-    proxy: { '/stdb': { target: 'http://127.0.0.1:3000', ws: true, rewrite: path => path.replace(/^\/stdb/, '') } },
+    // Same-origin websocket route to a local SpacetimeDB so one preview URL serves the game and the match server
+    // (port 3000 unless STDB_PROXY_TARGET names another, e.g. a throwaway server for a cold-start test).
+    proxy: { '/stdb': { target: process.env.STDB_PROXY_TARGET || 'http://127.0.0.1:3000', ws: true, rewrite: path => path.replace(/^\/stdb/, '') } },
   },
   build: {
     chunkSizeWarningLimit: 900,

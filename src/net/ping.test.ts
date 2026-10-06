@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { setLang } from '../ui/i18n';
-import { PING_INTERVAL_MS, PingMonitor, PingSamples, median, pingAllowed, pingTone, pingUrl, serverRegion } from './ping';
+import { PING_INTERVAL_MS, PingMonitor, PingSamples, hostAnswers, median, pingAllowed, pingTone, pingUrl, serverIdentityKey, serverRegion } from './ping';
 
 afterEach(() => { setLang('en', false); vi.useRealTimers(); });
 
@@ -29,6 +29,39 @@ describe('serverRegion', () => {
     expect(serverRegion('wss://tw.example.com')).toBe('tw.example.com');
     setLang('zh-TW', false);
     expect(serverRegion('wss://maincloud.spacetimedb.com')).toBe('美東');
+  });
+  it('puts the production server and every InstaCloud compute host in Singapore', () => {
+    const hosts = ['wss://play.turfwar.ianhsiao.me', 'https://prod-main-stdb-2b7636-205bvw6d002.compute.instacloud-edge.com', 'wss://Other-Branch.compute.instacloud-edge.com/'];
+    for (const uri of hosts) expect(serverRegion(uri), uri).toBe('Singapore');
+    // Only real subdomains: a look-alike host is shown by its name.
+    expect(serverRegion('wss://compute.instacloud-edge.com.evil.example')).toBe('compute.instacloud-edge.com.evil.example');
+    expect(serverRegion('wss://turfwar.ianhsiao.me')).toBe('turfwar.ianhsiao.me');
+    setLang('zh-TW', false);
+    for (const uri of hosts) expect(serverRegion(uri), uri).toBe('新加坡');
+    expect(serverRegion('wss://maincloud.spacetimedb.com')).toBe('美東');
+  });
+});
+
+describe('serverIdentityKey', () => {
+  it('keeps one identity for the Singapore server under either hostname', () => {
+    const edge = serverIdentityKey('wss://prod-main-stdb-2b7636-205bvw6d002.compute.instacloud-edge.com');
+    expect(edge).toBe(serverIdentityKey('wss://play.turfwar.ianhsiao.me'));
+    expect(edge).toBe('instacloud-singapore');
+  });
+  it('leaves every other server keyed by its URI, so saved identities keep working', () => {
+    expect(serverIdentityKey('wss://maincloud.spacetimedb.com')).toBe('wss://maincloud.spacetimedb.com');
+    expect(serverIdentityKey('same-origin')).toBe('same-origin');
+  });
+});
+
+describe('hostAnswers', () => {
+  const reply =(status: number) => async () => ({ ok: status >= 200 && status < 300, status, arrayBuffer: async () => new ArrayBuffer(0) } as Response);
+  const signal = new AbortController().signal;
+  it('is true only for a 200 from the host', async () => {
+    expect(await hostAnswers('https://h/v1/ping', signal, reply(200))).toBe(true);
+    // A sleeping server's edge: 502/503/504, or a network (or CORS) error.
+    for (const status of [502, 503, 504, 404]) expect(await hostAnswers('https://h/v1/ping', signal, reply(status)), String(status)).toBe(false);
+    expect(await hostAnswers('https://h/v1/ping', signal, async () => { throw new TypeError('Failed to fetch'); })).toBe(false);
   });
 });
 

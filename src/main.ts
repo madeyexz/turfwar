@@ -10,8 +10,9 @@ import { loadLayout, matches } from './game/keybinds';
 import type { GameLink } from './game/link';
 import { OfflineLink } from './game/offline';
 import { Bench, BENCH_SECONDS, benchReport, type BenchResult } from './game/bench';
-import { onlineAvailable, onlineConfig, connectOnline, watchRooms, OnlineLink, type OnlineEntry, type PublicRoom } from './net/online';
-import { PING_WINDOW, PingMonitor, pingAllowed, pingTone, serverRegion } from './net/ping';
+import { onlineAvailable, onlineConfig, connectOnline, watchRooms, ConnectError, OnlineLink, type OnlineEntry, type PublicRoom } from './net/online';
+import { PING_WINDOW, PingMonitor, hostAnswers, pingAllowed, pingTone, pingUrl, serverHost, serverRegion } from './net/ping';
+import { WakeDriver, wakeProgress, wakeSeconds, type WakeState } from './net/wake';
 import { matchJoined, matchLeft, setSuper, startAnalytics, track, type PlayKind, type Reason } from './analytics';
 import { LevelView } from './render/level';
 import { THEMES } from './render/materials';
@@ -117,6 +118,17 @@ menu.innerHTML = `
   <section class="panel">
     <div class="tabs" id="tabs" role="tablist" aria-label="${t('lobby.ways')}" data-i18n-aria-label="lobby.ways">${TABS.map(id => `
       <button type="button" class="tab" role="tab" id="tab-${id}" data-tab="${id}" aria-controls="view-${id}">${TAB_ICONS[id]}<span>${L(`tab.${id}`, 'b')}${L(`tab.${id}Sub`, 'small')}</span></button>`).join('')}
+    </div>
+
+    <div class="wake" id="wake" hidden>
+      <div class="wake-say" role="status" aria-live="polite">
+        <b class="wake-head"><span class="conn wait" id="wake-dot"><i></i></span><span id="wake-title"></span></b>
+        <p id="wake-body"></p>
+        <p class="wake-note" id="wake-note" hidden></p>
+      </div>
+      <div class="wake-meter" id="wake-meter" aria-hidden="true"><span class="wake-bar"><i id="wake-fill"></i></span><span class="wake-time" id="wake-time"></span></div>
+      <div class="wake-queued" id="wake-queued" hidden><span id="wake-queued-text"></span><button type="button" class="link" id="wake-cancel"></button></div>
+      <button type="button" class="sub wake-retry" id="wake-retry" hidden></button>
     </div>
 
     <div class="view" id="view-quick" role="tabpanel" aria-labelledby="tab-quick">
@@ -260,36 +272,60 @@ const firstMap = () => FEATURED.find(mapOk) ?? validMaps()[0];
 if (!mapOk(map)) map = firstMap();
 
 // ---- Live rooms: a light subscription to the server's room rows while the lobby is open. ----
+/*
+ * The server sleeps when nobody plays and boots on the next request (src/net/wake.ts). The wake
+ * driver owns the rooms connection: it pings, connects, shows "waking" while the server boots and
+ * gives up after 3 minutes. Play buttons pressed meanwhile are queued and run once it is up.
+ */
+/** A play action held until the server is up; `retried`: it already failed to reach the server once. */
+interface Queued { action: Action; room: number; retried: boolean }
 let rooms: PublicRoom[] = [];
-let roomsState: 'connecting' | 'live' | 'offline' = 'offline';
-let stopRooms: (() => void) | undefined;
-let roomsGen = 0;
-let roomsRetry: ReturnType<typeof setTimeout> | undefined;
-/** "Server offline" is reported to analytics once per page, not on every retry. */
-let roomsErrorShown = false;
+const serverPing = server.uri ? pingUrl(server.uri) : undefined;
+const wake = new WakeDriver<Queued>({
+  ping: signal => serverPing ? hostAnswers(serverPing, signal) : Promise.resolve(false),
+  connect: lost => watchRooms(list => { rooms = list; refresh(); }, lost),
+}, s => onWake(s), q => run(q.action, q.room, q.retried));
+const phase = () => wake.state.phase;
+/** What the screen last showed of the wake state: a change redraws everything, a tick only the timer. */
+let wakeKey = '';
+/** "Server unreachable" is reported to analytics once per page, not on every attempt. */
+let unreachableReported = false;
+function onWake(s: WakeState<Queued>) {
+  pings.setActive(pingOn && s.phase === 'ready');
+  const key = `${s.phase}|${s.hostUp}|${s.queued?.action ?? ''}`;
+  if (key === wakeKey) { renderWake(); renderQuick(); renderStart(); return; }
+  const [was, , queued] = wakeKey.split('|');
+  wakeKey = key;
+  // A new attempt (or a dropped connection): the old room list is stale. (Stopping keeps it: the
+  // room being joined stays on screen while the game connects.)
+  if (s.phase !== was && s.phase !== 'ready' && s.phase !== 'idle') rooms = [];
+  if (s.phase === 'ready' && was !== 'ready' && s.woke) track('server_woke', { seconds: wakeSeconds(s, performance.now()), queued: !!queued });
+  if (s.phase === 'unreachable' && !unreachableReported) { unreachableReported = true; track('error_shown', { where: 'rooms', message: 'server unreachable' }); }
+  refresh();
+}
 function watchLobbyRooms() {
-  unwatchRooms();
   if (!online.ok || benchMode) { refresh(); return; }
-  pings.setActive(pingOn);
-  const gen = ++roomsGen;
-  void watchRooms(list => { if (gen !== roomsGen) return; rooms = list; refresh(); }, state => {
-    if (gen !== roomsGen) return;
-    roomsState = state;
-    if (state === 'offline') {
-      rooms = [];
-      if (!roomsErrorShown) { roomsErrorShown = true; track('error_shown', { where: 'rooms', message: 'server offline' }); }
-      // The server may come back: try again while the lobby stays open.
-      roomsRetry = setTimeout(() => { if (gen === roomsGen && inMenu) watchLobbyRooms(); }, 5000);
-    }
-    refresh();
-  }).then(stop => { if (gen === roomsGen) stopRooms = stop; else stop(); }, () => { if (gen === roomsGen) { roomsState = 'offline'; refresh(); } });
+  wake.start();
+  refresh();
 }
 function unwatchRooms() {
-  roomsGen++;
-  clearTimeout(roomsRetry);
-  stopRooms?.(); stopRooms = undefined;
+  wake.stop();
   pings.setActive(false);
 }
+/**
+ * A lobby left in a background tab lets the server sleep (an open connection keeps it awake, and
+ * that costs money): after 5 minutes hidden it disconnects, and on coming back it reconnects,
+ * waking the server if need be. Not while a play action waits for the server.
+ */
+const LET_SLEEP_HIDDEN_MS = 5 * 60_000;
+let hiddenTimer: ReturnType<typeof setTimeout> | undefined;
+document.addEventListener('visibilitychange', () => {
+  clearTimeout(hiddenTimer);
+  if (!online.ok || benchMode || !inMenu) return;
+  if (document.visibilityState === 'hidden') {
+    hiddenTimer = setTimeout(() => { if (inMenu && document.visibilityState === 'hidden' && !wake.state.queued) unwatchRooms(); }, LET_SLEEP_HIDDEN_MS);
+  } else if (phase() === 'idle') watchLobbyRooms();
+});
 
 // ---- Ping: round trip to each room's server, measured only while the lobby is on screen. ----
 const pings = new PingMonitor(() => renderPings());
@@ -302,18 +338,23 @@ function pingHtml(uri: string | undefined) {
 }
 const pingClass = (uri: string | undefined) => { const ms = pings.get(uri); return `ping${ms === undefined ? '' : ` ${pingTone(ms)}`}`; };
 const pingTitle = (uri: string | undefined) => uri ? t('server.pingTitle', { server: serverRegion(uri), n: PING_WINDOW }) : '';
-/** "Server · US East · 190 ms" for the chips. */
+/** "Server · Singapore · 110 ms" for the chips; "Server · Singapore · waking" while it boots. */
 function chipHtml(uri: string) {
-  const ms = pings.get(uri);
-  return `<span class="server-word">${esc(t('server.label'))} · </span>${esc(serverRegion(uri))} · <span class="${pingClass(uri)}">${ms === undefined ? '—' : esc(t('server.ms', { n: ms }))}</span>`;
+  const ms = pings.get(uri), p = phase();
+  const value = p === 'waking' ? `<span class="ping waking">${esc(t('wake.chip'))}</span>`
+    : p === 'unreachable' ? `<span class="ping">${esc(t('wake.downChip'))}</span>`
+    : `<span class="${pingClass(uri)}">${ms === undefined ? '—' : esc(t('server.ms', { n: ms }))}</span>`;
+  return `<span class="server-word">${esc(t('server.label'))} · </span>${esc(serverRegion(uri))} · ${value}`;
 }
 /** Updates the ping cells, the server chips and the lines under the big buttons in place (samples arrive every 4 s). */
 function renderPings() {
   menu.querySelectorAll<HTMLElement>('#rooms [data-ping]').forEach(el => { el.className = pingClass(el.dataset.ping); el.innerHTML = pingHtml(el.dataset.ping); });
-  const live = pingOn && !!server.uri && roomsState === 'live';
+  const live = pingOn && !!server.uri && phase() === 'ready';
+  // The chips also say when the server is waking (or could not be reached), never an error.
+  const chips = pingOn && !!server.uri && (live || phase() === 'waking' || phase() === 'unreachable');
   for (const chip of [$('#rooms-server'), $('#quick-server')]) {
-    chip.hidden = !live;
-    if (live) { chip.title = pingTitle(server.uri); chip.innerHTML = chipHtml(server.uri!); }
+    chip.hidden = !chips;
+    if (chips) { chip.title = live ? pingTitle(server.uri) : ''; chip.innerHTML = chipHtml(server.uri!); }
   }
   // Quick Play goes to its target room's server; a started room opens on this build's server.
   const lines: [string, string | undefined][] = [['#quick-ping', quickTarget()?.server ?? server.uri], ['#start-ping', server.uri]];
@@ -377,33 +418,71 @@ function renderTabs() {
   menu.dataset.tab = tab;
 }
 
-/** A big button's label: loading, the action under way, or its name. */
+/** The queued action (pressed while the server wakes), if any. */
+const queuedAction = () => wake.state.queued?.action;
+/** A big button's label: loading, the action under way, waiting for the server, or its name. It stays usable while the server wakes. */
 function renderDeploy(btn: HTMLButtonElement, action: Action, busyText: string, enabled: boolean) {
   const label = btn.querySelector<HTMLElement>('.deploy-t')!;
-  label.textContent = !ready ? loadingText() : starting === action ? busyText : t(label.dataset.label as Key);
+  const queued = queuedAction() === action;
+  label.textContent = !ready ? loadingText() : starting === action ? busyText : queued ? t('wake.waiting') : t(label.dataset.label as Key);
   btn.disabled = !ready || !!starting || !enabled;
+  btn.classList.toggle('queued', queued && !starting);
 }
 
-/** The status dot and text under a big button, from the room list's state. */
-function renderLine(id: string, liveText: string) {
+/** The status dot and text under a big button: connecting, waking (or waiting to join), unreachable, or what it will do. */
+function renderLine(id: string, action: Action, liveText: string) {
   const el = $(`#${id}-line`);
   el.hidden = !online.ok;
   if (!online.ok) return;
-  const [state, text] = roomsState === 'connecting' ? ['wait', t('lobby.connecting')]
-    : roomsState === 'offline' ? ['off', t('lobby.serverOffline')] : ['live', liveText];
+  const p = phase();
+  const [state, text] = p === 'ready' ? ['live', liveText]
+    : p === 'waking' ? ['wait', queuedAction() === action ? t('wake.queued') : t('wake.line', { n: wakeSeconds(wake.state, performance.now()) })]
+    : p === 'unreachable' ? ['down', t('wake.downHead')]
+    : ['wait', queuedAction() === action ? t('wake.queued') : t('lobby.connecting')];
   el.querySelector('.conn')!.className = `conn ${state}`;
-  el.title = roomsState === 'live' ? t('lobby.liveTitle', { db: server.database ?? 'online' }) : '';
-  $(`#${id}-hint`).textContent = text;
+  el.title = p === 'ready' ? t('lobby.liveTitle', { db: server.database ?? 'online' }) : '';
+  setText($(`#${id}-hint`), text);
+}
+
+/** Text that only changes when it differs (the waking timer redraws every second; live regions should not re-announce). */
+function setText(el: HTMLElement, text: string) { if (el.textContent !== text) el.textContent = text; }
+
+/**
+ * The waking card over the tabs' views: the server is asleep (not down), the time so far and a bar,
+ * the queued play action with Cancel; after 3 minutes, "Can't reach the server" with Retry.
+ */
+function renderWake() {
+  const box = $('#wake'), s = wake.state, p = s.phase;
+  box.hidden = !online.ok || (p !== 'waking' && p !== 'unreachable');
+  if (box.hidden) return;
+  const down = p === 'unreachable';
+  const secs = wakeSeconds(s, performance.now());
+  box.classList.toggle('down', down);
+  $('#wake-dot').className = `conn ${down ? 'down' : 'wait'}`;
+  setText($('#wake-title'), t(down ? 'wake.downHead' : 'wake.head'));
+  setText($('#wake-body'), t(down ? 'wake.downBody' : 'wake.body'));
+  // The machine answers but the database is still loading; or it is slower than usual.
+  const note = down ? '' : s.hostUp ? t('wake.loading') : secs >= 60 ? t('wake.slow') : '';
+  $('#wake-note').hidden = !note;
+  setText($('#wake-note'), note);
+  $('#wake-meter').hidden = down;
+  ($('#wake-fill') as HTMLElement).style.width = `${(wakeProgress(secs * 1000) * 100).toFixed(1)}%`;
+  setText($('#wake-time'), t('wake.elapsed', { n: secs }));
+  $('#wake-queued').hidden = down || !s.queued;
+  setText($('#wake-queued-text'), t('wake.queued'));
+  setText($('#wake-cancel'), t('wake.cancel'));
+  $('#wake-retry').hidden = !down;
+  setText($('#wake-retry'), t('wake.retry'));
 }
 
 /** QUICK PLAY: where it would put you, or that it opens a 6v6 with bots. */
 function renderQuick() {
   renderDeploy($<HTMLButtonElement>('#quick-go'), 'quick', t('lobby.joining'), online.ok);
   const target = quickTarget();
-  renderLine('quick', target ? t('quick.joins', { map: mapName(target.mapId), size: sizeLabel(target.size), n: target.humans, max: target.size * 2 }) : t('quick.opens'));
+  renderLine('quick', 'quick', target ? t('quick.joins', { map: mapName(target.mapId), size: sizeLabel(target.size), n: target.humans, max: target.size * 2 }) : t('quick.opens'));
   const humans = rooms.reduce((n, r) => n + r.humans, 0);
   const live = $('#quick-live');
-  live.hidden = roomsState !== 'live';
+  live.hidden = phase() !== 'ready';
   live.querySelector('span')!.textContent = `${t('quick.online')} · ${plural('lobby.roomCount', rooms.length)} · ${plural('lobby.playerCount', humans)}`;
   live.className = `conn ${rooms.length ? 'live' : ''}`;
 }
@@ -434,7 +513,7 @@ function renderStart() {
   }
   renderDeploy($<HTMLButtonElement>('#start-go'), 'start', t('lobby.starting'), online.ok);
   $('#start-summary').textContent = ready ? `${sizeOf(size).label} · ${t(isPublic ? 'start.public' : 'start.private')}` : '';
-  renderLine('start', `${t(isPublic ? 'start.hintPublic' : 'start.hintPrivate')}${bots ? '' : ` ${t('start.hintBotsOff')}`}`);
+  renderLine('start', 'start', `${t(isPublic ? 'start.hintPublic' : 'start.hintPrivate')}${bots ? '' : ` ${t('start.hintBotsOff')}`}`);
 }
 
 /** JOIN A SERVER: the filters, the live rooms they show (fixed-height rows in a box that keeps its size) and the code box. */
@@ -446,16 +525,23 @@ function renderJoin() {
   for (const r of shown) if (pingOn) pings.track(r.server);
   // Header totals: every public room and everyone in them, whatever the filters show.
   const humans = rooms.reduce((n, r) => n + r.humans, 0);
-  $('#rooms-count').innerHTML = roomsState === 'live' && rooms.length ? `<span class="conn live"><i></i>${plural('lobby.roomCount', rooms.length)} · ${plural('lobby.playerCount', humans)}</span>` : '';
+  const p = phase();
+  $('#rooms-count').innerHTML = p === 'ready' && rooms.length ? `<span class="conn live"><i></i>${plural('lobby.roomCount', rooms.length)} · ${plural('lobby.playerCount', humans)}</span>` : '';
   // Keep keyboard focus on the same JOIN button across live updates.
   const focused = (document.activeElement as HTMLElement | null)?.closest?.('[data-joinroom]') as HTMLElement | null;
   const focusRoom = focused && list.contains(focused) ? focused.dataset.joinroom : undefined;
   if (!shown.length) {
-    const offline = !online.ok ? t('lobby.noServer') : roomsState === 'connecting' ? t('lobby.connecting') : roomsState === 'offline' ? t('lobby.serverOffline') : '';
-    list.innerHTML = offline ? `<div class="empty">${esc(offline)}</div>`
+    // While the server wakes the list says so (never an empty box); after 3 minutes it offers Retry.
+    const html = !online.ok ? `<div class="empty">${esc(t('lobby.noServer'))}</div>`
+      : p === 'waking' ? `<div class="empty waking"><p><span class="conn wait"><i></i></span>${esc(t('wake.rooms'))}</p><small>${esc(t('wake.roomsSub'))}</small></div>`
+      : p === 'unreachable' ? `<div class="empty"><p>${esc(t('wake.downHead'))}</p><button type="button" class="sub" data-wake-retry>${esc(t('wake.retry'))}</button></div>`
+      : p !== 'ready' ? `<div class="empty">${esc(t('lobby.connecting'))}</div>`
       : rooms.length ? `<div class="empty"><p>${esc(t('join.emptyFiltered'))}</p><button type="button" class="link" data-clear>${esc(t('lobby.clearFilters'))}</button></div>`
       : `<div class="empty"><p>${esc(t('join.empty'))}</p><div class="empty-go"><button type="button" class="sub" data-go="quick">${esc(t('tab.quick'))}</button><button type="button" class="sub" data-go="start">${esc(t('tab.start'))}</button></div></div>`;
+    // (Unchanged markup is left alone, so a focused Retry keeps its focus.)
+    if (list.dataset.html !== html) { list.dataset.html = html; list.innerHTML = html; }
   } else {
+    list.dataset.html = '';
     list.innerHTML = shown.map(r => {
       const m = maps.find(x => x.id === r.mapId);
       const aria = t('lobby.roomAria', { map: mapName(r.mapId), mode: modeName(r.mode), size: sizeLabel(r.size), n: r.humans, max: r.size * 2, status: roomStatus(r) });
@@ -481,7 +567,7 @@ function renderJoin() {
   const join = $<HTMLButtonElement>('#join-go');
   roomCode.disabled = !online.ok;
   join.disabled = !ready || !!starting || !online.ok || roomCode.value.length < 4;
-  join.textContent = starting === 'code' ? '…' : t('common.join');
+  join.textContent = starting === 'code' || queuedAction() === 'code' ? '…' : t('common.join');
 }
 
 /** The backdrop's map: Quick Play's target, the form's map, or the first listed room. */
@@ -519,6 +605,7 @@ function renderOthers() {
 function refresh() {
   renderBrand();
   renderTabs();
+  renderWake();
   renderQuick();
   renderStart();
   renderJoin();
@@ -580,6 +667,9 @@ onClick('clear', () => { joinSize = ''; joinMode = ''; changed(); });
 onClick('team', v => { team = v; select('teams', 'team', team); });
 onClick('skill', v => { skill = v; select('skills', 'skill', skill); });
 onClick('joinroom', v => run('room', Number(v)));
+onClick('wake-retry', () => wake.retry());
+$('#wake-retry').addEventListener('click', () => { audio.ui(); wake.retry(); });
+$('#wake-cancel').addEventListener('click', () => { audio.ui(); wake.cancel(); });
 roomCode.addEventListener('input', () => { roomCode.value = cleanCode(roomCode.value); renderJoin(); });
 $('#quick-go').addEventListener('click', () => { audio.ui(); run('quick'); });
 $('#start-go').addEventListener('click', () => { audio.ui(); run('start'); });
@@ -769,7 +859,7 @@ watchLobbyRooms();
 track('lobby_view', {});
 // Analytics loads once the lobby is on screen, when the browser is idle: never in the way of the game.
 const idle = (fn: () => void) => ('requestIdleCallback' in window ? requestIdleCallback(fn, { timeout: 3000 }) : setTimeout(fn, 1500));
-idle(() => startAnalytics({ lang: lang(), online_db: online.ok ? server.database ?? '' : '' }));
+idle(() => startAnalytics({ lang: lang(), online_db: online.ok ? server.database ?? '' : '', server_host: online.ok && server.uri ? serverHost(server.uri) : '' }));
 
 /** Loops the menu theme once the player has interacted (browsers block audio before a gesture). */
 function menuMusic() {
@@ -790,14 +880,25 @@ function showBackdrop() {
   renderer.scene.add(backdrop.group);
 }
 
-/** Run one way in. */
-function run(action: Action, room = -1) {
+/**
+ * Run one way in. An online one pressed while the server is still waking is queued: it runs by
+ * itself once the server is up (`retried`: it already failed to reach the server once).
+ */
+function run(action: Action, room = -1, retried = false) {
   if (!ready || starting) return;
   if (modeOf(action) === 'online' && !online.ok) return;
   if (action === 'code' && roomCode.value.length < 4) { roomCode.focus(); return; }
+  if (modeOf(action) === 'online' && phase() !== 'ready') {
+    // Still inside the tap: full screen now, as starting would (a queued start runs without a gesture).
+    fullscreenForTouch();
+    // (A lobby that let the server sleep in a background tab reconnects first.)
+    if (phase() === 'idle') watchLobbyRooms();
+    wake.queue({ action, room, retried });
+    return;
+  }
   if (action === 'room' && !rooms.some(r => r.room === room)) return;
   joiningRoom = room;
-  void start(action);
+  void start(action, retried);
 }
 
 /** Solo's and Practice's map and mode: the form's (the performance check uses ?map or the size's first map, Elimination). */
@@ -820,7 +921,7 @@ function fullscreenForTouch() {
   }).catch(() => undefined);
 }
 
-async function start(action: Action) {
+async function start(action: Action, retried = false) {
   // Before the first await: still inside the player's tap.
   if (!benchMode) fullscreenForTouch();
   const name = callsign.value.trim().slice(0, 16) || t('lobby.fallbackName');
@@ -856,10 +957,19 @@ async function start(action: Action) {
         ? new OfflineLink(rules.mapId, name, teamChoice, {}, true)
         : new OfflineLink(rules.mapId, name, teamChoice, { ...(rules.mode === 'sabotage' ? SABOTAGE : ELIMINATION), teamSize: perTeam(), botSkill, freeBuy: params.has('freebuy') });
   } catch (error) {
-    status.textContent = t('lobby.couldNotJoin', { error: serverError((error as Error).message) });
-    track('error_shown', { where: 'join', message: String((error as Error)?.message ?? error).slice(0, 120) });
+    const room = joiningRoom;
     starting = undefined; joiningRoom = -1;
     inMenu = !benchMode; menuMusic();
+    // The server could not be reached (it fell asleep under a lobby that still looked connected,
+    // after a laptop slept say): wake it and join once it is up. Only once: a second failure is shown.
+    if (error instanceof ConnectError && via === 'online' && !retried && !benchMode) {
+      status.textContent = '';
+      watchLobbyRooms();
+      wake.queue({ action, room, retried: true });
+      return;
+    }
+    status.textContent = t('lobby.couldNotJoin', { error: serverError((error as Error).message) });
+    track('error_shown', { where: 'join', message: String((error as Error)?.message ?? error).slice(0, 120) });
     watchLobbyRooms(); refresh();
     return;
   }
@@ -1031,7 +1141,8 @@ async function boot() {
   let simNow = 0;
   /** Advance n fixed frames (capture mode). Returns once the frames are rendered. */
   const stepFrames = (n: number, render = true) => { for (let i = 0; i < n; i++) { simNow += 1000 / 30; step(1 / 30, simNow, render && i === n - 1); } return n; };
-  const startNow = () => start(startAction());
+  // An online ?autostart waits for a sleeping server like a pressed button does.
+  const startNow = () => { const action = startAction(); return modeOf(action) === 'online' ? run(action) : start(action); };
   if (params.get('autostart') || benchMode) void startNow();
   if (import.meta.env.DEV) Object.assign(window, { __lb: { get game() { return game; }, get bench() { return bench; }, renderer, assets, step: stepFrames, start: startNow } });
 }
