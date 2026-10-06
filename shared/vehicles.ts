@@ -101,6 +101,14 @@ export const VEHICLES: Record<VehicleKind, VehicleSpec> = {
   },
 };
 
+/**
+ * How far (rad) a scooter rider's torso turns from the bike's heading toward the aim: the hips and
+ * legs stay on the seat, the arms bring the weapon round the rest of the way.
+ */
+export const RIDER_TWIST = 1.1;
+/** The rider's torso twist from the heading toward the aim, within RIDER_TWIST either way. */
+export const riderTwist = (aimYaw: number, heading: number) => clamp(wrapAngle(aimYaw - heading), -RIDER_TWIST, RIDER_TWIST);
+
 /** Highest the helicopter climbs (absolute metres). */
 export const HELI_CEILING = 160;
 /** Heli rotor disc radius (visual; the rotor does not collide). */

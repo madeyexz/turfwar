@@ -4,7 +4,7 @@ import { MAP_IDS, loadMap } from './maps/index';
 import { rng, wrapAngle } from './math';
 import { PLAY } from './maps/taipei-compact';
 import {
-  HELI_CEILING, VEHICLES, createVehicle, exitSpot, forwardOf, idleVehicleInput, raycastVehicle, seatPosition, skidOf, slipAngle, speedOf, stepVehicle,
+  HELI_CEILING, RIDER_TWIST, VEHICLES, createVehicle, exitSpot, riderTwist, forwardOf, idleVehicleInput, raycastVehicle, seatPosition, skidOf, slipAngle, speedOf, stepVehicle,
   vehicleBlocked, type Vehicle, type VehicleInput,
 } from './vehicles';
 import { eyeOf } from './match/combat';
@@ -556,5 +556,25 @@ describe('vehicles in a match', () => {
     expect(d.health).toBe(77); expect(d.driver).toBe(1); expect(d.passenger).toBe(-1); expect(d.rotor).toBeCloseTo(0.5, 1);
     expect(frame.vehicles[1].wrecked).toBe(true);
     expect(frame.poses.length).toBe(state.soldiers.length);
+  });
+});
+
+describe('scooter riders', () => {
+  it('stay seated facing the bike: the torso twists toward the aim at most RIDER_TWIST, whatever the camera does', () => {
+    // A camera swung all the way round the bike (and past the angle wrap) never spins the body round on the seat.
+    for (const heading of [0, 1.57, -2.9, 3.1]) {
+      let previous = riderTwist(heading, heading);
+      expect(previous).toBe(0);
+      for (let k = 1; k <= 400; k++) {
+        const aim = heading + k * 0.05; // a full turn and more
+        const twist = riderTwist(aim, heading);
+        expect(Math.abs(twist)).toBeLessThanOrEqual(RIDER_TWIST);
+        // Continuous except where the aim passes straight behind (one side's limit to the other's).
+        if (Math.abs(twist - previous) > 0.06) expect(Math.abs(wrapAngle(aim - heading))).toBeGreaterThan(Math.PI - 0.06);
+        previous = twist;
+      }
+      expect(riderTwist(heading + 0.4, heading)).toBeCloseTo(0.4, 9);
+      expect(riderTwist(heading - Math.PI * 0.75, heading)).toBe(-RIDER_TWIST);
+    }
   });
 });
