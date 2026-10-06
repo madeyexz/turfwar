@@ -85,6 +85,15 @@ export const THEMES: Record<ThemeId, Theme> = {
     sunColor: new THREE.Color(0xc4ceff), sunIntensity: 2.1, hemiSky: new THREE.Color(0x9aa6d8), hemiGround: new THREE.Color(0x9a7a5a), hemiIntensity: 2.1,
     planet: null, exposure: 1.2, urban: true,
   },
+  // Golden hour from an office floor 383 m up Taipei 101: a low amber sun through the west glass,
+  // warm bounce off the carpet indoors, and a thin haze over the city far below.
+  highrise: {
+    id: 'highrise', ground: 'concrete', rock: 'moss', dirt: 'concrete',
+    groundTint: new THREE.Color(0.42, 0.43, 0.45), rockTint: new THREE.Color(0.55, 0.75, 0.55), dirtTint: new THREE.Color(0.5, 0.5, 0.52),
+    skyTop: new THREE.Color(0x3c5c92), skyHorizon: new THREE.Color(0xf0b282), fog: new THREE.Color(0xc4a892), fogDensity: 0.0009,
+    sunColor: new THREE.Color(0xffbf86), sunIntensity: 3.2, hemiSky: new THREE.Color(0xd8d8e0), hemiGround: new THREE.Color(0x8c7866), hemiIntensity: 1.7,
+    planet: null, exposure: 1.0, urban: true,
+  },
 };
 
 /** Terrain: world-space planar ground with triplanar rock on slopes and dirt along a splat channel. */

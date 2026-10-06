@@ -165,6 +165,25 @@ the Xinyi Plaza Malls, Militia on Songzhi Rd; Elephant Mountain's foot (象山) 
 (eased toward the edge of the terrain grid). The lots get curtain walls, mullion fins, crowns, lit
 canopies and rooftop plant. About 270 × 290 m; the tower itself is scenery (only its base collides).
 
+**Taipei 101 · 88F** (台北101・高樓辦公層; 1v1 and 6v6, Elimination and Sabotage) moves the fight
+indoors, onto an office floor near the top of the same tower (`shared/maps/taipei101.ts`). The floor
+plate is the tower's notched square, 50 m across at the glass, set at the height (about 383 m) where
+the xinyi map's top-segment loft reaches that width, so the segments below the glass come from the
+same data. A 3 × 3 plan round a stone core: the Chairman's and CEO's corner suites either side of
+the **Sky Lobby** (SWAT steps out of the lifts by the reception and logo wall); **A**, the server room
+(two zigzag rows of racks), and **B**, the boardroom, either side of the core; the pantry and the copy
+room below them; open offices with desk pods (and two glass meeting rooms in the SE) by the south
+glass, and between them the floor under renovation by the fire stairs and freight lift, where Militia
+comes up. Three lanes: the west rooms, the east rooms and the core's **damper hall**, where the tuned
+mass damper (41 stacked gold plates, 5.8 m across, on eight cables over its hydraulic pedestal) hangs
+in a shaft through 89F; a stair either side of the hall climbs to the 89F viewing gallery round the
+shaft (glass balustrades higher than a jump), which looks down into the hall. SWAT reaches each site
+about 1.8 s ahead of Militia; the bases are about 37 m apart on foot; no eye-level line between two
+standing spots exceeds 45 m (`shared/maps/taipei101.test.ts`). Glass stops bullets, as everywhere.
+The city below — the shared Taipei skyline (less the 101), Xinyi's lots and a seeded fill of blocks
+over the basin's flat ground — is the client-only `taipei101` dressing set (`src/render/cityfill.ts`),
+lit by a golden-hour theme (`highrise`) through clear window glass. No vehicles.
+
 Every map has ammo crates (one more stands in each base) and open team bases. Sabotage lists only the
 maps with bomb sites.
 
@@ -413,6 +432,8 @@ texture, sound and line of code here is original or CC0/OFL.
   streets, hills and lots — used with the author's permission and extracted by `tools/import-xinyi.ts`
   into `shared/maps/xinyi-data.ts`. Its mall and shop names are that game's own parodies. The mall's
   interior, the sunken garden and the curtain-wall detailing are this project's own.
+- Taipei 101 · 88F: the tower's sections below the floor and the city's skyline and lots reuse the two
+  imports above; the floor's plan, fit-out and the damper are this project's own.
 - Sky, terrain, architecture, effects and the remaining audio (knife, casings, footsteps,
   explosions, heartbeat, bomb, round and cash cues, UI, and the fallback weapon voices used before
   the recordings load) are procedural.
@@ -488,7 +509,7 @@ shared/        Pure TypeScript shared by browser, tests and the SpacetimeDB modu
   maps/          Builder + BeGone's six maps (Crane, Tower, Warehouse, Pipeline, Courtyard,
                  Timbertown) and eight originals (Cinder, Frostline, Verdant, Ochre, Citadel,
                  Railyard, Skyline, Meridian), plus Taipei and Taipei 101 · Xinyi (taipei-data.ts and
-                 xinyi-data.ts, generated from 臺北狂飆),
+                 xinyi-data.ts, generated from 臺北狂飆) and Taipei 101 · 88F (taipei101.ts),
                  with ladders, bomb sites and ammo crates
   match/         State, rounds and bomb, combat validation, economy, bots, navigation, packed frame
 src/           Browser client: lobby, game loop, prediction, rendering, view model, soldiers, HUD, store, audio, net

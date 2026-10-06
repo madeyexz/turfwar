@@ -140,6 +140,7 @@
 #menu [data-theme='meadow'] { --swatch: #8fc46a; }
 #menu [data-theme='taipei'] { --swatch: #ff5ad8; }
 #menu [data-theme='xinyi'] { --swatch: #5fd0c0; }
+#menu [data-theme='highrise'] { --swatch: #f2c06a; }
 
 /* Status line (connecting, errors): pinned under the panel, only when there is something to say. */
 #menu .status { padding: 10px 32px 12px; border-top: 1px solid rgba(190, 236, 244, 0.1); background: rgba(4, 9, 12, 0.7); font-size: 13px; color: var(--ink); letter-spacing: 0.06em; font-weight: 600; }
