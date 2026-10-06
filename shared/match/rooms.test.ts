@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { PLAYABLE_MAP_IDS, RETIRED_MAPS, loadMap } from '../maps/index';
-import { filterError, hasSites, mapsFor, newRoomRules, nextRoomRules, pickAnyRoom, pickRoom, QUICK_PLAY_NEW, roomMatches, ROOM_SIZES, startRoomConfig, startRoomError, type RoomFilter, type RoomView } from './rooms';
+import { filterError, hasSites, listOrder, mapsFor, newRoomRules, nextRoomRules, pickAnyRoom, pickRoom, QUICK_PLAY_NEW, roomMatches, ROOM_SIZES, startRoomConfig, startRoomError, type RoomFilter, type RoomView } from './rooms';
 
 const room = (r: Partial<RoomView> & { room: number }): RoomView => ({ mapId: 'crane', mode: 'elimination', size: 6, humans: 1, phase: 'live', ...r });
 const any = (size = 6): RoomFilter => ({ size, mode: '', map: '' });
@@ -199,5 +199,20 @@ describe('Start a server', () => {
   it('a public room keeps its map and mode; bots off is carried', () => {
     expect(startRoomConfig({ size: 6, mode: 'sabotage', map: 'taipei', bots: true, isPublic: true })).toEqual({ mode: 'sabotage', teamSize: 6, noBots: false, fixedMap: true, fixedMode: true });
     expect(startRoomConfig({ size: 1, mode: 'elimination', map: 'tower', bots: false, isPublic: false })).toEqual({ mode: 'elimination', teamSize: 1, noBots: true });
+  });
+});
+
+describe('the room list', () => {
+  it('lists joinable rooms first, then the most players, then the lowest ping; full rooms stay, last', () => {
+    const rooms = [
+      room({ room: 0, size: 1, humans: 2 }), // full duel
+      room({ room: 1, size: 6, humans: 3 }),
+      room({ room: 2, size: 24, humans: 9 }),
+      room({ room: 3, size: 6, humans: 12 }), // full squad
+      room({ room: 4, size: 6, humans: 3 }),
+    ];
+    expect(listOrder(rooms).map(r => r.room)).toEqual([2, 1, 4, 3, 0]);
+    const ping = new Map([[1, 190], [4, 30]]);
+    expect(listOrder(rooms, r => ping.get(r.room)).map(r => r.room)).toEqual([2, 4, 1, 3, 0]);
   });
 });

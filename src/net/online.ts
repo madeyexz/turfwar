@@ -61,13 +61,12 @@ function soldierFrom(r: RosterRow, p: FramePose, reloadLeft: number, sinceShot: 
 }
 
 /**
- * How to get into a room: Play Online by size with an optional mode and map ('' = any), Quick Play
- * by size (older servers), a new private room, a private room's code, or a listed public room.
+ * How to get into a room: Quick Play (anything open, else a new 6v6), Start a Server (a new public
+ * or private room with exactly these rules), a private room's code, or a listed public room.
  */
 export type OnlineEntry =
-  | { kind: 'play'; size: number; mode: Mode | ''; mapId: string }
-  | { kind: 'quick'; size: number }
-  | { kind: 'create'; size: number; mode: Mode; mapId: string; bots: boolean }
+  | { kind: 'any' }
+  | { kind: 'start'; size: number; mode: Mode; mapId: string; bots: boolean; isPublic: boolean }
   | { kind: 'code'; code: string }
   | { kind: 'room'; room: number };
 
@@ -177,8 +176,9 @@ export class OnlineLink implements GameLink {
     if (this.me < 0 && this.entry && !this.rejoining && !this.disconnected) {
       // Backgrounded tabs stop reporting and get dropped as idle; rejoin the same room transparently.
       this.rejoining = true;
-      const info = this.roomInfo(), was = this.entry.how;
-      const how: OnlineEntry = info?.code ? { kind: 'code', code: info.code } : was.kind === 'code' || was.kind === 'play' ? was : { kind: 'quick', size: JSON.parse(match.configJson).teamSize };
+      const info = this.roomInfo();
+      // Back into the same room: by its code, else as a listed public room.
+      const how: OnlineEntry = info?.code ? { kind: 'code', code: info.code } : { kind: 'room', room: this.room };
       void enter(this.conn, { ...this.entry, how }).catch(() => undefined).finally(() => { setTimeout(() => { this.rejoining = false; }, 2000); });
     }
     // Mid-rotation the frame may still describe the previous map: hold its bomb back.
@@ -256,20 +256,27 @@ function sayHello(conn: DbConnection) {
   try { void conn.reducers.hello({ tz, lang: navigator.language ?? '' }).catch(() => undefined); } catch { /* server without hello */ }
 }
 
-/** Ask the server for a room (Play Online, Quick Play, new private room, by code, or a listed room). */
-async function enter(conn: DbConnection, e: { name: string; team: number; how: OnlineEntry }) {
+/** A server published before a reducer existed refuses the call by name. */
+const missingReducer = (error: unknown) => /no such reducer|reducer.*not found|unknown reducer/i.test(String((error as Error)?.message ?? error));
+
+/** Ask the server for a room (Quick Play, Start a Server, by code, a listed room, or an older lobby's way in). */
+async function enter(conn: DbConnection, e: { name: string; team: number; how: OnlineEntry }): Promise<void> {
   const { name, team, how } = e;
-  if (how.kind === 'play') {
-    try {
-      return await conn.reducers.quickPlay({ name, team, size: how.size, mode: how.mode, mapId: how.mapId });
-    } catch (error) {
-      // A server published before quick_play: fall back to Quick Play by size, which it has.
-      if (!/no such reducer|reducer.*not found|unknown reducer/i.test(String((error as Error)?.message ?? error))) throw error;
-      return conn.reducers.quickJoin({ name, team, size: how.size });
+  if (how.kind === 'any') {
+    try { return await conn.reducers.quickAny({ name, team }); } catch (error) {
+      // A server published before quick_any: Quick Play 6v6, which it has.
+      if (!missingReducer(error)) throw error;
+      return conn.reducers.quickJoin({ name, team, size: 6 });
     }
   }
-  if (how.kind === 'quick') return conn.reducers.quickJoin({ name, team, size: how.size });
-  if (how.kind === 'create') return conn.reducers.createRoom({ name, team, size: how.size, mode: how.mode, mapId: how.mapId, bots: how.bots });
+  if (how.kind === 'start') {
+    try { return await conn.reducers.startRoom({ name, team, size: how.size, mode: how.mode, mapId: how.mapId, bots: how.bots, isPublic: how.isPublic }); } catch (error) {
+      // A server published before start_room: a public room by filter (bots on), or a private room.
+      if (!missingReducer(error)) throw error;
+      return how.isPublic ? conn.reducers.quickPlay({ name, team, size: how.size, mode: how.mode, mapId: how.mapId })
+        : conn.reducers.createRoom({ name, team, size: how.size, mode: how.mode, mapId: how.mapId, bots: how.bots });
+    }
+  }
   if (how.kind === 'room') return conn.reducers.joinPublic({ name, team, room: how.room });
   return conn.reducers.joinRoom({ name, team, code: how.code });
 }
@@ -295,11 +302,11 @@ export async function watchRooms(onChange: (rooms: PublicRoom[]) => void, onStat
     const rooms: PublicRoom[] = [];
     for (const r of conn.db.match.iter()) {
       if (r.code !== '') continue;
-      let config: { mode?: Mode; teamSize?: number; fixedMap?: boolean; fixedMode?: boolean } = {};
+      let config: { mode?: Mode; teamSize?: number; fixedMap?: boolean; fixedMode?: boolean; noBots?: boolean } = {};
       try { config = JSON.parse(r.configJson); } catch { /* malformed row: listed with defaults */ }
       rooms.push({
         room: r.id, mapId: r.mapId, mode: config.mode === 'sabotage' ? 'sabotage' : 'elimination', size: config.teamSize ?? 6, humans: r.humans,
-        phase: r.phase, round: r.score0 + r.score1 + 1, fixedMap: !!config.fixedMap, fixedMode: !!config.fixedMode, server: uri,
+        phase: r.phase, round: r.score0 + r.score1 + 1, fixedMap: !!config.fixedMap, fixedMode: !!config.fixedMode, noBots: !!config.noBots, server: uri,
       });
     }
     onChange(rooms.sort((a, b) => b.humans - a.humans || a.room - b.room));

@@ -141,6 +141,15 @@ export function pickAnyRoom<R extends RoomView>(rooms: readonly R[], ping?: (r: 
   return best;
 }
 
+/**
+ * The lobby's room list order: rooms with a free slot before full ones, then the most players,
+ * then the lowest ping (`ping`, when known), then the lowest room id.
+ */
+export function listOrder<R extends RoomView>(rooms: readonly R[], ping?: (r: R) => number | undefined): R[] {
+  const lag = (r: R) => ping?.(r) ?? Infinity;
+  return [...rooms].sort((a, b) => Number(roomFull(a)) - Number(roomFull(b)) || b.humans - a.humans || lag(a) - lag(b) || a.room - b.room);
+}
+
 // ---- Start a server: a room with exactly these rules --------------------------------------------
 
 /** What Start a Server asks for: every rule is chosen (no "any"). */
