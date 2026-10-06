@@ -3,6 +3,7 @@ import type { CollisionWorld } from '../../shared/collision';
 import { clamp, dirFromAngles, wrapAngle } from '../../shared/math';
 import { eyeHeight } from '../../shared/movement';
 import type { VehicleReport } from '../../shared/match/state';
+import type { Obstacle } from '../../shared/obstacles';
 import { VEHICLES, seatPosition, stepVehicle, type Vehicle, type VehicleEvents, type VehicleInput } from '../../shared/vehicles';
 import type { Input } from './input';
 
@@ -62,8 +63,11 @@ export class Driving {
     this.prev = { ...this.v };
   }
 
-  /** Mouse look, keys to controls, fixed-step physics. `frozen` (round start) keeps it parked. */
-  update(dt: number, input: Input | undefined, world: CollisionWorld, frozen: boolean): VehicleEvents {
+  /**
+   * Mouse look, keys to controls, fixed-step physics. `frozen` (round start) keeps it parked.
+   * `obstacles`: the other vehicles' bodies at their latest replicated poses (we bounce off them).
+   */
+  update(dt: number, input: Input | undefined, world: CollisionWorld, frozen: boolean, obstacles?: readonly Obstacle[]): VehicleEvents {
     const events: VehicleEvents = { impact: 0, landed: 0 };
     const v = this.v;
     if (!v) return events;
@@ -95,7 +99,7 @@ export class Driving {
     this.accumulator += Math.min(dt, 0.1);
     while (this.accumulator >= STEP) {
       this.prev = { ...v };
-      const e = stepVehicle(world, v, controls, STEP);
+      const e = stepVehicle(world, v, controls, STEP, obstacles);
       events.impact = Math.max(events.impact, e.impact); events.landed = Math.max(events.landed, e.landed);
       this.accumulator -= STEP;
     }

@@ -1,16 +1,21 @@
 import type { CollisionWorld } from './collision';
 import { clamp, wrapAngle, type Vec3 } from './math';
+import { near, penetration, type Obstacle } from './obstacles';
 
 /**
  * Drivable vehicles: arcade physics shared by the driver's client (prediction), Solo and the
  * SpacetimeDB module (driverless vehicles, validation). Cars and scooters drive on the floor under
  * them (terrain, solids' tops, ramps) and never flip; the helicopter hovers, climbs and descends.
- * Bodies collide with the static world as a row of vertical cylinders along their length.
+ * Bodies collide with the static world as a row of vertical cylinders along their length; with
+ * soldiers, grenades and each other as a few oriented boxes (`blocks`, see obstacles.ts).
  *
  * Local axes follow the soldiers': yaw 0 faces -Z; forward = (-sin yaw, -cos yaw), right = (cos yaw, -sin yaw).
  */
 export type VehicleKind = 'car' | 'scooter' | 'heli';
 export const VEHICLE_KINDS: VehicleKind[] = ['car', 'scooter', 'heli'];
+
+/** An oriented box in the vehicle's frame: half width, half length, height, bottom above the floor, centre's forward offset. */
+export interface Block { w: number; l: number; h: number; y0: number; c: number }
 
 /** A seat: feet position in the vehicle's local frame (x right, y up, z forward). */
 export interface Seat { x: number; y: number; z: number }
@@ -28,7 +33,14 @@ export interface VehicleSpec {
   /** Collision cylinders along the body: [forward offset, radius]; their height. */
   circles: [number, number][]; height: number;
   /** Hit box (oriented by yaw): half width, half length, height, bottom above the floor, centre's forward offset. */
-  box: { w: number; l: number; h: number; y0: number; c: number };
+  box: Block;
+  /**
+   * The solid body (oriented boxes, same fields as the hit box): it blocks soldiers (who can stand
+   * on top), other vehicles and grenades. The heli's rotor is not part of it.
+   */
+  blocks: Block[];
+  /** Mass (kg): how vehicles share an impact between them. */
+  mass: number;
   /** Driver first, then the passenger. */
   seats: Seat[];
   /** Occupants' crouch (sitting) value. */
@@ -58,6 +70,8 @@ export const VEHICLES: Record<VehicleKind, VehicleSpec> = {
     accel: 8.5, brake: 20, drag: 2.4, steer: 1.45, grip: 9,
     circles: [[1.35, 0.92], [0, 0.92], [-1.35, 0.92]], height: 1.5,
     box: { w: 0.92, l: 2.25, h: 1.42, y0: 0.14, c: 0 },
+    // The lower body (bonnet and boot lid height) and the glasshouse with its roof on top.
+    blocks: [{ w: 0.92, l: 2.22, h: 0.92, y0: 0.14, c: 0 }, { w: 0.82, l: 1.05, h: 0.42, y0: 1.06, c: -0.1 }], mass: 1200,
     seats: [{ x: -0.4, y: 0.14, z: -0.05 }, { x: 0.4, y: 0.14, z: -0.05 }], sit: 1,
     reach: 2.2, exposed: false, runOver: 7, crashSpeed: 11, crashDamage: 14,
     drift: { grip: 0.14, follow: 0.3, yaw: 1.7, bleed: 3.5 }, driverArms: false,
@@ -68,6 +82,7 @@ export const VEHICLES: Record<VehicleKind, VehicleSpec> = {
     accel: 9.5, brake: 17, drag: 2, steer: 2.3, grip: 11,
     circles: [[0.45, 0.42], [-0.45, 0.42]], height: 1.2,
     box: { w: 0.3, l: 0.92, h: 0.95, y0: 0.08, c: 0 },
+    blocks: [{ w: 0.3, l: 0.92, h: 0.95, y0: 0.08, c: 0 }], mass: 140,
     seats: [{ x: 0, y: 0.32, z: 0.02 }, { x: 0, y: 0.36, z: -0.5 }], sit: 0.75,
     reach: 1.6, exposed: true, runOver: 3.5, crashSpeed: 10, crashDamage: 6,
     drift: { grip: 0.32, follow: 0.55, yaw: 1.35, bleed: 3 }, driverArms: true,
@@ -78,6 +93,8 @@ export const VEHICLES: Record<VehicleKind, VehicleSpec> = {
     accel: 10, brake: 10, drag: 1.2, steer: 1.8, grip: 3,
     circles: [[1.0, 1.15], [-0.6, 1.15], [-2.5, 0.6], [-4.2, 0.6]], height: 2.6,
     box: { w: 1.05, l: 3.2, h: 2.3, y0: 0.3, c: -1.2 },
+    // The cabin on its skids, and the tail boom at head height (crouch to pass under it).
+    blocks: [{ w: 1.0, l: 1.55, h: 2.3, y0: 0.06, c: 0.55 }, { w: 0.26, l: 2.0, h: 0.55, y0: 1.28, c: -2.9 }], mass: 1600,
     seats: [{ x: -0.4, y: 0.4, z: 0.85 }, { x: 0.4, y: 0.4, z: 0.85 }], sit: 1,
     reach: 2.4, exposed: false, runOver: 0, crashSpeed: 7, crashDamage: 26,
     drift: { grip: 1, follow: 1, yaw: 1, bleed: 0 }, driverArms: false,
@@ -133,7 +150,13 @@ export interface VehicleInput {
 
 export const idleVehicleInput = (yaw = 0, engine = false): VehicleInput => ({ throttle: 0, steer: 0, brake: false, lift: 0, yaw, engine });
 
-export interface VehicleEvents { impact: number; landed: number }
+/**
+ * What a step reports: the hardest impact (speed lost, m/s), a landing's fall speed, and the
+ * velocity each obstacle's owner took from the bodies touching (equal and opposite momentum: the
+ * host gives it to driverless vehicles).
+ */
+export interface VehicleEvents { impact: number; landed: number; contacts?: VehicleContact[] }
+export interface VehicleContact { id: number; dvx: number; dvz: number }
 
 export function createVehicle(id: number, spot: VehicleSpot): Vehicle {
   const spec = VEHICLES[spot.kind];
@@ -170,6 +193,66 @@ export function vehicleGround(world: CollisionWorld, v: Pick<Vehicle, 'kind' | '
   return best;
 }
 
+/** Upward pop given to a soldier shoved by a vehicle going faster than RUN_OVER_SPEED. */
+const SHOVE_POP = 3.2;
+
+/** The vehicle's solid body as obstacles (blocks soldiers, other vehicles and grenades). */
+export function vehicleObstacles(v: Pick<Vehicle, 'id' | 'kind' | 'x' | 'y' | 'z' | 'yaw' | 'vx' | 'vz'>, out: Obstacle[] = []) {
+  const spec = VEHICLES[v.kind], f = forwardOf(v.yaw), r = rightOf(v.yaw);
+  const speed = Math.hypot(v.vx, v.vz);
+  for (const b of spec.blocks) {
+    out.push({
+      id: v.id, x: v.x + f.x * b.c, z: v.z + f.z * b.c, rx: r.x, rz: r.z, fx: f.x, fz: f.z, hw: b.w, hl: b.l,
+      y0: v.y + b.y0, y1: v.y + b.y0 + b.h, vx: v.vx, vz: v.vz, mass: spec.mass, shove: speed > RUN_OVER_SPEED ? SHOVE_POP : 0, reach: Math.hypot(b.w, b.l),
+    });
+  }
+  return out;
+}
+
+/** Every vehicle's body as obstacles, bar the one numbered `skip`. */
+export function obstaclesOf(vehicles: readonly Pick<Vehicle, 'id' | 'kind' | 'x' | 'y' | 'z' | 'yaw' | 'vx' | 'vz'>[], skip = -1) {
+  const out: Obstacle[] = [];
+  for (const v of vehicles) if (v.id !== skip) vehicleObstacles(v, out);
+  return out;
+}
+
+/** Radius round the vehicle's origin that holds all of its collision cylinders (broad phase). */
+export const bodyReach = (spec: VehicleSpec) => Math.max(...spec.circles.map(([o, r]) => Math.abs(o) + r));
+
+/** Restitution of vehicle-on-vehicle impacts (walls use the same 0.25). */
+const BOUNCE = 0.25;
+
+/**
+ * Push the body's cylinders out of other vehicles' bodies (their pose is fixed for this step) and
+ * share the impact by mass: the relative speed into the contact is lost (with a little bounce),
+ * this body taking the other's share of it. Returns the hardest impact; contacts collect the
+ * equal and opposite change for the other bodies.
+ */
+function resolveVehicles(v: Vehicle, spec: VehicleSpec, obstacles: readonly Obstacle[], contacts: VehicleContact[]) {
+  const f = forwardOf(v.yaw), extent = bodyReach(spec);
+  let impact = 0;
+  for (const ob of obstacles) {
+    if (ob.id === v.id || ob.y1 <= v.y + 0.3 || ob.y0 >= v.y + spec.height || !near(ob, v.x, v.z, extent)) continue;
+    let px = 0, pz = 0;
+    for (const [o, r] of spec.circles) {
+      const p = penetration(ob, v.x + f.x * o, v.z + f.z * o, r);
+      if (p.depth <= 1e-9) continue;
+      v.x += p.x; v.z += p.z; px += p.x; pz += p.z;
+    }
+    const pushed = Math.hypot(px, pz);
+    if (pushed < 1e-9) continue;
+    const nx = px / pushed, nz = pz / pushed;
+    const rel = (v.vx - ob.vx) * nx + (v.vz - ob.vz) * nz;
+    if (rel >= 0) continue;
+    const share = ob.mass / (spec.mass + ob.mass), dv = -rel * (1 + BOUNCE) * share;
+    v.vx += nx * dv; v.vz += nz * dv;
+    impact = Math.max(impact, dv);
+    const k = spec.mass / ob.mass;
+    contacts.push({ id: ob.id, dvx: -nx * dv * k, dvz: -nz * dv * k });
+  }
+  return impact;
+}
+
 /** Push the body's cylinders out of solids. Returns the total push (zero when clear). */
 function resolveBody(world: CollisionWorld, v: Vehicle, spec: VehicleSpec) {
   const f = forwardOf(v.yaw);
@@ -192,8 +275,11 @@ export function vehicleBlocked(world: CollisionWorld, v: Pick<Vehicle, 'kind' | 
 
 const approach = (value: number, target: number, rate: number) => value < target ? Math.min(target, value + rate) : Math.max(target, value - rate);
 
-/** Advance one vehicle by dt seconds under `input`. Mutates it and returns impact events. */
-export function stepVehicle(world: CollisionWorld, v: Vehicle, input: VehicleInput, dt: number): VehicleEvents {
+/**
+ * Advance one vehicle by dt seconds under `input`. Mutates it and returns impact events.
+ * `obstacles` are the other vehicles' bodies (their latest poses), which it bounces off.
+ */
+export function stepVehicle(world: CollisionWorld, v: Vehicle, input: VehicleInput, dt: number, obstacles?: readonly Obstacle[]): VehicleEvents {
   const events: VehicleEvents = { impact: 0, landed: 0 };
   if (dt <= 0) return events;
   const spec = VEHICLES[v.kind];
@@ -208,8 +294,10 @@ export function stepVehicle(world: CollisionWorld, v: Vehicle, input: VehicleInp
   const h = dt / steps;
   const startY = v.y;
   let pushX = 0, pushZ = 0;
+  const contacts: VehicleContact[] = [];
   for (let i = 0; i < steps; i++) {
     v.x += v.vx * h; v.z += v.vz * h;
+    if (obstacles?.length) events.impact = Math.max(events.impact, resolveVehicles(v, spec, obstacles, contacts));
     const push = resolveBody(world, v, spec);
     pushX += push.x; pushZ += push.z;
     if (!heli && v.grounded) {
@@ -223,7 +311,7 @@ export function stepVehicle(world: CollisionWorld, v: Vehicle, input: VehicleInp
     // Hit a wall: lose the speed into it (with a little bounce) and some of the rest.
     const nx = pushX / pushed, nz = pushZ / pushed, vn = v.vx * nx + v.vz * nz;
     if (vn < 0) {
-      events.impact = -vn;
+      events.impact = Math.max(events.impact, -vn);
       v.vx -= nx * vn * 1.25; v.vz -= nz * vn * 1.25;
       const keep = 1 - Math.min(0.5, -vn * 0.03);
       v.vx *= keep; v.vz *= keep;
@@ -251,6 +339,7 @@ export function stepVehicle(world: CollisionWorld, v: Vehicle, input: VehicleInp
     if (v.y > HELI_CEILING) { v.y = HELI_CEILING; v.vy = Math.min(0, v.vy); }
   }
   if (events.landed > 0) events.impact = Math.max(events.impact, events.landed * (heli ? 1 : 0.5));
+  if (contacts.length) events.contacts = contacts;
   attitude(world, v, spec, dt);
   return events;
 }
@@ -419,7 +508,7 @@ export function vehicleCenter(v: Pick<Vehicle, 'kind' | 'x' | 'y' | 'z' | 'yaw'>
  * behind and in front; on clear floor in reach of the body (never through a wall). Falls back to
  * the roof.
  */
-export function exitSpot(world: CollisionWorld, v: Pick<Vehicle, 'kind' | 'x' | 'y' | 'z' | 'yaw'>, seat: number, radius = 0.38, height = 1.8): Vec3 {
+export function exitSpot(world: CollisionWorld, v: Pick<Vehicle, 'kind' | 'x' | 'y' | 'z' | 'yaw'>, seat: number, radius = 0.38, height = 1.8, obstacles?: readonly Obstacle[]): Vec3 {
   const spec = VEHICLES[v.kind];
   const side = spec.box.w + radius + 0.35, end = spec.box.l + radius + 0.4;
   const first = seat === 1 ? 1 : -1;
@@ -436,10 +525,12 @@ export function exitSpot(world: CollisionWorld, v: Pick<Vehicle, 'kind' | 'x' | 
     // In flight there is no floor next to the door: the soldier drops from the seat's height.
     const y = v.y - floor > 1.2 ? v.y : floor;
     if (world.overlapsSolid({ x: p.x, y: y + 0.05, z: p.z }, radius, height)) continue;
+    // Never out into another vehicle parked alongside (obstacles of this one are skipped by the caller).
+    if (obstacles?.some(ob => near(ob, p.x, p.z, radius + 0.1) && ob.y1 > y + 0.3 && ob.y0 < y + height && penetration(ob, p.x, p.z, radius + 0.1).depth > 0)) continue;
     if (!world.lineOfSight(from, { x: p.x, y: y + 1, z: p.z })) continue;
     return { x: p.x, y, z: p.z };
   }
-  return { x: v.x, y: v.y + spec.box.y0 + spec.box.h + 0.05, z: v.z };
+  return { x: v.x, y: v.y + Math.max(...spec.blocks.map(b => b.y0 + b.h)) + 0.02, z: v.z };
 }
 
 /** Distance from a soldier's feet to the vehicle body, for getting in (ignores height within reach). */

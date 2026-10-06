@@ -4,7 +4,7 @@ import { loadMap } from '../../shared/maps/index';
 import { wrapAngle, type Vec3 } from '../../shared/math';
 import { eyeHeight } from '../../shared/movement';
 import { ATTACKERS, TEAM_NAMES, vehicleTarget, type MatchEvent, type MatchState, type Soldier } from '../../shared/match/state';
-import { VEHICLES, raycastVehicle, seatPosition, speedOf, type Vehicle } from '../../shared/vehicles';
+import { VEHICLES, obstaclesOf, raycastVehicle, seatPosition, speedOf, type Vehicle } from '../../shared/vehicles';
 import { seatFor } from '../../shared/match/vehicles';
 import { WEAPONS, pelletCone, pelletDirs, weaponStats, type HitZone, type WeaponId } from '../../shared/weapons';
 import { CASH, CRATE_REACH, canBuyWeapons, inBase } from '../../shared/match/economy';
@@ -294,7 +294,7 @@ export class Game {
     if (this.driving.active) {
       // At the wheel: the controls fly the vehicle; we ride in the driver's seat (no walking). Car and
       // helicopter drivers have no weapon; a scooter rider aims with the mouse (below).
-      const e = this.driving.update(dt, active && state.phase !== 'ended' ? this.input : undefined, this.map.world, this.player.frozen);
+      const e = this.driving.update(dt, active && state.phase !== 'ended' ? this.input : undefined, this.map.world, this.player.frozen, obstaclesOf(state.vehicles, this.driving.v!.id));
       if (e.impact > 5) this.audio.crash(e.impact);
       const v = this.driving.renderPose()!;
       this.player.seat(seatPosition(v, 0), VEHICLES[v.kind].sit, v);
@@ -307,7 +307,8 @@ export class Game {
     const aimed = { yaw: this.player.yaw, pitch: this.player.pitch };
     const result = this.driving.active && !this.driving.armed
       ? this.player.update(dt, undefined, this.map.world, false, true)
-      : this.player.update(dt, active ? this.input : undefined, this.map.world, active && state.phase !== 'ended', this.player.frozen || state.roundPhase === 'over');
+      : this.player.update(dt, active ? this.input : undefined, this.map.world, active && state.phase !== 'ended', this.player.frozen || state.roundPhase === 'over',
+        seat ? undefined : this.vehicleBodies(state));
     if (this.driving.armed) {
       // Recoil kicks the rider's camera (the aim follows the camera, not the other way round).
       this.driving.camPitch += this.player.pitch - aimed.pitch;
@@ -488,6 +489,15 @@ export class Game {
     this.fpsFrames++; this.fpsTime += dt;
     if (this.fpsTime > 1) { this.hud.fps(`${Math.round(this.fpsFrames / this.fpsTime)} FPS · ${this.renderer.renderer.info.render.calls} calls`); this.fpsFrames = 0; this.fpsTime = 0; }
     this.input.endFrame();
+  }
+
+  /** The vehicles' bodies where we see them (as rendered): they block us, carry us on their roofs and push us aside. */
+  private vehicleBodies(state: MatchState) {
+    if (!state.vehicles.length) return undefined;
+    return obstaclesOf(state.vehicles.map(v => {
+      const p = this.vehicles.pose(v.id);
+      return p ? { id: v.id, kind: v.kind, x: p.x, y: p.y, z: p.z, yaw: p.yaw, vx: p.vx, vz: p.vz } : v;
+    }));
   }
 
   /** The vehicle E would get us into: the closest one in reach with a seat for us, or -1. */
