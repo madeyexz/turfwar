@@ -107,13 +107,27 @@ whenever what is collected changes. These answer "how many players, and from whe
 - **SpacetimeDB** keeps the ground truth in the private table `player_seen` (first and last seen,
   sessions, time zone, language, callsign per identity; `player_day` per active day), filled by the
   join reducers, `hello(tz, lang)` (sent once per connection) and the connect lifecycle.
+  **Online play time** (`shared/playtime.ts`) lives in the private tables `player_time` (seconds
+  per identity, plus `since`, the start of the stretch not yet credited) and `player_day_time`
+  (seconds per identity per UTC day). Entering a room opens a stretch; leaving, disconnecting, the
+  idle kick (up to when the player went quiet) and the room closing credit it. Each room's tick
+  credits its humans once per wall-clock minute (one batch per room per minute, not per tick), and
+  a stretch over 10 minutes (ticks stopped) is dropped rather than credited. Lobby time does not
+  count; Solo and Practice never reach the server. Players already in a room when this was first
+  published start counting at the next minute.
   `bun scripts/players.ts <database> [--server maincloud|http://127.0.0.1:3000]` prints totals, new
-  and active players, countries estimated from time zones, who is online and career totals
-  (read-only, `spacetime sql` as the owner). Local checks: `bun scripts/seencheck.ts ws://127.0.0.1:<port> <db>`.
+  and active players, countries estimated from time zones, who is online, total and per-player play
+  time and career totals (read-only, `spacetime sql` as the owner). Local checks:
+  `bun scripts/seencheck.ts ws://127.0.0.1:<port> <db>`, and for play time
+  `ADMIN_TEST_KEY=<test key> bun scripts/playtimecheck.ts ws://127.0.0.1:<port> <db>` (about two minutes).
 
 **Admin page** (`/admin`, `admin/index.html`, not linked from the game, `noindex`): live totals,
-rooms, a 30-day chart of new and active players, countries and a sortable player list, for the
-database of the build (`VITE_SPACETIMEDB_*`). The owner logs in with the **admin key**; the module
+online play time (total, average and median per player, today, 7 days), rooms, 30-day charts of new
+and active players and of play time, countries and a sortable player list (play time, rounds,
+matches, kills …), for the database of the build (`VITE_SPACETIMEDB_*`). Play time comes from the
+views `admin_player_time` and `admin_daily_time`, joined to `admin_players` by the short id: new
+views rather than new columns on the old ones, because changing an existing view's columns makes a
+publish disconnect every client. The owner logs in with the **admin key**; the module
 keeps only its SHA-256 (`ADMIN_KEY_SHA256` in `spacetimedb/src/admin.ts`). `admin_login(key)` adds
 the browser's SpacetimeDB identity to the private `admin` table (five wrong keys per identity per
 10 minutes, then refused until the window passes), and the `admin_*` views return rows only to

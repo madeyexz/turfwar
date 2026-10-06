@@ -1,6 +1,6 @@
 /**
  * "How many players do I have and where are they from?" — a read-only report from a database's
- * private `player_seen` table (plus `player`, `match` and `profile`), via `spacetime sql` with the
+ * private `player_seen` table (plus `player`, `match`, `profile` and `player_time`), via `spacetime sql` with the
  * owner's CLI login. Works against any database:
  *
  *   bun scripts/players.ts lawbreaker-dev                      # Maincloud (default server)
@@ -10,7 +10,9 @@
  * Where from = the browser's time zone mapped to a country (an estimate; no IPs are stored).
  * Players are identities that said `hello` or joined a room (lobby-only visitors are not counted).
  */
+import { formatPlayTime } from '../shared/playtime';
 import { countByCountry } from '../shared/tzcountry';
+import { shortId } from '../spacetimedb/src/admin';
 import { sql } from './stdb-sql';
 
 const args = process.argv.slice(2);
@@ -18,10 +20,13 @@ const db = args.find(a => !a.startsWith('--') && args[args.indexOf(a) - 1] !== '
 const server = args.includes('--server') ? args[args.indexOf('--server') + 1] : 'maincloud';
 if (!db) { console.error('usage: bun scripts/players.ts <database> [--server maincloud|http://127.0.0.1:3000]'); process.exit(2); }
 
-const seen = sql(server, db, 'SELECT * FROM player_seen') as { identity: string; first_seen: bigint; last_seen: bigint; sessions: number; tz: string; lang: string }[];
+const seen = sql(server, db, 'SELECT * FROM player_seen') as { identity: string; first_seen: bigint; last_seen: bigint; sessions: number; tz: string; lang: string; name: string }[];
 const online = sql(server, db, 'SELECT * FROM player').length;
 const rooms = sql(server, db, 'SELECT * FROM match') as { humans: number; code: string; map_id: string }[];
-const profiles = sql(server, db, 'SELECT * FROM profile') as { matches_played: number; matches_won: number; rounds_played: number; kills: number }[];
+const profiles = sql(server, db, 'SELECT * FROM profile') as { identity: string; name: string; matches_played: number; matches_won: number; rounds_played: number; kills: number }[];
+// Online play time (seconds credited; `since` > 0 = in a room now). Missing on a database whose module predates it.
+let times: { identity: string; play_seconds: number | bigint; since: number | bigint }[] | undefined;
+try { times = sql(server, db, 'SELECT * FROM player_time') as typeof times; } catch { times = undefined; }
 
 const now = BigInt(Date.now()) * 1000n;
 const DAY = 86_400_000_000n;
@@ -59,4 +64,23 @@ console.log('\nBrowser languages:');
 for (const [l, n] of [...langs].sort((a, b) => b[1] - a[1]).slice(0, 8)) console.log(`  ${pad(l, 12)} ${num(n)}`);
 
 const sum = (k: keyof (typeof profiles)[number]) => profiles.reduce((n, p) => n + Number(p[k]), 0);
+console.log('\nOnline play time (time in online rooms; lobby, Solo and Practice not counted):');
+if (!times) console.log('  (no player_time table: publish the module with play-time tracking first)');
+else {
+  const nameOf = new Map<string, string>();
+  for (const p of profiles) if (p.name) nameOf.set(p.identity, p.name);
+  for (const s of seen) if (s.name) nameOf.set(s.identity, s.name);
+  const roundsOf = new Map(profiles.map(p => [p.identity, Number(p.rounds_played)]));
+  const played = times.map(t => ({ ...t, seconds: Number(t.play_seconds) })).filter(t => t.seconds > 0).sort((a, b) => b.seconds - a.seconds);
+  const total = played.reduce((n, t) => n + t.seconds, 0);
+  console.log(`  Total                     ${formatPlayTime(total)} over ${num(played.length)} player${played.length === 1 ? '' : 's'}`);
+  if (played.length) console.log(`  Average / median          ${formatPlayTime(total / played.length)} / ${formatPlayTime(played[played.length >> 1].seconds)}`);
+  const top = played.slice(0, 50);
+  if (top.length) console.log(`\n  ${pad('Player', 18)} ${pad('Play time', 11)} ${pad('Rounds', 7)} Id`);
+  for (const t of top) {
+    console.log(`  ${pad(nameOf.get(t.identity) || '—', 18)} ${pad(formatPlayTime(t.seconds), 11)} ${pad(num(roundsOf.get(t.identity) ?? 0), 7)} ${shortId(t.identity)}${Number(t.since) > 0 ? '  (in a room now)' : ''}`);
+  }
+  if (played.length > top.length) console.log(`  … ${played.length - top.length} more`);
+}
+
 console.log(`\nCareer (profile): ${num(profiles.length)} players with stats, ${num(sum('matches_played'))} player-matches played (${num(sum('matches_won'))} won), ${num(sum('rounds_played'))} player-rounds, ${num(sum('kills'))} kills`);
