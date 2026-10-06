@@ -16,7 +16,7 @@ runner (`bun` / `bunx`, never npm/npx).
 
 | Area | Implemented |
 | --- | --- |
-| Lobby | Callsign and team at the top, then three filters: **size** (1v1 / 6v6 / 24v24), **mode** (Any / Elimination / Sabotage) and **map** (Any, a map card from the picker with a plan of the map, its region or bomb sites and who is playing there, or one of the shortcuts beside it). **Play online** joins the fullest public room whose current mode and map match (Any matches anything) or opens a new one with those rules; its label sums the choice up ("6v6 · Sabotage · Taipei") and the line under it says which room it would join. **Live rooms** below lists the rooms the same filters match (map, mode, players, round, Join), with "showing N of M · clear filters" or links to other sizes when the filters hide some. The bottom row: *Solo vs bots* (the filters, Any picked at random; bot difficulty), *Practice* (the map filter; no bots, free store), *Private room* (the filters, Any picked at random; bots on or off; you get a 4-letter code) and a *# code* box to join one. A map the size or mode cannot host goes back to Any with a note; the filters are remembered. Options: language (English / 繁體中文), graphics, crosshair, scope view, reticle, sensitivity and aim sensitivity, field of view, volume, and a Controls tab where every key can be rebound (see [Controls](#controls)). In a match, Esc or P opens the same settings (Options and Controls tabs); F toggles fullscreen. |
+| Lobby | Callsign and team at the top, then three tabs. **Quick play** (the default) has one big button: it joins the fullest open public room of any size, map or mode (`quick_any`; full and private rooms never), or opens a public 6v6 with bots on a random map and mode; the line under it says which ("Joins Taipei · 6v6 · 5/12" or "Opens a new 6v6 room with bots") with the ping. **Start a server** is a form: game type (Elimination / Sabotage), size (1v1 / 6v6 / 24v24), map (the picker's cards with a plan of the map, its region or bomb sites and who is playing there, filtered to maps the size and mode can host, or a shortcut beside it), visibility (Public: listed and filled by Quick Play, keeps its map and mode; Private: a 4-letter code shown in game) and bots (on / off), then START (`start_room`); the form is remembered, and a map the size or mode cannot host moves to the first one that can, with a note. **Join a server** lists every live public room (map and round, mode, size, players, ping, Join; full rooms greyed with FULL; joinable first, then the most players, then the lowest ping; a lock when the map or mode is fixed), with header totals and the server's region and ping, optional size and mode filters (All by default; the foot counts the rooms they hide), and a private room code box. Ping (`src/net/ping.ts`): `GET /v1/ping` on the SpacetimeDB host every 4 s while the lobby is visible, the handshake sample dropped, median of the last 5; green under 80 ms, amber under 160, red beyond; per server URI, so every room shows the one Maincloud database's ping today. Under all three: *Solo vs bots* (the form's mode, size and map; bot difficulty) and *Practice* (the form's map; no bots, free store). Options: language (English / 繁體中文), graphics, crosshair, scope view, reticle, sensitivity and aim sensitivity, field of view, volume, controls. In a match, Esc or P opens the same settings; F toggles fullscreen. The ? button opens the Controls tab where every key can be rebound (see [Controls](#controls)). In a match, Esc or P opens the same settings (Options and Controls tabs); F toggles fullscreen. |
 | Language | English and Traditional Chinese (Taiwan, 繁體中文): every lobby, settings, HUD, store, scoreboard and end-of-match string (`src/ui/i18n.ts`; SWAT 特警, Militia 民兵, Elimination 殲滅戰, Sabotage 爆破戰, maps by their Chinese names such as 西門町 and 台北101・信義; guns keep their real names). It follows the browser (zh-TW, zh-HK, zh-Hant read Chinese) until a choice is saved in Settings; `?lang=zh-TW` / `?lang=en` overrides it for the visit. Switching applies at once, in the lobby and in a match; kill-feed lines and toasts already on screen keep their language until they fade. Text the server sends (cash award reasons, room errors) stays English on the wire and is translated in the client. |
 | Teams | **SWAT** (team 0, navy tactical kit) and **Militia** (team 1, desert and olive irregulars). In Sabotage Militia attacks and SWAT defends. No friendly fire. |
 | Rounds | 4 s freeze at round start (buy, no moving), the round, a 5 s round-over pause; first team to **10 round wins** takes the match, then 10 s on the result screen and a new match. Nobody respawns inside a round; everyone respawns at the next round start. Dead players spectate their killer immediately (RMB cycles players); their chat is hidden from the living. |
@@ -303,7 +303,11 @@ fullscreen. On touch-only screens the Controls tab is read-only.
 
 - Rooms: one database holds many rooms. The `match`, `clock` and `frame` rows are keyed by room id,
   and soldiers, bodies, players, the roster and events carry a `room` column; soldier and body ids
-  come from a global `counter`. `quick_play(size, mode, map)` (Play Online; '' = any mode or map)
+  come from a global `counter`. `quick_any` (Quick Play) puts the caller in the fullest open public room of
+  any size, map and mode (`pickAnyRoom`), or opens a public 6v6 with bots on a random map and mode.
+  `start_room(size, mode, map, bots, isPublic)` (Start a Server) opens a room with exactly those rules,
+  validated like `quick_play` (`startRoomError`): public ones keep their map and mode and are listed and
+  matched, private ones get a code. `quick_play(size, mode, map)` (the older lobby's Play Online; '' = any mode or map)
   puts the caller in the fullest public room of that size (1, 6 or 24 per team) whose current mode and
   map match, or opens one with those rules; the server checks the size, the mode and that the size (and
   mode) can play the map, and the choice itself is `pickRoom` in `shared/match/rooms.ts`. `quick_join(size)`
@@ -411,18 +415,22 @@ game and the match server. After changing the module, regenerate client bindings
 `spacetime generate --lang typescript --out-dir src/module_bindings --module-path spacetimedb`.
 In Amp orbs, `.amp/services.yaml` declares both services (`amp orb services ensure`).
 
-Lobby URL flags: `?mode=offline|online|lab` (what `&autostart=1` starts: Solo, Play Online or Practice),
-`&game=elimination|sabotage` (mode filter), `&size=duel|squad|war`, `&map=<id>` (map filter; a 24v24 map
-picks 24v24 unless `size` says otherwise), `&room=CODE` (fills the code box; with `autostart` joins it),
-`&team=0|1|auto`, `&skill=0.25…0.75`, `&name=…`, `&autostart=1`. Choices are remembered per browser under
-`lawbreaker.*` in localStorage (`lawbreaker.lobby.mode` and `lawbreaker.lobby.map` hold the filters, ''
-for Any; `lawbreaker.crosshair` holds the crosshair style the HUD draws).
+Lobby URL flags: `?tab=quick|start|join` (the open tab), `?mode=offline|online|lab` (what `&autostart=1`
+starts: Solo, Quick Play or Practice), `&game=elimination|sabotage`, `&size=duel|squad|war` and `&map=<id>`
+(the Start a Server form; a 24v24 map picks 24v24 unless `size` says otherwise), `&room=CODE` (opens Join a
+server with the code filled in; with `autostart` joins it), `&team=0|1|auto`, `&skill=0.25…0.75`, `&name=…`,
+`&autostart=1`. Choices are remembered per browser under `lawbreaker.*` in localStorage (`lawbreaker.start.*`
+holds the form; `lawbreaker.crosshair` holds the crosshair style the HUD draws).
 
 `bun scripts/roomcheck.ts ws://127.0.0.1:<port> <db>` (local only) checks Play Online with separate
 identities: the same filters share a room, different maps split, Any joins a specific-map room,
 `quick_join` and `join` still work, bad sizes, modes and maps are refused, and after a match fixed rooms
 keep their map (and mode) while Any rooms rotate (it ends matches early with `spacetime sql`, owner-only).
 `scripts/loadtest.ts` takes `--mode` and `--map` to Play Online with filters.
+`bun scripts/startcheck.ts ws://127.0.0.1:<port> <db>` (local only, an empty database) checks Quick Play and
+Start a Server with separate identities: Quick Play opens a 6v6 with bots and a second one joins it, a public
+started room is listed, fixed and joinable, a private one is hidden, never Quick Played into and joined by
+code, bots off leaves slots empty, `start_room` refuses bad sizes, modes and maps, and the older reducers work.
 
 Testing the store: the practice range always buys for free, anywhere; add `&freebuy` to the URL for a
 free-buy Solo match; for a **local** Online database, set `"freeBuy":true` in the match's
@@ -587,7 +595,7 @@ screens can exceed 60. The lobby also has Low / Medium / High graphics presets (
 
 ## Known limitations and what remains
 
-- Online has filtered Play Online, a live room list and private rooms, but no clans, vote kick or
+- Online has Quick Play, Start a Server (public or private) and a live room list, but no clans, vote kick or
   skill-based matchmaking. All rooms share one database; capacity per database has been measured only locally.
 - No full lag compensation or server-side rewind for hit validation; very high latency can make
   moving targets harder to hit or let claims fail validation. Latency spikes and movement

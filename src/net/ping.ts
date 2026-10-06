@@ -1,0 +1,151 @@
+/**
+ * Round-trip time from this browser to each game server, for the lobby.
+ *
+ * A "server" is a SpacetimeDB host (its websocket URI). Every room lives in one Maincloud database
+ * today, so every room shows the same ping; rooms carry their server's URI so a second server (a
+ * Taiwan host, say) gets its own column value without changes here.
+ *
+ * Measured with SpacetimeDB's own HTTP `GET /v1/ping` on that host: it is answered by the host
+ * without touching the database (no reducer, no subscription, nothing queued behind the match
+ * tick), Maincloud allows it cross-origin (`Access-Control-Allow-Origin: *`) and a plain GET needs
+ * no preflight. The browser websocket API cannot send ping frames, and the SDK has no one-off
+ * query, so the open websocket offers nothing cheaper that does not load the database.
+ *
+ * The first sample pays for the TCP + TLS handshake (about 3× the RTT to Maincloud) and is
+ * discarded; after it the browser reuses the connection. One sample every 4 s while the lobby is
+ * visible; the shown value is the median of the last 5.
+ */
+import { t, type Key } from '../ui/i18n';
+
+export const PING_INTERVAL_MS = 4000;
+export const PING_WINDOW = 5;
+/** A ping slower than this is not worth a sample (and the next one is due anyway). */
+const PING_TIMEOUT_MS = 3500;
+/** After a pause this long the browser has likely dropped the connection: warm up again. */
+const COLD_AFTER_MS = 30_000;
+
+/** `/v1/ping` on the host of a SpacetimeDB URI (ws→http, wss→https; a path prefix such as the dev proxy's `/stdb` is kept). */
+export function pingUrl(uri: string): string | undefined {
+  let url: URL;
+  try { url = new URL(uri); } catch { return undefined; }
+  const scheme = ({ 'wss:': 'https:', 'ws:': 'http:', 'https:': 'https:', 'http:': 'http:' } as Record<string, string>)[url.protocol];
+  if (!scheme) return undefined;
+  return `${scheme}//${url.host}${url.pathname.replace(/\/+$/, '')}/v1/ping`;
+}
+
+/** Where each known server host is, as the lobby names it. Any other host is shown by its name. */
+export const SERVER_REGIONS: Record<string, Key> = {
+  'maincloud.spacetimedb.com': 'server.region.usEast',
+  localhost: 'server.region.local',
+  '127.0.0.1': 'server.region.local',
+};
+export function serverHost(uri: string) {
+  try { return new URL(uri).hostname; } catch { return uri; }
+}
+/** "US East", "Local", or the host name. */
+export function serverRegion(uri: string) {
+  const host = serverHost(uri);
+  const key = SERVER_REGIONS[host];
+  return key ? t(key) : host;
+}
+
+export function median(xs: readonly number[]): number | undefined {
+  if (!xs.length) return undefined;
+  const s = [...xs].sort((a, b) => a - b), m = s.length >> 1;
+  return s.length % 2 ? s[m] : (s[m - 1] + s[m]) / 2;
+}
+
+/** Green under 80 ms, amber under 160 ms, red otherwise. */
+export type PingTone = 'good' | 'fair' | 'bad';
+export const pingTone = (ms: number): PingTone => ms < 80 ? 'good' : ms < 160 ? 'fair' : 'bad';
+
+/** No pinging under the automation flags (the performance check, trailer and capture runs). */
+export const pingAllowed = (search: string) => !['bench', 'trailer', 'capture', 'fixeddt'].some(f => new URLSearchParams(search).has(f));
+
+/** One server's samples: the first after a (re)start is a handshake and is dropped; the value is the median of the last `PING_WINDOW`. */
+export class PingSamples {
+  private samples: number[] = [];
+  private warm = false;
+  add(ms: number) {
+    if (!this.warm) { this.warm = true; return; }
+    this.samples.push(ms);
+    if (this.samples.length > PING_WINDOW) this.samples.shift();
+  }
+  /** The next sample sets up a connection again (it is dropped); the shown value stays meanwhile. */
+  cool() { this.warm = false; }
+  /** The server did not answer: no value until it does again. */
+  fail() { this.samples = []; this.warm = false; }
+  get warmedUp() { return this.warm; }
+  get value() { const m = median(this.samples); return m === undefined ? undefined : Math.round(m); }
+}
+
+type Fetch = (url: string, init: RequestInit) => Promise<Response>;
+/** A tracked server: its ping URL, samples, the pending timer and when its last sample started (undefined: due now). */
+interface Server { url: string; samples: PingSamples; timer?: ReturnType<typeof setTimeout>; busy: boolean; last?: number }
+
+/**
+ * Pings every tracked server while active (the lobby is open) and the page is visible.
+ * `onChange` fires when a server's shown value changes.
+ */
+export class PingMonitor {
+  private servers = new Map<string, Server>();
+  private active = false;
+
+  constructor(private onChange: () => void, private fetcher: Fetch = (u, i) => fetch(u, i)) {
+    if (typeof document !== 'undefined') document.addEventListener('visibilitychange', () => this.reschedule());
+  }
+
+  /** Measure this server (a SpacetimeDB URI) from now on. */
+  track(uri: string | undefined) {
+    if (!uri || this.servers.has(uri)) return;
+    const url = pingUrl(uri);
+    if (!url) return;
+    this.servers.set(uri, { url, samples: new PingSamples(), busy: false });
+    this.reschedule();
+  }
+  /** The shown ping of a server in ms, or undefined while measuring (or when it does not answer). */
+  get(uri: string | undefined) { return uri ? this.servers.get(uri)?.samples.value : undefined; }
+
+  setActive(on: boolean) {
+    if (on === this.active) return;
+    this.active = on;
+    this.reschedule();
+  }
+
+  private running() { return this.active && (typeof document === 'undefined' || document.visibilityState !== 'hidden'); }
+
+  private reschedule() {
+    const now = performance.now();
+    for (const s of this.servers.values()) {
+      clearTimeout(s.timer); s.timer = undefined;
+      if (!this.running() || s.busy) continue;
+      if (s.last !== undefined && now - s.last > COLD_AFTER_MS) s.samples.cool();
+      s.timer = setTimeout(() => void this.sample(s), s.last === undefined ? 0 : Math.max(0, s.last + PING_INTERVAL_MS - now));
+    }
+  }
+
+  private async sample(s: Server) {
+    s.timer = undefined;
+    if (!this.running()) return;
+    s.busy = true;
+    const before = s.samples.value, warming = !s.samples.warmedUp;
+    const abort = new AbortController();
+    const timeout = setTimeout(() => abort.abort(), PING_TIMEOUT_MS);
+    const t0 = performance.now();
+    try {
+      const res = await this.fetcher(s.url, { cache: 'no-store', signal: abort.signal });
+      await res.arrayBuffer();
+      if (!res.ok) throw new Error(String(res.status));
+      s.samples.add(performance.now() - t0);
+    } catch {
+      s.samples.fail();
+    } finally {
+      clearTimeout(timeout);
+      s.busy = false;
+    }
+    // The handshake sample is dropped: the first real one follows at once rather than 4 s later.
+    s.last = warming && s.samples.warmedUp ? undefined : t0;
+    if (s.samples.value !== before) this.onChange();
+    this.reschedule();
+  }
+}
