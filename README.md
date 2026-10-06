@@ -154,11 +154,23 @@ Maps can park drivable vehicles (`MapDef.vehicles`, placed with the builder's `v
 
 | Vehicle | Seats | Top speed | Body | Notes |
 | --- | --- | --- | --- | --- |
-| Car / taxi | Driver + passenger | 94 km/h | 520 | Crew is inside: shots and blasts hit the body. Runs enemies over |
-| Scooter | Rider + pillion | 76 km/h | 160 | Riders are exposed and can be shot off it. Leans into turns |
+| Car / taxi | Driver + passenger | 94 km/h | 520 | Crew is inside: shots and blasts hit the body. Runs enemies over. Drifts on the handbrake |
+| Scooter | Rider + pillion | 76 km/h | 160 | Riders are exposed and can be shot off it. The rider shoots one-handed. Leans into turns; slides lighter on the handbrake |
 | Helicopter | Pilot + passenger | 122 km/h, climbs 9 m/s | 800 | Rotor spins up for 1.6 s before it lifts; hovers when idle; ceiling 160 m; no bailing out above 40 m |
 
-Drivers cannot shoot or throw; passengers can. A body reduced to 0 wrecks: it explodes (7 m blast),
+Car and helicopter drivers cannot shoot or throw; passengers can. A scooter rider steers with one
+hand and shoots with the other: pistols and SMGs only (mounting with a rifle, shotgun, sniper or LMG
+in hand draws the secondary), from the hip with extra spread and kick, no aiming down sights,
+binoculars or grenades. The mouse aims independently of the steering: while you aim (or fire) the
+camera holds its direction as the bike turns under it, and swings back behind the bike a moment
+after you stop; the crosshair is the camera's centre in both the chase and first-person views.
+Riders' legs stay on the bike while the torso turns to the aim (for everyone watching too).
+
+Holding the handbrake (Space) through a turn at speed drifts a car or a scooter: rear grip drops, the
+body swings round faster than its velocity, so it slides at an angle; speed bleeds gently; counter-
+steer (or letting go) catches the slide. Sliding tyres screech, smoke and lay dark marks on the road.
+The drift is part of the shared deterministic physics, so the server's checks accept it as they do
+any driving. A body reduced to 0 wrecks: it explodes (7 m blast),
 kills its crew and stays as a charred hulk until the round ends. Crashes (speed lost against walls,
 hard landings, a pilotless helicopter falling) damage the body. A driven car or scooter faster than
 6 m/s hurts enemies it touches. No friendly fire on a crewed vehicle; an empty one is fair game.
@@ -182,7 +194,8 @@ the rotor chop are synthesized.
 | Z · B | Binoculars · store |
 | Enter · T | Chat · team chat |
 | Tab · F | Scoreboard · fullscreen |
-| In a car or on a scooter: W · S · A · D · Space | Throttle · brake and reverse · steer · handbrake |
+| In a car or on a scooter: W · S · A · D · Space | Throttle · brake and reverse · steer · handbrake (drift through a turn) |
+| On a scooter: mouse · LMB · R · 1 · 2 · 3 | Aim (independent of the steering) · fire · reload · one-handed weapons only |
 | In the helicopter: W · S · A · D · Space · C or Ctrl · mouse | Forward · back · strafe · climb · descend · turn |
 | V | Vehicle camera: chase view or the driver's seat |
 | Esc · M | Release the mouse (pauses solo; click to resume) · back to the lobby |
@@ -237,10 +250,16 @@ the rotor chop are synthesized.
   rejected report is a correction and the client snaps to the server's pose. Getting in and out
   (reach, free seats, teammates only as passengers, a clear spot beside the vehicle), driverless
   vehicles, crashes, run-overs, body damage and wrecks are server-side. Shot claims on a vehicle use
-  target `-2 - index` and are checked against its hit box like soldier claims.
-  `bun scripts/vehiclecheck.ts ws://127.0.0.1:<port> <db>` (local only) drives a car and flies the
-  helicopter with two identities and expects zero corrections, the other client seeing both move,
-  and a rejected teleport.
+  target `-2 - index` and are checked against its hit box like soldier claims. A scooter rider's
+  report also carries its aim (`aim_yaw`, `aim_pitch`, appended to `vehicle_inbox` with defaults), and
+  its shots go through the normal `fire` validation: refused for car and helicopter drivers and for
+  two-handed weapons; the claimed origin must lie within 2.5 m (plus 0.1 s of the vehicle's speed)
+  of the rider's seated eye, or the server fires from that eye instead.
+  `bun scripts/vehiclecheck.ts ws://127.0.0.1:<port> <db>` (local only) drives a car (with a
+  handbrake drift round a corner, and a refused shot from the driver's seat), flies the helicopter,
+  then rides a scooter through drifts both ways while firing sideways, with two identities. It
+  expects zero corrections, every rider shot accepted from its claimed muzzle, the other client
+  seeing the vehicles move and the rider turned to its aim, and a rejected teleport.
 - Client-side: own movement is predicted with the shared controller; remote soldiers and grenades
   are interpolated ~100 ms behind from the frame; a rejected position snaps the client back; dropped
   (idle) clients rejoin automatically.

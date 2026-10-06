@@ -2,7 +2,7 @@ import { CollisionWorld } from '../../shared/collision';
 import { clamp, dirFromAngles, type Vec3 } from '../../shared/math';
 import { MOVE, createMoveState, eyeHeight, isSprinting, stepMovement, type MoveEvents, type MoveInput, type MoveState } from '../../shared/movement';
 import type { Soldier } from '../../shared/match/state';
-import { DEFAULT_WEAPONS, STAMINA, pelletCone, weaponStats, type Attachments, type Slot, type WeaponDef, type WeaponId } from '../../shared/weapons';
+import { DEFAULT_WEAPONS, RIDER_AIM, STAMINA, oneHanded, pelletCone, weaponStats, type Attachments, type Slot, type WeaponDef, type WeaponId } from '../../shared/weapons';
 import type { Input } from './input';
 import { BINOCULAR_ZOOM, adsFov, settings, isMagnified, opticFov } from './settings';
 
@@ -143,6 +143,23 @@ export class LocalPlayer {
 
   /** In a vehicle: the seat carries us (set each frame with `seat`); no walking. */
   riding = false;
+  /**
+   * Riding a scooter: one hand on the bars, so only one-handed weapons (pistols, SMGs), no aiming
+   * down sights, binoculars or grenades, and a wider, kickier hip fire.
+   */
+  rider = false;
+
+  /** Can this slot be fired right now (a rider holds only one-handed weapons)? */
+  usable(slot: Slot) { return !this.rider || oneHanded(this.statsOf(slot)); }
+
+  /** Mounting a scooter: bring up the one-handed secondary if the weapon in hand needs two. Returns the slot drawn. */
+  drawOneHanded(): Slot | undefined {
+    if (this.usable(this.slot)) return undefined;
+    const to: Slot = this.usable(1) ? 1 : 0;
+    this.selectSlot(to);
+    this.switchLeft = this.weapon.equipTime;
+    return to;
+  }
 
   /** Sit at a vehicle seat (feet position) with the vehicle's velocity. */
   seat(p: Vec3, crouch: number, v: { vx: number; vy: number; vz: number }) {
@@ -207,7 +224,7 @@ export class LocalPlayer {
       strafe: Number(input!.down('KeyD')) - Number(input!.down('KeyA')),
       yaw: this.yaw, jump: jumpKey, crouch: input!.down('KeyC') || input!.down('ControlLeft'),
       sprint: sprintKey && canSprint && this.sprintBlock <= 0,
-      ads: (input!.aim && w.class !== 'melee' && this.reloadLeft <= 0 && this.switchLeft < 0.1) || this.binoculars,
+      ads: (input!.aim && w.class !== 'melee' && this.reloadLeft <= 0 && this.switchLeft < 0.1 && !this.rider) || this.binoculars,
       speed: w.speed * (this.tired ? 0.8 : 1),
     } : { forward: 0, strafe: 0, yaw: this.yaw, jump: false, crouch: false, sprint: false, ads: false };
     // Round-start freeze (and holding E on the bomb): look and aim, but stay put.
@@ -237,7 +254,7 @@ export class LocalPlayer {
       // While scoped, the wheel steps a sniper scope's magnification instead of cycling weapons.
       const wheel = input!.consumeWheel();
       const scoped = this.ads > 0.6 && hasSecondZoom(this.weapon) && !this.binoculars;
-      if (input!.take('KeyZ')) { this.binoculars = !this.binoculars; this.zoomLevel = 0; result.zoomed = true; }
+      if (input!.take('KeyZ') && !this.rider) { this.binoculars = !this.binoculars; this.zoomLevel = 0; result.zoomed = true; }
       if (scoped && wheel !== 0) { this.zoomLevel = this.zoomLevel ? 0 : 1; result.zoomed = true; }
       else if (this.throwLeft <= 0) {
         let to: Slot | undefined;
@@ -245,14 +262,18 @@ export class LocalPlayer {
         if (input!.take('Digit2')) to = 1;
         if (input!.take('Digit3')) to = 0;
         if (input!.take('KeyQ')) to = this.lastSlot;
-        if (wheel !== 0) to = (((this.slot + (wheel > 0 ? 1 : 2)) % 3) as Slot);
-        if (to !== undefined && to !== this.slot) this.swap(to, result);
+        if (wheel !== 0) {
+          // Cycle to the next slot this hand can hold (a rider skips two-handed weapons and the knife).
+          to = this.slot;
+          for (let i = 0; i < 2; i++) { to = (((to + (wheel > 0 ? 1 : 2)) % 3) as Slot); if (this.usable(to)) break; }
+        }
+        if (to !== undefined && to !== this.slot && this.usable(to)) this.swap(to, result);
       }
       if (input!.take('KeyR')) this.startReload(result);
       // An empty magazine reloads by itself (when there are spare rounds).
       if (this.slot !== 2 && this.ammo[this.slot] <= 0 && this.switchLeft <= 0 && this.throwLeft <= 0) this.startReload(result);
       const throwKey = input!.take('Digit4') || input!.take('KeyG');
-      if (throwKey && this.grenades > 0 && this.throwLeft <= 0 && this.reloadLeft <= 0) {
+      if (throwKey && !this.rider && this.grenades > 0 && this.throwLeft <= 0 && this.reloadLeft <= 0) {
         this.throwLeft = 0.32; this.grenades--; this.sinceThrow = 0; this.binoculars = false;
       }
     }
@@ -261,7 +282,7 @@ export class LocalPlayer {
       if (this.throwLeft <= 0) result.grenade = { origin: this.eye(), dir: dirFromAngles(this.yaw, this.pitch + 0.06) };
     }
 
-    const trigger = wantsFire && !this.sprinting && this.sprintRecover <= 0 && this.throwLeft <= 0;
+    const trigger = wantsFire && !this.sprinting && this.sprintRecover <= 0 && this.throwLeft <= 0 && this.usable(this.slot);
     if (!trigger) { this.triggerHeld = false; this.shotsInBurst = 0; }
     if (trigger && this.switchLeft <= 0 && this.reloadLeft <= 0 && this.fireCooldown <= 0 && (w.auto || !this.triggerHeld)) {
       if (this.slot !== 2 && this.ammo[this.slot] <= 0) {
@@ -312,12 +333,13 @@ export class LocalPlayer {
     let s = w.spread.hip + (w.spread.ads - w.spread.hip) * this.ads;
     if (moving) s += w.spread.moving * (1 - this.ads * 0.65);
     if (!this.m.grounded) s += w.spread.air;
-    if (this.m.crouch > 0.5 && !moving) s *= 0.7;
+    if (this.m.crouch > 0.5 && !moving && !this.rider) s *= 0.7;
+    if (this.rider) s += RIDER_AIM.spread;
     return s + this.bloom * (1 - this.ads * 0.6);
   }
 
   private kick(w: WeaponDef) {
-    const ads = 1 - this.ads * 0.35;
+    const ads = (1 - this.ads * 0.35) * (this.rider ? RIDER_AIM.recoil : 1);
     const pitchKick = w.recoil.pitch * DEG * (0.85 + Math.random() * 0.3) * ads * (this.m.crouch > 0.5 ? 0.8 : 1);
     const pattern = w.recoil.pattern[this.shotsInBurst % w.recoil.pattern.length];
     const yawKick = (pattern + (Math.random() - 0.5) * 0.6) * w.recoil.yaw * DEG * ads;

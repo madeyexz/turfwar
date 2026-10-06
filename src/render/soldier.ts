@@ -3,7 +3,7 @@ import { RoundedBoxGeometry } from 'three/examples/jsm/geometries/RoundedBoxGeom
 import { mergeGeometries } from 'three/examples/jsm/utils/BufferGeometryUtils.js';
 import * as SkeletonUtils from 'three/examples/jsm/utils/SkeletonUtils.js';
 import type { Assets } from '../assets';
-import { dirFromAngles } from '../../shared/math';
+import { dirFromAngles, wrapAngle } from '../../shared/math';
 import { curlFingers, orientHand, restorePose, rotateWorld, snapshotPose, solveArm } from './rig';
 import { ATTACHMENT_SLOTS, WEAPONS, type Attachments, type WeaponId } from '../../shared/weapons';
 import { GUN_FIT, fitAttachments, vec, type Fitted } from './optics';
@@ -188,6 +188,8 @@ export interface SoldierPose {
   attachments?: Attachments;
   /** Holding E on a bomb site (arming/defusing): kneels with both hands on the device. */
   using?: boolean;
+  /** Riding a scooter: the hips and legs face the bike's heading (yaw) while the torso turns to the aim. */
+  hips?: number;
 }
 
 type ClipName = 'idle' | 'walk' | 'jog' | 'sprint' | 'crouchIdle' | 'crouchWalk' | 'air' | 'slide' | 'death';
@@ -358,7 +360,9 @@ export class SoldierView {
     let moveAngle = speed > 0.5 ? Math.atan2(strafe, forward) : 0;
     if (backwards) moveAngle = Math.atan2(-strafe, -forward);
     const clampAngle = Math.max(-1.1, Math.min(1.1, moveAngle));
-    this.legYaw += (clampAngle * (p.sprint ? 0.3 : 1) - this.legYaw) * Math.min(1, dt * 10);
+    // On a seat the legs stay on the bike: the twist is the aim's angle from the heading.
+    const legTarget = p.hips !== undefined ? Math.max(-1.3, Math.min(1.3, wrapAngle(p.yaw - p.hips))) : clampAngle * (p.sprint ? 0.3 : 1);
+    this.legYaw += (legTarget - this.legYaw) * Math.min(1, dt * 10);
     for (const [name, action] of this.actions) {
       const w = this.weights.get(name)! + ((target[name] ?? 0) - this.weights.get(name)!) * Math.min(1, dt * (p.alive ? 12 : 30));
       this.weights.set(name, w);

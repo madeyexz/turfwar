@@ -4,7 +4,7 @@ import { loadMap, loadNav } from '../maps/index';
 import type { MapDef } from '../maps/types';
 import { clamp, dist3, normalize3, segmentPointDistance, type Vec3 } from '../math';
 import { MOVE, createMoveState } from '../movement';
-import { FALL, STAMINA, type AttachmentId, type Slot, type WeaponId } from '../weapons';
+import { FALL, STAMINA, oneHanded, type AttachmentId, type Slot, type WeaponId } from '../weapons';
 import { PHYSICS_STEP, stepBodies, type Body } from '../world';
 import { botName, createBrain, updateBot } from './bots';
 import {
@@ -16,7 +16,7 @@ import {
 } from './combat';
 import { ATTACKERS, targetVehicle, type ClientReport, type MatchConfig, type MatchEvent, type MatchState, type RoundEnd, type ShotClaim, type Soldier, type Team } from './state';
 import { resetVehicles, updateVehicles } from './vehicles';
-import { speedOf, vehicleBoxDistance } from '../vehicles';
+import { VEHICLES, speedOf, vehicleBoxDistance } from '../vehicles';
 
 export { TICK_RATE } from './combat';
 export { enterVehicle, exitVehicle, reportVehicle, seatOf } from './vehicles';
@@ -170,13 +170,18 @@ export function reload(state: MatchState, id: number) {
 
 /** Seconds a client's fire clock may run ahead of the server's (network jitter allowance). */
 export const FIRE_JITTER = 0.25;
+/** Metres a claimed shot origin may sit from the shooter's eye (more aboard a moving vehicle). */
+export const SHOT_REACH = 2.5;
+const slotOf = (v: number): Slot => (v === 1 || v === 2 ? v : 0);
 
 /** Validate a client's hitscan shot (or knife swing) and its claimed hit. */
 export function fireShot(state: MatchState, ctx: SimContext, id: number, claim: ShotClaim) {
   const s = state.soldiers.find(x => x.id === id);
   if (!s || s.bot || !s.alive || state.phase !== 'live' || state.roundPhase === 'freeze') return false;
-  // Drivers keep both hands on the controls (passengers can shoot).
-  if (seatOf(state, id)?.seat === 0) return false;
+  // Car and helicopter drivers keep both hands on the controls (passengers can shoot); a scooter
+  // rider steers with one hand and fires one-handed weapons (pistols, SMGs) with the other.
+  const seat = seatOf(state, id);
+  if (seat?.seat === 0 && (!VEHICLES[seat.vehicle.kind].driverArms || !oneHanded(statsOf(s, slotOf(claim.weapon))))) return false;
   if (claim.weapon !== s.weapon) switchWeapon(state, id, claim.weapon);
   const w = weaponOf(s);
   const melee = s.weapon === 2;
@@ -189,8 +194,11 @@ export function fireShot(state: MatchState, ctx: SimContext, id: number, claim: 
   if (s.weapon !== 2) s.ammo[s.weapon]--;
   s.fireCooldown = Math.max(0, s.fireCooldown) + w.interval;
   s.sinceShot = 0;
+  // The muzzle is near the shooter's eye; aboard a moving vehicle the seat the server knows lags
+  // the client's by up to a report, so the allowance grows with the vehicle's speed.
   const eye = eyeOf(s);
-  const origin = dist3(claim.origin, eye) < 2.5 ? claim.origin : eye;
+  const reach = SHOT_REACH + (seat ? speedOf(seat.vehicle) * 0.1 : 0);
+  const origin = dist3(claim.origin, eye) < reach ? claim.origin : eye;
   const dir = normalize3(claim.dir);
   let result: TraceResult | undefined;
   let compensated: { target: Soldier; shift: Vec3 } | undefined;
