@@ -119,7 +119,16 @@ server and the other maps never carry them. Gameplay additions over the source: 
 floors (two 7-TWELVEs, a claw-machine shop, the 51嵐 tea shop and a figure shop by site A) with
 counters, shelves and machines as cover, a stair and a ladder up to two parapeted roofs
 (`taipei-interiors.ts`), and the Ximen station underpass under Zhongxiao W. Rd linking both sidewalks
-(`taipei-underpass.ts`); parked cars and taxis stand in the source's car bays. Approximations: medians
+(`taipei-underpass.ts`); parked cars and taxis stand in the source's car bays. The source's
+pedestrian streets ran straight and bare, so `taipei-cover.ts` adds street life placed for the fight:
+a covered night market (西門夜市) on Wuchang St between sites A and B with staggered stall aisles, a
+two-level scaffold with a covered walkway on Xining S. Rd (SWAT's middle exit), a two-storey container
+site office with a roof ladder on Hanzhong St, a temple stage (廟口戲台) on the Emei St crossing, a
+footbridge (天橋) over Zhongxiao W. Rd with a broken-down bus beside it (Militia's west exit), a
+billboard catwalk up a ladder on the claw-shop roof, and food carts, crates, delivery vans, a box
+truck, kiosks, bus shelters, jersey barriers, planters and roadwork elsewhere. Its pieces sit on the
+bots' 2.5 m navigation grid so bots walk the new aisles and climb the new stairs and ladders; no
+pedestrian street keeps an eye-level line longer than about 75 m (the source's ran up to 165 m). Approximations: medians
 follow the junction gaps by rule, the generic buildings' balconies, window cages and rooftops are
 drawn by our own rules after the source's, and traffic and pedestrians are not carried over.
 
