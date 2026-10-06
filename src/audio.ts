@@ -173,6 +173,9 @@ export class Audio {
   });
   /** The sound being built: its nodes leave the mix together when its last source ends (see src/voices.ts). */
   private voice?: Voice;
+  private comp?: DynamicsCompressorNode;
+  private limit?: DynamicsCompressorNode;
+  private tailVerb?: ConvolverNode;
   muted = false;
   volume = 0.8;
   musicVolume = 0.6;
@@ -181,9 +184,9 @@ export class Audio {
     if (this.ctx) { void (this.ctx as AudioContext).resume(); return; }
     const ctx = new AudioContext();
     this.build(ctx);
-    const comp = ctx.createDynamicsCompressor(); comp.threshold.value = -14; comp.ratio.value = 4;
+    const comp = this.comp = ctx.createDynamicsCompressor(); comp.threshold.value = -14; comp.ratio.value = 4;
     // A final safety limiter so stacked gunfire never clips the output.
-    const limit = ctx.createDynamicsCompressor();
+    const limit = this.limit = ctx.createDynamicsCompressor();
     limit.threshold.value = -1.5; limit.knee.value = 0; limit.ratio.value = 20; limit.attack.value = 0.001; limit.release.value = 0.08;
     this.master.connect(comp).connect(limit).connect(ctx.destination);
     this.reverb = ctx.createConvolver(); this.reverb.buffer = reverbImpulse(ctx, 1.6);
@@ -195,7 +198,7 @@ export class Audio {
     this.gunBus.connect(gunComp).connect(this.master);
     // Outdoor tail: slap off buildings and a rolling decay, kept out of the lows so bursts stay clear.
     this.tailBus = ctx.createGain();
-    const tail = ctx.createConvolver(); tail.buffer = outdoorImpulse(ctx);
+    const tail = this.tailVerb = ctx.createConvolver(); tail.buffer = outdoorImpulse(ctx);
     const hp = ctx.createBiquadFilter(); hp.type = 'highpass'; hp.frequency.value = 170;
     const lp = ctx.createBiquadFilter(); lp.type = 'lowpass'; lp.frequency.value = 6500;
     this.tailBus.connect(hp).connect(lp).connect(tail).connect(this.master);
@@ -204,6 +207,15 @@ export class Audio {
   }
 
   private get live() { return !!this.gunBus; }
+
+  /** Debug (?audiodebug): the mix's nodes and counters, for src/audio-probe.ts. */
+  debugTaps() {
+    if (!this.ctx || !this.comp || !this.limit) return undefined;
+    return {
+      ctx: this.ctx, master: this.master, world: this.world, gunBus: this.gunBus!, tail: this.tailVerb!, reverb: this.reverb,
+      comp: this.comp, limit: this.limit, voices: () => ({ remote: this.remote.size }),
+    };
+  }
 
   /** Fetch and decode the recordings; until each arrives its sound stays synthesized. */
   private async loadSamples(ctx: AudioContext) {

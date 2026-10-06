@@ -423,7 +423,8 @@ animation and shadows within 30 m, half-rate animation to 70 m, quarter rate bey
 beyond 110 m is not drawn and gunshot audio is limited to 85 m, six voices per frame and 14 ringing at
 once (a near shot takes the oldest's place). Every sound leaves the mix when its last source ends
 (`src/voices.ts`): Chrome otherwise keeps rendering finished voices until garbage collection, and a long
-firefight starved the audio thread into seconds-long dropouts. The largest
+firefight starved the audio thread into seconds-long dropouts. `?audiodebug` logs the mix's levels,
+compressor reduction and audio-clock rate (below 1 means the audio thread is falling behind). The largest
 room (24v24, 48 soldiers) is lighter than the 100-soldier matches this engine was
 measured with (Solo 50v50 on Meridian: 59.9 fps average on an M3 Pro, Chrome, medium).
 
