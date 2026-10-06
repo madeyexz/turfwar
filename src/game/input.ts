@@ -1,24 +1,36 @@
-/** Keyboard/mouse state with pointer lock. Game logic reads intents, not raw events. */
+import { binding, boundCodes, onBindings, type ActionId, type InputCode } from './keybinds';
+
+/**
+ * Keyboard/mouse state with pointer lock. Game logic reads actions (`down('jump')`, `take('reload')`)
+ * through the player's key bindings (`keybinds.ts`), never raw key codes. Mouse buttons are held
+ * codes like keys (`Mouse0`…`Mouse4`), wheel clicks are presses (`WheelUp` / `WheelDown`).
+ */
 export class Input {
-  readonly keys = new Set<string>();
-  fire = false;
-  aim = false;
-  /** Edge-triggered actions consumed once per frame. */
-  private pressed = new Set<string>();
+  /** Held codes (keys and mouse buttons). */
+  readonly keys = new Set<InputCode>();
+  /** Actions held by a script (the ?bench run), whatever they are bound to. */
+  readonly forced = new Set<ActionId>();
+  /** Edge-triggered codes consumed once per frame. */
+  private pressed = new Set<InputCode>();
   lookX = 0;
   lookY = 0;
-  wheel = 0;
   sensitivity = 1;
   enabled = true;
+  /** Codes the browser's own behaviour is kept off (scrolling on Space, focus on Tab, quick find…). */
+  private claimed = new Set<InputCode>();
 
   /** Removes every listener this instance registered (a new Input is created per match). */
   private readonly abort = new AbortController();
 
   constructor(private canvas: HTMLElement) {
     const signal = this.abort.signal;
+    const claim = () => { this.claimed = new Set([...boundCodes(), 'Space', 'Tab', 'Slash', 'Quote']); this.claimed.delete('Escape'); };
+    claim();
+    const stop = onBindings(claim);
+    signal.addEventListener('abort', stop);
     document.addEventListener('keydown', e => {
       if (!this.enabled || isTyping(e)) return;
-      if (['Space', 'Tab', 'ControlLeft', 'KeyC', 'Slash', 'Quote'].includes(e.code)) e.preventDefault();
+      if (this.claimed.has(e.code)) e.preventDefault();
       if (!e.repeat) this.pressed.add(e.code);
       this.keys.add(e.code);
     }, { signal });
@@ -28,17 +40,23 @@ export class Input {
       this.lookX += e.movementX; this.lookY += e.movementY;
     }, { signal });
     canvas.addEventListener('mousedown', e => {
-      if (!this.locked) return;
-      if (e.button === 0) { this.fire = true; this.pressed.add('Mouse0'); }
-      if (e.button === 2) { this.aim = true; this.pressed.add('Mouse2'); }
-      if (e.button === 1) this.pressed.add('Mouse1');
+      if (!this.locked || e.button > 4) return;
+      // Back / forward buttons would navigate the page.
+      if (e.button >= 3) e.preventDefault();
+      const code = `Mouse${e.button}`;
+      this.keys.add(code); this.pressed.add(code);
     }, { signal });
-    document.addEventListener('mouseup', e => { if (e.button === 0) this.fire = false; if (e.button === 2) this.aim = false; }, { signal });
+    document.addEventListener('mouseup', e => {
+      if (e.button >= 3 && this.locked) e.preventDefault();
+      this.keys.delete(`Mouse${e.button}`);
+    }, { signal });
     canvas.addEventListener('contextmenu', e => e.preventDefault(), { signal });
-    document.addEventListener('wheel', e => { if (this.locked) this.wheel += Math.sign(e.deltaY); }, { passive: true, signal });
+    document.addEventListener('wheel', e => {
+      if (this.locked && e.deltaY) this.pressed.add(e.deltaY > 0 ? 'WheelDown' : 'WheelUp');
+    }, { passive: true, signal });
     window.addEventListener('blur', () => this.clear(), { signal });
     document.addEventListener('visibilitychange', () => this.clear(), { signal });
-    document.addEventListener('pointerlockchange', () => { if (!this.locked) { this.fire = false; this.aim = false; } }, { signal });
+    document.addEventListener('pointerlockchange', () => { if (!this.locked) this.releaseMouse(); }, { signal });
     // Clicking the view (re)captures the mouse.
     canvas.addEventListener('click', () => { if (!this.locked && this.canRelock()) void this.lock(); }, { signal });
   }
@@ -51,16 +69,31 @@ export class Input {
   /** Set while a script (the ?bench run) drives the player, so input counts without pointer lock. */
   driven = false;
   get locked() { return Input.debug || this.driven || document.pointerLockElement === this.canvas; }
-  down(code: string) { return this.keys.has(code); }
-  /** True once per physical press. */
-  take(code: string) { const had = this.pressed.has(code); this.pressed.delete(code); return had; }
+
+  /** Whether `action` is held: any of its keys or mouse buttons. */
+  down(action: ActionId) {
+    if (this.forced.has(action)) return true;
+    for (const c of binding(action)) if (this.keys.has(c)) return true;
+    return false;
+  }
+  /** True once per physical press of any of `action`'s keys (or a wheel click). */
+  take(action: ActionId) {
+    let had = false;
+    for (const c of binding(action)) if (this.pressed.delete(c)) had = true;
+    return had;
+  }
+  /** A press of one fixed key (Esc, which is never rebound). */
+  takeCode(code: InputCode) { return this.pressed.delete(code); }
+  /** Held fire / aim (mouse buttons by default). */
+  get fire() { return this.down('fire'); }
+  get aim() { return this.down('aim'); }
   consumeLook() { const x = this.lookX, y = this.lookY; this.lookX = this.lookY = 0; return { x, y }; }
-  consumeWheel() { const w = this.wheel; this.wheel = 0; return w; }
   endFrame() { this.pressed.clear(); }
 
   /**
    * Dev/test autopilot: frame-based scripted input so automated runs are deterministic even
-   * when a software renderer draws only a few frames per second.
+   * when a software renderer draws only a few frames per second. `keys` / `press` are raw codes
+   * (read through the bindings like real keys); `fire` / `aim` hold those actions.
    */
   private script: { frames: number; keys?: string[]; press?: string[]; fire?: boolean; aim?: boolean; look?: [number, number] }[] = [];
   autopilot(steps: typeof this.script) { this.script.push(...steps); }
@@ -71,18 +104,21 @@ export class Input {
     const step = this.script[0];
     if (!step) {
       // Release scripted keys one frame after the script ends so its last step still applies.
-      if (this.wasScripted) { this.keys.clear(); this.fire = false; this.aim = false; this.wasScripted = false; }
+      if (this.wasScripted) { this.keys.clear(); this.forced.clear(); this.wasScripted = false; }
       return;
     }
     this.wasScripted = true;
-    this.keys.clear();
+    this.keys.clear(); this.forced.clear();
     for (const k of step.keys ?? []) this.keys.add(k);
     if (step.press) { for (const k of step.press) this.pressed.add(k); step.press = undefined; }
-    this.fire = !!step.fire; this.aim = !!step.aim;
+    if (step.fire) this.forced.add('fire');
+    if (step.aim) this.forced.add('aim');
     if (step.look) { this.lookX += step.look[0]; this.lookY += step.look[1]; }
     if (--step.frames <= 0) this.script.shift();
   }
-  clear() { this.keys.clear(); this.pressed.clear(); this.fire = false; this.aim = false; this.lookX = this.lookY = 0; }
+  /** The mouse was released: no button stays held. */
+  private releaseMouse() { for (const c of [...this.keys]) if (c.startsWith('Mouse')) this.keys.delete(c); }
+  clear() { this.keys.clear(); this.pressed.clear(); this.forced.clear(); this.lookX = this.lookY = 0; }
   lock() { return this.canvas.requestPointerLock?.(); }
 }
 

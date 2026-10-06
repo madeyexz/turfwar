@@ -6,6 +6,7 @@ import type { VehicleReport } from '../../shared/match/state';
 import type { Obstacle } from '../../shared/obstacles';
 import { VEHICLES, seatPosition, stepVehicle, type Vehicle, type VehicleEvents, type VehicleInput } from '../../shared/vehicles';
 import type { Input } from './input';
+import type { ActionId } from './keybinds';
 
 const STEP = 1 / 120;
 /** Chase camera per kind: height of the look-at point above the body and distance behind it. */
@@ -13,9 +14,9 @@ const CHASE = { car: { up: 1.7, back: 6.4 }, scooter: { up: 1.5, back: 4.2 }, he
 const hit = new THREE.Vector3();
 
 /**
- * The vehicle we drive: keyboard to controls (W/S throttle and brake, A/D steer, Space handbrake —
- * held through a turn at speed it drifts; the helicopter climbs on Space, descends on C or Ctrl and
- * turns to the mouse), client-side prediction with the shared physics at 120 Hz, reports for the
+ * The vehicle we drive: keys to controls through the bindings (by default W/S throttle and brake,
+ * A/D steer, Space handbrake — held through a turn at speed it drifts; the helicopter climbs on
+ * Space, descends on C or Ctrl and turns to the mouse), client-side prediction with the shared physics at 120 Hz, reports for the
  * host, and the chase camera (V switches to the driver's seat). On a scooter the mouse aims a
  * one-handed weapon independently of the steering: while you aim, the camera holds its direction
  * as the bike turns under it. The host validates every report like soldier movement.
@@ -78,18 +79,18 @@ export class Driving {
       this.camYaw -= look.x * sens;
       this.camPitch = clamp(this.camPitch - look.y * sens, heli ? -1.3 : -0.9, this.firstPerson ? 0.9 : this.armed ? 0.6 : 0.35);
       if (Math.abs(look.x) + Math.abs(look.y) > 0.5) this.lookIdle = 0;
-      if (input.take('KeyV')) this.firstPerson = !this.firstPerson;
+      if (input.take('vehicleView')) this.firstPerson = !this.firstPerson;
     }
     this.lookIdle += dt;
     const speed = Math.hypot(v.vx, v.vz);
     // Cars and scooters: the camera swings back behind the body once you stop looking around.
     if (!heli && this.lookIdle > 1.2 && speed > 2) this.camYaw = wrapAngle(this.camYaw) * Math.exp(-dt * 2.5);
-    const key = (code: string) => !!input?.down(code);
+    const key = (action: ActionId) => !!input?.down(action);
     const controls: VehicleInput = {
-      throttle: Number(key('KeyW')) - Number(key('KeyS')),
-      steer: Number(key('KeyD')) - Number(key('KeyA')),
-      brake: key('Space'),
-      lift: Number(key('Space')) - Number(key('KeyC') || key('ControlLeft')),
+      throttle: Number(key('throttle')) - Number(key('brake')),
+      steer: Number(key('steerRight')) - Number(key('steerLeft')),
+      brake: !heli && key('handbrake'),
+      lift: heli ? Number(key('climb')) - Number(key('descend')) : 0,
       yaw: heli ? this.camYaw : v.yaw,
       engine: true,
     };

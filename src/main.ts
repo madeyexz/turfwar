@@ -6,6 +6,7 @@ import { loadAssets, type Assets } from './assets';
 import { Audio } from './audio';
 import { Game } from './game/game';
 import { settings } from './game/settings';
+import { loadLayout, matches } from './game/keybinds';
 import type { GameLink } from './game/link';
 import { OfflineLink } from './game/offline';
 import { Bench, BENCH_SECONDS, benchReport, type BenchResult } from './game/bench';
@@ -561,6 +562,8 @@ $('#map-grid').addEventListener('keydown', e => {
 });
 
 // ---- Settings and controls: the gear (and ?) open the shared settings menu in its lobby mode. ----
+// Key labels follow the keyboard layout where the browser tells us (AZERTY shows A on KeyQ).
+void loadLayout();
 const clamp01 = (v: string) => Math.max(0, Math.min(1, Number(v) || 0));
 const options = new SettingsMenu(document.body, {
   sensitivity: () => undefined, // `settings` is already updated; the next match reads it.
@@ -746,17 +749,26 @@ function leftMatch(reason: Reason) {
 // Closing the tab mid-match: match_left goes out by beacon.
 addEventListener('pagehide', () => leftMatch('close'));
 
+/** Fullscreen on or off. Entering it can drop pointer lock, so recapture after. */
+function toggleFullscreen() {
+  if (document.fullscreenElement) { void document.exitFullscreen().catch(() => undefined); return; }
+  const relock = !!game?.input.locked;
+  void document.documentElement.requestFullscreen?.({ navigationUI: 'hide' }).then(() => {
+    if (relock && game && !game.input.locked) void game.input.lock()?.catch?.(() => undefined);
+  }, () => undefined);
+}
+// Fullscreen and leave bound to a mouse button (the left one never: it clicks the menu).
+document.addEventListener('mousedown', e => {
+  const code = `Mouse${e.button}`;
+  if (matches('fullscreen', code)) toggleFullscreen();
+  else if (matches('leave', code) && game && !game.input.locked) game.onExit?.();
+});
 const typing = (e: KeyboardEvent) => { const t = e.target as HTMLElement | null; return !!t && (t.tagName === 'INPUT' || t.tagName === 'TEXTAREA' || t.isContentEditable); };
 document.addEventListener('keydown', e => {
-  if (e.code === 'KeyM' && game && !game.input.locked && e.target === document.body) game.onExit?.();
-  // F: fullscreen (BeGone's default key). Entering it can drop pointer lock, so recapture after.
-  if (e.code === 'KeyF' && !e.repeat && !e.ctrlKey && !e.metaKey && !e.altKey && !typing(e)) {
-    if (document.fullscreenElement) { void document.exitFullscreen().catch(() => undefined); return; }
-    const relock = !!game?.input.locked;
-    void document.documentElement.requestFullscreen?.({ navigationUI: 'hide' }).then(() => {
-      if (relock && game && !game.input.locked) void game.input.lock()?.catch?.(() => undefined);
-    }, () => undefined);
-  }
+  // The leave key (M) from the in-game menu (the mouse is free): back to the lobby.
+  if (matches('leave', e.code) && game && !game.input.locked && e.target === document.body) game.onExit?.();
+  // Fullscreen (F, BeGone's default key).
+  if (matches('fullscreen', e.code) && !e.repeat && !e.ctrlKey && !e.metaKey && !e.altKey && !typing(e)) toggleFullscreen();
   // Esc in the lobby: close the settings dialog, else the open popover.
   if (e.key === 'Escape' && !game && !menu.hidden) {
     if (options.open) { e.preventDefault(); options.close(); return; }

@@ -81,7 +81,7 @@ export class Bench {
   drive(dt: number) {
     if (this.done) return; // the player has the controls back
     const g = this.game, p = g.player, input = g.input, st = g.link.state();
-    input.keys.clear(); input.fire = false; input.aim = false;
+    input.keys.clear(); input.forced.clear();
     if (!st) return;
     const me = st.soldiers.find(s => s.id === g.link.myId());
     if (!me) return;
@@ -110,11 +110,11 @@ export class Bench {
     if (target) {
       const dx = target.x - eye.x, dy = target.y - eye.y, dz = target.z - eye.z;
       const error = this.turn(Math.atan2(-dx, -dz), Math.atan2(dy, Math.hypot(dx, dz)), dt, 10);
-      input.aim = true;
-      input.fire = error < 0.08;
+      input.forced.add('aim');
+      if (error < 0.08) input.forced.add('fire');
       this.strafe -= dt;
       if (this.strafe < -1.4) this.strafe = 1.4;
-      input.keys.add(this.strafe > 0 ? 'KeyA' : 'KeyD');
+      input.forced.add(this.strafe > 0 ? 'left' : 'right');
       return;
     }
 
@@ -130,12 +130,12 @@ export class Bench {
     const dx = nav.x[node] - p.m.x, dz = nav.z[node] - p.m.z;
     if (Math.hypot(dx, dz) < 1.4) { this.pathIndex++; return; }
     this.turn(Math.atan2(-dx, -dz), 0, dt, 7);
-    input.keys.add('KeyW');
-    if (this.path.length - this.pathIndex > 3) input.keys.add('ShiftLeft');
+    input.forced.add('forward');
+    if (this.path.length - this.pathIndex > 3) input.forced.add('sprint');
     // Unstick: jump and re-plan if barely moving for a second.
     this.stuckTime = Math.hypot(p.m.x - this.lastX, p.m.z - this.lastZ) < 2 * dt ? this.stuckTime + dt : 0;
     this.lastX = p.m.x; this.lastZ = p.m.z;
-    if (this.stuckTime > 1) { input.keys.add('Space'); this.path = []; this.stuckTime = 0; }
+    if (this.stuckTime > 1) { input.forced.add('jump'); this.path = []; this.stuckTime = 0; }
   }
 
   private turn(yaw: number, pitch: number, dt: number, rate: number) {

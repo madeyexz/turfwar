@@ -6,6 +6,8 @@ import { statsOf } from '../../shared/match/economy';
 import { ATTACKERS, type MatchState, type Soldier, type Team } from '../../shared/match/state';
 import { ATTACHMENTS, ATTACHMENT_SLOTS, HEALTH, STAMINA, WEAPONS, type AttachmentCategory, type WeaponId } from '../../shared/weapons';
 import type { CareerStats } from '../game/link';
+import type { ActionId } from '../game/keybinds';
+import { kbd } from './keys';
 import type { LocalPlayer } from '../game/player';
 import { isMagnified, settings } from '../game/settings';
 import { RETICLE_CSS } from '../render/sights';
@@ -137,7 +139,7 @@ export class Hud {
       <div class="vehicle panel" data-k="vehicle" hidden><div class="vrow"><b data-k="vName"></b><span class="vread"><b data-k="vSpeed">0</b>${L('hud.kmh', 'small')}</span><span class="vread" data-k="vAltBox"><b data-k="vAlt">0</b>${L('hud.alt', 'small')}</span></div><div class="track"><i data-k="vHealth"></i></div><small class="vkeys" data-k="vKeys"></small></div>
       <div class="spectate" data-k="spectate" hidden></div>
       <div class="zoomtag" data-k="zoomtag" hidden></div>
-      <div class="released panel" data-k="released" hidden><b data-k="releasedTitle"></b><span>${L('hud.clickResume')} · <kbd>M</kbd> ${L('hud.leave')}</span></div>
+      <div class="released panel" data-k="released" hidden><b data-k="releasedTitle"></b><span>${L('hud.clickResume')} · <span data-k="leaveKey">${kbd('leave')}</span> ${L('hud.leave')}</span></div>
       <div class="scoreboard panel" data-k="board" hidden></div>
       <div class="end panel" data-k="end" hidden></div>
       <div class="fps" data-k="fps"></div>`;
@@ -376,17 +378,17 @@ export class Hud {
     this.set('atts', '', 'html');
     const ammo = p.ammo[p.slot as 0 | 1] ?? 0;
     // Without a counter the panel is a plain list of what you carry (key, weapon), the one in hand lit.
-    const carried = [[3, WEAPONS[p.weapons[0]].name, p.slot === 0], [2, WEAPONS[p.weapons[1]].name, p.slot === 1], [1, t('cause.knife'), p.slot === 2],
-      [4, `M67 ×${p.grenades}${me?.grenadeHE ? ' HE' : ''}`, false]] as [number, string, boolean][];
-    const list = `<ul class="carried">${carried.map(([k, name, on]) => `<li class="${on ? 'on' : ''}${k === 4 && !p.grenades ? ' none' : ''}"><kbd>${k}</kbd>${name}</li>`).join('')}</ul>`;
+    const carried = [['primary', WEAPONS[p.weapons[0]].name, p.slot === 0], ['secondary', WEAPONS[p.weapons[1]].name, p.slot === 1], ['knife', t('cause.knife'), p.slot === 2],
+      ['grenade', `M67 ×${p.grenades}${me?.grenadeHE ? ' HE' : ''}`, false]] as [ActionId, string, boolean][];
+    const list = `<ul class="carried">${carried.map(([k, name, on]) => `<li class="${on ? 'on' : ''}${k === 'grenade' && !p.grenades ? ' none' : ''}">${kbd(k)}${name}</li>`).join('')}</ul>`;
     this.set('ammo', counter && !melee ? `${ammo}<small>/ ${p.reserve[p.slot as 0 | 1]}</small>` : list, 'html');
     this.el.arms.classList.toggle('listed', !counter || melee);
     this.el.ammo.classList.toggle('low', counter && !melee && ammo > 0 && ammo <= Math.max(3, w.magazine * 0.25));
     this.el.ammo.classList.toggle('empty', counter && !melee && ammo === 0);
     this.set('reload', `${p.reloading ? (1 - p.reloadLeft / p.reloadTotal) * 100 : 0}%`, 'width');
-    const slot = (key: number, name: string, on: boolean, extra = '') => `<span class="${on ? 'on' : ''}"><kbd>${key}</kbd>${name}${extra}</span>`;
-    this.set('slots', slot(1, t('hud.knife'), p.slot === 2) + slot(2, WEAPONS[p.weapons[1]].name, p.slot === 1) + slot(3, WEAPONS[p.weapons[0]].name, p.slot === 0)
-      + `<span class="nade${p.grenades > 0 ? '' : ' none'}"><kbd>4</kbd>M67 ×${p.grenades}${me?.grenadeHE ? '<em>HE</em>' : ''}</span>`, 'html');
+    const slot = (key: ActionId, name: string, on: boolean, extra = '') => `<span class="${on ? 'on' : ''}">${kbd(key)}${name}${extra}</span>`;
+    this.set('slots', slot('knife', t('hud.knife'), p.slot === 2) + slot('secondary', WEAPONS[p.weapons[1]].name, p.slot === 1) + slot('primary', WEAPONS[p.weapons[0]].name, p.slot === 0)
+      + `<span class="nade${p.grenades > 0 ? '' : ' none'}">${kbd('grenade')}M67 ×${p.grenades}${me?.grenadeHE ? '<em>HE</em>' : ''}</span>`, 'html');
   }
 
   /** BeGone's score bar: one avatar per soldier, most kills nearest the clock. */
@@ -507,11 +509,11 @@ export class Hud {
     else this.rangeTimer = 0;
   }
 
-  /** "SPECTATING name · RMB next" while dead, or hidden. */
+  /** "SPECTATING name · RMB next" (the aim key cycles) while dead, or hidden. */
   spectate(name: string | undefined, team: number) {
     (this.last ??= {}).spectate = [name, team];
     this.el.spectate.hidden = name === undefined;
-    if (name !== undefined) this.set('spectate', `<small>${t('hud.spectating')}</small><b style="color:${TEAM_CSS[team] ?? 'var(--ink)'}">${escape(name)}</b><small><kbd>${t('key.rmb')}</kbd> ${t('hud.next')}</small>`, 'html');
+    if (name !== undefined) this.set('spectate', `<small>${t('hud.spectating')}</small><b style="color:${TEAM_CSS[team] ?? 'var(--ink)'}">${escape(name)}</b><small>${kbd('aim')} ${t('hud.next')}</small>`, 'html');
   }
 
   /** Context prompt under the crosshair (HTML allowed, e.g. "<kbd>E</kbd> ARM BOMB"), or hidden. */
@@ -546,10 +548,10 @@ export class Hud {
     this.set('vKeys', info.keys, 'html');
   }
 
-  /** Store reminder during buy time (e.g. "B STORE · 14s"), or hidden. */
-  buyHint(text: string | undefined) {
-    this.el.buyhint.hidden = !text;
-    if (text) this.set('buyhint', escape(text).replace(/^B /, '<kbd>B</kbd> '), 'html');
+  /** Store reminder during buy time (HTML, e.g. "<kbd>B</kbd> STORE · 14s"), or hidden. */
+  buyHint(html: string | undefined) {
+    this.el.buyhint.hidden = !html;
+    if (html) this.set('buyhint', html, 'html');
   }
 
   /** Tab: per team name, K, D, A, score, cash (own team only) and alive state; sorted like BeGone (kills, then fewest deaths). */
@@ -694,7 +696,7 @@ export class Hud {
   released(show: boolean, solo: boolean) {
     this.el.released.hidden = !show;
     if (show) (this.last ??= {}).released = solo;
-    if (show) this.set('releasedTitle', t(solo ? 'set.paused' : 'hud.released'));
+    if (show) { this.set('releasedTitle', t(solo ? 'set.paused' : 'hud.released')); this.set('leaveKey', kbd('leave'), 'html'); }
   }
   net(text: string) { this.set('net', text); }
   fps(text: string) { this.set('fps', text); }

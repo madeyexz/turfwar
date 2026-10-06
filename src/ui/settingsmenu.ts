@@ -1,7 +1,10 @@
 import { OPTIC_DETAILS, RETICLE_COLORS, RETICLE_STYLES, SCOPE_MODES, settings, type OpticDetail, type ReticleColor, type ReticleStyle, type ScopeMode } from '../game/settings';
 import { RETICLE_CSS } from '../render/sights';
 import type { CrosshairStyle } from './hud';
+import { matches, onBindings } from '../game/keybinds';
+import { ControlsPanel } from './controlspanel';
 import { LANGS, lang, onLang, setLang, t, type Key, type Lang } from './i18n';
+import { kbd, kbdCode } from './keys';
 import './settingsmenu.css';
 
 /** Saved like the lobby saves it (`lawbreaker.<key>`); storage may be disabled. */
@@ -22,7 +25,7 @@ export interface SettingsActions {
   volume(value: number): void;
 }
 
-/** Lobby mode: a "Settings" dialog with a Controls tab and the options only the lobby has. */
+/** Lobby mode: a "Settings" dialog with the options only the lobby has (both modes have the Controls tab). */
 export interface LobbySettings {
   /** Current values the lobby owns (it may hold a ?quality override that is not saved). */
   current(): { volume: number; music: number; quality: GraphicsQuality };
@@ -55,29 +58,6 @@ const RETICLES: Record<ReticleStyle, string> = {
   chevron: '<path d="M5 16.5l7-8 7 8" fill="none" stroke-linejoin="round"/>',
   cross: '<path d="M12 3v6M12 15v6M3 12h6M15 12h6"/><circle cx="12" cy="12" r="1.3"/>',
 };
-/** Keys shown on the Controls tab: [keys (a key name, or `key.*` to translate), what they do]. */
-const CONTROLS: [(string | Key)[], Key][] = [
-  [['W', 'A', 'S', 'D'], 'ctl.move'],
-  [['key.mouse'], 'ctl.look'],
-  [['key.lmb'], 'ctl.fire'],
-  [['key.rmb'], 'ctl.aim'],
-  [['Shift'], 'ctl.sprint'],
-  [['Space'], 'ctl.jump'],
-  [['C', 'Ctrl'], 'ctl.crouch'],
-  [['1', '2', '3'], 'ctl.slots'],
-  [['4', 'G'], 'ctl.grenade'],
-  [['Q', 'key.wheel'], 'ctl.last'],
-  [['R'], 'ctl.reload'],
-  [['E'], 'ctl.use'],
-  [['B'], 'ctl.store'],
-  [['Z'], 'ctl.binos'],
-  [['Enter', 'T'], 'ctl.chat'],
-  [['Tab'], 'ctl.board'],
-  [['Esc', 'P'], 'ctl.menu'],
-  [['F'], 'ctl.fullscreen'],
-  [['M'], 'ctl.lobby'],
-];
-
 const icon = (paths: string) => `<svg viewBox="0 0 24 24" aria-hidden="true">${paths}</svg>`;
 const choice = <T extends string>(id: string, values: readonly T[], label: (v: T) => string, title?: (v: T) => string) =>
   `<div class="seg" data-group="${id}">${values.map(v => `<button type="button" data-${id}="${v}"${title ? ` title="${title(v)}"` : ''}>${label(v)}</button>`).join('')}</div>`;
@@ -88,13 +68,14 @@ const horizontal = (v: number) => Math.round(2 * Math.atan(Math.tan(v * Math.PI 
 let uid = 0;
 
 /**
- * In-game menu (Esc or P): resume, the settings that matter mid-match (sensitivity, aim sensitivity,
- * field of view, volume, crosshair, scope view, reticle, graphics, language) and leave match. Solo
+ * In-game menu (Esc or the menu key, P): resume, an Options tab with the settings that matter
+ * mid-match (sensitivity, aim sensitivity, field of view, volume, crosshair, scope view, reticle,
+ * graphics, language), a Controls tab to rebind every key (`ControlsPanel`), and leave match. Solo
  * pauses while it is open; online the match keeps going.
  *
  * With `options.lobby` it is the lobby's Settings dialog instead: no Resume / Leave, a close button
- * (Esc and a click on the backdrop close it too), menu music, optic detail, the performance check,
- * credits, and a Controls tab with the key list.
+ * (Esc and a click on the backdrop close it too), menu music, optic detail, the performance check
+ * and credits; the lobby's ? button opens it on the Controls tab.
  *
  * Its markup is rebuilt when the language changes (listeners sit on the root, so they survive).
  */
@@ -107,6 +88,8 @@ export class SettingsMenu {
   private music = 0;
   private solo = false;
   private stopLang: () => void;
+  private stopKeys: () => void;
+  private readonly controls = new ControlsPanel();
 
   constructor(parent: HTMLElement, private actions: SettingsActions, options: SettingsOptions = {}) {
     const lobby = this.lobby = options.lobby;
@@ -151,16 +134,19 @@ export class SettingsMenu {
     // Keep keys typed into the menu from reaching the game (or the lobby's own shortcuts).
     this.root.addEventListener('keydown', e => {
       e.stopPropagation();
+      if ((e.key === 'ArrowLeft' || e.key === 'ArrowRight') && (e.target as HTMLElement).dataset.tab) {
+        e.preventDefault(); this.tab(this.current === 'options' ? 'controls' : 'options', true);
+        return;
+      }
       if (lobby) {
         if (e.key === 'Escape') { e.preventDefault(); this.close(); }
         else if (e.key === 'Tab') this.trapFocus(e);
-        else if ((e.key === 'ArrowLeft' || e.key === 'ArrowRight') && (e.target as HTMLElement).dataset.tab) {
-          e.preventDefault(); this.tab(this.current === 'options' ? 'controls' : 'options', true);
-        }
         return;
       }
-      if (e.code === 'Escape' || e.code === 'KeyP') { e.preventDefault(); this.actions.resume?.(); }
+      if (e.code === 'Escape' || matches('menu', e.code)) { e.preventDefault(); this.actions.resume?.(); }
     });
+    // New bindings: the header's key hint follows (the Controls tab redraws itself).
+    this.stopKeys = onBindings(() => { const hint = this.root.querySelector('[data-k="hint"]'); if (hint) hint.innerHTML = this.hint(); });
     // A new language: rebuild the text, keep the open tab and the focused control.
     this.stopLang = onLang(() => {
       const focused = document.activeElement instanceof HTMLElement && this.root.contains(document.activeElement)
@@ -195,15 +181,16 @@ export class SettingsMenu {
         ${lobby ? `<div class="row"><span>${t('set.optic')}</span>${choice('optic', OPTIC_DETAILS, v => t(`set.optic.${v}`), v => t(`set.optic.${v}Tip`))}</div>` : ''}
         <div class="row"><span>${t('set.quality')}</span>${choice('quality', ['low', 'medium', 'high'] as const, v => t(`set.q.${v}`), v => t(`set.q.${v}Tip`))}</div>
       </div>`;
-    const key = (k: string) => `<kbd>${k.startsWith('key.') ? t(k as Key) : k}</kbd>`;
-    this.root.innerHTML = lobby ? `
-      <div class="panel" role="dialog" aria-modal="true" aria-labelledby="${id}-title">
-        <header>
-          <h2 id="${id}-title" data-k="title">${t('set.title')}</h2>
+    const tabs = `
           <div class="tabs" role="tablist" aria-label="${t('set.sections')}">
             <button type="button" role="tab" id="${id}-tab-options" data-tab="options" aria-controls="${id}-options">${t('set.options')}</button>
             <button type="button" role="tab" id="${id}-tab-controls" data-tab="controls" aria-controls="${id}-controls">${t('set.controls')}</button>
-          </div>
+          </div>`;
+    const controls = `<div class="pane" role="tabpanel" id="${id}-controls" data-pane="controls" aria-labelledby="${id}-tab-controls" hidden></div>`;
+    this.root.innerHTML = lobby ? `
+      <div class="panel" role="dialog" aria-modal="true" aria-labelledby="${id}-title">
+        <header>
+          <h2 id="${id}-title" data-k="title">${t('set.title')}</h2>${tabs}
           <button type="button" class="close" data-act="close" aria-label="${t('set.close')}" title="${t('set.closeEsc')}">${icon('<path d="M6 6l12 12M18 6L6 18" fill="none"/>')}</button>
         </header>
         <div class="pane grid" role="tabpanel" id="${id}-options" data-pane="options" aria-labelledby="${id}-tab-options">
@@ -213,23 +200,30 @@ export class SettingsMenu {
             <p class="credits">${lobby.credits()}</p>
           </div>
         </div>
-        <div class="pane" role="tabpanel" id="${id}-controls" data-pane="controls" aria-labelledby="${id}-tab-controls" hidden>
-          <dl class="keys">${CONTROLS.map(([keys, what]) => `<div><dt>${keys.map(key).join('')}</dt><dd>${t(what)}</dd></div>`).join('')}</dl>
-        </div>
+        ${controls}
       </div>` : `
       <div class="panel">
-        <header><h2 data-k="title">${t(this.solo ? 'set.paused' : 'set.menuOnline')}</h2><span class="hint"><kbd>Esc</kbd> / <kbd>P</kbd> ${t('set.hintResume')} · <kbd>F</kbd> ${t('set.hintFullscreen')}</span></header>
+        <header><h2 data-k="title">${t(this.solo ? 'set.paused' : 'set.menuOnline')}</h2><span class="hint" data-k="hint">${this.hint()}</span></header>
         <button type="button" class="resume" data-act="resume">${t('set.resume')}</button>
-        <div class="grid">${options}</div>
+        ${tabs}
+        <div class="pane grid" role="tabpanel" id="${id}-options" data-pane="options" aria-labelledby="${id}-tab-options">${options}</div>
+        ${controls}
         <footer><button type="button" class="leave" data-act="leave">${t('set.leave')}</button></footer>
       </div>`;
+    this.root.querySelector('[data-pane="controls"]')!.appendChild(this.controls.el);
+    this.tab(this.current);
+  }
+
+  /** In-game header: how to resume and go fullscreen, with the current keys. */
+  private hint() {
+    return `${kbdCode('Escape')} / ${kbd('menu')} ${t('set.hintResume')} · ${kbd('fullscreen')} ${t('set.hintFullscreen')}`;
   }
 
   private current: SettingsTab = 'options';
   private quality: GraphicsQuality = load('quality', 'medium') as GraphicsQuality;
   get open() { return !this.root.hidden; }
 
-  /** In-game: `solo` picks the title. Lobby: `tab` picks the section to open on. */
+  /** In-game: `solo` picks the title (it opens on the tab last shown). Lobby: `tab` picks the section to open on. */
   show(solo = false, tab: SettingsTab = 'options') {
     if (this.lobby) {
       const now = this.lobby.current();
@@ -248,7 +242,7 @@ export class SettingsMenu {
     this.root.hidden = false;
     this.refresh();
   }
-  hide() { this.root.hidden = true; }
+  hide() { this.controls.cancel(); this.root.hidden = true; }
   /** Lobby: close and give focus back to whatever opened the dialog. */
   close() {
     if (!this.open) return;
@@ -258,9 +252,9 @@ export class SettingsMenu {
     this.lobby?.onClose?.();
   }
 
-  /** Lobby: show one section (Options or Controls). */
+  /** Show one section (Options or Controls). */
   tab(which: SettingsTab, focus = false) {
-    if (!this.lobby) return;
+    if (which !== this.current) this.controls.cancel();
     this.current = which;
     this.root.querySelectorAll<HTMLButtonElement>('[data-tab]').forEach(b => {
       const on = b.dataset.tab === which;
@@ -299,5 +293,5 @@ export class SettingsMenu {
     pick('quality', this.lobby ? this.quality : load('quality', 'medium'));
   }
 
-  dispose() { this.stopLang(); this.root.remove(); }
+  dispose() { this.stopLang(); this.stopKeys(); this.controls.dispose(); this.root.remove(); }
 }
