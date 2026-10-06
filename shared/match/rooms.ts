@@ -1,4 +1,4 @@
-import { MAP_IDS, loadMap } from '../maps/index';
+import { PLAYABLE_MAP_IDS, loadMap } from '../maps/index';
 import type { Mode } from './state';
 
 /**
@@ -15,9 +15,9 @@ export type RoomSize = (typeof ROOM_SIZES)[number]['perTeam'];
 export const isRoomSize = (n: number): n is RoomSize => ROOM_SIZES.some(s => s.perTeam === n);
 export const sizeLabel = (n: number) => ROOM_SIZES.find(s => s.perTeam === n)?.label ?? `${n}v${n}`;
 
-/** Maps a room of this size may play: 24v24 only on big maps, smaller rooms on the others. */
+/** Maps a room of this size may play (retired maps never): 24v24 only on big maps, smaller rooms on the others. */
 export function mapsFor(perTeam: number, mode?: Mode): string[] {
-  return MAP_IDS.filter(id => {
+  return PLAYABLE_MAP_IDS.filter(id => {
     const d = loadMap(id).def;
     if (perTeam > 12 ? !d.big : d.big) return false;
     return mode !== 'sabotage' || !!d.sabotage?.sites.length;

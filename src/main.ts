@@ -1,5 +1,5 @@
 import { inject } from '@vercel/analytics';
-import { loadMap, mapSummaries } from '../shared/maps/index';
+import { RETIRED_MAPS, loadMap, mapSummaries } from '../shared/maps/index';
 import { cleanCode, hasSites, mapsFor, newRoomRules, pickRoom, roomFull, roomMatches, ROOM_SIZES, sizeLabel, type RoomFilter } from '../shared/match/rooms';
 import { ELIMINATION, SABOTAGE, type Mode, type Team } from '../shared/match/state';
 import { loadAssets, type Assets } from './assets';
@@ -149,7 +149,8 @@ let size: SizeId = sizeOf(params.get('size') ?? store.get('size', 'squad')).id;
 let modeF = (params.get('game') ?? store.get('lobby.mode', '')) as Mode | '';
 if (modeF !== '' && modeF !== 'elimination' && modeF !== 'sabotage') modeF = '';
 let mapF = params.get('map') ?? store.get('lobby.map', '');
-if (mapF && !maps.some(m => m.id === mapF)) mapF = '';
+// A remembered map that has since been retired falls back to Any (a ?map= link still opens it).
+if (mapF && (!maps.some(m => m.id === mapF) || (RETIRED_MAPS.has(mapF) && !params.get('map')))) mapF = '';
 // A map from the URL picks the size that plays it (?map=meridian is a 24v24 map) and drops a mode it cannot host.
 if (params.get('map') && mapF) {
   if (!mapsFor(sizeOf(size).perTeam).includes(mapF) && !params.get('size')) size = SIZES.find(s => mapsFor(s.perTeam).includes(mapF))?.id ?? size;

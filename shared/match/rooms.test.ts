@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { MAP_IDS, loadMap } from '../maps/index';
+import { PLAYABLE_MAP_IDS, RETIRED_MAPS, loadMap } from '../maps/index';
 import { filterError, hasSites, mapsFor, newRoomRules, nextRoomRules, pickRoom, roomMatches, ROOM_SIZES, type RoomFilter, type RoomView } from './rooms';
 
 const room = (r: Partial<RoomView> & { room: number }): RoomView => ({ mapId: 'crane', mode: 'elimination', size: 6, humans: 1, phase: 'live', ...r });
@@ -8,11 +8,13 @@ const any = (size = 6): RoomFilter => ({ size, mode: '', map: '' });
 const seeded = (seed: number) => () => ((seed = (seed * 1103515245 + 12345) % 2 ** 31) / 2 ** 31);
 
 describe('maps per room size', () => {
-  it('24v24 plays only big maps; 1v1 and 6v6 every other map', () => {
-    const big = MAP_IDS.filter(id => loadMap(id).def.big);
+  it('24v24 plays only big maps; 1v1 and 6v6 every other map; retired maps nowhere', () => {
+    const big = PLAYABLE_MAP_IDS.filter(id => loadMap(id).def.big);
     expect(big.length).toBeGreaterThan(0);
     expect(mapsFor(24).sort()).toEqual([...big].sort());
-    for (const size of [1, 6]) expect(mapsFor(size).sort()).toEqual(MAP_IDS.filter(id => !loadMap(id).def.big).sort());
+    for (const size of [1, 6]) expect(mapsFor(size).sort()).toEqual(PLAYABLE_MAP_IDS.filter(id => !loadMap(id).def.big).sort());
+    for (const s of ROOM_SIZES) for (const id of RETIRED_MAPS) expect(mapsFor(s.perTeam)).not.toContain(id);
+    expect(filterError({ size: 6, mode: '', map: 'crane' })).toBeTruthy();
   });
 
   it('Sabotage lists only maps with bomb sites', () => {

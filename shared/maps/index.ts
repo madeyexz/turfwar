@@ -24,6 +24,13 @@ import type { MapDef } from './types';
 /** BeGone's six maps first (in their release order), then the original battlefields, then Taipei's Ximending and Xinyi (from 臺北狂飆), then the office floor high up Taipei 101, then Memorial Hall (中正紀念堂). */
 export const MAP_IDS = ['crane', 'tower', 'warehouse', 'pipeline', 'courtyard', 'timbertown', 'cinder', 'frostline', 'verdant', 'ochre', 'citadel', 'railyard', 'skyline', 'meridian', 'taipei', 'xinyi', 'taipei101', 'memorial'] as const;
 export type MapId = (typeof MAP_IDS)[number];
+/**
+ * Retired maps (soft delete): still defined and loadable (`?map=`, rooms already on them, tests),
+ * but offered nowhere: not in the lobby, Solo or Practice choices, Quick Play or new rooms.
+ */
+export const RETIRED_MAPS: ReadonlySet<string> = new Set<MapId>(['crane', 'tower', 'courtyard', 'cinder', 'frostline', 'verdant']);
+/** The maps players can choose and rooms rotate through. */
+export const PLAYABLE_MAP_IDS: readonly MapId[] = MAP_IDS.filter(id => !RETIRED_MAPS.has(id));
 const factories: Record<string, () => MapDef> = {
   cinder: cinderBasin, frostline: frostlineReach, verdant: verdantDivide, ochre: ochreQuarter, citadel: citadelKeep, railyard, skyline: skylineRooftops, meridian: meridianDistrict,
   crane, tower, warehouse, pipeline, courtyard, timbertown, taipei, xinyi, taipei101,
