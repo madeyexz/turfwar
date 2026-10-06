@@ -17,6 +17,8 @@ export interface BotBrain {
   /** Seconds before the bot picks a new goal. */
   goalLeft: number;
   goalX: number; goalZ: number;
+  /** Height of the goal's floor (absent: plan on the bot's own floor). */
+  goalY?: number;
   path: number[];
   pathIndex: number;
   repath: number;

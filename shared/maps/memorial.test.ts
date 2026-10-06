@@ -2,7 +2,10 @@ import { describe, expect, it } from 'vitest';
 import { loadMap, loadNav } from './index';
 import { findPath, nearestNode, type NavGraph } from '../match/nav';
 import { mapsFor } from '../match/rooms';
+import { rng } from '../math';
 import { MOVE } from '../movement';
+import { BOMB_REACH, TICK_RATE, addSoldier, createContext, createMatch, onSite, resetMatch, tickMatch } from '../match/sim';
+import { ATTACKERS, SABOTAGE, type MatchEvent } from '../match/state';
 import { longSightlines } from './sightlines';
 import { GRAND, LEVEL, MEMORIAL_NAME_ZH, SPAWNS } from './memorial';
 
@@ -107,6 +110,36 @@ describe('memorial: Memorial Hall (中正紀念堂)', () => {
       }
     }
   });
+
+  it('arms each site on its own floor: the chamber (B) is not armed from the Gallery Hall (A) under it, nor A from the chamber', () => {
+    const { def } = loadMap('memorial');
+    const [a, b] = def.sabotage!.sites.map(id => def.points.find(p => p.id === id)!);
+    // The sites stack (A under B) within arming reach across the floor; the floor tells them apart.
+    expect(Math.hypot(a.x - b.x, a.z - b.z)).toBeLessThan(BOMB_REACH * 2);
+    expect(onSite(a, a.x, a.y, a.z, BOMB_REACH)).toBe(true);
+    expect(onSite(a, a.x, b.y, a.z, BOMB_REACH)).toBe(false);
+    expect(onSite(b, b.x, a.y, b.z, BOMB_REACH)).toBe(false);
+    expect(onSite(b, b.x, LEVEL.M, b.z, BOMB_REACH)).toBe(false);
+  });
+
+  for (const [site, name] of [[0, 'the Gallery Hall (A)'], [1, 'the chamber upstairs (B)']] as const) {
+    it(`Sabotage: Militia bots find their way to ${name} and arm it`, () => {
+      const events: MatchEvent[] = [];
+      const ctx = createContext('memorial', rng(5), e => events.push(e));
+      const state = createMatch('memorial', { ...SABOTAGE, teamSize: 0, warmup: 0, botSkill: 0.2 });
+      for (let i = 0; i < 4; i++) addSoldier(state, ctx, { name: `M${i}`, team: ATTACKERS, bot: true });
+      // One SWAT player hiding under the map keeps the round going.
+      const swat = addSoldier(state, ctx, { name: 'S', team: (1 - ATTACKERS) as 0 | 1, bot: false });
+      resetMatch(state, ctx);
+      // Attackers take the round's site in turn (round % sites).
+      if (state.round % 2 !== site) state.round++;
+      for (let i = 0; i < 60 * TICK_RATE && !state.bomb.armed; i++) {
+        swat.m.x = 0; swat.m.y = -30; swat.m.z = 0;
+        tickMatch(state, ctx, 1 / TICK_RATE);
+      }
+      expect(events.find(e => e.type === 'bomb' && e.action === 'armed')).toMatchObject({ site });
+    }, 30_000);
+  }
 
   it('deploys twelve slots in each base, none inside a solid or on a stair, with an ammo crate close by', () => {
     const { def, world } = loadMap('memorial');
