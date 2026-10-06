@@ -2,10 +2,10 @@
  * Assembles the cuts in trailer/edit.ts into trailer/out/<cut>.mp4 (1920×1080, 30 fps, H.264 + AAC):
  * trims each captured clip, punches in on UI shots, flashes and dips on section changes, lays the
  * cards over the picture, mixes the score with the game's own sound (the score leads, the game sits
- * about 5 LU under it, silent over the title and end cards) and normalizes to -14 LUFS.
- *   bun trailer/scripts/build.ts [cut ids…]
+ * about 5 LU under it, ducked by it, silent over the cards) and masters to -14 LUFS, under -1 dBTP.
+ *   bun trailer/scripts/build.ts [cut ids…] [--sound-only]   (--sound-only re-masters the sound onto the finished picture)
  */
-import { existsSync, mkdirSync, rmSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdirSync, renameSync, rmSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { CARDS, CUTS, FPS, type Cut, type Segment } from '../edit';
 import { cardDir } from './cards';
@@ -88,25 +88,78 @@ async function build(cut: Cut) {
   });
 
   // ---- Sound ----
-  const music = join(BUILD, `${cut.id}.music.wav`), sfx = join(BUILD, `${cut.id}.sfx.wav`);
-  const [lm, ls] = [await loudness(music), await loudness(sfx)];
-  const sfxGain = Math.min(6, lm - 5 - ls);
-  const quiet = cut.segments.map((s, i) => s.clip.startsWith('card:') ? `between(t,${(starts[i] / FPS).toFixed(3)},${((starts[i] + s.frames) / FPS).toFixed(3)})` : '').filter(Boolean).join('+') || '0';
-  const mixed = join(BUILD, `${cut.id}.mix.wav`);
-  await run(FFMPEG, ['-v', 'error', '-y', '-i', music, '-i', sfx, '-filter_complex',
-    `[1:a]volume=${sfxGain.toFixed(2)}dB,volume=0:enable='${quiet}'[s];[0:a][s]amix=inputs=2:normalize=0:duration=first,atrim=0:${seconds.toFixed(3)},afade=t=out:st=${(seconds - 1.5).toFixed(3)}:d=1.5[a]`,
-    '-map', '[a]', '-ar', '48000', mixed]);
-  // Two-pass, linear loudness normalization to -14 LUFS with a -1 dBTP ceiling (keeps the dynamics).
-  const probe = await run(FFMPEG, ['-hide_banner', '-i', mixed, '-af', 'loudnorm=I=-14:TP=-1:LRA=14:print_format=json', '-f', 'null', '-'], { quiet: true, stderr: true });
-  const j = JSON.parse(probe.slice(probe.lastIndexOf('{'), probe.lastIndexOf('}') + 1));
-  const norm = `loudnorm=I=-14:TP=-1:LRA=14:measured_I=${j.input_i}:measured_TP=${j.input_tp}:measured_LRA=${j.input_lra}:measured_thresh=${j.input_thresh}:offset=${j.target_offset}:linear=true`;
-
+  const mixed = await mix(cut, seconds);
   const outFile = join(OUT, `${cut.id}.mp4`);
-  const filter = [...chain, `[${last}]format=yuv420p[vout]`, `[${cut.overlays.length + 1}:a]${norm},aresample=48000[aout]`].join(';');
+  const filter = [...chain, `[${last}]format=yuv420p[vout]`, `[${cut.overlays.length + 1}:a]anull[aout]`].join(';');
   await run(FFMPEG, ['-v', 'error', '-y', ...inputs, '-i', mixed, '-filter_complex', filter, '-map', '[vout]', '-map', '[aout]',
     '-c:v', 'libx264', '-preset', 'slow', '-crf', '17', '-profile:v', 'high', '-pix_fmt', 'yuv420p', '-r', String(FPS), '-g', String(FPS * 2),
     '-c:a', 'aac', '-b:a', '256k', '-ac', '2', '-movflags', '+faststart', '-t', seconds.toFixed(3), outFile]);
-  console.log(`  ${cut.id}: ${seconds.toFixed(1)} s → ${outFile} (music ${lm} LUFS, game ${ls} LUFS → ${sfxGain.toFixed(1)} dB) in ${((Date.now() - t0) / 1000).toFixed(0)} s`);
+  console.log(`  ${cut.id}: ${seconds.toFixed(1)} s → ${outFile} in ${((Date.now() - t0) / 1000).toFixed(0)} s`);
+  await report(outFile);
 }
 
-for (const cut of CUTS.filter(c => !wanted.length || wanted.includes(c.id))) await build(cut);
+/** Integrated loudness and true peak of a file's audio (ffmpeg ebur128). */
+async function measure(file: string) {
+  const out = await run(FFMPEG, ['-hide_banner', '-nostats', '-i', file, '-map', '0:a', '-af', 'ebur128=peak=true', '-f', 'null', '-'], { quiet: true, stderr: true });
+  const sum = out.split('Summary:').pop() ?? '';
+  const num = (re: RegExp) => Number(re.exec(sum)?.[1] ?? NaN);
+  return { I: num(/I:\s+(-?[\d.]+) LUFS/), LRA: num(/LRA:\s+(-?[\d.]+) LU/), TP: num(/Peak:\s+(-?[\d.]+) dBFS/) };
+}
+async function report(file: string) {
+  const m = await measure(file);
+  console.log(`    loudness ${m.I} LUFS integrated, LRA ${m.LRA} LU, true peak ${m.TP} dBTP`);
+  return m;
+}
+
+/**
+ * Score plus game sound, mastered: the game's own sound sits about 5 LU under the score, is ducked by
+ * the score where they collide (sidechain), drops out under the cards and dips in the score's silent
+ * beats; the sum is brought to -14 LUFS and held under -1 dBTP by a limiter.
+ */
+async function mix(cut: Cut, seconds: number) {
+  const music = join(BUILD, `${cut.id}.music.wav`), sfx = join(BUILD, `${cut.id}.sfx.wav`);
+  const [lm, ls] = [await loudness(music), await loudness(sfx)];
+  const sfxGain = Math.min(6, lm - 5 - ls);
+  let at = 0;
+  const cards: string[] = [];
+  for (const s of cut.segments) { if (s.clip.startsWith('card:')) cards.push(`between(t,${(at / FPS).toFixed(3)},${((at + s.frames) / FPS).toFixed(3)})`); at += s.frames; }
+  const stops: string[] = [];
+  let beat = 0;
+  for (const [kind, beats] of cut.score) {
+    const t0 = beat * 0.5, t1 = (beat + beats) * 0.5;
+    if (kind === 'silence') stops.push(`between(t,${t0},${t1})`);
+    if (kind === 'rise') stops.push(`between(t,${t1 - 0.5},${t1})`);
+    beat += beats;
+  }
+  const sum = join(BUILD, `${cut.id}.sum.wav`);
+  await run(FFMPEG, ['-v', 'error', '-y', '-i', music, '-i', sfx, '-filter_complex',
+    `[0:a]asplit[m][key];[1:a]volume=${sfxGain.toFixed(2)}dB,volume=0:enable='${cards.join('+') || '0'}',volume=0.25:enable='${stops.join('+') || '0'}'[s0];` +
+    `[s0][key]sidechaincompress=threshold=0.1:ratio=4:attack=8:release=350:knee=4[s];` +
+    `[m][s]amix=inputs=2:normalize=0:duration=first,atrim=0:${seconds.toFixed(3)},afade=t=out:st=${(seconds - 1.5).toFixed(3)}:d=1.5[a]`,
+    '-map', '[a]', '-ar', '48000', '-c:a', 'pcm_f32le', sum]);
+  // Gain to the target, then a limiter at -2.4 dBFS (headroom for the AAC encode under -1 dBTP); a second pass corrects what the limiter took.
+  const master = join(BUILD, `${cut.id}.mix.wav`);
+  let gain = -14 - (await measure(sum)).I;
+  for (let pass = 0; pass < 3; pass++) {
+    await run(FFMPEG, ['-v', 'error', '-y', '-i', sum, '-af', `volume=${gain.toFixed(2)}dB,alimiter=limit=0.76:attack=1:release=80:level=disabled,aresample=48000`, '-c:a', 'pcm_s24le', master]);
+    const m = await measure(master);
+    if (Math.abs(m.I + 14) < 0.2) break;
+    gain += -14 - m.I;
+  }
+  console.log(`    music ${lm} LUFS, game ${ls} LUFS → game ${sfxGain.toFixed(1)} dB; master gain ${gain.toFixed(1)} dB`);
+  return master;
+}
+
+/** Re-master a cut's sound onto its finished picture (no re-encode of the video). */
+async function remux(cut: Cut) {
+  const file = join(OUT, `${cut.id}.mp4`);
+  const seconds = cut.segments.reduce((n, s) => n + s.frames, 0) / FPS;
+  const mixed = await mix(cut, seconds);
+  const tmp = join(BUILD, `${cut.id}.remux.mp4`);
+  await run(FFMPEG, ['-v', 'error', '-y', '-i', file, '-i', mixed, '-map', '0:v', '-map', '1:a', '-c:v', 'copy', '-c:a', 'aac', '-b:a', '256k', '-ac', '2', '-movflags', '+faststart', '-t', seconds.toFixed(3), tmp]);
+  renameSync(tmp, file);
+  console.log(`  ${cut.id}: new sound on ${file}`);
+  await report(file);
+}
+
+for (const cut of CUTS.filter(c => !wanted.length || wanted.includes(c.id))) await (process.argv.includes('--sound-only') ? remux(cut) : build(cut));

@@ -1,7 +1,7 @@
 /**
  * The cuts: which captured clip plays when, the cards over them, and the score's sections.
  * Everything is in frames at 30 fps; the music runs at 120 BPM, so a beat is 15 frames and a bar
- * (the score's unit) is 60 frames — every cut below lands on a beat.
+ * is 60 frames — every cut below lands on a beat, and every score section starts on a cut.
  */
 export const FPS = 30;
 export const BPM = 120;
@@ -30,8 +30,9 @@ export interface Overlay {
   /** Length when it differs from the card's own. */
   frames?: number;
 }
-/** Score sections (music/score.ts) in bars. */
-export type Section = 'intro' | 'title' | 'build' | 'drop' | 'breakdown' | 'tension' | 'rise' | 'drop2' | 'theme' | 'online' | 'outro';
+/** Score sections (music/score.ts), each [kind, beats]; a beat is 15 frames. */
+import type { Section } from './music/score';
+export type { Section };
 export interface Cut { id: string; segments: Segment[]; overlays: Overlay[]; score: [Section, number][] }
 
 /** Cards: [id, kind, lines, frames]. Lower thirds (`caption`), corner tags (`tag`), the title and the end card. */
@@ -127,7 +128,11 @@ export const FULL: Cut = {
     { card: 'tag_crane', at: 82 * 30 + 3 }, { card: 'tag_tower', at: 84 * 30 + 3 }, { card: 'tag_warehouse', at: 86 * 30 + 3 }, { card: 'tag_meridian', at: 88 * 30 + 3 },
     { card: 'cap_online', at: 90 * 30 + 8, frames: 96 },
   ],
-  score: [['intro', 4], ['title', 2], ['build', 4], ['drop', 8], ['breakdown', 4], ['tension', 3], ['rise', 4], ['drop2', 8], ['theme', 8], ['online', 3], ['outro', 5]],
+  // Act 1: ominous open, the title hit, the build through the store and the guns. Act 2: Sabotage and
+  // Elimination under Shepard tension, the mechanics fill (heli swell, M249 burst), the drop on the
+  // vehicles. A silent beat, then Act 3: the climax over the maps, the rise through the lobby, a
+  // dry-fire click in the last silent beat, and the end card's braam.
+  score: [['open', 16], ['title', 8], ['store', 16], ['guns', 32], ['tension', 28], ['fill', 16], ['drop', 30], ['silence', 2], ['climax', 32], ['rise', 12], ['end', 20]],
 };
 
 export const SHORT: Cut = {
@@ -152,7 +157,12 @@ export const SHORT: Cut = {
     { card: 'tag_scooter', at: 10 * 30 + 3, frames: 54 }, { card: 'tag_drift', at: 12 * 30 + 3, frames: 54 }, { card: 'tag_heli', at: 14 * 30 + 3, frames: 54 },
     { card: 'tag_101', at: 16 * 30 + 3, frames: 54 }, { card: 'tag_market', at: 18 * 30 + 3, frames: 54 },
   ],
-  score: [['intro', 1], ['title', 1], ['drop', 4], ['drop2', 4], ['breakdown', 2], ['outro', 3]],
+  // Condensed: cold open, title hit, the guns build (M249 fill), the drop on the vehicles, the climax
+  // on the maps, the rise with its dry-fire stop, the end braam.
+  score: [['open', 4], ['title', 4], ['guns', 12], ['drop', 12], ['climax', 12], ['rise', 4], ['end', 12]],
 };
 
 export const CUTS = [FULL, SHORT];
+
+/** Seconds at which each segment of a cut starts (its picture cuts). */
+export const cutTimes = (cut: Cut) => { let at = 0; return cut.segments.map(s => { const t = at / FPS; at += s.frames; return t; }); };

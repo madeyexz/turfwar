@@ -8,7 +8,7 @@
  */
 import { Audio, type EngineVoice } from '../../src/audio';
 import { renderScore, RATE } from '../music/score';
-import type { Section } from '../edit';
+import type { Section } from '../music/score';
 
 interface SoundEvent { t: number; f: string; a: unknown[]; v?: number }
 
@@ -59,7 +59,7 @@ async function renderSfx(plan: { seconds: number; events: SoundEvent[] }) {
 
 Object.assign(window, {
   __trailerAudio: {
-    renderScore: async (sections: [Section, number][]) => wav(await renderScore(sections)),
+    renderScore: async (sections: [Section, number][], cuts: number[]) => wav(await renderScore(sections, cuts)),
     renderSfx,
   },
 });

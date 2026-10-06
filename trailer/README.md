@@ -30,7 +30,8 @@ The steps can also run alone (with the dev server up on 5201):
 | `scripts/capture.ts [--only a,b] [--preview] [--force]` | Films the shots in `shots.ts` into `captures/<shot>.mp4` and the sounds the game played into `captures/<shot>.sounds.json`. `--preview` writes a contact sheet per shot to `captures/preview/` instead (seconds per shot). |
 | `scripts/cards.ts` | Renders the title, captions, tags and end card (`web/card.ts`) into PNG frames with alpha. |
 | `scripts/audio.ts` | Renders the score for each cut (`music/score.ts`, kept as `music/<cut>.flac`) and the game's sound for each cut, replayed from the capture logs. |
-| `scripts/build.ts` | Cuts `edit.ts` into `out/`. |
+| `scripts/build.ts [--sound-only]` | Cuts `edit.ts` into `out/` (`--sound-only` re-masters the sound onto the finished picture). |
+| `scripts/analyze.ts` | Loudness curves, impacts vs cuts, spectrograms and waveforms. |
 | `scripts/probe.ts`, `scout.ts`, `sheet.ts` | Scouting stills, camera tests and contact sheets of any clip. |
 
 ## How the capture works
@@ -56,17 +57,44 @@ The steps can also run alone (with the dev server up on 5201):
 
 ## Music
 
-`music/score.ts` composes an original score by rule and renders it offline in the browser, in the
-same way as the menu theme (`src/theme.ts`): D minor, 120 BPM (a beat is exactly 15 frames, so the cuts
-land on beats), i–VI–III–VII (Dm–B♭–F–C). Sections follow the edit: a dark intro under the cold
-open, a braam-and-boom hit on the title, a build under the store, a full drop for the gunplay, a
-breakdown where the bomb's beep speeds up for Sabotage, half-time for Elimination, a snare-roll rise
-through the mechanics, a bigger second drop for the vehicles, the main theme over the maps, a
-filtered pass under the lobby and an outro on the end card. Voices are synthesized (kick, snare,
-hats, toms, sub drops, risers, swells, pads, bass, arp, lead, braam) and layered with the game's CC0
-recordings (M4A1 and M9A1 shots on the backbeat, M1014 and M110 on the big hits, mag and bolt foley in
-the turnarounds). `music/lawbreaker-trailer.flac` and `music/lawbreaker-trailer-30s.flac` are the
-rendered scores.
+`music/score.ts` composes an original cinematic score by rule and renders it offline in the browser
+(no sampled music): D minor at 120 BPM, so a beat is exactly 15 frames and every section starts on a
+cut. `edit.ts` gives each cut its sections in beats and the score reads the cut times from the edit,
+so another cut with the same timing (the planned zh-TW version) reuses it as is.
+
+The orchestra is synthesized: spiccato string ostinatos and legato strings (detuned saw ensembles),
+low brass stabs and horn lines, a formant choir, taiko and orchestral drums, sub booms, braams,
+reverse-cymbal swells, risers and Shepard tones, through two convolution halls (3.4 s and a 5.5 s
+impact tail) with wide stereo. The beds duck under every impact (sidechain) and the master gate cuts
+everything, tails included, for the silent beats.
+
+The game's own sounds are part of the score: charging handles, bolts, racks and slides
+(`public/assets/sfx/foley-*`) hit on the picture's cuts; shell casings play the hi-hats and fills; big
+M110 and M1014 shots with long tails sit on the impacts and M4A1 shots on the backbeat; an M249 burst
+is the drum fill into the drop; a dry-fire click is alone in the last silent beat; and from
+`src/audio.ts`, the helicopter's rotor spins up as the swell into the vehicles, the bomb's beep is the
+Sabotage pulse and the M67's blast is the final sub-drop.
+
+| Full cut | Section | Score |
+| --- | --- | --- |
+| 0–8 s | open | Ominous: low string drone, distant taiko, a reverse cymbal into the title |
+| 8–12 s | title | Impact: braam, boom, sub, M110 shot with a long tail, taiko ensemble |
+| 12–20 s | store | The build starts: eighth-note strings (Dm–B♭–Gm–A), taiko on 1 and 3, shell ticks |
+| 20–36 s | guns | Sixteenth-note ostinato, taiko groove, brass stabs (Dm–B♭–F–C), gun handling on every cut |
+| 36–50 s | tension | Sabotage and Elimination: half time, the bomb's beep quickening, a Shepard tone climbing |
+| 50–58 s | fill | Mechanics: rising Shepard and snare roll, the rotor swell, the M249 burst into the drop |
+| 58–73 s | drop | Full power on the vehicles: braam, brass stabs, driving strings, backbeat gunshots, choir |
+| 73–74 s | silence | Everything stops; a casing falls |
+| 74–90 s | climax | The heroic theme in brass and strings over the maps (B♭–C–Dm–F–Gm–B♭–C–D), choir |
+| 90–96 s | rise | Lobby: risers, Shepard and snare roll; the last beat silent but for a dry-fire click |
+| 96–106 s | end | Final braam, grenade sub-drop, a held D minor chord with choir, long tail |
+
+The 30-second cut has its own condensed arrangement: open, title hit at 2 s, the guns build (M249
+fill), the drop at 10 s, the climax at 16 s, the rise with its dry-fire stop, the end braam at 24 s.
+The final mix (`scripts/build.ts`) puts the in-shot game sound about 5 LU under the score, ducks it
+under the score's peaks, drops it under the cards and in the silent beats, and masters to −14 LUFS
+under −1 dBTP. `scripts/analyze.ts` prints the loudness curve and the impacts against the cuts and
+draws spectrograms (`build/analysis/`). `scripts/audio.ts` also writes each rendered score to `music/<cut>.flac` (regenerated, not committed).
 
 ## Shots (`shots.ts`) and the cut (`edit.ts`)
 

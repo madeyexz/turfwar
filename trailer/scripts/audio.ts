@@ -6,7 +6,7 @@
  */
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
-import { CUTS, FPS, type Cut } from '../edit';
+import { CUTS, FPS, cutTimes, type Cut } from '../edit';
 import { Browser, type Page } from './cdp';
 import { FFMPEG, ROOT, run } from './util';
 
@@ -73,7 +73,7 @@ if (import.meta.main) {
     for (const cut of CUTS.filter(c => !wanted.length || wanted.includes(c.id))) {
       if (!args.includes('--sfx-only')) {
         const t = Date.now();
-        const music = await fetchBase64(page, `__trailerAudio.renderScore(${JSON.stringify(cut.score)})`);
+        const music = await fetchBase64(page, `__trailerAudio.renderScore(${JSON.stringify(cut.score)}, ${JSON.stringify(cutTimes(cut))})`);
         writeFileSync(join(BUILD, `${cut.id}.music.wav`), music);
         await run(FFMPEG, ['-v', 'error', '-y', '-i', join(BUILD, `${cut.id}.music.wav`), '-compression_level', '8', join(ROOT, 'music', `${cut.id}.flac`)]);
         console.log(`  ${cut.id}: music ${(music.length / 1e6).toFixed(1)} MB in ${((Date.now() - t) / 1000).toFixed(0)} s`);
