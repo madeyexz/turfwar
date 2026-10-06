@@ -1,4 +1,4 @@
-# Lawbreaker // Frontline
+# 角頭械鬥 · Turf War: Taipei
 
 Browser-first round-based team FPS modelled on BeGone (nplay): Elimination and Sabotage,
 cash and a store, attachments, 1v1 / 6v6 / 24v24 rooms. Read `README.md`
