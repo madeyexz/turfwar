@@ -123,7 +123,7 @@ export class Hud {
       <div class="progress" data-k="progress" hidden><span data-k="progressText"></span><div class="track"><i data-k="progressBar"></i></div></div>
       <div class="toast" data-k="toast"></div>
       <div class="announce" data-k="announce"><b></b><small></small></div>
-      <div class="chat" data-k="chat"><div class="lines" data-k="chatLines"></div><label class="chat-input" data-k="chatBox" hidden><span data-k="chatLabel">${t('hud.chatAll')}</span><input maxlength="75" autocomplete="off" spellcheck="false"></label></div>
+      <div class="chat" data-k="chat"><div class="lines" data-k="chatLines"></div><label class="chat-input" data-k="chatBox" hidden><span data-k="chatLabel">${t('hud.chatAll')}</span><input maxlength="75" autocomplete="off" spellcheck="false" enterkeyhint="send"></label></div>
       <div class="vitals" data-k="vitals">
         <div class="meter health" data-k="healthMeter">${L('hud.hp')}<div class="track"><i data-k="healthBar"></i></div><b data-k="health">100</b></div>
         <div class="meter stamina" data-k="staminaMeter">${L('hud.sta')}<div class="track"><i data-k="staminaBar"></i><u></u></div><b data-k="stamina">100</b></div>
@@ -154,7 +154,8 @@ export class Hud {
     this.input = this.root.querySelector('.chat-input input')!;
     this.input.addEventListener('keydown', e => {
       e.stopPropagation();
-      if (e.code === 'Enter' || e.code === 'NumpadEnter') {
+      // On-screen keyboards may report Enter without a key code.
+      if (e.code === 'Enter' || e.code === 'NumpadEnter' || (e.key === 'Enter' && !e.isComposing)) {
         e.preventDefault();
         const text = this.input.value.trim(), send = this.chatSend;
         this.closeChat();
@@ -583,8 +584,11 @@ export class Hud {
     setTimeout(() => line.classList.add('old'), 12000);
   }
 
-  /** Opens the chat input (Enter: all, T: team); `send` gets the trimmed text. */
-  openChat(team: boolean, send: (text: string) => void) {
+  /**
+   * Opens the chat input (Enter: all, T: team); `send` gets the trimmed text. `focusNow`: a tap on a
+   * touch screen opened it, and iOS shows the keyboard only for a focus inside that tap.
+   */
+  openChat(team: boolean, send: (text: string) => void, focusNow = false) {
     this.chatSend = send;
     this.chatOpen = true;
     (this.last ??= {}).chatTeam = team;
@@ -594,7 +598,8 @@ export class Hud {
     this.el.chat.classList.add('open');
     this.input.value = '';
     // Focus after the opening key's own events, so its character doesn't land in the box.
-    setTimeout(() => { if (this.chatOpen) this.input.focus(); });
+    if (focusNow) this.input.focus();
+    else setTimeout(() => { if (this.chatOpen) this.input.focus(); });
   }
 
   private closeChat() {

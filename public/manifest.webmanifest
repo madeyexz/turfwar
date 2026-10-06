@@ -1,0 +1,21 @@
+{
+  "id": "/",
+  "name": "角頭械鬥 · Turf War: Taipei",
+  "short_name": "Turf War",
+  "description": "Round-based SWAT vs Militia shooter in the streets of Taipei: Elimination and Sabotage, cash, guns and attachments, solo with bots or online.",
+  "lang": "en",
+  "start_url": "/",
+  "scope": "/",
+  "display": "fullscreen",
+  "display_override": ["fullscreen", "standalone"],
+  "orientation": "landscape",
+  "background_color": "#05090c",
+  "theme_color": "#05090c",
+  "categories": ["games"],
+  "icons": [
+    { "src": "/icons/icon-192.png", "sizes": "192x192", "type": "image/png", "purpose": "any" },
+    { "src": "/icons/icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any" },
+    { "src": "/icons/maskable-192.png", "sizes": "192x192", "type": "image/png", "purpose": "maskable" },
+    { "src": "/icons/maskable-512.png", "sizes": "512x512", "type": "image/png", "purpose": "maskable" }
+  ]
+}

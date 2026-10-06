@@ -24,8 +24,13 @@ import { L, applyI18n, escapeHtml as esc, isZh, lang, mapName as localMapName, m
 import './style.css';
 import './menu.css';
 import './ui/lang-zh.css';
+import { defaultQuality } from './game/device';
+import { onTouchLayout, touchActive } from './game/touchlayout';
+import { InstallBanner } from './ui/installhint';
+import { registerServiceWorker, warmServiceWorker } from './pwa';
 
 inject();
+registerServiceWorker();
 
 const app = document.querySelector<HTMLDivElement>('#app')!;
 const params = new URLSearchParams(location.search);
@@ -183,6 +188,21 @@ menu.innerHTML = `
 app.appendChild(menu);
 document.body.classList.add('menu-open');
 
+// ---- Phones and tablets: touch controls, the rotate prompt and the install hint. ----
+const applyTouchClass = () => document.body.classList.toggle('touch', touchActive());
+applyTouchClass();
+onTouchLayout(applyTouchClass);
+const rotate = document.createElement('div');
+rotate.id = 'rotate';
+rotate.setAttribute('role', 'alert');
+const renderRotate = () => {
+  rotate.innerHTML = `<svg viewBox="0 0 48 48" aria-hidden="true"><rect x="15" y="6" width="18" height="36" rx="3"/><path d="M21 37h6"/></svg><b>${esc(t('rot.title'))}</b><small>${esc(t('rot.sub'))}</small>`;
+};
+renderRotate();
+document.body.appendChild(rotate);
+// Inside the lobby, so it goes away with it during a match.
+if (!params.has('bench')) new InstallBanner(menu);
+
 const $ = <T extends HTMLElement = HTMLElement>(sel: string) => menu.querySelector<T>(sel)!;
 const select = (group: string, attr: string, value: string) => menu.querySelectorAll<HTMLButtonElement>(`#${group} [data-${attr}]`).forEach(b => b.setAttribute('aria-pressed', String(b.dataset[attr] === value)));
 
@@ -213,8 +233,9 @@ let joinSize: SizeId | '' = '';
 let joinMode: Mode | '' = '';
 let team = params.get('team') ?? store.get('team', 'auto');
 let skill = params.get('skill') ?? store.get('skill', '0.45');
-let quality = (params.get('quality') ?? store.get('quality', 'medium')) as keyof typeof QUALITY;
-if (!QUALITY[quality]) quality = 'medium';
+// Phones and tablets start on low graphics unless the player chose a preset.
+let quality = (params.get('quality') ?? store.get('quality', defaultQuality(touchActive()))) as keyof typeof QUALITY;
+if (!QUALITY[quality]) quality = defaultQuality(touchActive());
 /** ?bench: scripted solo run that measures frame times on this device (Elimination, Squad unless ?size). */
 const benchMode = params.has('bench');
 if (benchMode) { mode = 'elimination'; size = sizeOf(params.get('size') ?? 'squad').id; }
@@ -703,6 +724,7 @@ const options = new SettingsMenu(document.body, {
 
 // Language switch (Settings): the lobby's own text follows at once.
 onLang(next => {
+  renderRotate();
   setSuper({ lang: next });
   track('language_changed', { to: next }, { set: { lang: next } });
   applyI18n(menu);
@@ -784,7 +806,21 @@ function offlineRules(): { mapId: string; mode: Mode } {
   return { mapId: asked && maps.some(m => m.id === asked) ? asked : fits.includes(map) ? map : fits[0], mode: 'elimination' };
 }
 
+/**
+ * Touch devices play full screen and sideways where the browser allows (Android; iPhones have no
+ * Fullscreen API, so there the installed app is the full-screen way). Must run inside the tap.
+ */
+function fullscreenForTouch() {
+  if (!touchActive() || document.fullscreenElement || !document.documentElement.requestFullscreen) return;
+  void document.documentElement.requestFullscreen({ navigationUI: 'hide' }).then(() => {
+    const orientation = screen.orientation as ScreenOrientation & { lock?: (o: string) => Promise<void> };
+    return orientation?.lock?.('landscape');
+  }).catch(() => undefined);
+}
+
 async function start(action: Action) {
+  // Before the first await: still inside the player's tap.
+  if (!benchMode) fullscreenForTouch();
   const name = callsign.value.trim().slice(0, 16) || t('lobby.fallbackName');
   const via = modeOf(action);
   if (!benchMode) {
@@ -831,6 +867,8 @@ async function start(action: Action) {
   const linkMap = link.state()?.mapId ?? rules.mapId;
   launch(link, linkMap);
   joined(link, linkMap);
+  // The map's own files have loaded by now: cache them too on a first visit.
+  setTimeout(warmServiceWorker, 15000);
   menu.hidden = true;
   document.body.classList.remove('menu-open');
   await game?.input.lock()?.catch?.(() => undefined);
@@ -951,6 +989,7 @@ async function boot() {
   assets = await loadAssets(f => { loadFraction = f; renderQuick(); renderStart(); renderOthers(); });
   await fonts;
   ready = true;
+  warmServiceWorker();
   refresh();
   if (params.get('room') && !params.get('autostart')) roomCode.focus({ preventScroll: true });
   if (!benchMode) {

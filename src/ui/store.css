@@ -186,3 +186,49 @@
 #store .callout.flip::after { left: auto; right: 6px; transform: rotate(45deg); transform-origin: right center; }
 #store .callout.flip span { left: auto; right: 30px; }
 #store .card.locked .badge.price, #store .opt.locked .badge.price { color: var(--muted); border-color: var(--line); }
+
+/* Phones held sideways (and other short screens): everything on one screen, list beside the details. */
+@media (max-height: 560px) and (orientation: landscape) {
+  #store { width: calc(100vw - env(safe-area-inset-left, 0px) - env(safe-area-inset-right, 0px) - 8px); height: calc(100vh - 8px); padding: 6px 10px 6px; gap: 6px; }
+  #store header { gap: 8px; }
+  #store h2 { display: none; }
+  #store .tabs { gap: 3px; overflow-x: auto; scrollbar-width: none; }
+  #store .tabs button { padding: 4px 10px; font-size: 12px; letter-spacing: 0.08em; white-space: nowrap; }
+  #store .clock { min-width: 0; padding: 2px 8px 3px; row-gap: 2px; }
+  #store .clock small { font-size: 9px; }
+  #store .clock b { font-size: 14px; }
+  #store .clock.free b { font-size: 12px; }
+  #store .cash small { font-size: 9px; }
+  #store .cash b { font-size: 20px; }
+  #store .loadout { grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 4px; }
+  #store .lo { padding: 2px 8px; grid-template-rows: auto auto; }
+  #store .lo small, #store .lo .mods { font-size: 9px; }
+  #store .lo .mods { display: none; }
+  #store .lo b { font-size: 14px; }
+  #store .body { grid-template-columns: minmax(0, 0.95fr) minmax(0, 1.05fr); grid-template-rows: minmax(0, 1fr); gap: 8px; }
+  #store .side { max-height: none; }
+  #store .card, #store .opt { padding: 4px 10px; gap: 8px; }
+  #store .card b { font-size: 16px; }
+  #store .card small, #store .opt small { font-size: 10px; }
+  #store .aside { display: none; }
+  #store main { grid-template-rows: minmax(60px, 1fr) auto; gap: 6px; }
+  #store .stage { min-height: 0; }
+  #store .stage h3 { font-size: 18px; }
+  #store .stage .title { left: 8px; top: 6px; }
+  #store .stage .title small { font-size: 10px; }
+  #store .preview .hint { display: none; }
+  #store .info { grid-template-columns: minmax(0, 1fr) 150px; min-height: 0; max-height: 58vh; gap: 6px; }
+  #store .stats { padding: 6px 8px; gap: 4px; overflow-y: auto; }
+  #store .note { font-size: 12px; }
+  #store .split { grid-template-columns: 1fr; gap: 6px; }
+  #store .bar { grid-template-columns: 62px minmax(0, 1fr) 40px 36px; gap: 5px; font-size: 10px; }
+  #store .bar b, #store .bar em { font-size: 11px; }
+  #store dl { grid-template-columns: repeat(2, auto 1fr); font-size: 11px; }
+  #store dt { font-size: 10px; }
+  #store .deltas { font-size: 12px; }
+  #store .act { padding: 6px 8px; gap: 4px; }
+  #store .act strong { font-size: 20px; }
+  #store .buy { padding: 8px 6px !important; font-size: 14px; letter-spacing: 0.08em; }
+  #store .why, #store .after, #store .swap, #store .link { font-size: 11px; }
+  #store footer { display: none; }
+}
