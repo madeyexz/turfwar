@@ -170,8 +170,12 @@ const conflictKey = (c: { a: ActionId; b: ActionId; code: InputCode }) => `${c.a
 export type Rebind =
   | { kind: 'ok'; bindings: Bindings }
   | { kind: 'problem'; problem: Problem }
-  /** `code` is taken: `swap` gives the others this action's old key, when that leaves every action bound and adds no clash. */
-  | { kind: 'conflict'; with: ActionId[]; swap?: Bindings; gives?: InputCode };
+  /**
+   * `code` is taken: `swap` gives the others this action's old key, when that leaves every action
+   * bound and adds no clash. Without a swap, `why` says what stops it: another action would be left
+   * with no key (`stranded`), or this action's old key clashes or is reserved where it would go (`clash`).
+   */
+  | { kind: 'conflict'; with: ActionId[]; swap?: Bindings; gives?: InputCode; why?: 'stranded' | 'clash' };
 
 /** Put `code` in `action`'s key `slot` (0 primary, 1 alternate). Nothing changes until the caller keeps a result. */
 export function rebind(b: Bindings, action: ActionId, slot: number, code: InputCode): Rebind {
@@ -198,8 +202,9 @@ export function rebind(b: Bindings, action: ActionId, slot: number, code: InputC
     if (old !== undefined && !xs.includes(old)) xs[i] = old; else xs.splice(i, 1);
   }
   const before = new Set(allConflicts(b).map(conflictKey));
-  const fine = clash.every(x => next[x].length > 0) && allConflicts(next).every(c => before.has(conflictKey(c)));
-  return { kind: 'conflict', with: clash, swap: fine ? next : undefined, gives: old };
+  if (!clash.every(x => next[x].length > 0)) return { kind: 'conflict', with: clash, gives: old, why: 'stranded' };
+  const fits = clash.every(x => next[x].every(c => !problemWith(x, c))) && allConflicts(next).every(c => before.has(conflictKey(c)));
+  return fits ? { kind: 'conflict', with: clash, swap: next, gives: old } : { kind: 'conflict', with: clash, gives: old, why: 'clash' };
 }
 
 /** Drop an alternate key (the primary always stays). */

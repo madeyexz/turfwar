@@ -112,6 +112,12 @@ describe('rebinding', () => {
     const added = rebind(b, 'crouch', 1, 'Space');
     if (added.kind !== 'conflict') throw new Error('expected a clash');
     expect(added.swap).toBeUndefined();
+    expect(added.why).toBe('stranded');
+    // Jump to the menu key: the menu cannot take Space back (the menu keeps Space, and drivers use it).
+    const menu = rebind(defaultBindings(), 'jump', 0, 'KeyP');
+    if (menu.kind !== 'conflict') throw new Error('expected a clash');
+    expect(menu.swap).toBeUndefined();
+    expect(menu.why).toBe('clash');
     // …but taking one of two keys is fine: the other action keeps its other key.
     b = defaultBindings();
     const sprint = rebind(removeKey(b, 'reload', 1), 'reload', 1, 'ShiftRight');
