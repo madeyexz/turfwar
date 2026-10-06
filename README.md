@@ -347,6 +347,38 @@ atomically; subsequent joins preserve its state. Publish the compatible module b
 the matching commit to `main`, which triggers Vercel's GitHub deployment.
 Verify the production URL and two separate Online clients after each release.
 
+### Self-hosted server (not yet production)
+
+Maincloud runs in the US East (`maincloud.spacetimedb.com` resolves to Leesburg, Virginia): about
+195 ms round trip from Taipei, against about 12 ms to AWS's Taipei region. `deploy/selfhost/` runs
+the same module on our own Ubuntu 24.04 VM in Taiwan instead:
+
+```sh
+# on the VM (DNS for the domain points at it; ports 80 and 443 open)
+sudo deploy/selfhost/setup.sh play.example.com
+# from your machine: publish over an SSH tunnel (publishing is not exposed publicly)
+deploy/selfhost/publish.sh ubuntu@play.example.com
+```
+
+Then build the frontend with `VITE_SPACETIMEDB_URI=wss://play.example.com` and
+`VITE_SPACETIMEDB_DATABASE=lawbreaker`. Saved logins are keyed by server URI, so players get new
+identities (and fresh career stats) when the URI changes; keep the domain stable and back up
+`/stdb/config/id_ecdsa*`, the keys that sign every player's token.
+
+- **Size.** Measured locally (M3 Pro, dev's module): 100 players in nine 6v6 rooms held 29.9
+  ticks/s at 63% (peak 85%) of one core and sent 20.8 KB/s to each client; one full 6v6 room used
+  16–20% of a core and ~90 MB of memory. Cloud vCPUs are slower than an M3 core, so measure a new
+  VM before launch: `scripts/loadtest.ts` only targets `127.0.0.1`, which reaches the VM through
+  the SSH tunnel `ssh -L 3100:127.0.0.1:3000 <host>`.
+- **Disk.** SpacetimeDB 2.10.2 compresses old commitlog segments but never deletes them: a busy 6v6
+  room writes ~1.7 GB per hour (~16× smaller once compressed). `spacetimedb-maintenance.timer`
+  runs `maintenance.sh` at 05:00 Taipei time: it waits up to two hours for empty rooms, stops the
+  server, runs `prune-commitlog.sh` (keeps the newest two complete snapshots and the log needed
+  to restore from the older one) and starts it again. `scripts/prunecheck.sh` checks that on a
+  local server: busy load, prune, restart, identical career stats, ticking again.
+- **License.** The server is BSL 1.1: one production instance is covered; a second production
+  region needs a commercial license from Clockwork Labs.
+
 ## Assets and licenses
 
 No proprietary game assets are used: the weapon and mode names follow BeGone, but every model,
@@ -469,7 +501,8 @@ shared/        Pure TypeScript shared by browser, tests and the SpacetimeDB modu
   match/         State, rounds and bomb, combat validation, economy, bots, navigation, packed frame
 src/           Browser client: lobby, game loop, prediction, rendering, view model, soldiers, HUD, store, audio, net
 spacetimedb/   SpacetimeDB module (tables, scheduled tick, validated reducers)
-scripts/       Local load test and simulation benchmark
+scripts/       Local load test, simulation benchmark and Online checks (ladders, vehicles, economy, prune)
+deploy/        Self-hosted SpacetimeDB server: setup, systemd units, Caddy, publish and log prune
 tools/         Reproducible CC0 asset import, sound and texture fetch scripts, and the Taipei and Xinyi map imports
 dev/           Development preview pages
 ```

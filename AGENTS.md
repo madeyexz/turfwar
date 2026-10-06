@@ -32,6 +32,8 @@ Improve playable gunplay, map flow, animation, and multiplayer—not only the HU
 - `public/assets/`, `public/fonts/`: runtime assets and licenses.
 - `tools/`: asset conversion/fetch tools with their own dependencies; not runtime code.
 - `dev/`: development-only map, model, soldier, and first-person weapon preview pages.
+- `deploy/selfhost/`: self-hosted SpacetimeDB server (setup, systemd, Caddy, SSH-tunnel publish,
+  nightly commitlog prune). Not production yet; production is still Maincloud.
 
 ## Gameplay and authority
 
