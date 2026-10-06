@@ -21,4 +21,6 @@ export default {
   yaw: __t.f32(),
   pitch: __t.f32(),
   roll: __t.f32(),
+  aimYaw: __t.f32(),
+  aimPitch: __t.f32(),
 };

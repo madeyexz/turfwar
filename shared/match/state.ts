@@ -231,6 +231,8 @@ export interface VehicleReport {
   x: number; y: number; z: number;
   vx: number; vy: number; vz: number;
   yaw: number; pitch: number; roll: number;
+  /** Where the driver looks and aims (a scooter rider shoots while riding); defaults to the heading. */
+  aimYaw?: number; aimPitch?: number;
 }
 
 /**

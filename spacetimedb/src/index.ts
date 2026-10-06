@@ -150,6 +150,8 @@ const vehicleTable = table({ name: 'vehicle' }, {
 const vehicleInboxTable = table({ name: 'vehicle_inbox' }, {
   soldierId: t.u32().primaryKey(), vehicle: t.u8(), lastMicros: t.u64(), elapsed: t.f32(), pending: t.bool(),
   x: t.f32(), y: t.f32(), z: t.f32(), vx: t.f32(), vy: t.f32(), vz: t.f32(), yaw: t.f32(), pitch: t.f32(), roll: t.f32(),
+  // Appended with defaults so existing databases migrate in place: where the driver aims (scooter riders shoot).
+  aimYaw: t.f32().default(0), aimPitch: t.f32().default(0),
 });
 
 const tickTable = table({ name: 'tick_schedule' }, { scheduledId: t.u64().primaryKey().autoInc(), scheduledAt: t.scheduleAt(), room: t.u8().default(0) });
@@ -581,6 +583,7 @@ function applyInputs(ctx: Ctx, state: MatchState, sim: SimContext) {
     if (!row.pending) continue;
     reportVehicle(state, sim, row.soldierId, {
       vehicle: row.vehicle, x: row.x, y: row.y, z: row.z, vx: row.vx, vy: row.vy, vz: row.vz, yaw: row.yaw, pitch: row.pitch, roll: row.roll,
+      aimYaw: row.aimYaw, aimPitch: row.aimPitch,
     }, row.elapsed);
     ctx.db.vehicleInbox.soldierId.update({ ...row, pending: false, elapsed: 0 });
   }
@@ -743,9 +746,13 @@ export const enterVehicle = spacetimedb.reducer({ index: t.u8() }, (ctx, { index
 /** E in a vehicle: get out beside it. */
 export const exitVehicle = spacetimedb.reducer({}, ctx => { queue(ctx, { kind: 'vehicle', enter: false, index: 0 }); });
 
-/** The driver's vehicle report: stored for the next tick (latest wins; elapsed time accumulates for the budget). */
+/**
+ * The driver's vehicle report and where it aims (a scooter rider shoots while riding): stored for
+ * the next tick (latest wins; elapsed time accumulates for the budget).
+ */
 export const vehicleReport = spacetimedb.reducer({
   vehicle: t.u8(), x: t.f32(), y: t.f32(), z: t.f32(), vx: t.f32(), vy: t.f32(), vz: t.f32(), yaw: t.f32(), pitch: t.f32(), roll: t.f32(),
+  aimYaw: t.f32(), aimPitch: t.f32(),
 }, (ctx, r) => {
   const player = mySoldier(ctx);
   const now = micros(ctx);
