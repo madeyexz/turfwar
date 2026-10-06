@@ -1,6 +1,8 @@
 import * as THREE from 'three';
-import { VEHICLES, type Vehicle, type VehicleKind } from '../../shared/vehicles';
+import type { Vehicle, VehicleKind } from '../../shared/vehicles';
 import { InterpBuffer } from './interp';
+import { UI_STACK } from '../ui/fonts';
+import { t } from '../ui/i18n';
 
 /**
  * Drivable vehicles, built procedurally from low-poly primitives: Taipei's yellow taxis and city
@@ -19,8 +21,8 @@ const SCOOTER_COLORS = [0xf4f2ec, 0xc8262a, 0x2f6bb0, 0x22252a, 0x9ed6c4, 0xf2c4
 
 /** Short display name for a vehicle (HUD, prompts). */
 export function vehicleName(v: Pick<Vehicle, 'kind' | 'id'>) {
-  if (v.kind !== 'car') return VEHICLES[v.kind].name;
-  return CAR_LOOKS[v.id % CAR_LOOKS.length].taxi ? 'TAXI' : 'CAR';
+  if (v.kind !== 'car') return t(v.kind === 'heli' ? 'vehicle.heli' : 'vehicle.scooter');
+  return t(CAR_LOOKS[v.id % CAR_LOOKS.length].taxi ? 'vehicle.taxi' : 'vehicle.car');
 }
 
 const mats = new Map<string, THREE.Material>();
@@ -57,7 +59,7 @@ function label(text: string, bg: string, fg: string, w: number, h: number) {
   const c = document.createElement('canvas'); c.width = 128; c.height = 48;
   const g = c.getContext('2d')!;
   g.fillStyle = bg; g.fillRect(0, 0, 128, 48);
-  g.fillStyle = fg; g.font = 'bold 30px Rajdhani, sans-serif'; g.textAlign = 'center'; g.textBaseline = 'middle'; g.fillText(text, 64, 26);
+  g.fillStyle = fg; g.font = `bold 30px ${UI_STACK}`; g.textAlign = 'center'; g.textBaseline = 'middle'; g.fillText(text, 64, 26);
   const tex = new THREE.CanvasTexture(c); tex.colorSpace = THREE.SRGBColorSpace;
   return new THREE.Mesh(new THREE.PlaneGeometry(w, h), new THREE.MeshStandardMaterial({ map: tex, emissive: 0xffffff, emissiveMap: tex, emissiveIntensity: 0.6, roughness: 0.6 }));
 }

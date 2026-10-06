@@ -30,7 +30,7 @@
 /* ---- Lobby dialog ---- */
 .lb-settings.lobby { z-index: 20; }
 /* A fixed height, so switching tabs does not make the dialog jump. */
-.lb-settings.lobby .panel { width: min(720px, calc(100vw - 32px)); height: min(556px, calc(100dvh - 32px)); max-height: none; padding: 0; gap: 0; }
+.lb-settings.lobby .panel { width: min(720px, calc(100vw - 32px)); height: min(600px, calc(100dvh - 32px)); max-height: none; padding: 0; gap: 0; }
 .lb-settings.lobby header { position: sticky; top: 0; z-index: 1; align-items: center; flex-wrap: nowrap; padding: 14px 14px 0 22px; background: rgba(12, 22, 28, 0.98); border-bottom: 1px solid rgba(190, 236, 244, 0.12); }
 .lb-settings.lobby h2 { font-size: 20px; padding-bottom: 12px; }
 .lb-settings .tabs { display: flex; gap: 2px; margin-right: auto; align-self: flex-end; }

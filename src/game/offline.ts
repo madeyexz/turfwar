@@ -7,6 +7,7 @@ import { ELIMINATION, PRACTICE_CONFIG, type ClientReport, type MatchConfig, type
 import type { BuyItem } from '../../shared/match/economy';
 import type { AttachmentId, Slot, WeaponId } from '../../shared/weapons';
 import type { GameLink } from './link';
+import { t } from '../ui/i18n';
 
 /** Solo match: the authoritative simulation runs in this tab with bots on both teams. */
 export class OfflineLink implements GameLink {
@@ -36,7 +37,7 @@ export class OfflineLink implements GameLink {
   state() { return this.match; }
   version() { return this.ticks; }
   drainEvents() { const e = this.events; this.events = []; return e; }
-  status() { return this.practice ? 'PRACTICE RANGE' : 'SOLO'; }
+  status() { return t(this.practice ? 'net.practice' : 'net.solo'); }
 
   update(dt: number) {
     this.sinceReport += dt; this.sinceVehicleReport += dt;

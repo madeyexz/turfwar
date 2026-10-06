@@ -4,6 +4,7 @@ import { findPath, nearestNode } from '../../shared/match/nav';
 import { HEALTH } from '../../shared/weapons';
 import type { Renderer } from '../render/renderer';
 import type { Game } from './game';
+import type { Key } from '../ui/i18n';
 
 export const BENCH_WARMUP = 4;
 export const BENCH_SECONDS = 30;
@@ -207,18 +208,19 @@ export class Bench {
   }
 }
 
+/** Result rows: [label key (see i18n `bench.*`), value]. */
 export function benchReport(r: BenchResult) {
-  const rows: [string, string][] = [
-    ['Average', `${r.avgFps} fps`],
-    ['1% low', `${r.low1Fps} fps`],
-    ['Frame time (median / p95 / p99)', `${r.medianMs} / ${r.p95Ms} / ${r.p99Ms} ms`],
-    ['Slowest frame', `${r.maxMs} ms`],
-    ['Frames slower than 60 Hz', `${r.slowFrames}%`],
-    ['Main-thread time (median / p95)', `${r.cpuMedianMs} / ${r.cpuP95Ms} ms`],
-    ['Draw calls · triangles', `${r.drawCalls} · ${(r.triangles / 1000).toFixed(0)}k`],
-    ['Hitches over 100 ms · shader compiles', `${r.hitchCount} · ${r.shaderCompiles}`],
-    ['Map · quality · resolution', `${r.map} · ${r.quality} · ${r.resolution}`],
-    ['GPU', r.gpu],
+  const rows: [Key, string][] = [
+    ['bench.avg', `${r.avgFps} fps`],
+    ['bench.low', `${r.low1Fps} fps`],
+    ['bench.frame', `${r.medianMs} / ${r.p95Ms} / ${r.p99Ms} ms`],
+    ['bench.slowest', `${r.maxMs} ms`],
+    ['bench.slow', `${r.slowFrames}%`],
+    ['bench.cpu', `${r.cpuMedianMs} / ${r.cpuP95Ms} ms`],
+    ['bench.draws', `${r.drawCalls} · ${(r.triangles / 1000).toFixed(0)}k`],
+    ['bench.hitches', `${r.hitchCount} · ${r.shaderCompiles}`],
+    ['bench.setup', `${r.map} · ${r.quality} · ${r.resolution}`],
+    ['bench.gpu', r.gpu],
   ];
   return rows;
 }
