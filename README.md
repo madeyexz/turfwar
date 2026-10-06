@@ -202,9 +202,12 @@ committed.
 
 ## License
 
-**License: TBD (the owner will choose).** Until a license is added, no license is granted for the
-code. The third-party assets keep their own licences, CC0 and the SIL Open Font License, as listed
-above.
+The code is released under the [MIT License](LICENSE).
+
+- **Third-party assets** keep their own licences, CC0 and the SIL Open Font License, as listed
+  above.
+- **The name and logo are not covered:** the names 角頭械鬥 and Turf War: Taipei and the logo are
+  not licensed for reuse. Forks are welcome, but please give them a different name.
 
 ## History
 
