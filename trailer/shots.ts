@@ -2,6 +2,7 @@
  * Shot list: how each clip of the trailer is staged and captured (see scripts/capture.ts).
  * Every shot loads the game with `?capture&trailer&debuginput&quality=high&<url>` and drives it
  * through `window.__trailer` (src/game/trailer.ts). Frames are 1/30 s of game time.
+ * Coordinates are each map's own (metres; the game's forward is -z at yaw 0).
  */
 export interface Step {
   /** Expression evaluated in the page (window.__trailer is `T`). */
@@ -29,6 +30,9 @@ export interface Shot {
   seed?: number;
   /** The lobby rather than a match. */
   lobby?: boolean;
+  /** Device scale for the screenshots (default 1.5); with `native` the clip keeps that size for punch-ins. */
+  scale?: number;
+  native?: boolean;
   page?: string;
 }
 
@@ -38,35 +42,42 @@ const live: Step = { until: `${T}.state().phase==='live' && ${T}.state().roundPh
 const freeze: Step = { until: `${T}.state().phase==='live' && ${T}.state().roundPhase==='freeze'`, max: 900 };
 const js = (s: string): Step => ({ js: s.replaceAll('T.', `${T}.`) });
 const cue = (at: number, s: string) => ({ at, js: s.replaceAll('T.', `${T}.`) });
-
-/** Taipei 101 in the Taipei (Ximending) map's coordinates (1.6 km east-southeast). */
-const T101: [number, number, number] = [1526, 230, 383];
-
-const TAIPEI = 'mode=offline&map=taipei&size=squad';
-/** yaw that faces from (x0, z0) toward (x1, z1) (the game's forward is -z at yaw 0). */
+/** yaw that faces from (x0, z0) toward (x1, z1). */
 const yaw = (x0: number, z0: number, x1: number, z1: number) => +Math.atan2(-(x1 - x0), -(z1 - z0)).toFixed(4);
+
+/**
+ * Taipei (compact Ximending, 162.5 × 133.5 m): the ring road runs on Civic Blvd (z ≈ -63), Zhongxiao W.
+ * Rd (z ≈ 62), Huanhe Rd (x ≈ -77) and Zhonghua Rd (x ≈ 77); Wuchang St (night market, z ≈ -27),
+ * Emei St (z ≈ 19), Xining S. Rd (x ≈ -22, Militia's barricade) and Hanzhong St (x ≈ 34, the gateway).
+ * SWAT deploys on Civic Blvd's sidewalk (z ≈ -52). Taipei 101 stands 1.6 km east-southeast.
+ */
+const TAIPEI = 'mode=offline&map=taipei&size=squad';
+const T101: [number, number, number] = [1536, 230, 426];
+/** Taipei 101 · Xinyi (24v24): the tower stands at (-60, 6); the mall atrium (site A) at (-9, 10.5). */
+const XINYI = 'mode=offline&map=xinyi&size=war';
 
 export const SHOTS: Shot[] = [
   // ---- Cold open ---------------------------------------------------------------------------
   {
+    // Rising over Ximending's rooftops at dusk; Taipei 101 on the skyline.
     id: 'open_skyline', url: `${TAIPEI}&game=elimination`, frames: 170, load: 5000,
     setup: [js(`T.hud('none')`)],
     cues: [cue(0, `T.camera({kind:'path', frames:170, ease:false, keys:[
-      {p:[-96,30,-74], t:[${T101}], fov:30}, {p:[-94,37,-50], t:[${T101}], fov:29}, {p:[-92,44,-26], t:[${T101}], fov:28}]})`)],
+      {p:[-80,24,-70], t:[${T101}], fov:31}, {p:[-78,33,-66], t:[${T101}], fov:29}, {p:[-76,42,-62], t:[${T101}], fov:27}]})`)],
   },
   {
-    // Hanzhong St under the Ximending gateway; Militia streams past the camera toward the arcade.
+    // Hanzhong St under the Ximending gateway: Militia streams past the camera toward the arcade.
     id: 'open_gate', url: `${TAIPEI}&game=sabotage&team=0`, frames: 150, load: 4000,
-    setup: [js(`T.hud('none')`), live, js(`T.god()`),
-      js(`[7,8,9,10,11,12].forEach((id,i)=>{T.place(id, 21.5+(i%3)*3, 0.15, 24+Math.floor(i/3)*5, Math.PI); T.goal(id, 30, -45)})`), { frames: 2 }],
-    cues: [cue(0, `T.camera({kind:'path', frames:150, keys:[{p:[25.8,1.0,19], t:[24.5,6,-40], fov:60}, {p:[25,1.4,9], t:[24.5,6.5,-40], fov:56}]})`)],
+    setup: [js(`T.hud('none')`), live, js(`T.god(); T.pinTeam(0)`),
+      js(`[7,8,9,10,11,12].forEach((id,i)=>{T.place(id, 31.5+(i%3)*2.6, 0.15, 63+Math.floor(i/3)*3, 0); T.goal(id, 45.75, -1.75)})`), { frames: 2 }],
+    cues: [cue(0, `T.camera({kind:'path', frames:150, keys:[{p:[35.2,1.0,60.5], t:[34,6,-20], fov:60}, {p:[34.8,1.3,57], t:[34,6.4,-20], fov:56}]})`)],
   },
   // ---- Round start and the store -----------------------------------------------------------
   {
-    // The SWAT squad lined up in its base under the expressway as round 1 freezes.
+    // Round 1 freezes: facing the SWAT squad behind its police cordon on Civic Blvd.
     id: 'freeze', url: `${TAIPEI}&game=elimination&team=0`, frames: 120, load: 3500,
-    setup: [js(`T.hud('clean')`), { until: `${T}.state().phase==='live'`, max: 900 }, js(`T.teleport(-30,0.15,-112,0)`)],
-    cues: [cue(0, `T.camera({kind:'path', frames:120, keys:[{p:[-14,1.2,-97], t:[-6,1.3,-106], fov:55}, {p:[22,1.5,-99], t:[14,1.3,-106], fov:50}]})`)],
+    setup: [{ until: `${T}.state().phase==='live'`, max: 900 }, js(`T.teleport(-6,0.15,-46.8,0.18,-0.04)`)],
+    cues: [cue(0, `T.turnTo(-0.12, -0.02, 0.8)`)],
   },
   {
     id: 'store', url: `${TAIPEI}&game=elimination&team=0`, frames: 270, load: 3500,
@@ -85,136 +96,154 @@ export const SHOTS: Shot[] = [
       cue(246, `T.cursor(null); T.store(false)`),
     ],
   },
-  // ---- Gunplay -----------------------------------------------------------------------------
+  // ---- Gunplay (staged fights on the ring road; enemies fire back, the camera soldier is kept alive) ----
   {
     id: 'gun_mp5', url: `${TAIPEI}&game=elimination&team=0`, frames: 120,
-    setup: [live, js(`T.god(); T.pinTeam(0); T.stage([76,-30,${yaw(76, -30, 76, 0)}], [[73,-14],[79,-10],[75,-6]])`), { frames: 30 }],
+    setup: [live, js(`T.god(); T.pinTeam(0); T.stage([4,62,${yaw(4, 62, 40, 62)}], [[16,61],[19,63],[22,61.5]])`), { frames: 30 }],
     cues: [cue(0, `T.fight({ads:false})`), cue(40, `T.fight({ads:true})`)],
   },
   {
     id: 'gun_m4', url: `${TAIPEI}&game=elimination&team=0`, frames: 130,
     setup: [live, js(`T.god(); T.pinTeam(0); T.loadout('m4a1', {optic:'holo'})`), { frames: 30 },
-      js(`T.stage([14,-24,${yaw(14, -24, -20, -24)}], [[0,-26],[-5,-21.5],[-10,-25]])`), { frames: 20 }],
+      js(`T.stage([-77,-46,${yaw(-77, -46, -77, 0)}], [[-79,-28],[-75,-24],[-77,-19]])`), { frames: 20 }],
     cues: [cue(0, `T.fight({ads:true, burst:[0.45,0.25]})`)],
   },
   {
     id: 'gun_m110', url: `${TAIPEI}&game=elimination&team=0`, frames: 150,
     setup: [live, js(`T.god(); T.pinTeam(0); T.loadout('m110', {optic:'x6'})`), { frames: 40 },
-      js(`T.stage([60,17,${yaw(60, 17, 0, 17)}], [[12,16],[2,19],[-8,15]], {pin:true})`), { frames: 20 }],
+      js(`T.stage([62,-63,${yaw(62, -63, 0, -63)}], [[14,-62.5],[6,-64],[-4,-62]], {pin:true})`), { frames: 20 }],
     cues: [cue(0, `T.fight({ads:true, head:true, burst:[0.1,0.7]})`)],
   },
   {
     id: 'gun_m1014', url: `${TAIPEI}&game=elimination&team=0`, frames: 120,
     setup: [live, js(`T.god(); T.pinTeam(0); T.loadout('m1014', {})`), { frames: 30 },
-      js(`T.stage([76,-36,${yaw(76, -36, 76, 0)}], [[74,-28],[78,-26],[76,-24]])`), { frames: 10 }],
+      js(`T.stage([-44,62,${yaw(-44, 62, 0, 62)}], [[-38.5,61],[-36.5,63],[-34.5,61.5]])`), { frames: 10 }],
     cues: [cue(0, `T.fight({ads:false, burst:[0.1,0.35]})`)],
   },
   {
     id: 'gun_m249', url: `${TAIPEI}&game=elimination&team=0`, frames: 130,
     setup: [live, js(`T.god(); T.pinTeam(0); T.loadout('m249', {})`), { frames: 40 },
-      js(`T.stage([-70,17,${yaw(-70, 17, -40, 17)}], [[-56,15],[-54,20],[-52,13],[-50,19]])`), { frames: 10 }],
+      js(`T.stage([64,62,${yaw(64, 62, 0, 62)}], [[48,60.5],[45,63],[42,61],[39,63]])`), { frames: 10 }],
     cues: [cue(0, `T.fight({ads:true, keys:['KeyC']})`)],
   },
   // ---- Sabotage ------------------------------------------------------------------------------
   {
     // Militia holds E on site B (the arcade) for 5 s: the bomb arms.
     id: 'bomb_arm', url: `${TAIPEI}&game=sabotage&team=1`, frames: 200,
-    setup: [live, js(`T.god(); T.pinTeam(0); T.teleport(35,0.15,-41.5,${yaw(35, -41.5, 35, -60)},-0.35)`), { frames: 10 }],
+    setup: [live, js(`T.god(); T.pinTeam(0); T.teleport(45.75,0.15,-1.75,${yaw(45.75, -1.75, 60, -1.75)},-0.35)`), { frames: 10 }],
     cues: [cue(0, `T.input({keys:['KeyE']})`)],
   },
   {
     // SWAT finds the bomb armed on site A (Cinema Street) and disarms it: round to SWAT.
     id: 'bomb_defuse', url: `${TAIPEI}&game=sabotage&team=0`, frames: 230,
     setup: [live, js(`T.god(); T.pinTeam(1); Object.assign(T.state().bomb,{site:0,armed:true,progress:0,by:-1}); T.state().phaseLeft=31`),
-      js(`T.teleport(-54,0.15,-66,${yaw(-54, -66, -57.5, -68.5)},-0.4)`), { frames: 30 }],
+      js(`T.teleport(-46.2,0.15,-27.3,${yaw(-46.2, -27.3, -47.75, -25.75)},-0.45)`), { frames: 30 }],
     cues: [cue(0, `T.input({keys:['KeyE']})`)],
   },
   // ---- Elimination: a staged 3v3 on Crane, slowed down --------------------------------------
   {
     id: 'elim_crane', url: 'mode=offline&map=crane&size=squad&game=elimination&team=0', frames: 180,
     setup: [js(`T.hud('none')`), live, js(`T.teleport(40,0,34,0)`),
-      js(`[2,3,4].forEach((id,i)=>T.place(id, -6+i*4, T.ground(-6+i*4, 12+i), 12+i, 0)); [5,6].forEach(id=>T.kill([id]))`),
-      js(`[7,8,9].forEach((id,i)=>T.place(id, -8+i*5, T.ground(-8+i*5, -14+i), -14+i, Math.PI)); [10,11,12].forEach(id=>T.kill([id]))`),
+      js(`[2,3,4].forEach((id,i)=>T.place(id, -6+i*4, T.ground(-6+i*4, 12+i), 12+i, 0)); T.kill([5,6])`),
+      js(`[7,8,9].forEach((id,i)=>T.place(id, -9+i*6, T.ground(-9+i*6, -6+i), -6+i, Math.PI)); T.kill([10,11,12])`),
       { frames: 2 }],
-    cues: [cue(0, `T.timeScale = 0.45; T.camera({kind:'follow', target:{soldier:3}, offset:[0.9,1.75,3.2], look:[0,1.5,-12], fov:55, smooth:5})`)],
+    cues: [cue(0, `T.timeScale = 0.45; T.camera({kind:'follow', target:{soldier:3}, offset:[0.9,1.75,3.2], look:[0,1.4,-12], fov:60, smooth:5})`)],
   },
   // ---- Mechanics ---------------------------------------------------------------------------
   {
     id: 'knife', url: `${TAIPEI}&game=elimination&team=0`, frames: 100,
-    setup: [live, js(`T.god(); T.pinTeam(0); T.pacify('enemies'); T.stage([76,-30,${yaw(76, -30, 76, 0)}], [[76,-27.6]], {pin:true})`), js(`T.press('Digit1')`), { frames: 15 }],
+    setup: [live, js(`T.god(); T.pinTeam(0); T.pacify('enemies'); T.stage([77,-42,${yaw(77, -42, 77, 0)}], [[77,-40.6]], {pin:true})`), js(`T.press('Digit1')`), { frames: 15 }],
     cues: [cue(0, `T.fight({range:4})`)],
   },
   {
     id: 'grenade', url: `${TAIPEI}&game=elimination&team=0`, frames: 120,
-    setup: [live, js(`T.god(); T.pinTeam(0); T.pacify('enemies'); T.grenades(1); T.stage([76,-38,${yaw(76, -38, 76, 0)}], [[74,-22],[77,-20],[79,-23]], {pin:true})`), { frames: 10 }],
-    cues: [cue(0, `T.look(${yaw(76, -38, 76, 0)}, 0.16)`), cue(6, `T.press('KeyG')`)],
+    setup: [live, js(`T.god(); T.pinTeam(0); T.pacify('enemies'); T.grenades(1); T.stage([-40,62,${yaw(-40, 62, 0, 62)}], [[-7,61],[-5,63.2],[-4,60.6]], {pin:true})`), { frames: 10 }],
+    cues: [cue(0, `T.look(${yaw(-40, 62, 0, 62)}, 0.02)`), cue(6, `T.press('KeyG')`),
+      // The landing, from beside the targets.
+      cue(50, `T.hud('none'); T.camera({kind:'fixed', p:[-15,2.2,64.5], t:[-4,1,61.5], fov:52})`)],
   },
   {
-    // Binoculars from the roof at the top of the expressway-side ladder, on Taipei 101.
+    // Binoculars from the roof at the top of the 18 m ladder, on Taipei 101.
     id: 'binos', url: `${TAIPEI}&game=elimination&team=0`, frames: 110,
-    setup: [live, js(`T.god(); T.pacify('all'); T.teleport(-40, T.ground(-40,-96,40), -96, 0); T.lookAt(${T101})`), { frames: 10 }],
-    cues: [cue(4, `T.press('KeyZ')`), cue(30, `T.turnTo(T.game.player.yaw - 0.05, T.game.player.pitch + 0.01, 0.6)`)],
+    setup: [live, js(`T.god(); T.pacify('all'); T.hold(-40, 21, -52); T.tick(1); T.lookAt(1536, 330, 426)`), { frames: 10 }],
+    cues: [cue(4, `T.press('KeyZ')`), cue(30, `T.turnTo(T.game.player.yaw - 0.04, T.game.player.pitch + 0.01, 0.6)`)],
   },
   {
     id: 'slide', url: `${TAIPEI}&game=elimination&team=0`, frames: 75,
-    setup: [live, js(`T.god(); T.pacify('all'); T.teleport(76,0.15,-60,${yaw(76, -60, 76, 0)})`), { frames: 5 }],
+    setup: [live, js(`T.god(); T.pacify('all'); T.teleport(77,0.15,40,${yaw(77, 40, 77, 0)})`), { frames: 5 }],
     cues: [cue(0, `T.input({keys:['KeyW','ShiftLeft']})`), cue(28, `T.input({keys:['KeyW','ShiftLeft','KeyC']})`), cue(52, `T.input({keys:['KeyW']})`)],
   },
   {
-    id: 'ladder', url: 'mode=offline&map=tower&size=squad&game=elimination&team=0', frames: 150,
-    setup: [live, js(`T.god(); T.pacify('all'); T.teleport(19.6,0,2.5,${yaw(19.6, 2.5, 18.5, 2.5)},0.5)`), { frames: 5 }],
-    cues: [cue(0, `T.input({keys:['KeyW']})`)],
+    // Up the round brick tower's ladder on Tower to the crow's nest.
+    id: 'ladder', url: 'mode=offline&map=tower&size=squad&game=elimination&team=0', frames: 170,
+    setup: [live, js(`T.god(); T.pacify('all'); T.teleport(18.5,0,3.15,0,0.75)`), { frames: 5 }],
+    cues: [cue(0, `T.input({keys:['KeyW']})`), cue(120, `T.turnTo(-0.9, -0.1, 3)`)],
   },
   // ---- Vehicles ----------------------------------------------------------------------------
   {
-    // A car east along Zhongxiao Rd, drifting right into Zhonghua Rd.
-    id: 'drift', url: `${TAIPEI}&game=elimination&team=0`, frames: 300,
-    setup: [live, js(`T.god(); T.pacify('all'); T.teleport(-48.5,0.15,28.2,0)`), { frames: 2 }, js(`T.enter(5)`), { frames: 10 }],
-    cues: [cue(0, `T.drive([{x:-20,z:29,speed:26},{x:55,z:29,speed:26},{x:70,z:29,speed:22},{x:82,z:40,speed:20,drift:true},{x:82,z:70,speed:24},{x:82,z:115,speed:24}])`)],
+    // A car south down Zhonghua Rd, drifting right onto Zhongxiao W. Rd.
+    id: 'drift', url: `${TAIPEI}&game=elimination&team=0`, frames: 280,
+    setup: [live, js(`T.god(); T.pacify('all'); T.teleport(74.8,0.15,-6.8,0)`), { frames: 2 }, js(`T.enter(5)`), { frames: 10 }],
+    cues: [cue(0, `T.drive([{x:77,z:20,speed:22},{x:77,z:44,speed:20},{x:66,z:62,speed:17,drift:true},{x:30,z:62,speed:22},{x:-60,z:62,speed:24}])`)],
   },
   {
-    // Riding a scooter west on Zhongxiao Rd, shooting one-handed at Militia across the median.
-    id: 'scooter', url: `${TAIPEI}&game=elimination&team=0`, frames: 270,
-    setup: [live, js(`T.god(); T.pinTeam(0); T.loadout('mp5',{},'mp7'); T.teleport(24.2,0.2,40,0)`), { frames: 30 }, js(`T.enter(8)`), { frames: 10 },
-      js(`T.stage([24.2,40,0], [[-15,16],[-28,14],[-42,18],[-56,15]], {clear:'enemies'})`), js(`T.teleport(24.2,0.2,40,0)`)],
-    cues: [cue(0, `T.drive([{x:20,z:30,speed:8},{x:5,z:28,speed:12},{x:-80,z:28,speed:12}])`), cue(45, `T.fight({range:45})`)],
+    // Militia on a scooter east along Zhongxiao W. Rd, shooting one-handed at SWAT ahead.
+    id: 'scooter', url: `${TAIPEI}&game=elimination&team=1`, frames: 270,
+    setup: [live, js(`T.god(); T.pinTeam(1); T.pacify('enemies'); T.loadout('mp5',{},'mp7'); T.teleport(-20.8,0.2,51.4,0)`), { frames: 30 }, js(`T.enter(6)`), { frames: 10 },
+      js(`T.placeVehicle(6,-40,0.2,62,${yaw(0, 0, 1, 0)})`),
+      js(`T.stage([-40,62,0], [[0,56],[14,55.5],[28,56.5],[42,55]], {clear:'enemies'})`), js(`T.teleport(-40,0.2,62,0)`), { frames: 2 }],
+    cues: [cue(0, `T.drive([{x:-30,z:62,speed:12},{x:75,z:62,speed:12}])`), cue(30, `T.fight({range:45})`)],
   },
   {
+    // The helicopter lifts off its pad on the 7-TWELVE roof, seen from above the rooftops.
     id: 'heli_takeoff', url: `${TAIPEI}&game=elimination&team=0`, frames: 210,
-    setup: [js(`T.hud('none')`), live, js(`T.god(); T.pacify('all'); T.teleport(86,0.15,-44,0)`), { frames: 2 }, js(`T.enter(15)`), { frames: 5 }],
-    cues: [cue(0, `T.camera({kind:'track', p:[64,1.4,-24], p2:[62,4,-20], frames:210, target:{vehicle:15}, look:[0,1.2,0], fov:48})`),
-      cue(0, `T.drive([{x:89,z:-44,y:22},{x:40,z:-60},{x:-40,z:-60}], {alt:40, climb:10})`)],
+    setup: [js(`T.hud('none')`), live, js(`T.god(); T.pacify('all'); T.teleport(14.3, 13.9, 7.3, 0)`), { frames: 2 }, js(`T.enter(14)`), { frames: 5 }],
+    cues: [cue(0, `T.camera({kind:'track', p:[-12,44,-30], p2:[-20,48,-12], frames:210, target:{vehicle:14}, look:[0,1.2,0], fov:46})`),
+      cue(0, `T.drive([{x:16.8,z:7.3,y:24},{x:-50,z:-45},{x:-60,z:40}], {alt:40, climb:10})`)],
   },
   {
+    // Flying a loop over Ximending at 45 m (chase camera and the vehicle HUD).
     id: 'heli_flight', url: `${TAIPEI}&game=elimination&team=0`, frames: 300,
-    setup: [live, js(`T.god(); T.pacify('all'); T.teleport(86,0.15,-44,0)`), { frames: 2 }, js(`T.enter(15)`), { frames: 5 },
-      js(`T.drive([{x:89,z:-44,y:45},{x:30,z:-70},{x:-60,z:-60},{x:-70,z:30},{x:0,z:80},{x:90,z:100}], {alt:45, climb:12})`), { frames: 240 }],
+    setup: [live, js(`T.god(); T.pacify('all'); T.teleport(14.3, 13.9, 7.3, 0)`), { frames: 2 }, js(`T.enter(14)`), { frames: 5 },
+      js(`T.drive([{x:16.8,z:7.3,y:45},{x:10,z:-45},{x:-60,z:-45},{x:-65,z:40},{x:60,z:55},{x:60,z:-40}], {alt:45, climb:12, loop:true})`), { frames: 240 }],
+  },
+  // ---- Online: the lobby against a local, disposable server with headless clients in its rooms ----
+  {
+    id: 'lobby', url: 'mode=online&size=squad&name=Lawbreaker&map=taipei', frames: 210, lobby: true, load: 6000, scale: 2, native: true,
+    setup: [{ until: `document.querySelectorAll('#rooms .room').length >= 3`, max: 600 }, { frames: 10 }],
+    cues: [
+      cue(0, `T.cursor('[data-size="duel"]', 20)`), cue(22, `T.click('[data-size="duel"]')`),
+      cue(40, `T.cursor('[data-size="squad"]', 16)`), cue(58, `T.click('[data-size="squad"]')`),
+      cue(76, `T.cursor('[data-size="war"]', 16)`), cue(94, `T.click('[data-size="war"]')`),
+      cue(116, `T.cursor('#rooms .room:nth-child(1)', 22)`), cue(150, `T.cursor('#rooms .room:nth-child(3)', 22)`),
+      cue(185, `T.cursor('#quick', 20)`),
+    ],
   },
   // ---- Maps --------------------------------------------------------------------------------
   {
-    id: 'map_101', url: 'mode=offline&map=xinyi&size=war&game=elimination', frames: 150, load: 6000,
+    id: 'map_101', url: `${XINYI}&game=elimination`, frames: 150, load: 6000,
     setup: [js(`T.hud('none')`)],
-    cues: [cue(0, `T.camera({kind:'path', frames:150, keys:[{p:[-150,2,60], t:[-60,40,6], fov:55}, {p:[-155,4,52], t:[-60,330,6], fov:52}]})`)],
+    cues: [cue(0, `T.camera({kind:'path', frames:150, keys:[{p:[-40,40,-270], t:[-60,150,6], fov:50}, {p:[-72,62,-245], t:[-60,235,6], fov:50}]})`)],
   },
   {
-    id: 'map_atrium', url: 'mode=offline&map=xinyi&size=war&game=elimination', frames: 150, load: 6000,
+    id: 'map_atrium', url: `${XINYI}&game=elimination`, frames: 150, load: 6000,
     setup: [js(`T.hud('none')`)],
-    cues: [cue(0, `T.camera({kind:'path', frames:150, keys:[{p:[-28,6,22], t:[-9,-3,10], fov:60}, {p:[-24,6.5,0], t:[-6,-3,12], fov:58}]})`)],
+    cues: [cue(0, `T.camera({kind:'path', frames:150, keys:[{p:[-9,2.4,-9], t:[-9,-3,22], fov:62}, {p:[-8,3.2,0], t:[-9,-3.5,24], fov:60}]})`)],
   },
   {
     id: 'map_market', url: `${TAIPEI}&game=elimination`, frames: 150,
     setup: [js(`T.hud('none')`)],
-    cues: [cue(0, `T.camera({kind:'path', frames:150, keys:[{p:[30,2.2,-70], t:[-60,2.5,-70], fov:58}, {p:[16,2.6,-70.5], t:[-60,2.5,-70], fov:56}]})`)],
+    cues: [cue(0, `T.camera({kind:'path', frames:150, keys:[{p:[29.5,2.2,-27.4], t:[-40,3.2,-27], fov:58}, {p:[26.5,2.5,-27.3], t:[-40,3.4,-27], fov:54}]})`)],
   },
   {
     id: 'map_cinema', url: `${TAIPEI}&game=elimination`, frames: 150,
     setup: [js(`T.hud('none')`)],
-    cues: [cue(0, `T.camera({kind:'path', frames:150, keys:[{p:[-82,2,-70], t:[-30,7,-70], fov:58}, {p:[-70,3,-69], t:[-30,8,-70], fov:55}]})`)],
+    cues: [cue(0, `T.camera({kind:'path', frames:150, keys:[{p:[-72.5,2,-27], t:[-30,6,-27], fov:54}, {p:[-69.5,2.6,-26.8], t:[-30,6.5,-27], fov:44}]})`)],
   },
   {
     id: 'map_crane', url: 'mode=offline&map=crane&size=squad&game=elimination', frames: 150,
     setup: [js(`T.hud('none')`)],
-    cues: [cue(0, `T.camera({kind:'orbit', frames:150, center:[0,0,0], radius:62, height:32, from:2.2, to:2.9, fov:55})`)],
+    cues: [cue(0, `T.camera({kind:'orbit', frames:150, center:[0,0,0], radius:55, height:24, from:2.2, to:2.9, lookUp:-2, fov:55})`)],
   },
   {
     id: 'map_tower', url: 'mode=offline&map=tower&size=squad&game=elimination', frames: 150,
@@ -229,7 +258,7 @@ export const SHOTS: Shot[] = [
   {
     // 24v24 on Meridian District: the square fifteen seconds into the round.
     id: 'map_meridian', url: 'mode=offline&map=meridian&size=war&game=elimination&team=0', frames: 180, load: 4000,
-    setup: [js(`T.hud('none')`), live, js(`T.teleport(-190,T.ground(-190,-30,10),-30,0)`), { frames: 420 }],
-    cues: [cue(0, `T.camera({kind:'path', frames:180, keys:[{p:[-70,38,-70], t:[0,0,0], fov:50}, {p:[-40,32,-82], t:[10,0,0], fov:48}]})`)],
+    setup: [js(`T.hud('none')`), live, js(`T.teleport(-190,T.ground(-190,-30,10),-30,0)`), { frames: 540 }],
+    cues: [cue(0, `T.camera({kind:'orbit', frames:180, center:[0,0,0], radius:50, height:40, from:4.0, to:3.55, fov:52})`)],
   },
 ];

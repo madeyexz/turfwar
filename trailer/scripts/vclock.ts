@@ -28,6 +28,15 @@ export const VCLOCK_SOURCE = String.raw`(() => {
   let seed = 0x1a2b3c4d;
   Math.random = () => { seed |= 0; seed = seed + 0x6D2B79F5 | 0; let t = Math.imul(seed ^ seed >>> 15, 1 | seed); t = t + Math.imul(t ^ t >>> 7, 61 | t) ^ t; return ((t ^ t >>> 14) >>> 0) / 4294967296; };
 
+  // Vite's hot-reload socket would reload the page mid-capture when a trailer source changes:
+  // hand it a socket that never connects (the game's own sockets are untouched).
+  const RealWS = window.WebSocket;
+  window.WebSocket = new Proxy(RealWS, { construct(target, args) {
+    const protocols = [].concat(args[1] || []);
+    if (protocols.some(p => String(p).startsWith('vite'))) return Object.assign(new EventTarget(), { readyState: 0, send() {}, close() {}, addEventListener: EventTarget.prototype.addEventListener });
+    return Reflect.construct(target, args);
+  } });
+
   const seen = new WeakSet();
   window.__vclock = {
     get now() { return now; },

@@ -10,13 +10,13 @@ export const FFPROBE = process.env.FFPROBE ?? (Bun.which('ffprobe') ? 'ffprobe' 
 /** Frame rate of every capture and of the cut. */
 export const FPS = 30;
 
-/** Run a command; reject with its stderr on failure. Returns stdout. */
-export function run(cmd: string, args: string[], opts: { quiet?: boolean } = {}): Promise<string> {
+/** Run a command; reject with its stderr on failure. Returns stdout (or stderr with `stderr: true`). */
+export function run(cmd: string, args: string[], opts: { quiet?: boolean; stderr?: boolean } = {}): Promise<string> {
   return new Promise((resolve, reject) => {
     const p = spawn(cmd, args, { stdio: ['ignore', 'pipe', 'pipe'] });
     let out = '', err = '';
     p.stdout.on('data', d => { out += d; });
     p.stderr.on('data', d => { err += d; if (!opts.quiet && process.env.TRAILER_VERBOSE) process.stderr.write(d); });
-    p.on('close', code => code === 0 ? resolve(out) : reject(new Error(`${cmd} ${args.slice(0, 6).join(' ')}… exited ${code}\n${err.slice(-3000)}`)));
+    p.on('close', code => code === 0 ? resolve(opts.stderr ? err : out) : reject(new Error(`${cmd} ${args.slice(0, 6).join(' ')}… exited ${code}\n${err.slice(-3000)}`)));
   });
 }

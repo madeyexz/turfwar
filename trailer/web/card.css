@@ -1,0 +1,48 @@
+/* Trailer cards in the game's own type and palette (src/style.css): Rajdhani, cyan accent, SWAT blue, Militia red. */
+@font-face { font-family: 'Rajdhani'; font-weight: 500; src: url('/fonts/rajdhani-500.woff2') format('woff2'); }
+@font-face { font-family: 'Rajdhani'; font-weight: 600; src: url('/fonts/rajdhani-600.woff2') format('woff2'); }
+@font-face { font-family: 'Rajdhani'; font-weight: 700; src: url('/fonts/rajdhani-700.woff2') format('woff2'); }
+
+:root {
+  --accent: #7ff6ff;
+  --ink: #e9f3f5;
+  --aegis: #4aa8ff;
+  --crimson: #ff5544;
+  --night: #05090c;
+}
+html, body { margin: 0; width: 1920px; height: 1080px; overflow: hidden; background: transparent; }
+body { font-family: 'Rajdhani', 'PingFang TC', 'Heiti TC', sans-serif; color: var(--ink); -webkit-font-smoothing: antialiased; }
+#card { position: absolute; inset: 0; }
+.opaque { background: radial-gradient(ellipse at 50% 45%, #0d1a20 0%, var(--night) 62%, #000 100%); }
+
+/* Subtle scan grid behind the title and end card. */
+.grid { position: absolute; inset: -40px; background-image: linear-gradient(rgba(127, 246, 255, 0.05) 1px, transparent 1px), linear-gradient(90deg, rgba(127, 246, 255, 0.05) 1px, transparent 1px); background-size: 64px 64px; }
+
+/* ---- Title ---- */
+.title { position: absolute; left: 0; right: 0; top: 330px; text-align: center; }
+.title .word { font-weight: 700; font-size: 196px; line-height: 1; letter-spacing: 0.16em; padding-left: 0.16em; text-shadow: 0 0 40px rgba(127, 246, 255, 0.25); }
+.title .sub { margin-top: 6px; font-weight: 600; font-size: 64px; letter-spacing: 0.42em; padding-left: 0.42em; color: var(--accent); }
+.title .rule { height: 2px; margin: 34px auto 0; background: linear-gradient(90deg, transparent, var(--accent), transparent); }
+.title .teams { margin-top: 30px; font-weight: 700; font-size: 58px; letter-spacing: 0.3em; padding-left: 0.3em; }
+.title .teams .swat { color: var(--aegis); }
+.title .teams .vs { color: var(--ink); opacity: 0.7; font-weight: 500; font-size: 40px; margin: 0 0.4em; }
+.title .teams .militia { color: var(--crimson); }
+
+/* ---- Lower-third caption ---- */
+.caption { position: absolute; left: 96px; bottom: 210px; padding: 18px 40px 22px 34px; }
+.caption .shade { position: absolute; inset: 0 -260px 0 -96px; background: linear-gradient(90deg, rgba(3, 8, 11, 0.78) 0%, rgba(3, 8, 11, 0.55) 60%, transparent 100%); }
+.caption .bar { position: absolute; left: 0; top: 18px; bottom: 22px; width: 6px; background: var(--accent); box-shadow: 0 0 16px var(--accent); }
+.caption .kicker { position: relative; font-weight: 700; font-size: 30px; letter-spacing: 0.34em; color: var(--accent); }
+.caption .head { position: relative; font-weight: 700; font-size: 66px; line-height: 1.05; letter-spacing: 0.02em; text-shadow: 0 2px 12px rgba(0, 0, 0, 0.7); }
+
+/* ---- Corner tag (weapon, vehicle, map) under the minimap ---- */
+.tag { position: absolute; left: 24px; top: 236px; display: flex; align-items: center; gap: 14px; padding: 9px 22px 9px 16px; background: rgba(3, 8, 11, 0.72); border-left: 5px solid var(--accent); box-shadow: 0 6px 24px rgba(0, 0, 0, 0.45); }
+.tag b { font-weight: 700; font-size: 36px; letter-spacing: 0.12em; white-space: nowrap; }
+
+/* ---- End card ---- */
+.end { position: absolute; left: 0; right: 0; top: 250px; text-align: center; }
+.end .word { font-weight: 700; font-size: 150px; line-height: 1; letter-spacing: 0.16em; padding-left: 0.16em; }
+.end .sub { font-weight: 600; font-size: 52px; letter-spacing: 0.42em; padding-left: 0.42em; color: var(--accent); }
+.end .cta { margin-top: 58px; font-weight: 600; font-size: 46px; letter-spacing: 0.08em; }
+.end .url { display: inline-block; margin-top: 22px; padding: 10px 44px 14px; font-weight: 700; font-size: 76px; letter-spacing: 0.04em; color: var(--night); background: var(--accent); box-shadow: 0 0 60px rgba(127, 246, 255, 0.45); }
+.end .note { margin-top: 34px; font-weight: 500; font-size: 32px; letter-spacing: 0.14em; opacity: 0.75; }

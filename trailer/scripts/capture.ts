@@ -40,7 +40,7 @@ try {
     const t0 = Date.now();
     // A fresh page per shot: no state leaks between shots.
     page?.close();
-    page = await browser.page(1920, 1080, SCALE);
+    page = await browser.page(1920, 1080, shot.scale ?? SCALE);
     await page.send('Page.addScriptToEvaluateOnNewDocument', { source: VCLOCK_SOURCE });
     await capture(page, shot);
     console.log(`  ${shot.id} done in ${((Date.now() - t0) / 1000).toFixed(0)} s`);
@@ -104,6 +104,6 @@ async function capture(page: Page, shot: Shot) {
   }
   writeFileSync(join(CAPTURES, `${shot.id}.sounds.json`), JSON.stringify({ frames: shot.frames, sounds }));
   await run(FFMPEG, ['-v', 'error', '-y', '-framerate', '30', '-i', join(dir, '%05d.jpg'),
-    '-vf', 'scale=1920:1080:flags=lanczos', '-c:v', 'libx264', '-preset', 'medium', '-crf', '12', '-pix_fmt', 'yuv420p', join(CAPTURES, `${shot.id}.mp4`)]);
+    '-vf', shot.native ? 'null' : 'scale=1920:1080:flags=lanczos', '-c:v', 'libx264', '-preset', 'medium', '-crf', '12', '-pix_fmt', 'yuv420p', join(CAPTURES, `${shot.id}.mp4`)]);
   if (!keep) rmSync(dir, { recursive: true, force: true });
 }
