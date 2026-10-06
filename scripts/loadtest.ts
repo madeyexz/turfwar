@@ -5,6 +5,7 @@
  * movement corrections and kills.
  *
  *   bun scripts/loadtest.ts --uri ws://127.0.0.1:3100 --db lawload --clients 100 --procs 4 --seconds 60
+ *   (--size 1|6|24, and --mode / --map to Play Online with those filters instead of Quick Play)
  *
  * Refuses non-local servers: never point this at Maincloud.
  */
@@ -25,6 +26,8 @@ const procs = Number(args.get('procs') ?? 4);
 const seconds = Number(args.get('seconds') ?? 60);
 /** Room size (soldiers per team): clients Quick Play into rooms of this size. */
 const size = Number(args.get('size') ?? 6);
+/** Optional Play Online filters ('' or absent = any). */
+const mode = args.get('mode'), map = args.get('map');
 const worker = args.get('worker');
 if (!/^wss?:\/\/(127\.0\.0\.1|localhost)(:\d+)?\/?$/.test(uri)) throw new Error(`Refusing non-local server ${uri}`);
 
@@ -35,7 +38,7 @@ if (worker === undefined) {
   const per = Math.ceil(clients / procs);
   const runs = Array.from({ length: procs }, (_, p) => new Promise<Result>((resolve, reject) => {
     const n = Math.min(per, clients - p * per);
-    const child = spawn('bun', [import.meta.path, '--uri', uri, '--db', db, '--seconds', String(seconds), '--size', String(size), '--worker', String(p), '--clients', String(n)], { stdio: ['ignore', 'pipe', 'inherit'] });
+    const child = spawn('bun', [import.meta.path, '--uri', uri, '--db', db, '--seconds', String(seconds), '--size', String(size), ...(mode !== undefined ? ['--mode', mode] : []), ...(map !== undefined ? ['--map', map] : []), '--worker', String(p), '--clients', String(n)], { stdio: ['ignore', 'pipe', 'inherit'] });
     let out = '';
     child.stdout.on('data', d => { out += d; });
     child.on('exit', code => {
@@ -124,7 +127,11 @@ class Client {
         .onConnect((conn) => {
           this.conn = conn;
           conn.subscriptionBuilder().onApplied(async () => {
-            await conn.reducers.quickJoin({ name: `Load${worker}-${this.index}`, team: -1, size });
+            const name = `Load${worker}-${this.index}`;
+            // --mode / --map: Play Online with those filters ('' = any); otherwise Quick Play by size.
+            await (mode !== undefined || map !== undefined
+              ? conn.reducers.quickPlay({ name, team: -1, size, mode: mode ?? '', mapId: map ?? '' })
+              : conn.reducers.quickJoin({ name, team: -1, size }));
             const wait = () => {
               const mine = conn.db.player.identity.find(conn.identity!);
               if (!mine) { setTimeout(wait, 100); return; }
