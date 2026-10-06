@@ -1,6 +1,6 @@
 # Trailer
 
-Everything that makes the Lawbreaker // Frontline trailer, all of it local: the shot list, the
+Everything that makes the 角頭械鬥 · Turf War: Taipei trailer (formerly Lawbreaker // Frontline), all of it local: the shot list, the
 capture tools that film the real game frame by frame, an original procedurally composed score, the
 cards, and the edit that cuts them together.
 

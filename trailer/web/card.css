@@ -22,7 +22,7 @@ body { font-family: 'Rajdhani', 'Noto Sans TC', sans-serif; color: var(--ink); -
 
 /* ---- Title ---- */
 .title { position: absolute; left: 0; right: 0; top: 330px; text-align: center; }
-.title .word { font-weight: 700; font-size: 196px; line-height: 1; letter-spacing: 0.16em; padding-left: 0.16em; text-shadow: 0 0 40px rgba(127, 246, 255, 0.25); }
+.title .word { display: inline-block; font-weight: 700; font-size: var(--word, 176px); line-height: 1; letter-spacing: 0.16em; padding-left: 0.16em; text-shadow: 0 0 40px rgba(127, 246, 255, 0.25); }
 .title .sub { margin-top: 6px; font-weight: 600; font-size: 64px; letter-spacing: 0.42em; padding-left: 0.42em; color: var(--accent); }
 .title .rule { height: 2px; margin: 34px auto 0; background: linear-gradient(90deg, transparent, var(--accent), transparent); }
 .title .teams { margin-top: 30px; font-weight: 700; font-size: 58px; letter-spacing: 0.3em; padding-left: 0.3em; }
@@ -43,7 +43,7 @@ body { font-family: 'Rajdhani', 'Noto Sans TC', sans-serif; color: var(--ink); -
 
 /* ---- End card ---- */
 .end { position: absolute; left: 0; right: 0; top: 250px; text-align: center; }
-.end .word { font-weight: 700; font-size: 150px; line-height: 1; letter-spacing: 0.16em; padding-left: 0.16em; }
+.end .word { display: inline-block; font-weight: 700; font-size: var(--word, 140px); line-height: 1; letter-spacing: 0.16em; padding-left: 0.16em; }
 .end .sub { font-weight: 600; font-size: 52px; letter-spacing: 0.42em; padding-left: 0.42em; color: var(--accent); }
 .end .cta { margin-top: 58px; font-weight: 600; font-size: 46px; letter-spacing: 0.08em; }
 .end .url { display: inline-block; margin-top: 22px; padding: 10px 44px 14px; font-weight: 700; font-size: 76px; letter-spacing: 0.04em; color: var(--night); background: var(--accent); box-shadow: 0 0 60px rgba(127, 246, 255, 0.45); }
@@ -56,3 +56,8 @@ body { font-family: 'Rajdhani', 'Noto Sans TC', sans-serif; color: var(--ink); -
 :lang(zh-TW) .title .teams { letter-spacing: 0.22em; padding-left: 0.22em; font-weight: 800; }
 :lang(zh-TW) .end .cta { font-size: 50px; font-weight: 700; letter-spacing: 0.12em; }
 :lang(zh-TW) .end .note { font-size: 30px; letter-spacing: 0.1em; font-weight: 500; }
+
+/* ---- The name in Chinese (角頭械鬥): Noto Sans TC at its heaviest, bigger, tighter ---- */
+.title .word.cjk { font-size: var(--word, 228px); font-weight: 900; font-family: 'Noto Sans TC', sans-serif; line-height: 1.1; }
+.end .word.cjk { font-size: var(--word, 176px); font-weight: 900; font-family: 'Noto Sans TC', sans-serif; line-height: 1.15; }
+.title .sub.cjk, .end .sub.cjk { font-family: 'Noto Sans TC', sans-serif; font-weight: 700; letter-spacing: 0.3em; padding-left: 0.3em; }

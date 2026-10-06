@@ -12,6 +12,10 @@ const clamp = (v: number) => Math.max(0, Math.min(1, v));
 const ease = (u: number) => 1 - (1 - clamp(u)) ** 3;
 /** 0→1 over [a, b] frames, eased. */
 const span = (f: number, a: number, b: number) => ease((f - a) / (b - a));
+/** Chinese lines get the CJK treatment (Noto Sans TC, heavier, tighter tracking). */
+const isCjk = (s: string) => /[\u3400-\u9fff]/.test(s);
+const cjk = (s: string) => isCjk(s) ? ' cjk' : '';
+const track = (s: string) => isCjk(s) ? 0.12 : 0.16;
 const esc = (s: string) => s.replace(/[&<>]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;' }[c]!));
 
 let pose: (f: number) => void = () => undefined;
@@ -22,14 +26,14 @@ function show(kind: Kind, lines: string[], frames: number) {
   if (kind === 'title') {
     const [word, sub, teams] = lines;
     const [swat, militia] = teams.split(' vs ');
-    root.innerHTML = `<div class="grid"></div><div class="title"><div class="word">${esc(word)}</div><div class="sub">${esc(sub)}</div><div class="rule"></div>
+    root.innerHTML = `<div class="grid"></div><div class="title"><div class="word${cjk(word)}">${esc(word)}</div><div class="sub${cjk(sub)}">${esc(sub)}</div><div class="rule"></div>
       <div class="teams"><span class="swat">${esc(swat)}</span><span class="vs">vs</span><span class="militia">${esc(militia)}</span></div></div>`;
     const q = (s: string) => root.querySelector<HTMLElement>(s)!;
     const short = frames < 90;
     pose = f => {
       const k = short ? 0.5 : 1;
       const w = span(f, 0, 20 * k);
-      q('.word').style.cssText = `opacity:${w};letter-spacing:${0.16 + (1 - w) * 0.25}em;filter:blur(${(1 - w) * 8}px)`;
+      q('.word').style.cssText = `opacity:${w};letter-spacing:${track(word) + (1 - w) * 0.25}em;filter:blur(${(1 - w) * 8}px)`;
       const s = span(f, 12 * k, 30 * k);
       q('.sub').style.cssText = `opacity:${s};transform:translateY(${(1 - s) * 18}px)`;
       q('.rule').style.width = `${span(f, 18 * k, 48 * k) * 900}px`;
@@ -59,12 +63,12 @@ function show(kind: Kind, lines: string[], frames: number) {
     };
   } else {
     const [word, sub, cta, url, note] = lines;
-    root.innerHTML = `<div class="grid"></div><div class="end"><div class="word">${esc(word)}</div><div class="sub">${esc(sub)}</div>
+    root.innerHTML = `<div class="grid"></div><div class="end"><div class="word${cjk(word)}">${esc(word)}</div><div class="sub${cjk(sub)}">${esc(sub)}</div>
       <div class="cta">${esc(cta)}</div><div class="url">${esc(url)}</div><div class="note">${esc(note)}</div></div>`;
     const q = (s: string) => root.querySelector<HTMLElement>(s)!;
     pose = f => {
       root.style.opacity = String(span(f, 0, 12) * (1 - span(f, frames - 20, frames)));
-      q('.word').style.cssText = `opacity:${span(f, 0, 16)};letter-spacing:${0.16 + (1 - span(f, 0, 24)) * 0.12}em`;
+      q('.word').style.cssText = `opacity:${span(f, 0, 16)};letter-spacing:${track(word) + (1 - span(f, 0, 24)) * 0.12}em`;
       q('.sub').style.opacity = String(span(f, 8, 24));
       q('.cta').style.cssText = `opacity:${span(f, 22, 36)};transform:translateY(${(1 - span(f, 22, 36)) * 14}px)`;
       const u = span(f, 30, 44);
@@ -77,8 +81,18 @@ function show(kind: Kind, lines: string[], frames: number) {
   const text = lines.join('');
   return Promise.all([
     ...[500, 600, 700].map(w => document.fonts.load(`${w} 40px Rajdhani`)),
-    ...(LANG === 'zh-TW' ? [500, 700, 800].map(w => document.fonts.load(`${w} 40px "Noto Sans TC"`, text)) : []),
-  ]).then(() => document.fonts.ready).then(() => true);
+    ...(/[\u3400-\u9fff]/.test(text) ? [500, 700, 800, 900].map(w => document.fonts.load(`${w} 40px "Noto Sans TC"`, text)) : []),
+  ]).then(() => document.fonts.ready).then(() => {
+    // The name fills the card: shrink it (at its settled tracking) until it fits 1680 px.
+    const word = root.querySelector<HTMLElement>('.word');
+    if (word) {
+      pose(frames - 30);
+      let size = parseFloat(getComputedStyle(word).fontSize);
+      while (word.getBoundingClientRect().width > 1680 && size > 60) { size -= 4; root.style.setProperty('--word', `${size}px`); }
+      pose(0);
+    }
+    return true;
+  });
 }
 
 Object.assign(window, { __card: { show, at: (f: number) => { pose(f); return f; } } });

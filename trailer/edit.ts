@@ -37,8 +37,8 @@ export interface Cut { id: string; segments: Segment[]; overlays: Overlay[]; sco
 
 /** Cards: [id, kind, lines, frames]. Lower thirds (`caption`), corner tags (`tag`), the title and the end card. */
 export const CARDS: [string, 'title' | 'caption' | 'tag' | 'end', string[], number][] = [
-  ['title', 'title', ['LAWBREAKER', '// FRONTLINE', 'SWAT vs MILITIA'], 120],
-  ['title_short', 'title', ['LAWBREAKER', '// FRONTLINE', 'SWAT vs MILITIA'], 60],
+  ['title', 'title', ['TURF WAR: TAIPEI', '角頭械鬥', 'SWAT vs MILITIA'], 120],
+  ['title_short', 'title', ['TURF WAR: TAIPEI', '角頭械鬥', 'SWAT vs MILITIA'], 60],
   ['cap_store', 'caption', ['THE STORE', 'Buy guns. Fit optics. Fight.'], 150],
   ['cap_sabotage', 'caption', ['SABOTAGE', 'Arm the bomb. Or stop it.'], 225],
   ['cap_elimination', 'caption', ['ELIMINATION', 'One life a round. First to ten.'], 165],
@@ -54,18 +54,18 @@ export const CARDS: [string, 'title' | 'caption' | 'tag' | 'end', string[], numb
   ['tag_101', 'tag', ['TAIPEI 101 · XINYI'], 68], ['tag_atrium', 'tag', ['XINYI MALL ATRIUM'], 40], ['tag_market', 'tag', ['XIMEN NIGHT MARKET 西門夜市'], 54],
   ['tag_cinema', 'tag', ['CINEMA STREET 電影街'], 54], ['tag_crane', 'tag', ['CRANE'], 54], ['tag_tower', 'tag', ['TOWER'], 54], ['tag_warehouse', 'tag', ['WAREHOUSE'], 54],
   ['tag_meridian', 'tag', ['MERIDIAN DISTRICT · 24v24'], 54],
-  ['end', 'end', ['LAWBREAKER', '// FRONTLINE', 'Play free in your browser', 'lawbreaker.vercel.app', 'Solo vs bots · Online rooms 1v1 · 6v6 · 24v24'], 300],
-  ['end_short', 'end', ['LAWBREAKER', '// FRONTLINE', 'Play free in your browser', 'lawbreaker.vercel.app', 'Solo vs bots · Online rooms 1v1 · 6v6 · 24v24'], 180],
+  ['end', 'end', ['TURF WAR: TAIPEI', '角頭械鬥', 'Play free in your browser', 'lawbreaker.vercel.app', 'Solo vs bots · Online rooms 1v1 · 6v6 · 24v24'], 300],
+  ['end_short', 'end', ['TURF WAR: TAIPEI', '角頭械鬥', 'Play free in your browser', 'lawbreaker.vercel.app', 'Solo vs bots · Online rooms 1v1 · 6v6 · 24v24'], 180],
 ];
 
 /**
  * Traditional Chinese (Taiwan) copy for the zh-TW trailer: written as trailer lines, not translated
  * word for word. Team, mode, map and gear names match the game's own (src/ui/i18n.ts). The brand and
- * the URL stay in English.
+ * the URL stay in English; the lockup leads with 角頭械鬥.
  */
 export const CARDS_ZH: Record<string, string[]> = {
-  title: ['LAWBREAKER', '// FRONTLINE', '特警 vs 民兵'],
-  title_short: ['LAWBREAKER', '// FRONTLINE', '特警 vs 民兵'],
+  title: ['角頭械鬥', 'TURF WAR: TAIPEI', '特警 vs 民兵'],
+  title_short: ['角頭械鬥', 'TURF WAR: TAIPEI', '特警 vs 民兵'],
   cap_store: ['商店', '買槍、上配件，直接開打。'],
   cap_sabotage: ['爆破戰', '炸彈裝下去，或拆掉它。'],
   cap_elimination: ['殲滅戰', '一回合一條命，先拿十勝。'],
@@ -79,8 +79,8 @@ export const CARDS_ZH: Record<string, string[]> = {
   tag_heli: ['直升機'], tag_drift: ['手煞車甩尾'], tag_scooter: ['機車 · 單手開火'], tag_flight: ['飛越西門町'],
   tag_101: ['台北101 · 信義'], tag_atrium: ['信義商場中庭'], tag_market: ['西門夜市'], tag_cinema: ['西門町電影街'],
   tag_crane: ['起重機'], tag_tower: ['塔樓'], tag_warehouse: ['倉庫'], tag_meridian: ['子午線街區 · 24v24'],
-  end: ['LAWBREAKER', '// FRONTLINE', '打開瀏覽器，免費開打', 'lawbreaker.vercel.app', '單機對戰電腦 · 線上房間 1v1 · 6v6 · 24v24'],
-  end_short: ['LAWBREAKER', '// FRONTLINE', '打開瀏覽器，免費開打', 'lawbreaker.vercel.app', '單機對戰電腦 · 線上房間 1v1 · 6v6 · 24v24'],
+  end: ['角頭械鬥', 'TURF WAR: TAIPEI', '打開瀏覽器，免費開打', 'lawbreaker.vercel.app', '單機對戰電腦 · 線上房間 1v1 · 6v6 · 24v24'],
+  end_short: ['角頭械鬥', 'TURF WAR: TAIPEI', '打開瀏覽器，免費開打', 'lawbreaker.vercel.app', '單機對戰電腦 · 線上房間 1v1 · 6v6 · 24v24'],
 };
 /** A card's lines in a language (English is CARDS' own). */
 export function cardLines(id: string, lang: string) {
