@@ -222,8 +222,9 @@ export class LocalPlayer {
     const canSprint = this.sprinting ? this.stamina > 0 : this.stamina > STAMINA.tired + STAMINA.sprintStart;
     const jumpKey = can && input!.down('jump') && this.stamina >= STAMINA.jump;
     const moveInput: MoveInput = can ? {
-      forward: Number(input!.down('forward')) - Number(input!.down('back')),
-      strafe: Number(input!.down('right')) - Number(input!.down('left')),
+      // Keys are all or nothing; the touch stick walks at any speed up to a run.
+      forward: input!.amount('forward') - input!.amount('back'),
+      strafe: input!.amount('right') - input!.amount('left'),
       yaw: this.yaw, jump: jumpKey, crouch: input!.down('crouch'),
       sprint: sprintKey && canSprint && this.sprintBlock <= 0,
       ads: (input!.aim && w.class !== 'melee' && this.reloadLeft <= 0 && this.switchLeft < 0.1 && !this.rider) || this.binoculars,
