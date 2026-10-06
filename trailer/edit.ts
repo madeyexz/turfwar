@@ -36,7 +36,7 @@ export type { Section };
 export interface Cut { id: string; segments: Segment[]; overlays: Overlay[]; score: [Section, number][] }
 
 /** Cards: [id, kind, lines, frames]. Lower thirds (`caption`), corner tags (`tag`), the title and the end card. */
-export const CARDS: [string, 'title' | 'caption' | 'tag' | 'end', string[], number][] = [
+export const CARDS: [string, 'title' | 'caption' | 'tag' | 'end' | 'credit', string[], number][] = [
   ['title', 'title', ['TURF WAR: TAIPEI', '角頭械鬥', 'SWAT vs MILITIA'], 120],
   ['title_short', 'title', ['TURF WAR: TAIPEI', '角頭械鬥', 'SWAT vs MILITIA'], 60],
   ['cap_store', 'caption', ['THE STORE', 'Buy guns. Fit optics. Fight.'], 150],
@@ -56,6 +56,25 @@ export const CARDS: [string, 'title' | 'caption' | 'tag' | 'end', string[], numb
   ['tag_meridian', 'tag', ['MERIDIAN DISTRICT · 24v24'], 54],
   ['end', 'end', ['TURF WAR: TAIPEI', '角頭械鬥', 'Play free in your browser', 'lawbreaker.vercel.app', 'Solo vs bots · Online rooms 1v1 · 6v6 · 24v24'], 300],
   ['end_short', 'end', ['TURF WAR: TAIPEI', '角頭械鬥', 'Play free in your browser', 'lawbreaker.vercel.app', 'Solo vs bots · Online rooms 1v1 · 6v6 · 24v24'], 180],
+  // ---- The Turf War: Taipei edit ----
+  ['credit_solo', 'credit', ["A tribute to Alex Honnold's 2025 free solo of Taipei 101"], 120],
+  ['cap_solo1', 'caption', ['TAIPEI 101', 'Free solo. 508 m.'], 105],
+  ['cap_solo2', 'caption', ['TAIPEI 101', 'No ropes. Just a rifle.'], 135],
+  ['cap_88f', 'caption', ['TAIPEI 101 · 88F', '383 m up. Take the floor.'], 165],
+  ['tag_damper', 'tag', ['TUNED MASS DAMPER · 660 t'], 80], ['tag_server', 'tag', ['SITE A · SERVER ROOM'], 80],
+  ['tag_board', 'tag', ['SITE B · BOARDROOM'], 95], ['tag_window', 'tag', ['383 M ABOVE XINYI'], 90],
+  ['cap_memorial', 'caption', ['MEMORIAL HALL', '89 steps to the chamber.'], 165],
+  ['tag_memgallery', 'tag', ['SITE A · GALLERY HALL'], 80],
+  ['tag_store', 'tag', ['THE STORE · GUNS & ATTACHMENTS'], 80],
+  ['cap_sabotage2', 'caption', ['SABOTAGE', 'Arm the bomb. Or stop it.'], 85],
+  ['cap_elimination2', 'caption', ['ELIMINATION', 'One life a round. First to ten.'], 115],
+  ['tag_duel', 'tag', ['1v1 DUEL'], 55], ['tag_war', 'tag', ['24v24 · MERIDIAN DISTRICT'], 70],
+  ['cap_vehicles2', 'caption', ['VEHICLES', 'Drive it. Ride it. Fly it.'], 150],
+  ['tag_shove', 'tag', ['CARS SHOVE CARS'], 80], ['tag_roof', 'tag', ['UP ON THE ROOF'], 90],
+  ['cap_maps2', 'caption', ['18 MAPS', 'From Ximending to Taipei 101.'], 150],
+  ['cap_online2', 'caption', ['PLAY ONLINE', 'Pick your fight. One click.'], 150],
+  ['end2', 'end', ['TURF WAR: TAIPEI', '角頭械鬥', 'Play free in your browser', 'lawbreaker.vercel.app', 'Solo vs bots · Online rooms 1v1 · 6v6 · 24v24'], 300],
+  ['end2_short', 'end', ['TURF WAR: TAIPEI', '角頭械鬥', 'Play free in your browser', 'lawbreaker.vercel.app', 'Solo vs bots · Online rooms 1v1 · 6v6 · 24v24'], 150],
 ];
 
 /**
@@ -81,6 +100,24 @@ export const CARDS_ZH: Record<string, string[]> = {
   tag_crane: ['起重機'], tag_tower: ['塔樓'], tag_warehouse: ['倉庫'], tag_meridian: ['子午線街區 · 24v24'],
   end: ['角頭械鬥', 'TURF WAR: TAIPEI', '打開瀏覽器，免費開打', 'lawbreaker.vercel.app', '單機對戰電腦 · 線上房間 1v1 · 6v6 · 24v24'],
   end_short: ['角頭械鬥', 'TURF WAR: TAIPEI', '打開瀏覽器，免費開打', 'lawbreaker.vercel.app', '單機對戰電腦 · 線上房間 1v1 · 6v6 · 24v24'],
+  // The Turf War: Taipei edit.
+  credit_solo: ['致敬 Alex Honnold 2025 年徒手攀登台北101'],
+  cap_solo1: ['台北101', '徒手攀登 · 508 公尺'],
+  cap_solo2: ['台北101', '沒有繩索，只有步槍。'],
+  cap_88f: ['台北101 · 88F', '383 公尺高空，整層樓都是戰場。'],
+  tag_damper: ['風阻尼器 · 660 公噸'], tag_server: ['A 點 · 機房'], tag_board: ['B 點 · 董事會議室'], tag_window: ['信義區上空 383 公尺'],
+  cap_memorial: ['中正紀念堂', '89 階，直上紀念大廳。'],
+  tag_memgallery: ['A 點 · 展覽廳'],
+  tag_store: ['商店 · 槍枝與配件'],
+  cap_sabotage2: ['爆破戰', '炸彈裝下去，或拆掉它。'],
+  cap_elimination2: ['殲滅戰', '一回合一條命，先拿十勝。'],
+  tag_duel: ['1v1 單挑'], tag_war: ['24v24 · 子午線街區'],
+  cap_vehicles2: ['載具', '飆車、騎機車、開直升機。'],
+  tag_shove: ['車撞車，硬推開'], tag_roof: ['跳上車頂開火'],
+  cap_maps2: ['18 張地圖', '從西門町一路打到台北101。'],
+  cap_online2: ['線上對戰', '挑好戰場，一鍵開打。'],
+  end2: ['角頭械鬥', 'TURF WAR: TAIPEI', '瀏覽器免費玩', 'lawbreaker.vercel.app', '單機對戰電腦 · 線上房間 1v1 · 6v6 · 24v24'],
+  end2_short: ['角頭械鬥', 'TURF WAR: TAIPEI', '瀏覽器免費玩', 'lawbreaker.vercel.app', '單機對戰電腦 · 線上房間 1v1 · 6v6 · 24v24'],
 };
 /** A card's lines in a language (English is CARDS' own). */
 export function cardLines(id: string, lang: string) {
@@ -196,7 +233,119 @@ export const SHORT: Cut = {
   score: [['open', 4], ['title', 4], ['guns', 12], ['drop', 12], ['climax', 12], ['rise', 4], ['end', 12]],
 };
 
-export const CUTS = [FULL, SHORT];
+/** The first edit (Lawbreaker // Frontline era), kept for reference; its outputs are in out/previous/. */
+export const LEGACY = [FULL, SHORT];
+
+/**
+ * Turf War: Taipei (角頭械鬥) — the new edit. Act 1: the Taipei 101 free solo as the cold open, a
+ * stop on the punchline and the title hit; Taipei 101 · 88F and Memorial Hall. Act 2: the modes, the
+ * sizes, the store; the vehicles' drop. Act 3: a silent beat, the maps, the lobby, the end card.
+ */
+export const TURF: Cut = {
+  id: 'turfwar-trailer',
+  segments: [
+    // 0–12 s: the free solo (open + a silent beat as the helicopter rises).
+    s('climb_wide', 15, 75, { enter: 'black' }),
+    s('climb_hands', 10, 45),
+    s('climb_down', 10, 45),
+    s('climb_orbit', 10, 60),
+    s('climb_push', 10, 45),
+    s('climb_top', 0, 90),
+    // 12–16 s: title.
+    s('card:title', 0, 120),
+    // 16–24 s: Taipei 101 · Xinyi, into 88F.
+    s('map_101', 30, 75, { enter: 'flash' }),
+    s('t101_push', 0, 120),
+    s('map_atrium', 40, 45),
+    // 24–40 s: the floor at 383 m.
+    s('t101_damper', 15, 90, { enter: 'flash' }),
+    s('t101_gallery', 20, 90),
+    s('t101_server', 15, 90),
+    s('t101_arm', 0, 45),
+    s('t101_arm', 140, 60),
+    s('t101_window', 10, 105),
+    // 40–52 s: Memorial Hall.
+    s('mem_aerial', 15, 90, { enter: 'flash' }),
+    s('mem_stairs', 30, 90),
+    s('mem_chamber', 15, 90),
+    s('mem_gallery', 20, 90),
+    // 52–62 s: the store, Sabotage, Elimination, a duel.
+    s('store', 120, 90, { enter: 'flash', zoom: { scale: 1.22, x: 0.5, y: 0.5 } }),
+    s('bomb_defuse', 140, 90),
+    s('elim_crane', 40, 60),
+    s('duel', 30, 60),
+    // 62–66 s: 24v24, then the helicopter lifts off (rotor swell, M249 fill).
+    s('map_meridian', 60, 75),
+    s('heli_takeoff', 100, 45),
+    // 66–82 s: vehicles.
+    s('drift', 60, 105, { enter: 'flash' }),
+    s('scooter', 45, 90),
+    s('car_shove', 60, 90),
+    s('roof_jump', 0, 105),
+    s('heli_flight', 30, 90),
+    // 82–83 s: silence — Taipei 101 through the binoculars.
+    s('binos', 40, 30),
+    // 83–91 s: the maps.
+    s('map_market', 20, 60, { enter: 'flash' }),
+    s('map_cinema', 0, 60),
+    s('map_crane', 30, 45),
+    s('map_tower', 30, 45),
+    s('map_warehouse', 30, 30),
+    // 91–97 s: the lobby (filters, Play Online, live rooms).
+    s('lobby2', 0, 105, { enter: 'flash', zoom: { scale: 1.7, x: 0, y: 0 } }),
+    s('lobby2', 140, 75, { zoom: { scale: 2.2, x: 0, y: 0.35 } }),
+    // 97–107 s: end card.
+    s('card:end2', 0, 300),
+  ],
+  overlays: [
+    { card: 'credit_solo', at: 15 },
+    { card: 'cap_solo1', at: 75 + 6 }, { card: 'cap_solo2', at: 180 + 6 },
+    { card: 'tag_101', at: 16 * 30 + 4 }, { card: 'cap_88f', at: 18.5 * 30 + 10 },
+    { card: 'tag_damper', at: 24 * 30 + 6 }, { card: 'tag_server', at: 30 * 30 + 6 }, { card: 'tag_board', at: 33 * 30 + 4 }, { card: 'tag_window', at: 36.5 * 30 + 6 },
+    { card: 'cap_memorial', at: 40 * 30 + 10 }, { card: 'tag_memgallery', at: 49 * 30 + 6 },
+    { card: 'tag_store', at: 52 * 30 + 4 }, { card: 'cap_sabotage2', at: 55 * 30 + 4 }, { card: 'cap_elimination2', at: 58 * 30 + 4 },
+    { card: 'tag_duel', at: 60 * 30 + 3 }, { card: 'tag_war', at: 62 * 30 + 3 },
+    { card: 'cap_vehicles2', at: 66 * 30 + 10 }, { card: 'tag_drift', at: 66 * 30 + 6, frames: 95 }, { card: 'tag_scooter', at: 69.5 * 30 + 4, frames: 82 },
+    { card: 'tag_shove', at: 72.5 * 30 + 4 }, { card: 'tag_roof', at: 75.5 * 30 + 6 }, { card: 'tag_flight', at: 79 * 30 + 4, frames: 82 },
+    { card: 'cap_maps2', at: 83 * 30 + 10 }, { card: 'tag_market', at: 83 * 30 + 3 }, { card: 'tag_cinema', at: 85 * 30 + 3 },
+    { card: 'tag_crane', at: 87 * 30 + 3, frames: 40 }, { card: 'tag_tower', at: 88.5 * 30 + 3, frames: 40 }, { card: 'tag_warehouse', at: 90 * 30 + 2, frames: 27 },
+    { card: 'cap_online2', at: 91 * 30 + 8 },
+  ],
+  score: [['open', 22], ['silence', 2], ['title', 8], ['store', 16], ['guns', 56], ['tension', 20], ['fill', 8], ['drop', 32], ['silence', 2], ['climax', 16], ['rise', 12], ['end', 20]],
+};
+
+export const TURF_SHORT: Cut = {
+  id: 'turfwar-trailer-30s',
+  segments: [
+    s('climb_hands', 10, 30, { enter: 'black' }),
+    s('climb_down', 10, 30),
+    s('climb_top', 45, 45),
+    s('card:title_short', 0, 60),
+    s('t101_push', 50, 60, { enter: 'flash' }),
+    s('t101_damper', 30, 45),
+    s('t101_server', 30, 45),
+    s('mem_stairs', 60, 30),
+    s('drift', 75, 60, { enter: 'flash' }),
+    s('car_shove', 95, 45),
+    s('roof_jump', 0, 45),
+    s('scooter', 60, 45),
+    s('heli_flight', 30, 45),
+    s('mem_aerial', 30, 45, { enter: 'flash' }),
+    s('t101_window', 40, 45),
+    s('t101_arm', 140, 45),
+    s('lobby2', 140, 30, { zoom: { scale: 2.2, x: 0, y: 0.35 } }),
+    s('card:end2_short', 0, 150),
+  ],
+  overlays: [
+    { card: 'cap_solo1', at: 4, frames: 56 },
+    { card: 'tag_101', at: 5.5 * 30 + 3, frames: 54 }, { card: 'tag_damper', at: 7.5 * 30 + 3, frames: 42 }, { card: 'tag_server', at: 9 * 30 + 3, frames: 42 },
+    { card: 'tag_drift', at: 11.5 * 30 + 3, frames: 54 }, { card: 'tag_shove', at: 13.5 * 30 + 3, frames: 42 }, { card: 'tag_roof', at: 15 * 30 + 3, frames: 42 },
+    { card: 'tag_scooter', at: 16.5 * 30 + 3, frames: 42 },
+  ],
+  score: [['open', 6], ['silence', 1], ['title', 4], ['guns', 12], ['drop', 16], ['climax', 9], ['rise', 2], ['end', 10]],
+};
+
+export const CUTS = [TURF, TURF_SHORT];
 
 /** Seconds at which each segment of a cut starts (its picture cuts). */
 export const cutTimes = (cut: Cut) => { let at = 0; return cut.segments.map(s => { const t = at / FPS; at += s.frames; return t; }); };

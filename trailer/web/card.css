@@ -61,3 +61,7 @@ body { font-family: 'Rajdhani', 'Noto Sans TC', sans-serif; color: var(--ink); -
 .title .word.cjk { font-size: var(--word, 228px); font-weight: 900; font-family: 'Noto Sans TC', sans-serif; line-height: 1.1; }
 .end .word.cjk { font-size: var(--word, 176px); font-weight: 900; font-family: 'Noto Sans TC', sans-serif; line-height: 1.15; }
 .title .sub.cjk, .end .sub.cjk { font-family: 'Noto Sans TC', sans-serif; font-weight: 700; letter-spacing: 0.3em; padding-left: 0.3em; }
+
+/* ---- A small, quiet credit line (bottom right) ---- */
+.credit { position: absolute; right: 64px; bottom: 54px; font-weight: 500; font-size: 26px; letter-spacing: 0.06em; color: rgba(233, 243, 245, 0.82); text-shadow: 0 1px 6px rgba(0, 0, 0, 0.8); }
+:lang(zh-TW) .credit { font-size: 26px; letter-spacing: 0.08em; }

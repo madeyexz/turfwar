@@ -403,7 +403,9 @@ function arrange(sections: [Section, number][], cuts: number[]): Plan {
       add(end - 2, 'riser', 0.6, 'hit', { hall: 0.3, rate: 2 });
       for (let i = 0; i < 9; i++) add(end - BEAT * 1.5 + i * (1 / 9) * 1.3, `shot-m249-${(i % 4) + 1}`, 0.35 + i * 0.05, 'hit', { hall: 0.25, pan: (i % 2 ? 0.2 : -0.2) });
     }
-    if (next === 'climax' || next === 'title' || next === 'end') add(end - 4, 'riser', 0.55, 'hit', { hall: 0.3 });
+    // A short stop before a section counts as part of the run-up: the riser ends in the stop (and is cut by it).
+    const after = next === 'silence' ? sections[si + 2]?.[0] : next;
+    if (after === 'climax' || after === 'title' || after === 'end') add(end - 4, 'riser', 0.55, 'hit', { hall: 0.3 });
     // Stops: a silent beat (a casing falls in it) before the montage; the last beat before the end card holds only a dry-fire click.
     if (kind === 'silence') { silences.push([start, end]); add(start + 0.3, 'foley-shell', 0.6, 'post', { rate: 0.95 }); add(start + 0.55, 'foley-shell', 0.35, 'post', { rate: 1.1, pan: 0.3 }); }
     if (kind === 'rise') { silences.push([end - BEAT, end]); add(end - BEAT * 0.5, 'foley-click', 0.9, 'post'); }

@@ -2,7 +2,7 @@
  * Trailer cards, animated by frame (trailer/scripts/cards.ts screenshots each frame, with alpha
  * for captions and tags). `__card.show(kind, lines, frames)` builds a card; `__card.at(f)` poses it.
  */
-type Kind = 'title' | 'caption' | 'tag' | 'end';
+type Kind = 'title' | 'caption' | 'tag' | 'end' | 'credit';
 
 const root = document.querySelector<HTMLElement>('#card')!;
 /** `?lang=zh-TW`: Chinese typography (card.css) and the game's Noto Sans TC. */
@@ -54,6 +54,10 @@ function show(kind: Kind, lines: string[], frames: number) {
       q('.head').style.cssText = `clip-path:inset(0 ${100 - span(f, 8, 20) * 100}% 0 0);opacity:${1 - out};transform:translateX(${-out * 30}px)`;
       q('.bar').style.opacity = String(1 - out);
     };
+  } else if (kind === 'credit') {
+    root.innerHTML = `<div class="credit">${esc(lines[0])}</div>`;
+    const el = root.querySelector<HTMLElement>('.credit')!;
+    pose = f => { el.style.opacity = String(span(f, 0, 15) * (1 - span(f, frames - 15, frames))); };
   } else if (kind === 'tag') {
     root.innerHTML = `<div class="tag"><b>${esc(lines[0])}</b></div>`;
     const tag = root.querySelector<HTMLElement>('.tag')!;
