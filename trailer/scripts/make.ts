@@ -51,9 +51,7 @@ try {
       const p = spawn('spacetime', ['publish', DB, '--module-path', 'spacetimedb', '--server', `http://127.0.0.1:${STDB_PORT}`, '--yes'], { cwd: REPO, stdio: 'inherit' });
       p.on('close', code => code === 0 ? resolve() : reject(new Error('spacetime publish failed')));
     });
-    for (const [size, clients] of [[1, 1], [6, 9], [24, 18]]) {
-      start('bun', ['scripts/loadtest.ts', '--uri', `ws://127.0.0.1:${STDB_PORT}`, '--db', DB, '--clients', String(clients), '--procs', '1', '--seconds', '7200', '--size', String(size)]);
-    }
+    start('bun', [join(ROOT, 'scripts', 'rooms.ts'), `ws://127.0.0.1:${STDB_PORT}`, DB, '7200']);
     start(join(REPO, 'node_modules/.bin/vite'), ['--port', String(VITE_PORT), '--strictPort', '--host', '127.0.0.1'],
       { VITE_SPACETIMEDB_URI: `ws://127.0.0.1:${STDB_PORT}`, VITE_SPACETIMEDB_DATABASE: DB });
     await waitFor(`http://127.0.0.1:${VITE_PORT}/`, 'Vite');
