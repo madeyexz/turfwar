@@ -1,7 +1,8 @@
 import { describe, expect, it } from 'vitest';
 import { CollisionWorld } from './collision';
 import { MAP_IDS, loadMap } from './maps/index';
-import { rng } from './math';
+import { rng, wrapAngle } from './math';
+import { PLAY } from './maps/taipei-compact';
 import {
   HELI_CEILING, VEHICLES, createVehicle, exitSpot, forwardOf, idleVehicleInput, raycastVehicle, seatPosition, skidOf, slipAngle, speedOf, stepVehicle,
   vehicleBlocked, type Vehicle, type VehicleInput,
@@ -288,6 +289,66 @@ describe('vehicles in a match', () => {
       }
       expect(a.corrections, kind).toBe(before);
       expect(peak, kind).toBeGreaterThan(0.12);
+    }
+  });
+
+  // Taipei's ring road round the compact Ximending and Emei St's cut-through, in the source's
+  // coordinates (taipei-compact.ts, taipei-streets.ts): lane centres and the bends between them.
+  const RING_LAP: [number, number][] = [
+    [-840, -292], [-857, -291], [-865.5, -282], [-865.5, -240], [-865.5, -185], [-858, -168], [-800, -167.5], [-740, -167.5],
+    [-719, -169], [-711, -180], [-711, -240], [-711, -282], [-720, -292], [-780, -292], [-805, -292],
+  ];
+  const EMEI_RUN: [number, number][] = [
+    [-850, -167.5], [-860, -171], [-865.5, -182], [-865.5, -198], [-861, -207.5], [-852, -210.7], [-836, -210.7], [-832, -208],
+    [-828.5, -204.3], [-822, -203.5], [-803, -203.5], [-798, -207], [-793, -210.5], [-753, -210.5], [-748, -207], [-743, -203.5],
+    [-722, -203.3], [-713, -208], [-711, -222], [-711, -250],
+  ];
+  /**
+   * Drive a car along waypoints (source coordinates) like a player: steer for a point 6 m ahead on
+   * the route, brake for the bends, report at 20 Hz. Returns how far it got and its hardest knock.
+   */
+  const driveRoute = (state: MatchState, ctx: SimContext, a: Soldier, index: number, path: [number, number][]) => {
+    const OX = (PLAY.x0 + PLAY.x1) / 2, OZ = (PLAY.z0 + PLAY.z1) / 2;
+    const sim = { ...state.vehicles[index] };
+    const route = [{ x: sim.x, z: sim.z }, ...path.map(([x, z]) => ({ x: x - OX, z: z - OZ }))];
+    let leg = 1, worst = 0, where = '', ticks = 0;
+    while (leg < route.length && ticks++ < 2400) {
+      const p = route[leg - 1], q = route[leg], r = route[leg + 1];
+      const dx = q.x - p.x, dz = q.z - p.z, len = Math.hypot(dx, dz) || 1;
+      const along = Math.max(0, Math.min(len, ((sim.x - p.x) * dx + (sim.z - p.z) * dz) / len));
+      let ahead = along + 6, tx = q.x, tz = q.z;
+      if (ahead <= len || !r) { const t = Math.min(ahead, len) / len; tx = p.x + dx * t; tz = p.z + dz * t; }
+      else { ahead -= len; const l2 = Math.hypot(r.x - q.x, r.z - q.z) || 1, t = Math.min(ahead, l2) / l2; tx = q.x + (r.x - q.x) * t; tz = q.z + (r.z - q.z) * t; }
+      const err = wrapAngle(Math.atan2(-(tx - sim.x), -(tz - sim.z)) - sim.yaw);
+      const bend = r ? Math.abs(wrapAngle(Math.atan2(-(r.x - q.x), -(r.z - q.z)) - Math.atan2(-dx, -dz))) : 0;
+      const left = Math.hypot(q.x - sim.x, q.z - sim.z), target = bend > 0.5 && left < 22 ? 11 : bend > 0.25 && left < 14 ? 7 : 18;
+      const speed = speedOf(sim), throttle = speed > target + 1 ? -1 : speed > target ? 0 : Math.abs(err) > 0.5 ? 0.4 : 0.9;
+      // Steering right lowers the yaw.
+      const input = { ...idleVehicleInput(sim.yaw, true), steer: Math.max(-1, Math.min(1, -err * 2)), throttle };
+      for (let i = 0; i < 6; i++) {
+        const hit = stepVehicle(ctx.world, sim, input, 1 / 120).impact;
+        if (hit > worst) { worst = hit; where = `${(sim.x + OX).toFixed(1)},${(sim.z + OZ).toFixed(1)}`; }
+      }
+      expect(reportVehicle(state, ctx, a.id, vreport(sim), 0.05), `report at ${(sim.x + OX).toFixed(1)},${(sim.z + OZ).toFixed(1)}`).toBe(true);
+      tickMatch(state, ctx, 0.05);
+      if (left < 3.5 || along >= len - 0.5) leg++;
+    }
+    return { reached: leg - 1, worst, where, seconds: ticks * 0.05 };
+  };
+
+  it('Taipei: a car laps the ring road round the core and cuts across it down Emei St, without a correction or a knock', () => {
+    // The SWAT car behind the cordon for the lap, the Militia car behind the barricade for the cut-through.
+    for (const [route, start] of [[RING_LAP, 0], [EMEI_RUN, 2]] as const) {
+      const { ctx, state } = setup();
+      const a = addSoldier(state, ctx, { name: 'Driver', team: 0, bot: false });
+      goLive(state, ctx);
+      besides(state, ctx, a, start);
+      expect(enterVehicle(state, ctx, a.id, start)).toBe(true);
+      const before = a.corrections;
+      const { reached, worst, where, seconds } = driveRoute(state, ctx, a, start, [...route]);
+      expect(reached, `waypoints reached in ${seconds.toFixed(1)} s`).toBe(route.length);
+      expect(a.corrections).toBe(before);
+      expect(worst, `hardest knock, at ${where}`).toBeLessThan(1);
     }
   });
 

@@ -15,54 +15,51 @@ import type { BlockStyle, SignStyle } from './types';
  *   - a two-storey container site office with a porch stair and a roof ladder on Hanzhong St
  *     (SWAT's east exit toward B);
  *   - a temple stage (廟口戲台) with an altar on the Hanzhong / Emei crossing (the Emei St stage);
- *   - a footbridge (天橋) over Zhongxiao W. Rd from Ximen station's side to Xining S. Rd
- *     (Militia's west exit), and a broken-down bus in the kerb lane beside it, climbable by crates;
- *   - a billboard catwalk on the 7-TWELVE / claw-shop roof, up a ladder from its stair house;
  *   - street cover everywhere else: food carts, crate stacks, delivery vans and a box truck,
  *     newspaper and ticket kiosks, jersey barriers, planters, poster boxes and a roadwork pit.
- * Buildings, the street plan, bases, sites, crates and vehicle spots are left as they are; the
- * traffic roads keep their lanes (only the bus and a van stand in kerb lanes).
+ * The compact map's own layer (taipei-compact.ts: bases, ring road, passages) builds the
+ * frontages along the ring road with the same kit, which is exported for it.
  *
  * Placement follows the bots' navigation grid (nodes every 2.5 m: source x -881 + 2.5i,
  * z -305 + 2.5j): obstacles fill whole cells between the node lines (`cells`), so every aisle left
  * between them keeps a line of nodes and the bots walk the new cover paths.
  *
- * Coordinates are the source's (+x east, +z south, metres). Returns boxes (map coordinates) where
- * the source's street dressing must not stand, for streetFurniture's `clear`.
+ * Coordinates are the source's (+x east, +z south, metres). The kit collects boxes (map
+ * coordinates) where the source's street dressing must not stand, for streetFurniture's `clear`.
  */
-type Rect = [x0: number, z0: number, x1: number, z1: number];
-type Side = 'n' | 's' | 'e' | 'w';
-const KERB = 0.15;
+export type Rect = [x0: number, z0: number, x1: number, z1: number];
+export type Side = 'n' | 's' | 'e' | 'w';
+export const KERB = 0.15;
 /** Nav node column / row in source coordinates. */
-const NX = (i: number) => -881 + 2.5 * i, NZ = (j: number) => -305 + 2.5 * j;
+export const NX = (i: number) => -881 + 2.5 * i, NZ = (j: number) => -305 + 2.5 * j;
 /** The nav cells i0..i1 × j0..j1, less an inset on every side. */
-const cells = (i0: number, i1: number, j0: number, j1: number, inset = 0.15): Rect =>
+export const cells = (i0: number, i1: number, j0: number, j1: number, inset = 0.15): Rect =>
   [NX(i0) - 1.25 + inset, NZ(j0) - 1.25 + inset, NX(i1) + 1.25 - inset, NZ(j1) + 1.25 - inset];
 /** Clamp a rect's sides to facade lines (pass undefined to keep a side). */
-const clampTo = (r: Rect, x0?: number, z0?: number, x1?: number, z1?: number): Rect =>
+export const clampTo = (r: Rect, x0?: number, z0?: number, x1?: number, z1?: number): Rect =>
   [x0 ?? r[0], z0 ?? r[1], x1 ?? r[2], z1 ?? r[3]];
 /** Sign facing: rotY for a sign read from the given side (0 faces north). */
-const FACE: Record<Side, number> = { n: 0, e: Math.PI / 2, s: Math.PI, w: -Math.PI / 2 };
+export const FACE: Record<Side, number> = { n: 0, e: Math.PI / 2, s: Math.PI, w: -Math.PI / 2 };
 
-const C = {
+export const C = {
   tarpBlue: 0x2f6f9f, tarpRed: 0xb8322a, tarpYellow: 0xe0b23a, tarpGreen: 0x3a8a5a, white: 0xf2f0ea,
   steel: 0xb8bcc0, dark: 0x1c1c1e, wood: 0x8a5a3a, red: 0xa81c1c, gold: 0xe8b84a, orange: 0xe8641c,
   netting: 0x2f7d4f, hoarding: 0xdfe6e0, concrete: 0xb4b2aa, container: 0x2f5d8a, bus: 0xeceae2,
 };
-const CANOPIES = [C.tarpRed, C.tarpBlue, C.tarpYellow, C.tarpGreen, 0xd8602a, 0x7a4aa0];
+export const CANOPIES = [C.tarpRed, C.tarpBlue, C.tarpYellow, C.tarpGreen, 0xd8602a, 0x7a4aa0];
 const GOODS = [0xe8c070, 0xc8402a, 0x5aa040, 0xf0e0b0, 0x8a4a2a, 0xe87aa0];
-const CRATES = [0xffffff, 0xc84a3a, 0x3a6ab8, 0xd8b040, 0x4a9a5a];
-const FOOD: [string, string][] = [
+export const CRATES = [0xffffff, 0xc84a3a, 0x3a6ab8, 0xd8b040, 0x4a9a5a];
+export const FOOD: [string, string][] = [
   ['雞排', 'FRIED CHICKEN'], ['珍珠奶茶', 'BUBBLE TEA'], ['臭豆腐', 'STINKY TOFU'], ['蚵仔煎', 'OYSTER OMELETTE'],
   ['大腸包小腸', 'SAUSAGE ROLL'], ['烤玉米', 'GRILLED CORN'], ['地瓜球', 'SWEET POTATO BALLS'], ['胡椒餅', 'PEPPER BUNS'],
   ['滷味', 'LUWEI'], ['刈包', 'GUA BAO'], ['鹽酥雞', 'POPCORN CHICKEN'], ['芒果冰', 'MANGO ICE'],
   ['甘蔗汁', 'SUGARCANE JUICE'], ['車輪餅', 'WHEEL CAKES'], ['麻糬', 'MOCHI'], ['水煎包', 'PAN BUNS'],
 ];
 
-class Kit {
+export class Kit {
   readonly clear: number[] = [];
   private n = 0;
-  constructor(readonly b: MapBuilder, readonly s: Shift, private keep: Keep) {}
+  constructor(readonly b: MapBuilder, readonly s: Shift, private keep: Keep, private lanes: Rect[] = []) {}
   /** Deterministic pick (the same on every client and the server). */
   pick<T>(list: T[]) { return list[(this.n++ * 7 + 3) % list.length]; }
 
@@ -96,9 +93,10 @@ class Kit {
   claim([x0, z0, x1, z1]: Rect, pad = 0.1) {
     this.clear.push(this.s.X(x0) - pad, 0.02, this.s.Z(z0) - pad, this.s.X(x1) + pad, 3, this.s.Z(z1) + pad);
   }
-  /** True when a rect stays clear of the spawns, ammo crates and vehicle spots. */
+  /** True when a rect stays clear of the spawns, ammo crates, vehicle spots and drive lanes. */
   free([x0, z0, x1, z1]: Rect) {
     const a = this.s.X(x0), c = this.s.X(x1), d = this.s.Z(z0), e = this.s.Z(z1);
+    if (this.lanes.some(([lx0, lz0, lx1, lz1]) => x1 > lx0 && x0 < lx1 && z1 > lz0 && z0 < lz1)) return false;
     return !this.keep.some(([x, z, r]) => x > a - r && x < c + r && z > d - r && z < e + r);
   }
 }
@@ -109,7 +107,7 @@ class Kit {
  * A market stall over a rect, its counter on the `face` side: a counter-high front, a body up to
  * 2.25 m behind it (full cover), a striped canopy over the front, its name board and a lamp strip.
  */
-function stall(k: Kit, r: Rect, face: Side, y = KERB) {
+export function stall(k: Kit, r: Rect, face: Side, y = KERB) {
   const [x0, z0, x1, z1] = r, canopy = k.pick(CANOPIES), [name, sub] = k.pick(FOOD);
   const depthX = face === 'e' || face === 'w', front = 0.7;
   // Front counter strip and the body behind it.
@@ -153,7 +151,7 @@ function stallDressing(k: Kit, [x0, z0, x1, z1]: Rect, face: Side, y: number, ca
 }
 
 /** A row of stalls splitting a rect along its length (all facing one way). */
-function stalls(k: Kit, [x0, z0, x1, z1]: Rect, face: Side, n: number, y = KERB) {
+export function stalls(k: Kit, [x0, z0, x1, z1]: Rect, face: Side, n: number, y = KERB) {
   const alongX = face === 'n' || face === 's', len = alongX ? x1 - x0 : z1 - z0, gap = 0.1, w = (len - gap * (n - 1)) / n;
   for (let i = 0; i < n; i++) {
     const a = (alongX ? x0 : z0) + i * (w + gap);
@@ -162,7 +160,7 @@ function stalls(k: Kit, [x0, z0, x1, z1]: Rect, face: Side, n: number, y = KERB)
 }
 
 /** A double-sided stall island: counters on both long faces, a shared kitchen core between them. */
-function island(k: Kit, r: Rect, depthAxis: 'x' | 'z', y = KERB) {
+export function island(k: Kit, r: Rect, depthAxis: 'x' | 'z', y = KERB) {
   const [x0, z0, x1, z1] = r, front = 0.7;
   if (depthAxis === 'z') {
     k.box(x0, z0, x1, z0 + front, y, y + 1.0, 'wood', C.wood);
@@ -185,7 +183,7 @@ function island(k: Kit, r: Rect, depthAxis: 'x' | 'z', y = KERB) {
 }
 
 /** A food cart (waist-high cover) under a market umbrella. */
-function cart(k: Kit, x: number, z: number, along: 'x' | 'z', y = KERB) {
+export function cart(k: Kit, x: number, z: number, along: 'x' | 'z', y = KERB) {
   const hw = along === 'x' ? 0.9 : 0.45, hd = along === 'x' ? 0.45 : 0.9, r: Rect = [x - hw, z - hd, x + hw, z + hd];
   if (!k.free(r)) return;
   const color = k.pick([0xc83a2a, 0x2a6ab0, 0xe0a030, 0x3a8a5a]);
@@ -202,7 +200,7 @@ function cart(k: Kit, x: number, z: number, along: 'x' | 'z', y = KERB) {
 }
 
 /** Crates: two side by side along an axis, a third on top when tall (a step up, or full cover). */
-function crates(k: Kit, x: number, z: number, along: 'x' | 'z', tall: boolean, y = KERB, size = 1.1) {
+export function crates(k: Kit, x: number, z: number, along: 'x' | 'z', tall: boolean, y = KERB, size = 1.1) {
   const off = size / 2 + 0.02, r: Rect = along === 'x' ? [x - size - 0.02, z - size / 2, x + size + 0.02, z + size / 2] : [x - size / 2, z - size - 0.02, x + size / 2, z + size + 0.02];
   if (!k.free(r)) return;
   const [ax, az] = along === 'x' ? [x - off, z] : [x, z - off], [bx, bz] = along === 'x' ? [x + off, z] : [x, z + off];
@@ -213,7 +211,7 @@ function crates(k: Kit, x: number, z: number, along: 'x' | 'z', tall: boolean, y
 }
 
 /** A newspaper / lottery kiosk over a rect, serving from its `face` side. */
-function kiosk(k: Kit, r: Rect, face: Side, text: string, sub: string, color = 0x2a7a4a, y = KERB) {
+export function kiosk(k: Kit, r: Rect, face: Side, text: string, sub: string, color = 0x2a7a4a, y = KERB) {
   if (!k.free(r)) return;
   const [x0, z0, x1, z1] = r;
   k.box(x0, z0, x1, z1, y, y + 2.35, 'painted', color);
@@ -237,7 +235,7 @@ function kiosk(k: Kit, r: Rect, face: Side, text: string, sub: string, color = 0
 }
 
 /** Concrete jersey barriers (crouch cover) along a rect, in segments of at most 3 m. */
-function jersey(k: Kit, r: Rect, y = KERB) {
+export function jersey(k: Kit, r: Rect, y = KERB) {
   if (!k.free(r)) return;
   const [x0, z0, x1, z1] = r, alongX = x1 - x0 >= z1 - z0, len = alongX ? x1 - x0 : z1 - z0, n = Math.ceil(len / 3), seg = len / n;
   for (let i = 0; i < n; i++) {
@@ -249,7 +247,7 @@ function jersey(k: Kit, r: Rect, y = KERB) {
 }
 
 /** Orange-and-white plastic road barriers along a rect (one collider, drawn as linked segments). */
-function roadBarrier(k: Kit, r: Rect, y = KERB) {
+export function roadBarrier(k: Kit, r: Rect, y = KERB) {
   const [x0, z0, x1, z1] = r, alongX = x1 - x0 >= z1 - z0, len = alongX ? x1 - x0 : z1 - z0, n = Math.max(1, Math.round(len / 1.6)), seg = len / n;
   k.box(x0, z0, x1, z1, y, y + 1.0, 'invisible');
   for (let i = 0; i < n; i++) {
@@ -263,7 +261,7 @@ function roadBarrier(k: Kit, r: Rect, y = KERB) {
 }
 
 /** A tiled planter box with a clipped hedge (crouch cover). */
-function planter(k: Kit, r: Rect, y = KERB) {
+export function planter(k: Kit, r: Rect, y = KERB) {
   if (!k.free(r)) return;
   const [x0, z0, x1, z1] = r;
   k.box(x0, z0, x1, z1, y, y + 0.75, 'mosaic', 0xb8a890);
@@ -272,7 +270,7 @@ function planter(k: Kit, r: Rect, y = KERB) {
 }
 
 /** A double-sided lit poster box (movie posters), thin and tall. */
-function posterBox(k: Kit, r: Rect, posters: [string, string, string][], y = KERB) {
+export function posterBox(k: Kit, r: Rect, posters: [string, string, string][], y = KERB) {
   if (!k.free(r)) return;
   const [x0, z0, x1, z1] = r, alongX = x1 - x0 >= z1 - z0;
   k.box(x0, z0, x1, z1, y, y + 2.4, 'painted', C.dark);
@@ -300,7 +298,7 @@ function wheels(k: Kit, x0: number, z0: number, x1: number, z1: number, alongX: 
  * A delivery van parked along an axis, its cab toward `front` (+1 toward +x/+z): a box van up
  * to 2.45 m and a lower cab, each a collider from the ground.
  */
-function van(k: Kit, x0: number, z0: number, alongX: boolean, front: 1 | -1, color: number, label: [string, string], y = KERB) {
+export function van(k: Kit, x0: number, z0: number, alongX: boolean, front: 1 | -1, color: number, label: [string, string], y = KERB) {
   const L = 5.2, W = 2.0, x1 = alongX ? x0 + L : x0 + W, z1 = alongX ? z0 + W : z0 + L;
   if (!k.free([x0, z0, x1, z1])) return;
   const a0 = alongX ? x0 : z0, cab = 1.7;
@@ -335,7 +333,7 @@ function van(k: Kit, x0: number, z0: number, alongX: boolean, front: 1 | -1, col
  * A broken-down box truck: a cab and a cargo box whose roller door is up, so its floor (a jump
  * up from the street) is a room of cover. Along an axis, cab toward `front`.
  */
-function truck(k: Kit, x0: number, z0: number, alongX: boolean, front: 1 | -1, y = KERB) {
+export function truck(k: Kit, x0: number, z0: number, alongX: boolean, front: 1 | -1, y = KERB) {
   const L = 7.4, W = 2.4, cab = 2.1, x1 = alongX ? x0 + L : x0 + W, z1 = alongX ? z0 + W : z0 + L;
   if (!k.free([x0, z0, x1, z1])) return;
   const a0 = alongX ? x0 : z0;
@@ -372,7 +370,7 @@ function truck(k: Kit, x0: number, z0: number, alongX: boolean, front: 1 | -1, y
  * A broken-down city bus in a kerb lane (hard cover), its roof reachable over two crate steps at
  * its back, with the roof air-con unit to crouch behind up there.
  */
-function bus(k: Kit, x0: number, z0: number, x1: number, z1: number, y = 0) {
+export function bus(k: Kit, x0: number, z0: number, x1: number, z1: number, y = 0) {
   const top = y + 3.15, alongX = x1 - x0 > z1 - z0;
   k.box(x0, z0, x1, z1, y, top, 'invisible');
   k.shape(x0, z0, x1, z1, y + 0.4, top, 'painted', C.bus);
@@ -395,7 +393,7 @@ function bus(k: Kit, x0: number, z0: number, x1: number, z1: number, y = 0) {
 }
 
 /** Construction hoarding along a rect (2.4 m): painted panels with a green top band and posters. */
-function hoarding(k: Kit, r: Rect, face: Side, y = KERB, text?: [string, string]) {
+export function hoarding(k: Kit, r: Rect, face: Side, y = KERB, text?: [string, string]) {
   const [x0, z0, x1, z1] = r;
   k.box(x0, z0, x1, z1, y, y + 2.4, 'painted', C.hoarding);
   k.shape(x0 - 0.01, z0 - 0.01, x1 + 0.01, z1 + 0.01, y + 2.1, y + 2.4, 'painted', C.netting);
@@ -412,7 +410,7 @@ function hoarding(k: Kit, r: Rect, face: Side, y = KERB, text?: [string, string]
  * A kerbside bus shelter along x: a glass back toward `back`, a lit advert box closing its west end
  * (full cover across the sidewalk lane), a bench and a roof.
  */
-function shelter(k: Kit, x0: number, z0: number, x1: number, z1: number, back: 'n' | 's', y = KERB) {
+export function shelter(k: Kit, x0: number, z0: number, x1: number, z1: number, back: 'n' | 's', y = KERB) {
   const r: Rect = [x0, z0, x1, z1];
   if (!k.free(r)) return;
   const bz = back === 'n' ? z0 : z1 - 0.06;
@@ -529,8 +527,8 @@ function constructionSite(k: Kit) {
 
 /**
  * The site office on Hanzhong St (SWAT's way toward B): two containers stacked against the block,
- * a porch stair up to the upper office (a door and a window to fight from) and a ladder to its
- * roof, with a sign and sandbags up there.
+ * a porch stair up to the upper office (a door and a window to fight from), and a sign and
+ * sandbags on its roof.
  */
 function siteOffice(k: Kit) {
   const x0 = -753.2, x1 = -750.75, z0 = -277.6, z1 = -271.5, h = 2.6, g = KERB, up = g + h, roof = up + h;
@@ -557,8 +555,7 @@ function siteOffice(k: Kit) {
   k.shape(x0 + t, z0 + t, x1 - t, z1 - t, up, up + 0.02, 'tile', 0xd8d4cc);
   k.shape(x0 + 0.4, z0 + 0.6, x1 - 0.3, z0 + 1.6, up, up + 0.75, 'wood', C.wood);
   k.shape(x0 + 0.5, (z0 + z1) / 2 - 0.3, x1 - 0.3, (z0 + z1) / 2 + 0.3, roof - 0.05, roof - 0.02, 'light');
-  // Ladder up the office's porch wall to the roof, sandbags and the sign up there.
-  k.ladder(x0, -277.05, up, roof + 0.1, 0);
+  // Sandbags and the sign on the roof (out of reach: it would overlook SWAT's cordon).
   k.crate(x0 + 0.5, roof + 0.1, -272.2, 0.9, 0.5, 1.2, 0xa89a70);
   k.crate(x1 - 0.5, roof + 0.1, -272.2, 0.9, 0.5, 1.2, 0xa89a70);
   k.sign('board', x0 - 0.02, up + 1.4, (door[1] + win[0]) / 2 - 0.15, FACE.w, 0.9, 0.35, '工務所', '#ffffff', '#1a3a6a', 'SITE OFFICE');
@@ -572,16 +569,15 @@ function siteOffice(k: Kit) {
 
 /**
  * The temple stage (廟口戲台) of the Emei St stage spot, on the Hanzhong / Emei crossing: a red
- * platform with steps from the south and east, an altar before a screen wall on its north edge,
+ * platform with steps from the south, an altar before a screen wall on its north edge,
  * a tiled roof on four pillars, lanterns and its name board. It splits the crossing into lanes.
  */
 function templeStage(k: Kit) {
-  const [x0, z0, x1, z1] = cells(49, 51, 38, 40, 0), top = KERB + 1.1, RED = 0x9a1c1c, ROOF = 0xc8642a, GREEN = 0x2e7d5b;
+  const [x0, z0, x1, z1] = cells(49, 51, 39, 41, 0.4), top = KERB + 1.1, RED = 0x9a1c1c, ROOF = 0xc8642a, GREEN = 0x2e7d5b;
   k.box(x0, z0, x1, z1, KERB, top, 'painted', RED);
   k.shape(x0 - 0.05, z0 - 0.05, x1 + 0.05, z1 + 0.05, top - 0.12, top, 'wood', 0x6a3a22);
-  // Steps up from the south (toward Ximen station) and the east.
+  // Steps up from the south (toward Ximen station).
   k.stairs([NX(50) - 1.0, z1, NX(50) + 1.0, z1 + 2.5], KERB, top, 3);
-  k.stairs([x1, NZ(39) - 1.0, x1 + 2.5, NZ(39) + 1.0], KERB, top, 2);
   // Screen wall with the temple's name, the altar before it.
   k.box(x0, z0, x1, z0 + 0.35, top, top + 2.8, 'painted', RED);
   k.shape(x0 + 0.4, z0 + 0.35, x1 - 0.4, z0 + 0.38, top + 0.3, top + 2.5, 'painted', 0xc8a040);
@@ -613,80 +609,23 @@ function templeStage(k: Kit) {
     k.shape(x - 0.01, z - 0.01, x + 0.01, z + 0.01, roofY - 0.6, roofY, 'painted', C.dark);
     k.ball(x, roofY - 0.85, z, 0.3, 'neon', 0xff2a1a);
   }
-  // Wing screens on the west side, a low balustrade between them (the east and south have the steps).
+  // Wing screens on the west side, a low balustrade between them (the south has the steps).
   k.box(x0, z0 + 0.35, x0 + 0.2, z0 + 3.1, top, top + 2.5, 'painted', RED);
   k.box(x0, z1 - 2.3, x0 + 0.2, z1 - 0.55, top, top + 2.5, 'painted', RED);
   k.shape(x0 + 0.2, z0 + 0.6, x0 + 0.22, z0 + 2.9, top + 0.3, top + 2.2, 'painted', C.gold);
   k.shape(x0, z0 + 3.1, x0 + 0.12, z1 - 2.3, top, top + 0.55, 'painted', C.gold);
-  k.claim([x0, z0, x1 + 2.5, z1 + 2.5]);
-}
-
-/**
- * Footbridge (天橋) over Zhongxiao W. Rd from the station side to the mouth of Xining S. Rd:
- * a stair along each sidewalk's building line up to a deck at 5.6 m with screened parapets,
- * on piers in the median. Cars pass under.
- */
-function footbridge(k: Kit) {
-  const x0 = -809.75, x1 = -807.25, zn = -178.35, zs = -141.65, top = KERB + 5.45, d = 0.3;
-  const run = 8.75, w = 1.9;
-  // Deck and its parapets (screened with a painted panel; open where the stairs join).
-  k.box(x0, zn, x1, zs, top - d, top, 'slab', 0xc8c4bc);
-  k.shape(x0 - 0.05, zn, x1 + 0.05, zs, top - d - 0.15, top - d, 'painted', 0x3a7a6a);
-  const panel = (r: Rect) => { k.box(...r, top, top + 1.2, 'painted', 0x3a7a6a); k.shape(r[0] - 0.02, r[1], r[2] + 0.02, r[3], top + 1.2, top + 1.28, 'steel', 0xd8dade); };
-  panel([x0, zn, x0 + 0.12, zs]);
-  panel([x1 - 0.12, zn + w, x1, zs - w]);
-  panel([x0, zn, x1 - 0.12, zn + 0.12]);
-  panel([x0, zs - 0.12, x1 - 0.12, zs]);
-  // Stairs along the sidewalks, rising west to the deck.
-  for (const [z0, z1] of [[zn, zn + w], [zs - w, zs]] as const) {
-    k.stairs([x1, z0, x1 + run, z1], KERB, top, 2);
-    const outer = z0 === zn ? z1 : z0;
-    for (let i = 0; i <= 4; i++) {
-      const x = x1 + run * i / 4, y = top - (top - KERB) * i / 4;
-      k.shape(x - 0.03, outer - 0.03, x + 0.03, outer + 0.03, y, y + 1.0, 'steel', 0xd8dade);
-    }
-    k.shape(x1 + run - 0.1, outer - 0.04, x1, outer + 0.04, KERB + 0.95, top + 1.05, 'steel', 0xd8dade);
-    k.claim([x1, z0, x1 + run, z1]);
-  }
-  // Piers on the sidewalks and in the median.
-  for (const z of [-174.5, -160, -145.4]) {
-    k.box(x0 + 0.2, z - 0.3, x0 + 0.8, z + 0.3, z === -160 ? 0.2 : KERB, top - d, 'concrete', 0xb8b8b2);
-    k.box(x1 - 0.8, z - 0.3, x1 - 0.2, z + 0.3, z === -160 ? 0.2 : KERB, top - d, 'concrete', 0xb8b8b2);
-  }
-  // Name boards on both faces of the span.
-  for (const [x, face] of [[x0 - 0.02, FACE.w], [x1 + 0.02, FACE.e]] as const) k.sign('board', x, top + 0.6, -160, face, 9, 0.8, '西門 人行天橋', '#1a5a4a', '#ffffff', 'XIMEN FOOTBRIDGE · 忠孝西路');
-  k.claim([x0, zn, x1, zs]);
-}
-
-/**
- * A billboard on the 7-TWELVE / claw-shop roof (13.9 m, up its stair house), facing Emei St, with
- * a catwalk in front of it reached by a ladder from the roof: the highest perch over the stage.
- */
-function billboard(k: Kit) {
-  const roof = 13.9, walk = roof + 2.5, x0 = -776.5, x1 = -766.5, zp = -216.9;
-  k.box(x0, zp, x1, zp + 0.3, walk + 0.1, walk + 3.6, 'painted', C.dark);
-  k.sign('billboard', (x0 + x1) / 2, walk + 1.85, zp + 0.32, FACE.s, 9.6, 3.3, '臺北狂飆', '#c8141a', '#ffffff', 'TAIPEI RUSH · 西門町');
-  for (const x of [x0 + 0.3, x1 - 0.3]) k.box(x - 0.15, zp - 0.4, x + 0.15, zp - 0.1, roof, walk + 3.6, 'steel', 0x4a4e52);
-  k.box(x0, zp + 0.3, x1, zp + 1.6, walk - 0.12, walk, 'floor');
-  k.box(x0, zp + 1.52, x1, zp + 1.6, walk, walk + 1.0, 'steel', 0x8a9096);
-  k.box(x0, zp + 0.3, x0 + 0.08, zp + 1.52, walk, walk + 1.0, 'steel', 0x8a9096);
-  k.box(x1 - 0.3, zp + 0.3, x1, zp + 1.6, roof, walk - 0.12, 'steel', 0x4a4e52);
-  for (let x = x0 + 1; x < x1; x += 2.2) k.shape(x - 0.12, zp + 0.9, x + 0.12, zp + 1.3, walk + 3.6, walk + 3.75, 'neon', 0xfff0c8);
-  k.ladder(x1 + 0.0, zp + 0.95, roof, walk, 2);
+  k.claim([x0, z0, x1, z1 + 2.5]);
 }
 
 // ---- Placement -----------------------------------------------------------------------------
 
-const MOVIES: [string, string, string][] = [['鬼門關', '#3a0a14', 'GHOST GATE · 9月25日'], ['台北狂飆', '#c8141a', 'TAIPEI RUSH'], ['西門之戀', '#d8507a', 'XIMEN LOVE STORY'], ['夜市英雄', '#1a3a8a', 'NIGHT MARKET HEROES']];
+export const MOVIES: [string, string, string][] = [['鬼門關', '#3a0a14', 'GHOST GATE · 9月25日'], ['台北狂飆', '#c8141a', 'TAIPEI RUSH'], ['西門之戀', '#d8507a', 'XIMEN LOVE STORY'], ['夜市英雄', '#1a3a8a', 'NIGHT MARKET HEROES']];
 
-export function taipeiCover(b: MapBuilder, s: Shift, keep: Keep): number[] {
-  const k = new Kit(b, s, keep);
+export function taipeiCover(k: Kit) {
   nightMarket(k);
   constructionSite(k);
   siteOffice(k);
   templeStage(k);
-  footbridge(k);
-  billboard(k);
 
   // ---- Wuchang St, west (Cinema Street, site A) ----
   van(k, -857.5, -259.25, true, -1, 0xf2f2ee, ['西門快遞', 'XIMEN EXPRESS']);
@@ -701,102 +640,48 @@ export function taipeiCover(b: MapBuilder, s: Shift, keep: Keep): number[] {
 
   // ---- Wuchang St, east (Hanzhong St to Zhonghua Rd) ----
   van(k, -746.0, -248.75, true, 1, 0xd8d4c8, ['宅配通', 'HOME DELIVERY']);
-  island(k, cells(58, 60, 21, 21), 'z');
-  crates(k, NX(54), NZ(20), 'x', true);
-  crates(k, NX(61), NZ(19), 'x', true);
   kiosk(k, clampTo(cells(63, 63, 22, 23), undefined, undefined, undefined, -246.75), 'w', '報攤', 'NEWS', 0x2a6a4a);
 
   // ---- Hanzhong St outside the arcade (site B) ----
   kiosk(k, [-763.2, -243.6, -759.6, -238.9], 'e', '彩券行', 'LOTTERY · NEWS', 0x2a7a4a);
   van(k, -762.95, -230.9, false, 1, 0xe8e8e2, ['冷凍宅配', 'COLD CHAIN']);
   crates(k, NX(51) + 0.3, NZ(25) + 0.4, 'x', true);
-  jersey(k, [-759.5, -220.3, -754.4, -219.7]);
   stall(k, [-763.2, -216.1, -760.9, -213.4], 'e');
   island(k, cells(50, 51, 32, 32), 'x');
   posterBox(k, [-752.2, -245.8, -750.8, -245.4], [MOVIES[2], MOVIES[0]]);
 
-  // ---- Emei St ----
-  truck(k, -852.0, -213.25, true, -1);
-  island(k, clampTo(cells(19, 21, 38, 39), undefined, undefined, undefined, NZ(40) - 0.55), 'z');
-  stalls(k, clampTo(cells(15, 17, 41, 41), undefined, NZ(40) + 0.55, undefined, -200.75), 'n', 3);
-  crates(k, NX(23), NZ(40), 'x', true);
-  van(k, -805.0, -213.25, true, 1, 0xc8d8e8, ['西門快遞', 'XIMEN EXPRESS']);
-  roadwork(k);
-  stalls(k, clampTo(cells(41, 43, 41, 41), undefined, NZ(40) + 0.55, undefined, -200.75), 'n', 3);
-  planter(k, cells(54, 55, 38, 38, 0.3));
-  jersey(k, [-748.0, -208.2, -745.0, -207.6]);
-  kiosk(k, clampTo(cells(58, 58, 40, 41, 0.2), undefined, undefined, undefined, -200.8), 'n', '報攤', 'NEWS', 0x2a6a4a);
-  van(k, -733.5, -213.25, true, -1, 0xf0f0ea, ['宅配通', 'HOME DELIVERY']);
-  crates(k, NX(63), NZ(39), 'x', true);
-
   // ---- Xining S. Rd between Wuchang and Emei streets ----
   stalls(k, clampTo(cells(29, 29, 25, 26), undefined, undefined, -806.75), 'w', 2);
-  crates(k, NX(25) + 0.15, NZ(24), 'z', true);
   posterBox(k, [-816.3, -243.4, -813.6, -243.0], [MOVIES[2], MOVIES[3]]);
   kiosk(k, [-819.2, -228.6, -817.0, -223.9], 'e', '報攤', 'NEWS', 0x2a6a4a);
   island(k, cells(27, 28, 34, 34), 'x');
   crates(k, NX(26), NZ(36), 'x', true);
-
-  // ---- Xining S. Rd between Emei St and Zhongxiao W. Rd (Militia's west way in) ----
-  stalls(k, clampTo(cells(29, 29, 43, 44), undefined, undefined, -806.75), 'w', 2);
-  kiosk(k, [-822.2, -199.0, -819.45, -196.2], 'e', '檳榔', 'BETEL NUT', 0x1a1a1a);
-  k.shape(-822.25, -199.05, -822.15, -196.15, KERB + 2.35, KERB + 2.45, 'neon', 0x3aff8a);
-  posterBox(k, [-815.6, -199.4, -812.0, -199.0], [MOVIES[1], MOVIES[0]]);
-  kiosk(k, [-819.25, -188.5, -815.45, -186.3], 'e', '彩券行', 'LOTTERY', 0x2a7a4a);
-  stall(k, [-812.3, -183.6, -809.4, -181.4], 'n');
-  bus(k, -822.5, -172.2, -811.5, -169.7);
-  crates(k, -810.9, -171.0, 'z', true, 0);
 
   // ---- Hanzhong St from the gateway to Emei St (Militia's middle way in) ----
   island(k, clampTo(cells(49, 50, 44, 44), NX(48) + 0.55), 'z');
   crates(k, NX(51), NZ(48), 'z', true);
   cart(k, NX(48), NZ(43) + 0.5, 'z');
   planter(k, cells(51, 51, 42, 42, 0.3));
-
-  // ---- Civic Blvd and Zhongxiao W. Rd frontages (the bases) ----
-  van(k, -835.0, -286.2, true, -1, 0xf2f2ee, ['西門快遞', 'XIMEN EXPRESS'], 0);
-  planter(k, cells(14, 15, 10, 10, 0.3));
-  shelter(k, -830.9, -283.95, -826.4, -282.3, 'n');
-  kiosk(k, cells(44, 45, 9, 10, 0.2), 'n', '報攤', 'NEWS', 0x2a6a4a);
-  posterBox(k, [-797.2, -279.5, -796.8, -278.15], [MOVIES[1], MOVIES[2]]);
-  jersey(k, [-760.5, -280.7, -756.5, -280.1]);
-  shelter(k, -834.0, -174.1, -829.5, -172.55, 's');
-  shelter(k, -741.8, -174.1, -737.3, -172.55, 's');
-  posterBox(k, [-840.2, -178.35, -839.8, -175.2], [MOVIES[3], MOVIES[1]]);
-  posterBox(k, [-790.2, -178.35, -789.8, -175.2], [MOVIES[0], MOVIES[2]]);
-
-  // ---- Huanhe Rd and Zhonghua Rd sidewalks (the flanks) ----
-  planter(k, clampTo(cells(9, 9, 15, 16, 0.3), undefined, undefined, -857.9));
-  posterBox(k, [-862.6, -266.2, -860.4, -265.8], [MOVIES[3], MOVIES[2]]);
-  kiosk(k, [-859.9, -241.05, -857.85, -236.45], 'w', '報攤', 'NEWS', 0x2a6a4a);
-  crates(k, NX(9), NZ(34), 'z', true);
-  posterBox(k, [-862.6, -226.4, -860.2, -226.0], [MOVIES[1], MOVIES[3]]);
-  jersey(k, [-859.5, -187.6, -858.9, -183.0]);
-  kiosk(k, clampTo(cells(66, 66, 25, 26, 0.2), -718.8, undefined, -715.2), 'e', '報攤', 'NEWS', 0x2a6a4a);
-  posterBox(k, [-714.9, -253.2, -712.95, -252.8], [MOVIES[0], MOVIES[3]]);
-  crates(k, NX(67), NZ(35), 'z', true);
-  planter(k, clampTo(cells(66, 66, 43, 44, 0.3), undefined, undefined, -715.3));
-  jersey(k, [-716.8, -268.0, -716.2, -263.0]);
-
-  return k.clear;
 }
 
 /**
- * Roadwork on Emei St between Xining S. Rd and the 7-TWELVE: an excavated trench under steel
- * plates fenced with road barriers, a dirt pile and a mini excavator (cover over three lanes).
+ * Roadwork over a rect (about 6 × 5 m): an excavated trench under steel plates fenced with road
+ * barriers (or walled in hoarding), a dirt pile and a mini excavator at its east end.
  */
-function roadwork(k: Kit) {
-  const [x0, z0, x1, z1] = cells(36, 39, 38, 40, 0.2), y = KERB;
-  roadBarrier(k, [x0, z0, x1, z0 + 0.45]);
-  roadBarrier(k, [x0, z1 - 0.45, x1, z1]);
-  roadBarrier(k, [x0, z0 + 0.5, x0 + 0.45, z1 - 0.5]);
-  roadBarrier(k, [x1 - 0.45, z0 + 0.5, x1, z1 - 0.5]);
+export function roadwork(k: Kit, r: Rect, walled = false) {
+  const [x0, z0, x1, z1] = r, y = KERB;
+  const fence = (f: Rect, face: Side) => walled ? hoarding(k, f, face) : roadBarrier(k, f);
+  fence([x0, z0, x1, z0 + 0.45], 'n');
+  fence([x0, z1 - 0.45, x1, z1], 's');
+  fence([x0, z0 + 0.5, x0 + 0.45, z1 - 0.5], 'w');
+  fence([x1 - 0.45, z0 + 0.5, x1, z1 - 0.5], 'e');
   k.shape(x0 + 0.6, z0 + 0.6, x1 - 0.6, z1 - 0.6, y, y + 0.01, 'painted', 0x3a2e24);
-  k.shape(x0 + 0.8, z0 + 1.0, x0 + 3.8, z1 - 1.0, y + 0.01, y + 0.04, 'steel', 0x6a6e72);
-  // Dirt pile and the excavator.
-  k.box(x0 + 4.2, z0 + 0.7, x0 + 6.6, z1 - 0.7, y, y + 1.1, 'painted', 0x6a4a30);
-  k.box(x0 + 4.6, z0 + 1.2, x0 + 6.2, z1 - 1.2, y + 1.1, y + 2.1, 'painted', 0x5a3e28);
-  k.shape(x0 + 5.0, z0 + 2.0, x0 + 5.8, z1 - 2.0, y + 2.1, y + 2.4, 'painted', 0x4a3220);
+  // Steel plates over the trench, the dirt pile beside it and the excavator at the east end.
+  const d0 = x1 - 5.3, d1 = x1 - 3.1;
+  k.shape(x0 + 0.8, z0 + 1.0, d0 - 0.2, z1 - 1.0, y + 0.01, y + 0.04, 'steel', 0x6a6e72);
+  k.box(d0, z0 + 0.7, d1, z1 - 0.7, y, y + 1.1, 'painted', 0x6a4a30);
+  k.box(d0 + 0.4, z0 + 1.2, d1 - 0.4, z1 - 1.2, y + 1.1, y + 2.1, 'painted', 0x5a3e28);
+  k.shape(d0 + 0.8, z0 + 2.0, d1 - 0.8, z1 - 2.0, y + 2.1, y + 2.4, 'painted', 0x4a3220);
   const ex = x1 - 1.9, ez = (z0 + z1) / 2;
   k.box(ex - 1.1, ez - 1.0, ex + 1.1, ez + 1.0, y, y + 2.5, 'invisible');
   k.shape(ex - 1.1, ez - 1.0, ex + 1.1, ez - 0.55, y, y + 0.45, 'painted', C.dark);

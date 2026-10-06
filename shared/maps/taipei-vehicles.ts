@@ -3,30 +3,36 @@ import type { MapBuilder } from './builder';
 
 /**
  * Drivable vehicles of the Taipei map, in the source's coordinates (+x east, +z south): taxis and
- * cars on the traffic roads, rows of scooters parked on the sidewalks by both bases and in the
- * pedestrian streets (Taipei's own way of getting around), and a helicopter on a painted pad on
- * Zhonghua Rd, about as far from either base. Kept apart from taipei.ts so map edits merge cleanly.
+ * cars on the ring road (taipei-compact.ts) behind both bases and on its flanks, rows of scooters
+ * at both bases and in the pedestrian streets (Taipei's own way of getting around), and a
+ * helicopter on a painted pad on the 7-TWELVE roof in the middle of the map (up its stair house),
+ * about as far from either base. Kept apart from taipei.ts so map edits merge cleanly.
  */
 const E = -Math.PI / 2, W = Math.PI / 2, N = 0, S = Math.PI;
+/** Roof the helicopter stands on (the 7-TWELVE / claw shop, taipei-interiors.ts). */
+export const HELI_ROOF = 13.9;
 export const TAIPEI_VEHICLES: [kind: VehicleKind, x: number, z: number, yaw: number][] = [
-  // SWAT: Civic Blvd's south carriageway under the expressway, scooters on the sidewalk.
-  ['car', -815, -289, W], ['car', -840, -289, W],
-  ['scooter', -800, -281, N], ['scooter', -801.2, -281, N], ['scooter', -802.4, -281, N],
-  // Militia: Zhongxiao W. Rd, scooters on the sidewalk outside Ximen station.
-  ['car', -830, -152, E], ['car', -740, -168, W],
-  ['scooter', -760, -144, N], ['scooter', -758.8, -144, N], ['scooter', -757.6, -144, N],
-  // Between the bases: Huanhe Rd, Zhonghua Rd, and scooters in Xining S. Rd and Hanzhong St.
-  ['car', -866, -215, N], ['car', -692, -120, S],
-  ['scooter', -813, -230, E], ['scooter', -814.2, -232, E], ['scooter', -755, -232, S],
-  ['heli', -692.5, -227, N],
+  // Cars on the ring road: behind SWAT's cordon on Civic Blvd, behind Militia's barricade on
+  // Zhongxiao W. Rd, and on the flanks (Huanhe Rd and Zhonghua Rd).
+  ['car', -812, -292, W], ['car', -760, -292, E],
+  ['car', -835, -167.5, W], ['car', -790, -167.5, E],
+  ['car', -865.5, -232, N], ['car', -711, -236, S],
+  // Scooters: on the sidewalk outside Militia's barricade, inside SWAT's cordon, and in
+  // Xining S. Rd and Hanzhong St.
+  ['scooter', -809.0, -176.6, W], ['scooter', -809.0, -175.4, W], ['scooter', -809.0, -174.2, W],
+  ['scooter', -790.5, -283.6, W], ['scooter', -790.5, -282.4, W], ['scooter', -790.5, -281.2, W],
+  ['scooter', -813, -230, N], ['scooter', -757, -262, S],
+  // The helicopter on its pad on the 7-TWELVE roof.
+  ['heli', -771.5, -222, N],
 ];
 
 /** Park the vehicles, and paint the helicopter's pad (an H in a square) under it. */
 export function parkTaipeiVehicles(b: MapBuilder, X: (x: number) => number, Z: (z: number) => number, floorAt: (x: number, z: number) => number) {
   for (const [kind, x, z, yaw] of TAIPEI_VEHICLES) {
-    b.vehicle(kind, X(x), floorAt(x, z), Z(z), yaw);
+    const floor = kind === 'heli' ? HELI_ROOF : floorAt(x, z);
+    b.vehicle(kind, X(x), floor, Z(z), yaw);
     if (kind !== 'heli') continue;
-    const y = floorAt(x, z) + 0.014, cx = X(x), cz = Z(z), PAINT = 0xf2efe6;
+    const y = floor + 0.014, cx = X(x), cz = Z(z), PAINT = 0xf2efe6;
     const mark = (dx: number, dz: number, w: number, d: number) => b.raw({ kind: 'marking', ...b.at(cx + dx, cz + dz), y, w, d, color: PAINT });
     for (const s of [-1, 1]) { mark(s * 4.2, 0, 0.3, 8.7); mark(0, s * 4.2, 8.7, 0.3); mark(s * 1.3, 0, 0.45, 3.6); }
     mark(0, 0, 2.6, 0.45);
