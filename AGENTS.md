@@ -109,7 +109,7 @@ spacetime generate --lang typescript --out-dir src/module_bindings --module-path
   preserve uncommitted changes. Files are not automatically mirrored between machines.
 - Pushing `main` triggers Vercel production deployment. Do not push or
   publish merely to test; obtain authorization for releases and shared-state changes.
-- Frontend: `https://lawbreaker.vercel.app` (production); `dev` previews are listed by `vercel ls`.
+- Frontend: `https://turfwar.ianhsiao.me` (production; `https://lawbreaker.vercel.app` still works, DNS for ianhsiao.me is on Cloudflare); `dev` previews are listed by `vercel ls`.
 - Maincloud databases, URI `wss://maincloud.spacetimedb.com`: production **`3d-game-c4lhd`**,
   development **`lawbreaker-dev`** (publish `dev`'s module there freely; still never reset it while
   people test). Build-time public variables are `VITE_SPACETIMEDB_URI` and
