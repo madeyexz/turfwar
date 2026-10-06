@@ -6,6 +6,9 @@
 import { type Infer as __Infer } from "spacetimedb";
 
 // Import all reducer arg schemas
+import AdminLoginReducer from "../admin_login_reducer";
+import AdminLogoutReducer from "../admin_logout_reducer";
+import AdminRevokeAllReducer from "../admin_revoke_all_reducer";
 import BuyReducer from "../buy_reducer";
 import BuyAttachmentReducer from "../buy_attachment_reducer";
 import CreateRoomReducer from "../create_room_reducer";
@@ -13,6 +16,7 @@ import EnterVehicleReducer from "../enter_vehicle_reducer";
 import ExitVehicleReducer from "../exit_vehicle_reducer";
 import FireReducer from "../fire_reducer";
 import GrenadeReducer from "../grenade_reducer";
+import HelloReducer from "../hello_reducer";
 import JoinReducer from "../join_reducer";
 import JoinPublicReducer from "../join_public_reducer";
 import JoinRoomReducer from "../join_room_reducer";
@@ -26,6 +30,9 @@ import SwitchSlotReducer from "../switch_slot_reducer";
 import UseCrateReducer from "../use_crate_reducer";
 import VehicleReportReducer from "../vehicle_report_reducer";
 
+export type AdminLoginParams = __Infer<typeof AdminLoginReducer>;
+export type AdminLogoutParams = __Infer<typeof AdminLogoutReducer>;
+export type AdminRevokeAllParams = __Infer<typeof AdminRevokeAllReducer>;
 export type BuyParams = __Infer<typeof BuyReducer>;
 export type BuyAttachmentParams = __Infer<typeof BuyAttachmentReducer>;
 export type CreateRoomParams = __Infer<typeof CreateRoomReducer>;
@@ -33,6 +40,7 @@ export type EnterVehicleParams = __Infer<typeof EnterVehicleReducer>;
 export type ExitVehicleParams = __Infer<typeof ExitVehicleReducer>;
 export type FireParams = __Infer<typeof FireReducer>;
 export type GrenadeParams = __Infer<typeof GrenadeReducer>;
+export type HelloParams = __Infer<typeof HelloReducer>;
 export type JoinParams = __Infer<typeof JoinReducer>;
 export type JoinPublicParams = __Infer<typeof JoinPublicReducer>;
 export type JoinRoomParams = __Infer<typeof JoinRoomReducer>;

@@ -10,6 +10,88 @@ import {
   type Infer as __Infer,
 } from "spacetimedb";
 
+export const Admin = __t.object("Admin", {
+  identity: __t.identity(),
+  grantedAt: __t.timestamp(),
+});
+export type Admin = __Infer<typeof Admin>;
+
+export const AdminAttempt = __t.object("AdminAttempt", {
+  identity: __t.identity(),
+  windowStart: __t.timestamp(),
+  failures: __t.u32(),
+});
+export type AdminAttempt = __Infer<typeof AdminAttempt>;
+
+export const AdminDaily = __t.object("AdminDaily", {});
+export type AdminDaily = __Infer<typeof AdminDaily>;
+
+export const AdminDayRow = __t.object("AdminDayRow", {
+  day: __t.u32(),
+  date: __t.string(),
+  newPlayers: __t.u32(),
+  activePlayers: __t.u32(),
+});
+export type AdminDayRow = __Infer<typeof AdminDayRow>;
+
+export const AdminOverview = __t.object("AdminOverview", {});
+export type AdminOverview = __Infer<typeof AdminOverview>;
+
+export const AdminOverviewRow = __t.object("AdminOverviewRow", {
+  onlineNow: __t.u32(),
+  rooms: __t.u32(),
+  humansInRooms: __t.u32(),
+  totalPlayers: __t.u32(),
+  profiles: __t.u32(),
+  playerMatches: __t.u32(),
+  roundsPlayed: __t.u32(),
+  kills: __t.u32(),
+  admins: __t.u32(),
+});
+export type AdminOverviewRow = __Infer<typeof AdminOverviewRow>;
+
+export const AdminPlayerRow = __t.object("AdminPlayerRow", {
+  id: __t.string(),
+  name: __t.string(),
+  firstSeen: __t.timestamp(),
+  lastSeen: __t.timestamp(),
+  sessions: __t.u32(),
+  tz: __t.string(),
+  lang: __t.string(),
+  matches: __t.u32(),
+  kills: __t.u32(),
+});
+export type AdminPlayerRow = __Infer<typeof AdminPlayerRow>;
+
+export const AdminPlayers = __t.object("AdminPlayers", {});
+export type AdminPlayers = __Infer<typeof AdminPlayers>;
+
+export const AdminRoomRow = __t.object("AdminRoomRow", {
+  room: __t.u8(),
+  code: __t.string(),
+  mapId: __t.string(),
+  mode: __t.string(),
+  size: __t.u8(),
+  humans: __t.u32(),
+  bots: __t.u32(),
+  round: __t.u32(),
+  phase: __t.string(),
+});
+export type AdminRoomRow = __Infer<typeof AdminRoomRow>;
+
+export const AdminRooms = __t.object("AdminRooms", {});
+export type AdminRooms = __Infer<typeof AdminRooms>;
+
+export const AdminStatus = __t.object("AdminStatus", {});
+export type AdminStatus = __Infer<typeof AdminStatus>;
+
+export const AdminStatusRow = __t.object("AdminStatusRow", {
+  admin: __t.bool(),
+  failures: __t.u32(),
+  windowStart: __t.timestamp(),
+});
+export type AdminStatusRow = __Infer<typeof AdminStatusRow>;
+
 export const Body = __t.object("Body", {
   id: __t.u32(),
   kind: __t.string(),
@@ -138,6 +220,24 @@ export const Player = __t.object("Player", {
   room: __t.u8(),
 });
 export type Player = __Infer<typeof Player>;
+
+export const PlayerDay = __t.object("PlayerDay", {
+  key: __t.string(),
+  day: __t.u32(),
+  identity: __t.identity(),
+});
+export type PlayerDay = __Infer<typeof PlayerDay>;
+
+export const PlayerSeen = __t.object("PlayerSeen", {
+  identity: __t.identity(),
+  firstSeen: __t.timestamp(),
+  lastSeen: __t.timestamp(),
+  sessions: __t.u32(),
+  tz: __t.string(),
+  lang: __t.string(),
+  name: __t.string(),
+});
+export type PlayerSeen = __Infer<typeof PlayerSeen>;
 
 export const Point = __t.object("Point", {
   id: __t.string(),

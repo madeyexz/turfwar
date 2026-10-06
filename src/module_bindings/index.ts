@@ -34,6 +34,9 @@ import {
 } from "spacetimedb";
 
 // Import all reducer arg schemas
+import AdminLoginReducer from "./admin_login_reducer";
+import AdminLogoutReducer from "./admin_logout_reducer";
+import AdminRevokeAllReducer from "./admin_revoke_all_reducer";
 import BuyReducer from "./buy_reducer";
 import BuyAttachmentReducer from "./buy_attachment_reducer";
 import CreateRoomReducer from "./create_room_reducer";
@@ -41,6 +44,7 @@ import EnterVehicleReducer from "./enter_vehicle_reducer";
 import ExitVehicleReducer from "./exit_vehicle_reducer";
 import FireReducer from "./fire_reducer";
 import GrenadeReducer from "./grenade_reducer";
+import HelloReducer from "./hello_reducer";
 import JoinReducer from "./join_reducer";
 import JoinPublicReducer from "./join_public_reducer";
 import JoinRoomReducer from "./join_room_reducer";
@@ -57,6 +61,11 @@ import VehicleReportReducer from "./vehicle_report_reducer";
 // Import all procedure arg schemas
 
 // Import all table schema definitions
+import AdminDailyRow from "./admin_daily_table";
+import AdminOverviewRow from "./admin_overview_table";
+import AdminPlayersRow from "./admin_players_table";
+import AdminRoomsRow from "./admin_rooms_table";
+import AdminStatusRow from "./admin_status_table";
 import BodyRow from "./body_table";
 import FrameRow from "./frame_table";
 import MatchRow from "./match_table";
@@ -170,10 +179,48 @@ const tablesSchema = __schema({
       { name: 'soldier_id_key', constraint: 'unique', columns: ['id'] },
     ],
   }, SoldierRow),
+  adminDaily: __table({
+    name: 'admin_daily',
+    indexes: [
+    ],
+    constraints: [
+    ],
+  }, AdminDailyRow),
+  adminOverview: __table({
+    name: 'admin_overview',
+    indexes: [
+    ],
+    constraints: [
+    ],
+  }, AdminOverviewRow),
+  adminPlayers: __table({
+    name: 'admin_players',
+    indexes: [
+    ],
+    constraints: [
+    ],
+  }, AdminPlayersRow),
+  adminRooms: __table({
+    name: 'admin_rooms',
+    indexes: [
+    ],
+    constraints: [
+    ],
+  }, AdminRoomsRow),
+  adminStatus: __table({
+    name: 'admin_status',
+    indexes: [
+    ],
+    constraints: [
+    ],
+  }, AdminStatusRow),
 });
 
 /** The schema information for all reducers in this module. This is defined the same way as the reducers would have been defined in the server, except the body of the reducer is omitted in code generation. */
 const reducersSchema = __reducers(
+  __reducerSchema("admin_login", AdminLoginReducer),
+  __reducerSchema("admin_logout", AdminLogoutReducer),
+  __reducerSchema("admin_revoke_all", AdminRevokeAllReducer),
   __reducerSchema("buy", BuyReducer),
   __reducerSchema("buy_attachment", BuyAttachmentReducer),
   __reducerSchema("create_room", CreateRoomReducer),
@@ -181,6 +228,7 @@ const reducersSchema = __reducers(
   __reducerSchema("exit_vehicle", ExitVehicleReducer),
   __reducerSchema("fire", FireReducer),
   __reducerSchema("grenade", GrenadeReducer),
+  __reducerSchema("hello", HelloReducer),
   __reducerSchema("join", JoinReducer),
   __reducerSchema("join_public", JoinPublicReducer),
   __reducerSchema("join_room", JoinRoomReducer),

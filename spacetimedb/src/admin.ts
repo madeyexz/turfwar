@@ -1,0 +1,123 @@
+import { constantTimeEqual, sha256Hex } from '../../shared/sha256';
+
+/**
+ * The owner's admin dashboard (`/admin`), checked inside the module: no owner token anywhere.
+ * The owner holds a secret admin key; only its SHA-256 lives here. `admin_login(key)` hashes the
+ * key and, on a match, adds the caller's identity to the private `admin` table; the `admin_*` views
+ * return data only to identities in that table (empty for everyone else).
+ *
+ * Rotating the key: choose a new key, put its hash below (`printf %s "$NEW_KEY" | shasum -a 256`),
+ * publish the module (`--delete-data=never`), and call `admin_revoke_all` from an admin session so
+ * every browser logged in with the old key has to log in again with the new one.
+ *
+ * This file is pure logic over a small store interface, so tests can run it with a test hash.
+ */
+export const ADMIN_KEY_SHA256 = '636dec36cc64bd40054fd54285fc60948484d414b1d0631025b36c31e447c3e9';
+/** Failed logins one identity may make per window; the next attempt is refused until it passes. */
+export const ADMIN_MAX_FAILURES = 5;
+export const ADMIN_WINDOW_MICROS = 10n * 60n * 1_000_000n;
+/** Longer keys are refused without hashing them. */
+const KEY_MAX = 256;
+
+export interface AdminAttempts { windowStart: bigint; failures: number }
+
+/** What the logic needs from the database; identities are hex strings here. */
+export interface AdminStore {
+  isAdmin(id: string): boolean;
+  grant(id: string): void;
+  revoke(id: string): void;
+  revokeAll(): void;
+  attempts(id: string): AdminAttempts | undefined;
+  setAttempts(id: string, attempts: AdminAttempts | undefined): void;
+}
+
+export class AdminError extends Error {}
+
+/** Does `key` hash to `hash`? Compared in constant time. */
+export function keyMatches(key: string, hash = ADMIN_KEY_SHA256): boolean {
+  if (key.length === 0 || key.length > KEY_MAX) return false;
+  return constantTimeEqual(sha256Hex(key), hash.toLowerCase());
+}
+
+/** Failures that still count at `now` (a window starts with its first failure and lasts 10 minutes). */
+export function failuresAt(attempts: AdminAttempts | undefined, now: bigint): number {
+  return attempts && now - attempts.windowStart < ADMIN_WINDOW_MICROS ? attempts.failures : 0;
+}
+
+/**
+ * Log in with the admin key. Right key: the caller becomes an admin and its failures are cleared.
+ * Wrong key: one more failure is recorded and `{ ok: false }` comes back (the caller's reducer must
+ * return normally, or the failure would roll back with it). Locked out: throws before checking.
+ */
+export function adminLogin(store: AdminStore, id: string, key: string, now: bigint, hash = ADMIN_KEY_SHA256): { ok: boolean; left: number } {
+  const prev = store.attempts(id);
+  const failures = failuresAt(prev, now);
+  if (failures >= ADMIN_MAX_FAILURES) throw new AdminError('Too many attempts; try again in 10 minutes');
+  if (keyMatches(key, hash)) {
+    store.grant(id);
+    store.setAttempts(id, undefined);
+    return { ok: true, left: ADMIN_MAX_FAILURES };
+  }
+  store.setAttempts(id, { windowStart: failures > 0 && prev ? prev.windowStart : now, failures: failures + 1 });
+  return { ok: false, left: ADMIN_MAX_FAILURES - failures - 1 };
+}
+
+export function adminLogout(store: AdminStore, id: string) { store.revoke(id); }
+
+/** Sign every browser out (key rotation, a lost device). Only an admin may. */
+export function adminRevokeAll(store: AdminStore, id: string) {
+  if (!store.isAdmin(id)) throw new AdminError('Admins only');
+  store.revokeAll();
+}
+
+/** A view's rows for admins; nothing for anyone else. */
+export function forAdmin<T>(store: Pick<AdminStore, 'isAdmin'>, id: string, rows: () => T[]): T[] {
+  return store.isAdmin(id) ? rows() : [];
+}
+
+// ---- What the views return ----------------------------------------------------------------
+
+export const DAY_MICROS = 86_400_000_000n;
+/** UTC day number (days since 1970-01-01). */
+export const dayOf = (micros: bigint) => Number(micros / DAY_MICROS);
+export const dateOf = (day: number) => new Date(day * 86_400_000).toISOString().slice(0, 10);
+/** A short anonymous id for a player (not the identity itself). */
+export const shortId = (identityHex: string) => sha256Hex(`player:${identityHex}`).slice(0, 10);
+
+export interface SeenLike { identity: string; firstSeen: bigint; lastSeen: bigint; sessions: number; tz: string; lang: string; name?: string }
+export interface ProfileLike { identity: string; name: string; kills: number; matchesPlayed: number }
+
+export interface PlayerRow { id: string; name: string; firstSeen: bigint; lastSeen: bigint; sessions: number; tz: string; lang: string; matches: number; kills: number }
+
+/** One row per player ever seen (callsign of the latest join, else the profile's), with career numbers from `profile`, newest activity first. */
+export function playerRows(seen: Iterable<SeenLike>, profiles: Iterable<ProfileLike>): PlayerRow[] {
+  const byId = new Map<string, ProfileLike>();
+  for (const p of profiles) byId.set(p.identity, p);
+  const rows: PlayerRow[] = [];
+  for (const s of seen) {
+    const p = byId.get(s.identity);
+    rows.push({ id: shortId(s.identity), name: s.name || p?.name || '', firstSeen: s.firstSeen, lastSeen: s.lastSeen, sessions: s.sessions, tz: s.tz, lang: s.lang, matches: p?.matchesPlayed ?? 0, kills: p?.kills ?? 0 });
+  }
+  return rows.sort((a, b) => (a.lastSeen < b.lastSeen ? 1 : a.lastSeen > b.lastSeen ? -1 : 0));
+}
+
+export interface DailyRow { day: number; date: string; newPlayers: number; activePlayers: number }
+
+/**
+ * New and active players per UTC day for the 30 days ending with the latest day anyone was seen
+ * (views cannot read the clock; the page fills in quiet days up to today). `activeOn(day)` counts
+ * the players active that day.
+ */
+export function dailyRows(seen: Iterable<SeenLike>, activeOn: (day: number) => number, days = 30): DailyRow[] {
+  const firstDays = new Map<number, number>();
+  let last = -1;
+  for (const s of seen) {
+    const d = dayOf(s.firstSeen);
+    firstDays.set(d, (firstDays.get(d) ?? 0) + 1);
+    last = Math.max(last, dayOf(s.lastSeen));
+  }
+  if (last < 0) return [];
+  const rows: DailyRow[] = [];
+  for (let day = last - days + 1; day <= last; day++) rows.push({ day, date: dateOf(day), newPlayers: firstDays.get(day) ?? 0, activePlayers: activeOn(day) });
+  return rows;
+}
