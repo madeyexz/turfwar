@@ -16,6 +16,12 @@ bun install --frozen-lockfile && bun install --cwd spacetimedb --frozen-lockfile
 bun trailer/scripts/make.ts            # everything; `--recapture` re-films every shot, `--only-build` re-cuts only
 ```
 
+**Traditional Chinese (zh-TW):** `bun trailer/scripts/make.ts --lang zh-TW` films every shot again with
+`?lang=zh-TW` (HUD, kill feed, store, banners and lobby in Chinese) into `captures/zh-TW/`, renders the
+cards in Chinese with the game's Noto Sans TC (copy in `edit.ts`, `CARDS_ZH`), reuses the same score and
+mix, and writes `out/lawbreaker-trailer.zh-TW.mp4` and `out/lawbreaker-trailer-30s.zh-TW.mp4`. Every step
+takes `--lang zh-TW`; `scripts/glyphs.ts` checks the copy against the subset font.
+
 `make.ts` needs Google Chrome, ffmpeg (8.x tested) and the SpacetimeDB CLI. It starts and stops its own
 services, all local and disposable: an in-memory SpacetimeDB on `127.0.0.1:3251` with the module
 published as `lbtrailer`, headless clients from `scripts/loadtest.ts` Quick-Playing into 1v1, 6v6 and

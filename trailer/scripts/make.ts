@@ -21,7 +21,7 @@ const STDB_PORT = 3251, VITE_PORT = 5201, DB = 'lbtrailer';
 const children: ChildProcess[] = [];
 
 function start(cmd: string, argv: string[], env: Record<string, string> = {}) {
-  const p = spawn(cmd, argv, { cwd: REPO, env: { ...process.env, ...env }, stdio: ['ignore', 'ignore', 'inherit'] });
+  const p = spawn(cmd, argv, { cwd: REPO, env: { ...process.env, ...env }, stdio: ['ignore', 'ignore', 'inherit'], detached: true });
   children.push(p);
   return p;
 }
@@ -38,7 +38,8 @@ async function waitFor(url: string, label: string) {
   }
   throw new Error(`${label} did not start (${url})`);
 }
-const cleanup = () => { for (const c of children) c.kill('SIGTERM'); };
+// Each service runs in its own process group: stopping the group also stops the load test's workers.
+const cleanup = () => { for (const c of children) { try { process.kill(-c.pid!, 'SIGTERM'); } catch { c.kill('SIGTERM'); } } };
 process.on('SIGINT', () => { cleanup(); process.exit(130); });
 
 try {
