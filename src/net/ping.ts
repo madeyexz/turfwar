@@ -51,6 +51,16 @@ export function serverRegionKey(uri: string): Key | undefined {
   const host = serverHost(uri).toLowerCase();
   return SERVER_REGIONS[host] ?? SERVER_REGION_SUFFIXES.find(([suffix]) => host.endsWith(suffix))?.[1];
 }
+/** Hostnames that reach the same production server (its custom domain and InstaCloud's own URL). */
+const SINGAPORE_HOSTS = (host: string) => host === 'play.turfwar.ianhsiao.me' || host.endsWith('.compute.instacloud-edge.com');
+/**
+ * Which server a URI reaches, for keying a player's saved identity: the same server under another
+ * hostname issues and accepts the same tokens, so switching hostnames must not mint new players.
+ */
+export function serverIdentityKey(uri: string) {
+  const host = serverHost(uri).toLowerCase();
+  return SINGAPORE_HOSTS(host) ? 'instacloud-singapore' : uri;
+}
 /** "Singapore", "US East", "Local", or the host name. */
 export function serverRegion(uri: string) {
   const key = serverRegionKey(uri);

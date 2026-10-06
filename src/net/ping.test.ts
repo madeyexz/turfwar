@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { setLang } from '../ui/i18n';
-import { PING_INTERVAL_MS, PingMonitor, PingSamples, hostAnswers, median, pingAllowed, pingTone, pingUrl, serverRegion } from './ping';
+import { PING_INTERVAL_MS, PingMonitor, PingSamples, hostAnswers, median, pingAllowed, pingTone, pingUrl, serverIdentityKey, serverRegion } from './ping';
 
 afterEach(() => { setLang('en', false); vi.useRealTimers(); });
 
@@ -42,8 +42,20 @@ describe('serverRegion', () => {
   });
 });
 
+describe('serverIdentityKey', () => {
+  it('keeps one identity for the Singapore server under either hostname', () => {
+    const edge = serverIdentityKey('wss://prod-main-stdb-2b7636-205bvw6d002.compute.instacloud-edge.com');
+    expect(edge).toBe(serverIdentityKey('wss://play.turfwar.ianhsiao.me'));
+    expect(edge).toBe('instacloud-singapore');
+  });
+  it('leaves every other server keyed by its URI, so saved identities keep working', () => {
+    expect(serverIdentityKey('wss://maincloud.spacetimedb.com')).toBe('wss://maincloud.spacetimedb.com');
+    expect(serverIdentityKey('same-origin')).toBe('same-origin');
+  });
+});
+
 describe('hostAnswers', () => {
-  const reply = (status: number) => async () => ({ ok: status >= 200 && status < 300, status, arrayBuffer: async () => new ArrayBuffer(0) } as Response);
+  const reply =(status: number) => async () => ({ ok: status >= 200 && status < 300, status, arrayBuffer: async () => new ArrayBuffer(0) } as Response);
   const signal = new AbortController().signal;
   it('is true only for a 200 from the host', async () => {
     expect(await hostAnswers('https://h/v1/ping', signal, reply(200))).toBe(true);

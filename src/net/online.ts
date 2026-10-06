@@ -15,6 +15,7 @@ import { newRoundStats, type BuyItem } from '../../shared/match/economy';
 import { plural, t } from '../ui/i18n';
 import { setPerson } from '../analytics';
 import type { WakeLink } from './wake';
+import { serverIdentityKey } from './ping';
 
 type RosterRow = Infer<typeof RosterTable>;
 
@@ -355,7 +356,7 @@ export async function connectOnline(name: string, team: Team | undefined, how: O
   if (!uri || !database) throw new Error('No SpacetimeDB server configured.');
   status(t('net.connecting'));
   const { DbConnection } = await import('../module_bindings');
-  const tokenKey = `lawbreaker.token:${uri}:${database}`;
+  const tokenKey = `lawbreaker.token:${serverIdentityKey(uri)}:${database}`;
   let token: string | undefined;
   try { token = localStorage.getItem(tokenKey) ?? undefined; } catch { /* storage disabled */ }
   return new Promise<OnlineLink>((resolve, reject) => {

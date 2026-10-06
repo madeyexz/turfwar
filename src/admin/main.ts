@@ -8,7 +8,7 @@ import type AdminPlayerTimeRow from '../module_bindings/admin_player_time_table'
 import type AdminDailyTimeRow from '../module_bindings/admin_daily_time_table';
 import { countByCountry, countryOf } from '../../shared/tzcountry';
 import { formatPlayTime, liveSeconds } from '../../shared/playtime';
-import { hostAnswers, pingUrl } from '../net/ping';
+import { hostAnswers, pingUrl, serverIdentityKey } from '../net/ping';
 import { WakeDriver, wakeProgress, wakeSeconds, type WakeLink } from '../net/wake';
 import { adminServers, chosenServer, regionName, rememberServer, type AdminServer } from './servers';
 import './admin.css';
@@ -41,8 +41,8 @@ const storage = (() => { try { return localStorage; } catch { return undefined; 
 let server: AdminServer = chosenServer(SERVERS, storage);
 // Its own identity, not the game's: closing this tab must never drop the owner's soldier from a match.
 // Per server (as before the switcher, so an existing login carries over).
-const tokenKey = () => `lawbreaker.admin.token:${server.uri}:${server.database}`;
-const flagKey = () => `lawbreaker.admin.loggedIn:${server.uri}:${server.database}`;
+const tokenKey = () => `lawbreaker.admin.token:${serverIdentityKey(server.uri)}:${server.database}`;
+const flagKey = () => `lawbreaker.admin.loggedIn:${serverIdentityKey(server.uri)}:${server.database}`;
 const store = {
   get: (k: string) => { try { return localStorage.getItem(k); } catch { return null; } },
   set: (k: string, v: string) => { try { localStorage.setItem(k, v); } catch { /* storage disabled */ } },
