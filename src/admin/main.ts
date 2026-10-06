@@ -4,7 +4,10 @@ import type AdminPlayersRow from '../module_bindings/admin_players_table';
 import type AdminRoomsRow from '../module_bindings/admin_rooms_table';
 import type AdminDailyRow from '../module_bindings/admin_daily_table';
 import type AdminOverviewRow from '../module_bindings/admin_overview_table';
+import type AdminPlayerTimeRow from '../module_bindings/admin_player_time_table';
+import type AdminDailyTimeRow from '../module_bindings/admin_daily_time_table';
 import { countByCountry, countryOf } from '../../shared/tzcountry';
+import { formatPlayTime, liveSeconds } from '../../shared/playtime';
 import './admin.css';
 
 /**
@@ -15,10 +18,13 @@ import './admin.css';
  * The database comes from the same build variables as the game, so a dev preview shows the dev
  * database and production the production one.
  */
-type Player = Infer<typeof AdminPlayersRow>;
 type Room = Infer<typeof AdminRoomsRow>;
 type Day = Infer<typeof AdminDailyRow>;
 type Overview = Infer<typeof AdminOverviewRow>;
+type PlayerTime = Infer<typeof AdminPlayerTimeRow>;
+type DayTime = Infer<typeof AdminDailyTimeRow>;
+/** An `admin_players` row joined (by id) with its `admin_player_time` row: rounds, and play time including a session in progress. */
+type Player = Infer<typeof AdminPlayersRow> & { rounds: number; playTime: number; playing: boolean; openSeconds: number };
 
 const POSTHOG = 'https://us.posthog.com/project/649207';
 const env = import.meta.env as Record<string, string | undefined>;
@@ -115,16 +121,53 @@ function renderLogin() {
 
 // ---- Dashboard ---------------------------------------------------------------------------
 
+/** Players with their play time: credited seconds plus the open stretch of anyone in a room right now. */
+function joinedPlayers(): Player[] {
+  const db = conn!.db;
+  const times = new Map<string, PlayerTime>();
+  for (const t of db.adminPlayerTime.iter()) times.set(t.id, t);
+  const nowMicros = BigInt(Date.now()) * 1000n;
+  return [...db.adminPlayers.iter()].map(p => {
+    const t = times.get(p.id);
+    const since = t?.playingSince.microsSinceUnixEpoch ?? 0n;
+    const credited = t?.playSeconds ?? 0n;
+    const live = Number(liveSeconds({ seconds: credited, since }, nowMicros));
+    return { ...p, rounds: t?.rounds ?? 0, playTime: live, playing: since > 0n, openSeconds: live - Number(credited) };
+  });
+}
+
+/** Play time for the tiles: a zero reads "0 m" there (the table shows "—"). */
+const hm = (seconds: number) => (seconds >= 1 ? formatPlayTime(seconds) : '0 m');
+
+/**
+ * Totals over every player's play time, and today's and the last 7 UTC days' (credited per day,
+ * plus the sessions in progress, which belong to today).
+ */
+function playTotals(players: Player[], dayTimes: DayTime[]) {
+  const played = players.map(p => p.playTime).filter(s => s > 0).sort((a, b) => a - b);
+  const total = played.reduce((n, s) => n + s, 0);
+  const mid = played.length >> 1;
+  const median = !played.length ? 0 : played.length % 2 ? played[mid] : (played[mid - 1] + played[mid]) / 2;
+  const open = players.reduce((n, p) => n + p.openSeconds, 0);
+  const byDay = new Map(dayTimes.map(d => [d.day, Number(d.playSeconds)]));
+  const today = Math.floor(Date.now() / DAY_MS);
+  let week = open;
+  for (let d = today - 6; d <= today; d++) week += byDay.get(d) ?? 0;
+  return { total, players: played.length, average: played.length ? total / played.length : 0, median, open, today: (byDay.get(today) ?? 0) + open, week };
+}
+
 function dashboard() {
   const db = conn!.db;
   const o: Overview | undefined = [...db.adminOverview.iter()][0];
-  const players = [...db.adminPlayers.iter()];
+  const players = joinedPlayers();
   const rooms = [...db.adminRooms.iter()].sort((a, b) => b.humans - a.humans || a.room - b.room);
   const days = [...db.adminDaily.iter()].sort((a, b) => a.day - b.day);
+  const dayTimes = [...db.adminDailyTime.iter()];
   const now = Date.now();
   const startOfToday = Date.UTC(new Date().getUTCFullYear(), new Date().getUTCMonth(), new Date().getUTCDate());
   const first = (p: Player) => p.firstSeen.toDate().getTime(), last = (p: Player) => p.lastSeen.toDate().getTime();
   const count = (f: (p: Player) => boolean) => players.filter(f).length;
+  const play = playTotals(players, dayTimes);
   const tile = (label: string, value: number | bigint | string, note = '', hero = false) => `<div class="tile${hero ? ' hero' : ''}"><small>${label}</small><b>${typeof value === 'string' ? value : num(value)}</b>${note ? `<span>${note}</span>` : ''}</div>`;
   const tiles = [
     tile('Online now', o?.onlineNow ?? 0, `${num(o?.rooms ?? 0)} room${o?.rooms === 1 ? '' : 's'} open`, true),
@@ -135,6 +178,10 @@ function dashboard() {
     tile('Active 24 h', count(p => last(p) >= now - DAY_MS)),
     tile('Active 7 d', count(p => last(p) >= now - 7 * DAY_MS)),
     tile('Matches played', o?.playerMatches ?? 0, 'player-matches finished'),
+    tile('Total play time', hm(play.total), 'online, all players'),
+    tile('Avg / player', hm(play.average), `median ${hm(play.median)} · ${num(play.players)} played`),
+    tile('Play time today', hm(play.today), 'UTC day'),
+    tile('Play time 7 d', hm(play.week)),
   ].join('');
 
   const roomRows = rooms.map(r => `<tr><td>${r.code ? `<span class="tag">#${esc(r.code)}</span>` : '<span class="tag">public</span>'}</td><td>${esc(titleCase(r.mapId))}</td><td>${esc(titleCase(r.mode))}</td>
@@ -152,11 +199,15 @@ function dashboard() {
         <div class="chart">${chart(days)}</div></section>
       <section class="card"><h2>Where from <small>time zone → country, estimate</small></h2>${countryList}</section>
     </div>
+    <section class="card"><h2>Play time <small>online play time per UTC day, all players, last 30 days</small></h2>
+      <div class="chart wide">${playChart(dayTimes, play.open)}</div></section>
     <section class="card"><h2>Live rooms <small>${rooms.length ? `${num(o?.humansInRooms ?? 0)} human${o?.humansInRooms === 1 ? '' : 's'} in ${rooms.length} room${rooms.length === 1 ? '' : 's'}` : 'none open'}</small></h2>
       ${rooms.length ? `<div class="scroll"><table><thead><tr><th>Room</th><th>Map</th><th>Mode</th><th>Size</th><th class="num">Humans</th><th class="num">Bots</th><th class="num">Round</th><th>Phase</th></tr></thead><tbody>${roomRows}</tbody></table></div>` : '<div class="empty">No rooms open: nobody is playing online right now.</div>'}
     </section>
     <section class="card"><h2>Players <small>${num(players.length)} · sorted by ${sortLabel()}</small></h2>${playerTable(players)}</section>
-    <footer>Updates live. Players are identities that said hello or joined a room; ids are anonymous. Career numbers from <code>profile</code>.
+    <footer><p>Updates live. Players are identities that said hello or joined a room; ids are anonymous. Career numbers come from <code>profile</code>:
+      matches counts finished first-to-10 matches, rounds every round played. Play time is online play time only: time spent in an online room
+      (lobby time, Solo and Practice are not counted), credited every minute and on leaving.</p>
       <button type="button" class="btn revoke" id="revoke">Sign out all admins</button></footer>`;
   body.querySelectorAll<HTMLButtonElement>('th button[data-sort]').forEach(b => b.addEventListener('click', () => {
     const k = b.dataset.sort as typeof sortKey;
@@ -176,7 +227,8 @@ function dashboard() {
 
 const COLUMNS: { key: keyof Player | 'country'; label: string; num?: boolean }[] = [
   { key: 'name', label: 'Name' }, { key: 'lastSeen', label: 'Last seen' }, { key: 'firstSeen', label: 'First seen' },
-  { key: 'sessions', label: 'Sessions', num: true }, { key: 'matches', label: 'Matches', num: true }, { key: 'kills', label: 'Kills', num: true },
+  { key: 'playTime', label: 'Play time', num: true }, { key: 'sessions', label: 'Sessions', num: true }, { key: 'rounds', label: 'Rounds', num: true },
+  { key: 'matches', label: 'Matches', num: true }, { key: 'kills', label: 'Kills', num: true },
   { key: 'country', label: 'Country' }, { key: 'tz', label: 'Time zone' }, { key: 'lang', label: 'Lang' }, { key: 'id', label: 'Id' },
 ];
 const sortLabel = () => `${COLUMNS.find(c => c.key === sortKey)?.label.toLowerCase()}, ${sortDir === 1 ? 'ascending' : 'descending'}`;
@@ -196,7 +248,8 @@ function playerTable(players: Player[]) {
   const rows = sorted.slice(0, playerLimit).map(p => {
     const lastSeen = p.lastSeen.toDate(), firstSeen = p.firstSeen.toDate();
     return `<tr><td>${esc(p.name || '—')}</td><td title="${lastSeen.toISOString()}">${ago(lastSeen)}</td><td title="${firstSeen.toISOString()}">${shortDate(firstSeen)}</td>
-      <td class="num">${num(p.sessions)}</td><td class="num">${num(p.matches)}</td><td class="num">${num(p.kills)}</td>
+      <td class="num"${p.playing ? ' title="In an online room now"' : ''}>${p.playing ? '<i class="dot live" aria-label="In a room now"></i>' : ''}${formatPlayTime(p.playTime)}</td>
+      <td class="num">${num(p.sessions)}</td><td class="num">${num(p.rounds)}</td><td class="num">${num(p.matches)}</td><td class="num">${num(p.kills)}</td>
       <td>${esc(countryOf(p.tz))}</td><td class="tz" title="${esc(p.tz)}">${esc(p.tz || '—')}</td><td>${esc(p.lang || '—')}</td><td class="id">${esc(p.id)}</td></tr>`;
   }).join('');
   const more = sorted.length > playerLimit ? `<button type="button" class="btn more" id="more">Show more (${num(sorted.length - playerLimit)} left)</button>` : '';
@@ -231,6 +284,34 @@ function chart(rows: Day[]) {
   return `${svg}</svg>`;
 }
 
+/** Online play time per day (bars, minutes or hours); today includes the sessions in progress (`open` seconds). */
+function playChart(rows: DayTime[], open: number) {
+  const today = Math.floor(Date.now() / DAY_MS);
+  const byDay = new Map(rows.map(r => [r.day, Number(r.playSeconds)]));
+  const data = Array.from({ length: 30 }, (_, i) => today - 29 + i).map(d => ({ day: d, seconds: (byDay.get(d) ?? 0) + (d === today ? open : 0) }));
+  const total = data.reduce((n, d) => n + d.seconds, 0);
+  if (!total) return '<div class="empty">No online play time in the last 30 days.</div>';
+  const narrow = innerWidth < 600;
+  const W = narrow ? 360 : 1100, H = narrow ? 200 : 180, L = 38, R = 8, T = 10, B = 26;
+  const maxSeconds = Math.max(...data.map(d => d.seconds));
+  // Hours once a day reaches two hours, minutes below that.
+  const unit = maxSeconds >= 7200 ? 3600 : 60, suffix = unit === 3600 ? 'h' : 'm';
+  const max = Math.max(1, maxSeconds / unit);
+  const step = max <= 5 ? 1 : max <= 10 ? 2 : Math.ceil(max / 4 / 5) * 5;
+  const top = Math.ceil(max / step) * step;
+  const col = (W - L - R) / data.length, bw = col * 0.7;
+  const y = (v: number) => T + (H - T - B) * (1 - v / top);
+  let svg = `<svg viewBox="0 0 ${W} ${H}" role="img" aria-label="Online play time per day, last 30 days: ${formatPlayTime(total)} in all">`;
+  for (let v = 0; v <= top; v += step) svg += `<line class="grid" x1="${L}" x2="${W - R}" y1="${y(v)}" y2="${y(v)}"/><text x="${L - 6}" y="${y(v) + 4}" text-anchor="end">${v}${v ? suffix : ''}</text>`;
+  data.forEach((d, i) => {
+    const date = new Date(d.day * DAY_MS).toISOString().slice(0, 10);
+    const v = d.seconds / unit;
+    svg += `<rect class="bar play" x="${L + col * i + (col - bw) / 2}" y="${y(v)}" width="${bw}" height="${Math.max(0, H - B - y(v))}"><title>${date}: ${hm(d.seconds)}${d.day === today && open ? ' (incl. sessions in progress)' : ''}</title></rect>`;
+    if (narrow ? i % 7 === 1 : i % 5 === 4 || i === 0) svg += `<text x="${L + col * i + col / 2}" y="${H - 8}" text-anchor="middle">${date.slice(5)}</text>`;
+  });
+  return `${svg}</svg>`;
+}
+
 // ---- Wiring ------------------------------------------------------------------------------
 
 let frame = 0;
@@ -257,13 +338,14 @@ function connect() {
   DbConnection.builder().withUri(uri).withDatabaseName(database).withToken(store.get(TOKEN_KEY) ?? undefined)
     .onConnect((c, _identity, token) => {
       store.set(TOKEN_KEY, token);
-      for (const t of [c.db.adminStatus, c.db.adminOverview, c.db.adminRooms, c.db.adminPlayers, c.db.adminDaily]) {
+      for (const t of [c.db.adminStatus, c.db.adminOverview, c.db.adminRooms, c.db.adminPlayers, c.db.adminDaily, c.db.adminPlayerTime, c.db.adminDailyTime]) {
         t.onInsert(render); t.onDelete(render);
       }
       c.subscriptionBuilder()
         .onApplied(() => { conn = c; setConn('live'); render(); })
         .onError(() => { setConn('off'); messageError = true; message = 'This database has no admin views yet (publish the module first).'; render(); })
-        .subscribe(['SELECT * FROM admin_status', 'SELECT * FROM admin_overview', 'SELECT * FROM admin_rooms', 'SELECT * FROM admin_players', 'SELECT * FROM admin_daily']);
+        .subscribe(['SELECT * FROM admin_status', 'SELECT * FROM admin_overview', 'SELECT * FROM admin_rooms', 'SELECT * FROM admin_players', 'SELECT * FROM admin_daily',
+          'SELECT * FROM admin_player_time', 'SELECT * FROM admin_daily_time']);
     })
     .onConnectError(() => { setConn('off'); conn = undefined; messageError = true; message = 'Cannot reach the server; retrying…'; render(); setTimeout(connect, 5000); })
     .onDisconnect(() => { setConn('off'); conn = undefined; messageError = true; message = 'Disconnected; reconnecting…'; render(); setTimeout(connect, 3000); })

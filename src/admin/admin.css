@@ -16,6 +16,7 @@
   --amber: #ffb45a;
   --crimson: #ff5544;
   --cash: #9cf08a;
+  --cash-dim: rgba(156, 240, 138, 0.34);
   color-scheme: dark;
   font-family: var(--font);
   color: var(--ink);
@@ -62,7 +63,7 @@ header.top h1 em { font-style: normal; color: var(--accent); }
 .login .msg.ok { color: var(--muted); }
 
 /* Dashboard */
-.tiles { display: grid; grid-template-columns: repeat(auto-fit, minmax(128px, 1fr)); gap: 10px; margin-bottom: 18px; }
+.tiles { display: grid; grid-template-columns: repeat(auto-fit, minmax(160px, 1fr)); gap: 10px; margin-bottom: 18px; }
 .tile { background: var(--panel); border: 1px solid var(--line); border-radius: 8px; padding: 12px 14px; }
 .tile small { display: block; color: var(--muted); font-weight: 600; font-size: 13px; text-transform: uppercase; letter-spacing: 0.06em; }
 .tile b { display: block; font-size: 32px; font-weight: 700; line-height: 1.1; margin-top: 2px; font-variant-numeric: tabular-nums; }
@@ -86,6 +87,8 @@ section.card h2 small { color: var(--faint); font-weight: 600; letter-spacing: 0
 .chart .bar:hover { fill: var(--accent); }
 .chart .new { fill: none; stroke: var(--amber); stroke-width: 2; }
 .chart .newdot { fill: var(--amber); }
+.chart .bar.play { fill: var(--cash-dim); }
+.chart .bar.play:hover { fill: var(--cash); }
 
 .countries { list-style: none; margin: 0; padding: 0; display: grid; gap: 6px; }
 .countries li { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 2px 10px; font-weight: 600; }
@@ -105,14 +108,19 @@ th button.sorted.desc::after { content: ' ▼'; }
 td.num, th.num { text-align: right; }
 td.id { color: var(--faint); font-size: 13px; }
 td.tz { max-width: 220px; overflow: hidden; text-overflow: ellipsis; }
+td .dot { display: inline-block; margin-right: 6px; vertical-align: 1px; }
 @media (max-width: 520px) {
-  .tiles { grid-template-columns: repeat(2, minmax(0, 1fr)); }
-  .tile b { font-size: 28px; }
+  .tiles { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; }
+  .tile { padding: 10px 12px; }
+  .tile b { font-size: 26px; }
   header.top h1 { font-size: 22px; }
 }
 td .tag { display: inline-block; padding: 0 6px; border-radius: 4px; border: 1px solid var(--line-strong); font-size: 12px; font-weight: 700; color: var(--muted); }
 td .tag.live { color: var(--cash); border-color: rgba(156, 240, 138, 0.4); }
 .more { margin-top: 10px; }
-footer { color: var(--faint); font-size: 13px; margin-top: 8px; display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 10px; }
+/* The note is one paragraph (inline code flows with its text); the button sits beside it, or below on a phone. */
+footer { color: var(--faint); font-size: 13px; margin-top: 8px; display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 10px 24px; }
+footer p { margin: 0; flex: 1 1 360px; max-width: 80ch; line-height: 1.45; }
+footer code { font-family: ui-monospace, 'SF Mono', Menlo, monospace; font-size: 12px; color: var(--muted); padding: 0 4px; border-radius: 3px; background: rgba(255, 255, 255, 0.06); }
 .btn.revoke { font-size: 12px; color: var(--muted); }
 .btn.revoke:hover { border-color: var(--crimson); color: var(--crimson); }
