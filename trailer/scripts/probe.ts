@@ -15,8 +15,8 @@ try {
   const page = await browser.page(1920, 1080, Number(process.env.TRAILER_SCALE ?? 1));
   await page.send('Page.addScriptToEvaluateOnNewDocument', { source: VCLOCK_SOURCE });
   const t0 = Date.now();
-  await page.navigate(`${BASE}/?capture&trailer&debuginput&autostart=1&quality=high&${params}`);
-  await page.waitFor('window.__lb && window.__lb.game && window.__trailer', 120000, 'game');
+  await page.navigate(`${BASE}/?capture&trailer&debuginput${process.env.TRAILER_LOBBY ? '' : '&autostart=1'}&quality=high&${params}`);
+  await page.waitFor(process.env.TRAILER_LOBBY ? 'window.__lb && window.__trailer' : 'window.__lb && window.__lb.game && window.__trailer', 120000, 'game');
   console.log(`ready in ${Date.now() - t0} ms`);
   let frames = 0;
   for (let i = 0; i < rest.length; i += 2) {

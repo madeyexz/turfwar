@@ -16,6 +16,7 @@ import type { Audio } from '../audio';
 import { THEMES } from '../render/materials';
 import type { Climber } from './trailer-climb';
 import type { Renderer } from '../render/renderer';
+import { SoldierView } from '../render/soldier';
 import type { Game } from './game';
 
 type V3 = [number, number, number];
@@ -110,7 +111,11 @@ export class Trailer {
 
   // ---- Camera ----
 
-  camera(move: CamMove | null) { this.cam = move ?? undefined; this.camFrame = 0; this.camReady = false; return !!move; }
+  camera(move: CamMove | null) {
+    this.cam = move ?? undefined; this.camFrame = 0; this.camReady = false;
+    if (!move && this.selfView) { this.selfView.root.visible = false; this.selfView.gun.visible = false; }
+    return !!move;
+  }
 
   private hook(game: Game) {
     if (this.hooked === game) return;
@@ -170,6 +175,7 @@ export class Trailer {
       fov = move.fov ?? fov;
     }
     this.camReady = true;
+    this.drawSelf(dt);
     cam.position.copy(this.camPos);
     cam.up.set(0, 1, 0);
     cam.lookAt(this.camLook);
@@ -177,6 +183,21 @@ export class Trailer {
     // A free camera shows no first-person weapon.
     g.viewmodel.root.visible = false; g.viewmodel.torch.intensity = 0;
     if (g.otherViewmodel) g.otherViewmodel.root.visible = false;
+  }
+
+  /** Under a free camera the local soldier (who has no third-person body in the game) is drawn too. */
+  private selfView?: SoldierView;
+  private drawSelf(dt: number) {
+    const g = this.game!, p = g.player;
+    if (!p.alive || g.driving.active) { if (this.selfView) { this.selfView.root.visible = false; this.selfView.gun.visible = false; } return; }
+    if (!this.selfView) { this.selfView = new SoldierView(this.lb.assets, p.team); this.lb.renderer.scene.add(this.selfView.root, this.selfView.gun); }
+    const held = p.slot === 2 ? 'knife' : p.weapons[p.slot];
+    this.selfView.root.visible = true;
+    this.selfView.update(dt, {
+      x: p.m.x, y: p.m.y, z: p.m.z, vx: p.m.vx, vy: p.m.vy, vz: p.m.vz, yaw: p.yaw, pitch: p.pitch, crouch: p.m.crouch,
+      grounded: p.m.grounded, sprint: p.sprinting, ads: p.ads > 0.5, slide: p.m.slideTime > 0, alive: true, weapon: held, attachments: p.attachments[held],
+      reloading: p.reloading ? 1 - p.reloadLeft / p.reloadTotal : 0, firing: false,
+    });
   }
 
   private targetPose(t: Target) {

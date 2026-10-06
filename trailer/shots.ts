@@ -55,6 +55,9 @@ const TAIPEI = 'mode=offline&map=taipei&size=squad';
 const T101: [number, number, number] = [1536, 230, 426];
 /** Taipei 101 · Xinyi (24v24): the tower stands at (-60, 6); the mall atrium (site A) at (-9, 10.5). */
 const XINYI = 'mode=offline&map=xinyi&size=war';
+/** Taipei 101 · 88F (6v6) and Memorial Hall 中正紀念堂 (6v6). */
+const T101_88 = 'mode=offline&map=taipei101&size=squad';
+const MEMORIAL = 'mode=offline&map=memorial&size=squad';
 /** The free solo: Xinyi (24v24, its only size; the fight stays far below), relit at golden hour (the 88F map's light). */
 const CLIMB = 'mode=offline&map=xinyi&size=war&game=elimination&team=0';
 const GOLDEN = "T.light('highrise', {x:-0.84, y:0.3, z:-0.2})";
@@ -265,6 +268,112 @@ export const SHOTS: Shot[] = [
       cue(0, `T.camera({kind:'track', p:[-77.5,390.4,25], p2:[-78.5,390.2,24], frames:90, target:{climber:'chest'}, look:[-4,-0.4,-1.5], fov:48, smooth:6})`),
       cue(8, `T.heliPath([-98,368,16], [-98,387.6,16], 1.7, -1.5708)`),
       cue(52, `T.turnHead(3.8, 0.55)`),
+    ],
+  },
+  // ---- Taipei 101 · 88F (taipei101): the office floor at 383 m; floor at y = 0, glass at ±25 ----
+  {
+    // From outside the west glass into the server room (A).
+    id: 't101_push', url: `${T101_88}&game=sabotage&team=0`, frames: 120, load: 6000,
+    setup: [js(`T.hud('none')`), live, js(`T.god(); T.teleport(0,0,-20,0)`), { frames: 2 }],
+    cues: [cue(0, `T.camera({kind:'path', frames:120, keys:[{p:[-44,3.2,-7], t:[0,1.2,-6], fov:52}, {p:[-31,2.2,-6.5], t:[0,1.3,-6], fov:52}, {p:[-21.5,1.7,-6], t:[0,1.2,-7], fov:56}]})`)],
+  },
+  {
+    // The tuned mass damper: a slow orbit round the gold sphere and its cables, inside the shaft.
+    id: 't101_damper', url: `${T101_88}&game=elimination&team=0`, frames: 120, load: 6000,
+    setup: [js(`T.hud('none')`), js(`T.teleport(0,0,-20,0)`)],
+    cues: [cue(0, `T.camera({kind:'orbit', frames:120, center:[0,5.6,0], radius:9.4, height:-3.7, from:-0.5, to:0.75, lookUp:0.6, fov:62})`)],
+  },
+  {
+    // From the 89F gallery down into the damper hall: SWAT and Militia trade shots round the pedestal.
+    id: 't101_gallery', url: `${T101_88}&game=elimination&team=0`, frames: 120, load: 6000,
+    setup: [js(`T.hud('none')`), live, js(`T.god(); T.teleport(0,0,-20,0); T.kill([4,5,6,10,11,12])`),
+      js(`T.place(2,-5.5,0,5.5,0); T.place(3,-5,0,-5.5,0); T.place(7,5.5,0,5,0); T.place(8,5,0,-5.8,0)`), { frames: 8 }],
+    cues: [cue(0, `T.camera({kind:'path', frames:120, keys:[{p:[-8.7,7.1,-2.5], t:[1,0,1], fov:62}, {p:[-8.7,7.3,1.5], t:[1,0,0], fov:58}]})`)],
+  },
+  {
+    // A: the server room, M4A1 with a holographic sight among the racks' LEDs.
+    id: 't101_server', url: `${T101_88}&game=elimination&team=0`, frames: 120, load: 6000,
+    setup: [live, js(`T.god(); T.pinTeam(0); T.loadout('m4a1', {optic:'holo'})`), { frames: 30 },
+      js(`T.stage([-23.5,-1,${yaw(-23.5, -1, -15.5, -7.5)}], [[-16,-6.5],[-14.5,-9],[-17,-10]])`), { frames: 15 }],
+    cues: [cue(0, `T.fight({ads:true, burst:[0.4,0.25]})`)],
+  },
+  {
+    // B: Militia arms the bomb in the boardroom.
+    id: 't101_arm', url: `${T101_88}&game=sabotage&team=1`, frames: 200, load: 6000,
+    setup: [live, js(`T.god(); T.pinTeam(0); T.teleport(18.5,0,-2.2,${yaw(18.5, -2.2, 22, -6)},-0.32)`), { frames: 10 }],
+    cues: [cue(0, `T.input({keys:['KeyE']})`)],
+  },
+  {
+    // A kill by the window, the city 383 m below.
+    id: 't101_window', url: `${T101_88}&game=elimination&team=0`, frames: 120, load: 6000,
+    setup: [live, js(`T.god(); T.pinTeam(0); T.pacify('enemies'); T.loadout('m4a1', {optic:'holo'})`), { frames: 40 },
+      js(`T.stage([-20,15,${yaw(-20, 15, -16.5, 23.6)}], [[-16.5,23.6]], {pin:true})`), { frames: 15 }],
+    cues: [cue(0, `T.look(${yaw(-20, 15, -16.5, 23.6)}, -0.05)`), cue(20, `T.fight({ads:true})`)],
+  },
+  // ---- Memorial Hall (memorial): the hall's floor at y ≈ 13.5, the Gallery Hall at 0 ----------
+  {
+    id: 'mem_aerial', url: `${MEMORIAL}&game=elimination&team=0`, frames: 120, load: 6000,
+    setup: [js(`T.hud('none')`)],
+    cues: [cue(0, `T.camera({kind:'orbit', frames:120, center:[5,6,0], radius:96, height:52, from:3.55, to:3.95, lookUp:4, fov:44})`)],
+  },
+  {
+    // Militia charges up the 89-step grand staircase toward the statue chamber (B).
+    id: 'mem_stairs', url: `${MEMORIAL}&game=sabotage&team=0`, frames: 150, load: 6000,
+    setup: [js(`T.hud('none')`), live, js(`T.god(); T.teleport(52,0,20,0); T.pinTeam(0); T.pacify('all')`),
+      js(`[7,8,9,10,11,12].forEach((id,i)=>{T.place(id, -50 - Math.floor(i/3)*3, 0, -3 + (i%3)*3, -1.5708); T.goal(id, 5, 0)})`), { frames: 2 }],
+    cues: [cue(0, `T.camera({kind:'path', frames:150, keys:[{p:[-23,13.5,4], t:[-46,2,0], fov:46}, {p:[-24.5,12.8,2.5], t:[-42,4,0], fov:42}]})`)],
+  },
+  {
+    // A SWAT defender holds the statue chamber's door.
+    id: 'mem_chamber', url: `${MEMORIAL}&game=sabotage&team=0`, frames: 120, load: 6000,
+    setup: [js(`T.hud('none')`), live, js(`T.god(); T.teleport(52,0,20,0); T.kill([3,4,5,6,9,10,11,12])`),
+      js(`T.place(2, 1, 13.5, 3, 1.5708, true); T.place(7, -16, 13.5, -1, -1.5708); T.place(8, -18, 13.5, 2, -1.5708); T.goal(7, 5, 0); T.goal(8, 5, 0)`), { frames: 2 }],
+    cues: [cue(0, `T.camera({kind:'path', frames:120, keys:[{p:[4.5,14.7,5.5], t:[-8,14.6,0], fov:50}, {p:[4,14.9,4.5], t:[-9,14.6,0], fov:46}]})`)],
+  },
+  {
+    // A: a fight among the museum cases of the Gallery Hall under the chamber.
+    id: 'mem_gallery', url: `${MEMORIAL}&game=elimination&team=0`, frames: 120, load: 6000,
+    setup: [live, js(`T.god(); T.pinTeam(0); T.loadout('mp5', {optic:'reflex'})`), { frames: 30 },
+      js(`T.stage([-8,0,${yaw(-8, 0, 4, 0)}], [[3,0],[5,2.5],[4,-3]])`), { frames: 15 }],
+    cues: [cue(0, `T.fight({ads:true})`)],
+  },
+  // ---- Sizes and vehicle collision ----------------------------------------------------------
+  {
+    // 1v1: one soldier each, on Crane.
+    id: 'duel', url: 'mode=offline&map=crane&size=duel&game=elimination&team=0', frames: 120,
+    setup: [live, js(`T.god(); T.loadout('m4a1', {optic:'reflex'})`), { frames: 30 }, js(`T.stage([-2,13,${yaw(-2, 13, -4, -5)}], [[-4,-5]])`), { frames: 10 }],
+    cues: [cue(0, `T.fight({ads:true, burst:[0.35,0.3]})`)],
+  },
+  {
+    // A car ploughs through the row of parked scooters on Zhongxiao W. Rd's kerb lane.
+    id: 'car_shove', url: `${TAIPEI}&game=elimination&team=0`, frames: 150,
+    setup: [js(`T.hud('none')`), live, js(`T.god(); T.pacify('all'); T.teleport(-1.8,0.15,59,0)`), { frames: 2 }, js(`T.enter(3)`), { frames: 10 },
+      js(`T.placeVehicle(3, -4, 0, 61.6, ${yaw(0, 0, -1, 0)})`), { frames: 2 }],
+    cues: [cue(0, `T.drive([{x:-80,z:61.8,speed:19}])`),
+      cue(0, `T.camera({kind:'track', p:[-37,2.3,65.6], p2:[-41,2.4,65.6], frames:150, target:{vehicle:3}, look:[0,0.6,0], fov:46, smooth:6})`)],
+  },
+  {
+    // Up the boot of a parked car onto its roof, then shooting from the high ground.
+    id: 'roof_jump', url: `${TAIPEI}&game=elimination&team=0`, frames: 150,
+    setup: [live, js(`T.god(); T.pinTeam(0); T.pacify('enemies')`), js(`T.stage([-53,61.8,-1.5708], [[-20,60],[-17,63],[-14,61]], {pin:true})`), { frames: 5 }],
+    cues: [
+      cue(0, `T.input({keys:['KeyW']})`), cue(9, `T.input({keys:['KeyW','Space']})`), cue(12, `T.input({keys:['KeyW']})`),
+      cue(24, `T.input({keys:['KeyW','Space']})`), cue(27, `T.input({keys:['KeyW']})`), cue(32, `T.input({keys:[]})`),
+      cue(0, `T.hud('none'); T.camera({kind:'track', p:[-48.5,1.4,56.2], frames:40, target:{soldier:T.me().id}, look:[0,1.1,0], fov:50, smooth:8})`),
+      cue(40, `T.camera(null); T.hud('full'); T.pacify('none'); T.fight({ads:true})`),
+    ],
+  },
+  {
+    // The new lobby: filters (size, mode, a map from the picker), PLAY ONLINE, the live room list.
+    id: 'lobby2', url: 'mode=online&size=squad&name=Lawbreaker', frames: 240, lobby: true, load: 6000, scale: 2, native: true,
+    setup: [{ until: `document.querySelectorAll('#rooms .room').length >= 2`, max: 600 }, { frames: 10 }],
+    cues: [
+      cue(0, `T.cursor('[data-size="squad"]', 18)`), cue(20, `T.click('[data-size="squad"]')`),
+      cue(34, `T.cursor('[data-gamemode="sabotage"]', 16)`), cue(52, `T.click('[data-gamemode="sabotage"]')`),
+      cue(66, `T.cursor('#map-trigger', 16)`), cue(84, `T.click('#map-trigger')`),
+      cue(100, `T.cursor('#map-grid [data-pick="taipei101"]', 20)`), cue(124, `T.click('#map-grid [data-pick="taipei101"]')`),
+      cue(150, `T.cursor('#play', 22)`),
+      cue(196, `T.cursor('#rooms .room', 22)`),
     ],
   },
   // ---- Maps --------------------------------------------------------------------------------
