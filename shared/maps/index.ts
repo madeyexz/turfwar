@@ -1,5 +1,6 @@
-import { CollisionWorld } from '../collision';
+import { CollisionWorld, type Solid } from '../collision';
 import { buildNav, type NavGraph } from '../match/nav';
+import { createVehicle, vehicleGround, vehicleObstacles } from '../vehicles';
 import { cinderBasin } from './cinder';
 import { citadelKeep } from './citadel';
 import { courtyard } from './courtyard';
@@ -100,8 +101,27 @@ function furnishBases(def: MapDef, world: CollisionWorld) {
 /** Navigation is built lazily: only bot hosts (offline client, server module) need it. */
 export function loadNav(id: string): NavGraph {
   const loaded = loadMap(id);
-  loaded.nav ??= buildNav(loaded.def, loaded.world);
+  loaded.nav ??= buildNav(loaded.def, withParkedVehicles(loaded.def, loaded.world));
   return loaded.nav;
+}
+
+/**
+ * The world with the vehicles standing at their spots as solids (the bounding boxes of their
+ * bodies), for the navigation grid: bots plan round them as parked at every round start. Once
+ * driven off, bots steer round their bodies wherever they are (bots.ts).
+ */
+function withParkedVehicles(def: MapDef, world: CollisionWorld) {
+  if (!def.vehicles?.length) return world;
+  const parked: Solid[] = [];
+  def.vehicles.forEach((spot, i) => {
+    const v = createVehicle(i, spot);
+    v.y = vehicleGround(world, { ...v, y: spot.y + 0.5 });
+    for (const ob of vehicleObstacles(v)) {
+      const ex = Math.abs(ob.rx) * ob.hw + Math.abs(ob.fx) * ob.hl, ez = Math.abs(ob.rz) * ob.hw + Math.abs(ob.fz) * ob.hl;
+      parked.push({ minX: ob.x - ex, maxX: ob.x + ex, minY: ob.y0, maxY: ob.y1, minZ: ob.z - ez, maxZ: ob.z + ez, surface: 'metal' });
+    }
+  });
+  return new CollisionWorld([...def.solids, ...parked], def.ramps, def.terrain, def.bounds, def.ladders);
 }
 
 export function mapSummaries() {

@@ -67,6 +67,10 @@ function panels(k: Kit, r: Rect, y = KERB) {
   k.claim(r);
 }
 
+/** The cordon's police vans in the kerb lane, along x with their -z side on CORDON_Z: -x end and cab toward. */
+export const CORDON_Z = -288;
+export const POLICE_VANS: [x0: number, front: 1 | -1][] = [[-806.0, -1], [-794.0, 1], [-783.0, -1], [-774.6, 1]];
+
 /**
  * SWAT's cordon on Civic Blvd's south sidewalk, in front of the block between Xining S. Rd and
  * Hanzhong St: police vans and riot panels along the kerb lane shield the slots from the ring
@@ -75,13 +79,10 @@ function panels(k: Kit, r: Rect, y = KERB) {
  * Hanzhong St, and south through the Ximen Mall in the block (taipei-passages.ts).
  */
 function cordon(k: Kit) {
-  const z0 = -288, police: [string, string] = ['警察', 'POLICE'], BLUE = 0x1a3a6a;
-  van(k, -806.0, z0, true, -1, BLUE, police, 0);
+  const z0 = CORDON_Z, police: [string, string] = ['警察', 'POLICE'], BLUE = 0x1a3a6a;
+  for (const [x, front] of POLICE_VANS) van(k, x, z0, true, front, BLUE, police, 0);
   panels(k, [-800.7, z0 + 0.6, -797.2, z0 + 1.0], 0);
-  van(k, -794.0, z0, true, 1, BLUE, police, 0);
   panels(k, [-788.7, z0 + 0.6, -783.2, z0 + 1.0], 0);
-  van(k, -783.0, z0, true, -1, BLUE, police, 0);
-  van(k, -774.6, z0, true, 1, BLUE, police, 0);
   panels(k, [-769.3, z0 + 0.6, -764.0, z0 + 1.0], 0);
   // Panels across the sidewalk at both ends, a door at the facade: the slots are not seen from
   // the street mouths.
@@ -93,6 +94,9 @@ function cordon(k: Kit) {
   kiosk(k, [-770.0, -281.6, -768.2, -278.2], 'w', '指揮所', 'COMMAND POST', 0x1a3a7a);
 }
 
+/** The broken-down bus of Militia's barricade, in Xining S. Rd's kerb lane. */
+export const BARRICADE_BUS: Rect = [-823.0, -175.3, -811.0, -172.8];
+
 /**
  * Militia's barricade in Xining S. Rd between Emei St and Zhongxiao W. Rd: a broken-down bus on
  * the sidewalk shields the street's mouth from the ring road, and hoarding with a gap closes its
@@ -101,7 +105,7 @@ function cordon(k: Kit) {
  * Zhongxiao W. Rd's sidewalk and to Hanzhong St.
  */
 function barricade(k: Kit) {
-  bus(k, -823.0, -175.3, -811.0, -172.8, KERB);
+  bus(k, ...BARRICADE_BUS, KERB);
   hoarding(k, [-819.2, -200.95, -816.0, -200.75], 'n', KERB, ['自由西門', 'FREE XIMEN']);
   hoarding(k, [-809.9, -200.95, -806.8, -200.75], 'n', KERB);
   crates(k, -817.3, -179.4, 'x', true);

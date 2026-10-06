@@ -4,6 +4,7 @@ import { mergeGeometries } from 'three/examples/jsm/utils/BufferGeometryUtils.js
 import * as SkeletonUtils from 'three/examples/jsm/utils/SkeletonUtils.js';
 import type { Assets } from '../assets';
 import { dirFromAngles, wrapAngle } from '../../shared/math';
+import { riderTwist } from '../../shared/vehicles';
 import { curlFingers, orientHand, restorePose, rotateWorld, snapshotPose, solveArm } from './rig';
 import { ATTACHMENT_SLOTS, WEAPONS, type Attachments, type WeaponId } from '../../shared/weapons';
 import { GUN_FIT, fitAttachments, vec, type Fitted } from './optics';
@@ -320,6 +321,12 @@ export class SoldierView {
   /** Opaque meshes (beams, cones and flashes never cast shadows). */
   private meshesOf(o: THREE.Object3D) { const out: THREE.Mesh[] = []; o.traverse(c => { const m = c as THREE.Mesh; if (m.isMesh && !(m.material as THREE.Material).transparent) out.push(m); }); return out; }
 
+  /**
+   * The body's facing: the aim, or for a rider the bike's heading turned toward the aim by the
+   * torso's twist (never round on the seat: the whole body used to follow a look behind).
+   */
+  private bodyYaw(p: SoldierPose) { return p.hips === undefined ? p.yaw : p.hips + riderTwist(p.yaw, p.hips); }
+
   update(dt: number, p: SoldierPose) {
     // Distant and hidden soldiers animate at a reduced rate; between updates they only move.
     const every = LOD_INTERVAL[this.lod];
@@ -327,14 +334,14 @@ export class SoldierView {
     if (this.lod === 3 || (++this.frame % every !== 0 && p.alive === this.wasAlive)) {
       const dx = p.x - this.root.position.x, dy = p.y - this.root.position.y, dz = p.z - this.root.position.z;
       this.root.position.set(p.x, p.y, p.z);
-      this.root.rotation.y = p.yaw;
+      this.root.rotation.y = this.bodyYaw(p);
       this.gun.position.x += dx; this.gun.position.y += dy; this.gun.position.z += dz;
       if (this.lod === 3) this.pending = Math.min(this.pending, 0.25);
       return;
     }
     dt = this.pending; this.pending = 0;
     this.root.position.set(p.x, p.y, p.z);
-    this.root.rotation.y = p.yaw;
+    this.root.rotation.y = this.bodyYaw(p);
     const using = !!p.using && p.alive;
     // ---- Locomotion blend ----
     const sin = Math.sin(p.yaw), cos = Math.cos(p.yaw);
@@ -360,9 +367,10 @@ export class SoldierView {
     let moveAngle = speed > 0.5 ? Math.atan2(strafe, forward) : 0;
     if (backwards) moveAngle = Math.atan2(-strafe, -forward);
     const clampAngle = Math.max(-1.1, Math.min(1.1, moveAngle));
-    // On a seat the legs stay on the bike: the twist is the aim's angle from the heading.
-    const legTarget = p.hips !== undefined ? Math.max(-1.3, Math.min(1.3, wrapAngle(p.yaw - p.hips))) : clampAngle * (p.sprint ? 0.3 : 1);
-    this.legYaw += (legTarget - this.legYaw) * Math.min(1, dt * 10);
+    // On a seat the hips and legs stay on the bike (exactly, every frame): the body turns toward the
+    // aim only as far as the torso twists; the arms bring the weapon the rest of the way.
+    if (p.hips !== undefined) this.legYaw = riderTwist(p.yaw, p.hips);
+    else this.legYaw += (clampAngle * (p.sprint ? 0.3 : 1) - this.legYaw) * Math.min(1, dt * 10);
     for (const [name, action] of this.actions) {
       const w = this.weights.get(name)! + ((target[name] ?? 0) - this.weights.get(name)!) * Math.min(1, dt * (p.alive ? 12 : 30));
       this.weights.set(name, w);

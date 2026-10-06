@@ -219,8 +219,16 @@ any driving. A body reduced to 0 wrecks: it explodes (7 m blast),
 kills its crew and stays as a charred hulk until the round ends. Crashes (speed lost against walls,
 hard landings, a pilotless helicopter falling) damage the body. A driven car or scooter faster than
 6 m/s hurts enemies it touches. No friendly fire on a crewed vehicle; an empty one is fair game.
-Vehicles are not obstacles for soldiers or each other, the rotor does not collide, and bots ignore
-vehicles. Models are built procedurally (`src/render/vehicles.ts`); engines, the scooter's buzz and
+Vehicles are solid (`blocks` in `shared/vehicles.ts`, oriented boxes in `shared/obstacles.ts`): a
+car's lower body and cabin, a scooter's small box, the helicopter's cabin and tail boom (crouch to
+pass under it; the rotor never collides). Soldiers stop against them, jump onto them and stand on
+their roofs (a moving vehicle drives out from under them; riding on one is not supported), and a
+moving vehicle pushes them aside, shoving them off their feet above 6 m/s. Vehicles bounce off each
+other, sharing the impact by mass (crash damage as against walls); a rammed driverless vehicle is
+shoved by the host. Grenades bounce off them. Bots plan round vehicles at their parking spots (the
+navigation grid counts them as solids) and steer round them wherever they are. Scooter riders stay
+seated facing the bike: the torso twists toward the aim at most about 60°, the arms bring the
+weapon round. Models are built procedurally (`src/render/vehicles.ts`); engines, the scooter's buzz and
 the rotor chop are synthesized.
 
 ## Controls
@@ -311,6 +319,17 @@ the rotor chop are synthesized.
   then rides a scooter through drifts both ways while firing sideways, with two identities. It
   expects zero corrections, every rider shot accepted from its claimed muzzle, the other client
   seeing the vehicles move and the rider turned to its aim, and a rejected teleport.
+- Vehicle bodies on the server: a soldier's report may not walk into a vehicle's body (deeper than
+  the vehicle's own speed explains, and deeper than where he stood: a vehicle driving onto him is
+  not his fault); vehicle roofs count as floors; a moving vehicle nearby adds its speed to the
+  movement budget (shoves). A driver's report may not drive into another vehicle's body the same
+  way, and a vehicle nearby adds to its budget (pushed). Driving clients bounce off the other
+  vehicles' latest replicated poses; the host hands a rammed driverless vehicle the blow (from the
+  rammer's velocity at its previous report, by mass) and steps driverless vehicles against the rest.
+  `bun scripts/collisioncheck.ts ws://127.0.0.1:<port> <db>` (local only): a driver creeps into
+  another client's soldier standing in the road (pushed aside, no corrections either side, never
+  inside the car in the server's frames), backs into a parked car (shoved, no corrections), and a
+  report inside a parked car is corrected.
 - Client-side: own movement is predicted with the shared controller; remote soldiers and grenades
   are interpolated ~100 ms behind from the frame; a rejected position snaps the client back; dropped
   (idle) clients rejoin automatically.

@@ -1,6 +1,7 @@
 import { chestPoint } from '../hitbox';
 import { clamp, dirFromAngles, wrapAngle, type Vec3 } from '../math';
 import { MOVE, eyeHeight, stepMovement, type MoveInput } from '../movement';
+import { blocksHeight, near, penetration, type Obstacle } from '../obstacles';
 import { GRENADE, STAMINA } from '../weapons';
 import { eyeOf, feetOf, resolvePellets, resolveShot, sideOf, spreadFor, throwGrenadeFrom, traceShot, weaponOf, type SimContext } from './combat';
 import { findPath, nearestNode } from './nav';
@@ -123,7 +124,34 @@ function perceive(state: MatchState, ctx: SimContext, bot: Soldier, brain: BotBr
   return undefined;
 }
 
-export function updateBot(state: MatchState, ctx: SimContext, bot: Soldier, dt: number) {
+/** How far ahead (m) a bot looks for a vehicle body across its way. */
+const AVOID_AHEAD = [0.5, 1.1, 1.8];
+
+/**
+ * Steer round the first vehicle body the next couple of metres toward (moveX, moveZ) would walk
+ * into: along its side that turns least from the way we want to go (ties broken by the bot's id).
+ */
+export function avoidObstacles(bot: Soldier, obstacles: readonly Obstacle[], moveX: number, moveZ: number): [number, number] {
+  const len = Math.hypot(moveX, moveZ);
+  if (len < 0.05) return [moveX, moveZ];
+  const dx = moveX / len, dz = moveZ / len, r = MOVE.radius + 0.15;
+  for (const ob of obstacles) {
+    if (!near(ob, bot.m.x, bot.m.z, AVOID_AHEAD[2] + r) || !blocksHeight(ob, bot.m.y, MOVE.standHeight)) continue;
+    if (!AVOID_AHEAD.some(t => penetration(ob, bot.m.x + dx * t, bot.m.z + dz * t, r).depth > 0)) continue;
+    // Tangents round the body's centre; take the one closer to where we are heading.
+    const cx = ob.x - bot.m.x, cz = ob.z - bot.m.z, cl = Math.hypot(cx, cz) || 1;
+    const lx = -cz / cl, lz = cx / cl;
+    const dot = lx * dx + lz * dz;
+    const side = Math.abs(dot) > 0.05 ? Math.sign(dot) : bot.id % 2 ? 1 : -1;
+    // Lean a little away from the body too, so the bot clears its corners instead of grinding along them.
+    const ax = lx * side - cx / cl * 0.35 + dx * 0.2, az = lz * side - cz / cl * 0.35 + dz * 0.2, al = Math.hypot(ax, az) || 1;
+    return [ax / al * len, az / al * len];
+  }
+  return [moveX, moveZ];
+}
+
+/** `obstacles`: the vehicles' bodies this tick (bots walk round them, and are pushed by them like anyone). */
+export function updateBot(state: MatchState, ctx: SimContext, bot: Soldier, dt: number, obstacles?: readonly Obstacle[]) {
   const brain = bot.brain!;
   if (!bot.alive || dt <= 0) return;
   brain.think -= dt; brain.repath -= dt; brain.strafeLeft -= dt; brain.crouchLeft -= dt;
@@ -263,6 +291,9 @@ export function updateBot(state: MatchState, ctx: SimContext, bot: Soldier, dt: 
     if (p && myJob && !busy && Math.hypot(p.x - bot.m.x, p.z - bot.m.z) < SITE_STOP) { bot.using = true; moveX = 0; moveZ = 0; }
   }
 
+  // ---- Vehicles in the way: the nav grid knows only where they park, so walk round the bodies ----
+  if (obstacles?.length && (moveX || moveZ)) [moveX, moveZ] = avoidObstacles(bot, obstacles, moveX, moveZ);
+
   // ---- Stuck detection ------------------------------------------------------------
   // Climbing a ladder is progress too.
   const moved = Math.hypot(bot.m.x - brain.lastX, bot.m.z - brain.lastZ, bot.m.y - brain.lastY);
@@ -283,7 +314,7 @@ export function updateBot(state: MatchState, ctx: SimContext, bot: Soldier, dt: 
   };
   brain.jump = false;
   bot.sprint = input.sprint && bot.m.grounded; bot.ads = input.ads;
-  stepMovement(ctx.world, bot.m, input, dt, bot.team);
+  stepMovement(ctx.world, bot.m, input, dt, bot.team, obstacles);
   // Safety net: never let a bot fall out of the world.
   if (bot.m.y < -60) bot.m.y = ctx.world.groundHeight(bot.m.x, bot.m.z, 100, MOVE.radius);
 }
