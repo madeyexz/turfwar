@@ -3,7 +3,7 @@
  * captions and tags: build/cards/<id>@<frames>/00000.png …
  *   bun trailer/scripts/cards.ts [--force] [--lang zh-TW]
  */
-import { existsSync, mkdirSync, rmSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { CARDS, CUTS, cardLines } from '../edit';
 import { Browser } from './cdp';
@@ -38,10 +38,14 @@ if (import.meta.main) {
     await page.waitFor('window.__card', 30000, 'card page');
     for (const [id, frames] of cardUses()) {
       const dir = cardDir(id, frames);
-      if (!force && existsSync(join(dir, `${String(frames - 1).padStart(5, '0')}.png`))) continue;
       const def = CARDS.find(c => c[0] === id);
       if (!def) throw new Error(`no card ${id}`);
+      // The frames are reused only while the card's style and copy are what rendered them.
+      const stamp = JSON.stringify([def[1], cardLines(id, LANG)]), stampFile = join(dir, 'copy.json');
+      const fresh = existsSync(join(dir, `${String(frames - 1).padStart(5, '0')}.png`)) && existsSync(stampFile) && readFileSync(stampFile, 'utf8') === stamp;
+      if (!force && fresh) continue;
       rmSync(dir, { recursive: true, force: true }); mkdirSync(dir, { recursive: true });
+      writeFileSync(stampFile, stamp);
       await page.eval(`__card.show(${JSON.stringify(def[1])}, ${JSON.stringify(cardLines(id, LANG))}, ${frames})`);
       for (let f = 0; f < frames; f++) {
         await page.eval(`__card.at(${f})`);

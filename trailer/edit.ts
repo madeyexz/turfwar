@@ -71,10 +71,11 @@ export const CARDS: [string, 'title' | 'caption' | 'tag' | 'end' | 'credit', str
   ['tag_duel', 'tag', ['1v1 DUEL'], 55], ['tag_war', 'tag', ['24v24 · MERIDIAN DISTRICT'], 70],
   ['cap_vehicles2', 'caption', ['VEHICLES', 'Drive it. Ride it. Fly it.'], 150],
   ['tag_shove', 'tag', ['CARS SHOVE CARS'], 80], ['tag_roof', 'tag', ['UP ON THE ROOF'], 90],
-  ['cap_maps2', 'caption', ['18 MAPS', 'From Ximending to Taipei 101.'], 150],
+  ['cap_maps2', 'caption', ['12 MAPS', 'From Ximending to Taipei 101.'], 150],
+  ['tag_railyard', 'tag', ['RAILYARD'], 54], ['tag_skyline', 'tag', ['SKYLINE ROOFTOPS'], 54],
   ['cap_online2', 'caption', ['PLAY ONLINE', 'Pick your fight. One click.'], 150],
-  ['end2', 'end', ['TURF WAR: TAIPEI', '角頭械鬥', 'Play free in your browser', 'lawbreaker.vercel.app', 'Solo vs bots · Online rooms 1v1 · 6v6 · 24v24'], 300],
-  ['end2_short', 'end', ['TURF WAR: TAIPEI', '角頭械鬥', 'Play free in your browser', 'lawbreaker.vercel.app', 'Solo vs bots · Online rooms 1v1 · 6v6 · 24v24'], 150],
+  ['end2', 'end', ['TURF WAR: TAIPEI', '角頭械鬥', 'Play free in your browser', 'turfwar.ianhsiao.me', 'Solo vs bots · Online rooms 1v1 · 6v6 · 24v24'], 300],
+  ['end2_short', 'end', ['TURF WAR: TAIPEI', '角頭械鬥', 'Play free in your browser', 'turfwar.ianhsiao.me', 'Solo vs bots · Online rooms 1v1 · 6v6 · 24v24'], 150],
 ];
 
 /**
@@ -95,7 +96,7 @@ export const CARDS_ZH: Record<string, string[]> = {
   tag_m1014: ['M1014 · 一槍 14 顆彈丸'], tag_m249: ['M249 · 86 發彈鏈'], tag_bots: ['空位由電腦玩家補滿'],
   tag_knife: ['刀'], tag_grenade: ['M67 手榴彈'], tag_binos: ['望遠鏡 · 10 倍'],
   tag_slide: ['衝刺 · 滑鏟'], tag_ladder: ['爬梯'],
-  tag_heli: ['直升機'], tag_drift: ['手煞車甩尾'], tag_scooter: ['機車 · 單手開火'], tag_flight: ['飛越西門町'],
+  tag_heli: ['直升機'], tag_drift: ['手煞車甩尾'], tag_scooter: ['一手催油門，一手開槍。'], tag_flight: ['飛越西門町'],
   tag_101: ['台北101 · 信義'], tag_atrium: ['信義商場中庭'], tag_market: ['西門夜市'], tag_cinema: ['西門町電影街'],
   tag_crane: ['起重機'], tag_tower: ['塔樓'], tag_warehouse: ['倉庫'], tag_meridian: ['子午線街區 · 24v24'],
   end: ['角頭械鬥', 'TURF WAR: TAIPEI', '打開瀏覽器，免費開打', 'lawbreaker.vercel.app', '單機對戰電腦 · 線上房間 1v1 · 6v6 · 24v24'],
@@ -109,15 +110,16 @@ export const CARDS_ZH: Record<string, string[]> = {
   cap_memorial: ['中正紀念堂', '89 階，直上紀念大廳。'],
   tag_memgallery: ['A 點 · 展覽廳'],
   tag_store: ['商店 · 槍枝與配件'],
-  cap_sabotage2: ['爆破戰', '炸彈裝下去，或拆掉它。'],
+  cap_sabotage2: ['爆破戰', '炸彈裝下去了，你敢來拆嗎？'],
   cap_elimination2: ['殲滅戰', '一回合一條命，先拿十勝。'],
   tag_duel: ['1v1 單挑'], tag_war: ['24v24 · 子午線街區'],
   cap_vehicles2: ['載具', '飆車、騎機車、開直升機。'],
-  tag_shove: ['車撞車，硬推開'], tag_roof: ['跳上車頂開火'],
-  cap_maps2: ['18 張地圖', '從西門町一路打到台北101。'],
+  tag_shove: ['路邊的車擋路？撞開就好。'], tag_roof: ['跳上車頂開火'],
+  cap_maps2: ['地圖', '12 張地圖，台北走透透。'],
+  tag_railyard: ['鐵道貨場'], tag_skyline: ['天際屋頂'],
   cap_online2: ['線上對戰', '挑好戰場，一鍵開打。'],
-  end2: ['角頭械鬥', 'TURF WAR: TAIPEI', '瀏覽器免費玩', 'lawbreaker.vercel.app', '單機對戰電腦 · 線上房間 1v1 · 6v6 · 24v24'],
-  end2_short: ['角頭械鬥', 'TURF WAR: TAIPEI', '瀏覽器免費玩', 'lawbreaker.vercel.app', '單機對戰電腦 · 線上房間 1v1 · 6v6 · 24v24'],
+  end2: ['角頭械鬥', 'TURF WAR: TAIPEI', '找朋友，打開瀏覽器就開打。', 'turfwar.ianhsiao.me', '免下載 · 單人打電腦 · 線上 1v1／6v6／24v24'],
+  end2_short: ['角頭械鬥', 'TURF WAR: TAIPEI', '找朋友，打開瀏覽器就開打。', 'turfwar.ianhsiao.me', '免下載 · 單人打電腦 · 線上 1v1／6v6／24v24'],
 };
 /** A card's lines in a language (English is CARDS' own). */
 export function cardLines(id: string, lang: string) {
@@ -288,8 +290,8 @@ export const TURF: Cut = {
     // 83–91 s: the maps.
     s('map_market', 20, 60, { enter: 'flash' }),
     s('map_cinema', 0, 60),
-    s('map_crane', 30, 45),
-    s('map_tower', 30, 45),
+    s('map_railyard', 30, 45),
+    s('map_skyline', 30, 45),
     s('map_warehouse', 30, 30),
     // 91–97 s: the lobby (filters, Play Online, live rooms).
     s('lobby2', 0, 105, { enter: 'flash', zoom: { scale: 1.7, x: 0, y: 0 } }),
@@ -306,9 +308,9 @@ export const TURF: Cut = {
     { card: 'cap_sabotage2', at: 55 * 30 + 4 }, { card: 'cap_elimination2', at: 58 * 30 + 4 },
     { card: 'tag_duel', at: 60 * 30 + 3 }, { card: 'tag_war', at: 62 * 30 + 3 },
     { card: 'cap_vehicles2', at: 66 * 30 + 10 }, { card: 'tag_drift', at: 66 * 30 + 6, frames: 95 }, { card: 'tag_scooter', at: 69.5 * 30 + 4, frames: 82 },
-    { card: 'tag_shove', at: 72.5 * 30 + 4 }, { card: 'tag_roof', at: 75.5 * 30 + 6 }, { card: 'tag_flight', at: 79 * 30 + 4, frames: 82 },
+    { card: 'tag_shove', at: 72.5 * 30 + 4 }, { card: 'tag_flight', at: 79 * 30 + 4, frames: 82 },
     { card: 'cap_maps2', at: 83 * 30 + 10 }, { card: 'tag_market', at: 83 * 30 + 3 }, { card: 'tag_cinema', at: 85 * 30 + 3 },
-    { card: 'tag_crane', at: 87 * 30 + 3, frames: 40 }, { card: 'tag_tower', at: 88.5 * 30 + 3, frames: 40 }, { card: 'tag_warehouse', at: 90 * 30 + 2, frames: 27 },
+    { card: 'tag_railyard', at: 87 * 30 + 3, frames: 40 }, { card: 'tag_skyline', at: 88.5 * 30 + 3, frames: 40 }, { card: 'tag_warehouse', at: 90 * 30 + 2, frames: 27 },
   ],
   score: [['open', 22], ['silence', 2], ['title', 8], ['store', 16], ['guns', 56], ['tension', 20], ['fill', 8], ['drop', 32], ['silence', 2], ['climax', 16], ['rise', 12], ['end', 20]],
 };
@@ -338,7 +340,7 @@ export const TURF_SHORT: Cut = {
   overlays: [
     { card: 'cap_solo1', at: 4, frames: 56 },
     { card: 'tag_88f', at: 5.5 * 30 + 3, frames: 54 }, { card: 'tag_damper', at: 7.5 * 30 + 3, frames: 42 }, { card: 'tag_server', at: 9 * 30 + 3, frames: 42 },
-    { card: 'tag_drift', at: 11.5 * 30 + 3, frames: 54 }, { card: 'tag_shove', at: 13.5 * 30 + 3, frames: 42 }, { card: 'tag_roof', at: 15 * 30 + 3, frames: 42 },
+    { card: 'tag_drift', at: 11.5 * 30 + 3, frames: 54 }, { card: 'tag_shove', at: 13.5 * 30 + 3, frames: 42 },
     { card: 'tag_scooter', at: 16.5 * 30 + 3, frames: 42 },
   ],
   score: [['open', 6], ['silence', 1], ['title', 4], ['guns', 12], ['drop', 16], ['climax', 9], ['rise', 2], ['end', 10]],

@@ -408,6 +408,16 @@ export const SHOTS: Shot[] = [
     cues: [cue(0, `T.camera({kind:'orbit', frames:150, center:[12.5,0,-2.5], radius:34, height:12, from:-2.4, to:-1.7, lookUp:7, fov:55})`)],
   },
   {
+    id: 'map_railyard', url: 'mode=offline&map=railyard&size=squad&game=elimination', frames: 150,
+    setup: [js(`T.hud('none')`)],
+    cues: [cue(0, `T.camera({kind:'orbit', frames:150, center:[0,0,0], radius:70, height:30, from:2.2, to:2.85, lookUp:-2, fov:55})`)],
+  },
+  {
+    id: 'map_skyline', url: 'mode=offline&map=skyline&size=squad&game=elimination', frames: 150,
+    setup: [js(`T.hud('none')`)],
+    cues: [cue(0, `T.camera({kind:'orbit', frames:150, center:[0,34,0], radius:70, height:28, from:-2.4, to:-1.75, lookUp:-4, fov:55})`)],
+  },
+  {
     id: 'map_warehouse', url: 'mode=offline&map=warehouse&size=squad&game=elimination', frames: 150,
     setup: [js(`T.hud('none')`)],
     cues: [cue(0, `T.camera({kind:'path', frames:150, keys:[{p:[-25,5,-14], t:[8,1.5,4], fov:60}, {p:[-12,5.5,-14.5], t:[12,1.5,6], fov:58}]})`)],
