@@ -62,6 +62,37 @@ describe('maps and navigation', () => {
       }
     });
   }
+  // Taipei's cover (shared/maps/taipei-cover.ts), in the source's coordinates (map = source - (-781.5, -183)).
+  const taipeiAt = (x: number, z: number) => ({ x: x + 781.5, z: z + 183 });
+  it('taipei: cover breaks the pedestrian streets\' long sightlines', () => {
+    const { world } = loadMap('taipei');
+    // Wuchang and Emei streets (along x), Xining S. Rd and Hanzhong St (along z), between the boulevards.
+    const streets: ['x' | 'z', number, number, number][] = [['x', -253, -870, -705], ['x', -207, -870, -705], ['z', -813, -284, -172], ['z', -757, -284, -172]];
+    for (const [axis, at, from, to] of streets) for (let o = -6; o <= 6; o += 1) for (let s = from; s < to; s += 4) {
+      const { x, z } = axis === 'x' ? taipeiAt(s, at + o) : taipeiAt(at + o, s);
+      const y = world.groundHeight(x, z, 0.3, 0.1);
+      if (world.overlapsSolid({ x, y, z }, 0.2, 1.7)) continue;
+      const hit = world.raycast({ x, y: y + 1.6, z }, axis === 'x' ? { x: 1, y: 0, z: 0 } : { x: 0, y: 0, z: 1 }, to - s);
+      expect(hit?.t ?? to - s, `${axis}=${at + o} from ${s}`).toBeLessThan(80);
+    }
+  });
+  it('taipei: bots reach the new decks and roofs from both bases', () => {
+    const { def } = loadMap('taipei'); const nav = loadNav('taipei');
+    const spots: [string, number, number, number][] = [
+      ['scaffold upper deck', -808.5, -262.5, 6.95], ['footbridge', -808.5, -160, 5.6], ['temple stage', -756, -207.5, 1.25],
+      ['site office porch', -756, -275, 2.75], ['market aisle', -791, -252.5, 0],
+    ];
+    for (const team of [0, 1]) {
+      const sp = def.spawns.find(s => s.team === team)!;
+      const start = nearestNode(nav, sp.x, sp.y, sp.z);
+      for (const [name, sx, sz, y] of spots) {
+        const { x, z } = taipeiAt(sx, sz), n = nearestNode(nav, x, y, z);
+        expect(Math.abs(nav.y[n] - y), name).toBeLessThan(0.3);
+        expect(Math.hypot(nav.x[n] - x, nav.z[n] - z), name).toBeLessThan(1.5);
+        expect(findPath(nav, start, n).length, `${team}->${name}`).toBeGreaterThan(3);
+      }
+    }
+  });
 });
 
 describe('bot matches', () => {
