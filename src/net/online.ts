@@ -13,6 +13,7 @@ import { decodeFrame, type DecodedFrame, type FramePose } from '../../shared/mat
 import { DEFAULT_WEAPONS, STAMINA, WEAPONS, normalizeAttachments, weaponStats, type AttachmentId, type Attachments, type Slot, type WeaponId } from '../../shared/weapons';
 import { newRoundStats, type BuyItem } from '../../shared/match/economy';
 import { plural, t } from '../ui/i18n';
+import { setPerson } from '../analytics';
 
 type RosterRow = Infer<typeof RosterTable>;
 
@@ -115,7 +116,13 @@ export class OnlineLink implements GameLink {
     db.matchEvent.onInsert((_ctx, row) => { if (row.room === this.room) try { this.events.push(JSON.parse(row.json)); } catch { /* malformed event */ } });
   }
 
-  markDisconnected() { this.disconnected = true; }
+  /** Called once when the connection drops (or after we leave). */
+  onDrop?: () => void;
+  markDisconnected() {
+    if (this.disconnected) return;
+    this.disconnected = true;
+    this.onDrop?.();
+  }
   myId() { this.state(); return this.me; }
   version() { this.state(); return this.ver; }
 
@@ -137,7 +144,7 @@ export class OnlineLink implements GameLink {
     const row = this.room >= 0 ? this.conn.db.match.id.find(this.room) : undefined;
     if (!row) return undefined;
     const config = JSON.parse(row.configJson) as { teamSize: number };
-    return { code: row.code, size: sizeLabel(config.teamSize) };
+    return { code: row.code, size: sizeLabel(config.teamSize), room: this.room };
   }
 
   state(): MatchState | undefined {
@@ -242,6 +249,13 @@ export class OnlineLink implements GameLink {
   }
 }
 
+/** Tell the server this browser's time zone and language (once per connection; older servers lack `hello`). */
+function sayHello(conn: DbConnection) {
+  let tz = '';
+  try { tz = Intl.DateTimeFormat().resolvedOptions().timeZone ?? ''; } catch { /* no Intl time zone */ }
+  try { void conn.reducers.hello({ tz, lang: navigator.language ?? '' }).catch(() => undefined); } catch { /* server without hello */ }
+}
+
 /** Ask the server for a room (Play Online, Quick Play, new private room, by code, or a listed room). */
 async function enter(conn: DbConnection, e: { name: string; team: number; how: OnlineEntry }) {
   const { name, team, how } = e;
@@ -315,6 +329,10 @@ export async function connectOnline(name: string, team: Team | undefined, how: O
       .onConnect((connection, identity, nextToken) => {
         try { localStorage.setItem(tokenKey, nextToken); } catch { /* anonymous identity still works */ }
         status(t('net.joining'));
+        // Rough "where from" for the owner's player counts (the private player_seen table): time zone and language, no IP.
+        sayHello(connection);
+        // PostHog people can be matched to SpacetimeDB profiles by this property (never identify()).
+        setPerson({ stdb_identity: identity.toHexString() });
         link = new OnlineLink(connection, identity);
         connection.subscriptionBuilder()
           .onApplied(async () => {
