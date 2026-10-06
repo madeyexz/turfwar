@@ -12,7 +12,7 @@
  */
 export type Route = 'page' | 'shell' | 'static' | 'bypass';
 
-const NEVER = /^\/(admin|stdb|_vercel|api|ingest|dev)(\/|$)/;
+const NEVER = /^\/(admin|stdb|_vercel|api|ingest|dev|media)(\/|$)/;
 const STATIC = /^\/(assets|fonts|icons)\//;
 
 export function routeOf(req: { url: string; method: string; mode?: string }, origin: string, shell: ReadonlySet<string>): Route {

@@ -33,6 +33,7 @@ describe('service worker routes', () => {
     expect(get('/_vercel/insights/script.js')).toBe('bypass');
     expect(get('/admin', 'navigate')).toBe('bypass');
     expect(get('/admin/')).toBe('bypass');
+    expect(get('/media/turfwar-trailer-30s.mp4')).toBe('bypass');
     expect(get('/admin/index.html')).toBe('bypass');
     expect(get('/dev/level.html', 'navigate')).toBe('bypass');
     expect(get('/sw.js')).toBe('bypass');
