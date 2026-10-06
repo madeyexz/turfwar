@@ -274,8 +274,11 @@ async function enter(conn: DbConnection, e: { name: string; team: number; how: O
   return conn.reducers.joinRoom({ name, team, code: how.code });
 }
 
-/** A public room as the lobby lists it (and as Play Online's matching sees it). */
-export interface PublicRoom extends RoomView { phase: string; round: number }
+/**
+ * A public room as the lobby lists it (and as Play Online's matching sees it). `server` is the
+ * SpacetimeDB URI it lives on (one database today), so the lobby shows each room its server's ping.
+ */
+export interface PublicRoom extends RoomView { phase: string; round: number; server: string }
 
 /**
  * Live list of public rooms for the lobby: a light connection that only subscribes to the room rows
@@ -296,7 +299,7 @@ export async function watchRooms(onChange: (rooms: PublicRoom[]) => void, onStat
       try { config = JSON.parse(r.configJson); } catch { /* malformed row: listed with defaults */ }
       rooms.push({
         room: r.id, mapId: r.mapId, mode: config.mode === 'sabotage' ? 'sabotage' : 'elimination', size: config.teamSize ?? 6, humans: r.humans,
-        phase: r.phase, round: r.score0 + r.score1 + 1, fixedMap: !!config.fixedMap, fixedMode: !!config.fixedMode,
+        phase: r.phase, round: r.score0 + r.score1 + 1, fixedMap: !!config.fixedMap, fixedMode: !!config.fixedMode, server: uri,
       });
     }
     onChange(rooms.sort((a, b) => b.humans - a.humans || a.room - b.room));

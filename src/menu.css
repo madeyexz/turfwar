@@ -135,7 +135,10 @@
 #menu .deploy-l svg { flex: none; width: 20px; height: 20px; fill: currentColor; }
 #menu .deploy-r { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 15px; font-weight: 700; letter-spacing: 0.1em; text-transform: uppercase; opacity: 0.78; }
 #menu .rooms-line { display: flex; align-items: center; gap: 8px; margin: 0; min-height: 18px; color: var(--muted); font-size: 13px; font-weight: 600; letter-spacing: 0.02em; line-height: 1.25; }
-#menu .rooms-line > span:last-child { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+#menu .rooms-line #play-hint { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+#menu .rooms-line .ping { flex: none; white-space: nowrap; font-variant-numeric: tabular-nums; }
+#menu .rooms-line .ping::before { content: '·'; margin-right: 8px; color: var(--muted); }
+#menu .rooms-line .ping[hidden] { display: none; }
 #menu .rooms-line[hidden] { display: none; }
 
 /* Connection dot (status line and room count) */
@@ -156,9 +159,21 @@
 #menu .browser-head b { font-size: 12px; letter-spacing: 0.24em; text-transform: uppercase; color: var(--accent); white-space: nowrap; }
 #menu .browser-head small { font-size: 11px; letter-spacing: 0.16em; text-transform: uppercase; color: var(--muted); font-weight: 700; }
 #menu .browser-head .count { margin-left: auto; min-width: 0; }
+/* Which server the rooms are on and the round trip to it: "Server · US East · 190 ms". */
+#menu .browser-head .server-chip { flex: none; display: inline-block; padding: 1px 7px; border: 1px solid var(--line); border-radius: 3px; color: var(--muted); font-size: 11px; font-weight: 700; letter-spacing: 0.06em; white-space: nowrap; font-variant-numeric: tabular-nums; }
+#menu .browser-head .server-chip[hidden] { display: none; }
+#menu .browser-head .count:empty + .server-chip { margin-left: auto; }
+#menu .server-chip .server-word { white-space: pre; }
+/* Ping: green under 80 ms, amber under 160 ms, red beyond; muted "—" while measuring. */
+#menu .ping { color: var(--muted); }
+#menu .ping.good { color: #5df29a; }
+#menu .ping.fair { color: var(--amber); }
+#menu .ping.bad { color: var(--crimson); }
+#menu .room .ping { font-variant-numeric: tabular-nums; text-align: right; white-space: nowrap; font-size: 13px; }
+#menu .room .ping small { font-size: 10px; letter-spacing: 0.04em; opacity: 0.8; }
 #menu .browser-rows { flex: 1 1 0; min-height: 0; overflow-y: auto; scrollbar-width: thin; scrollbar-color: rgba(190, 236, 244, 0.2) transparent; }
 #menu .room {
-  position: relative; display: grid; grid-template-columns: minmax(0, 1.25fr) minmax(0, 1fr) 46px minmax(0, 0.7fr) 66px; gap: 10px; align-items: center;
+  position: relative; display: grid; grid-template-columns: minmax(0, 1.25fr) minmax(0, 1fr) 46px minmax(0, 0.7fr) 52px 66px; gap: 10px; align-items: center;
   height: 42px; padding: 0 10px 0 16px; border-top: 1px solid rgba(190, 236, 244, 0.06); font-size: 14px; font-weight: 600;
 }
 #menu .room:first-child { border-top: none; }
@@ -282,7 +297,8 @@
 
 /* ---- Tighter screens ---- */
 @media (max-width: 1180px) {
-  #menu .room { grid-template-columns: minmax(0, 1fr) 40px 46px minmax(0, 76px) 62px; }
+  #menu .room { grid-template-columns: minmax(0, 1fr) 40px 46px minmax(0, 76px) 50px 62px; }
+  #menu .browser-head small[data-i18n='lobby.matching'] { display: none; }
   #menu .room .mname { display: none; }
   #menu .callsign { width: 200px; }
 }
@@ -319,8 +335,10 @@
   #menu .deploy { flex-direction: column; align-items: flex-start; justify-content: center; gap: 2px; padding: 10px 18px; }
   #menu .deploy-l { font-size: 20px; }
   #menu .deploy-r { font-size: 13px; padding-left: 32px; max-width: 100%; }
-  #menu .rooms-line > span:last-child { white-space: normal; }
-  #menu .room { grid-template-columns: minmax(0, 1fr) 30px 46px 60px; gap: 8px; padding-left: 12px; }
+  #menu .rooms-line { flex-wrap: wrap; }
+  #menu .rooms-line #play-hint { white-space: normal; flex: 1 1 0; }
+  #menu .room { grid-template-columns: minmax(0, 1fr) 30px 46px 50px 60px; gap: 8px; padding-left: 12px; }
+  #menu .server-chip .server-word { display: none; }
   #menu .room .state { display: none; }
   #menu .others { grid-template-columns: 1fr 1fr; }
 }

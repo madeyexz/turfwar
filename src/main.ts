@@ -10,6 +10,7 @@ import type { GameLink } from './game/link';
 import { OfflineLink } from './game/offline';
 import { Bench, BENCH_SECONDS, benchReport, type BenchResult } from './game/bench';
 import { onlineAvailable, onlineConfig, connectOnline, watchRooms, OnlineLink, type OnlineEntry, type PublicRoom } from './net/online';
+import { PING_WINDOW, PingMonitor, pingAllowed, pingTone, serverRegion } from './net/ping';
 import { matchJoined, matchLeft, setSuper, startAnalytics, track, type PlayKind, type Reason } from './analytics';
 import { LevelView } from './render/level';
 import { THEMES } from './render/materials';
@@ -103,11 +104,11 @@ menu.innerHTML = `
 
     <div class="play-block">
       <button type="button" class="deploy" id="play" disabled><span class="deploy-l">${PLAY}<span class="deploy-t">${t('lobby.loading')}</span></span><span class="deploy-r" id="play-summary"></span></button>
-      <p class="rooms-line" id="rooms-line"><span class="conn" id="conn"><i></i></span><span id="play-hint"></span></p>
+      <p class="rooms-line" id="rooms-line"><span class="conn" id="conn"><i></i></span><span id="play-hint"></span><span class="ping" id="play-ping"></span></p>
     </div>
 
     <section class="browser" id="browser" aria-labelledby="rooms-title">
-      <div class="browser-head"><b id="rooms-title" data-i18n="lobby.liveRooms">${t('lobby.liveRooms')}</b>${L('lobby.matching', 'small')}<span class="count" id="rooms-count"></span></div>
+      <div class="browser-head"><b id="rooms-title" data-i18n="lobby.liveRooms">${t('lobby.liveRooms')}</b>${L('lobby.matching', 'small')}<span class="count" id="rooms-count"></span><span class="server-chip" id="server-chip"></span></div>
       <div class="browser-rows" id="rooms" role="list"></div>
       <div class="browser-foot" id="rooms-foot"></div>
     </section>
@@ -194,6 +195,7 @@ let roomsErrorShown = false;
 function watchLobbyRooms() {
   unwatchRooms();
   if (!online.ok || benchMode) { refresh(); return; }
+  pings.setActive(pingOn);
   const gen = ++roomsGen;
   void watchRooms(list => { if (gen !== roomsGen) return; rooms = list; refresh(); }, state => {
     if (gen !== roomsGen) return;
@@ -211,6 +213,38 @@ function unwatchRooms() {
   roomsGen++;
   clearTimeout(roomsRetry);
   stopRooms?.(); stopRooms = undefined;
+  pings.setActive(false);
+}
+
+// ---- Ping: round trip to each room's server, measured only while the lobby is on screen. ----
+const pings = new PingMonitor(() => renderPings());
+const pingOn = online.ok && !benchMode && pingAllowed(location.search);
+if (pingOn) pings.track(server.uri);
+/** A room row's ping: "190 ms" ("—" while measuring); the class colours it. */
+function pingHtml(uri: string | undefined) {
+  const ms = pings.get(uri);
+  return ms === undefined ? '—' : `${ms}<small> ms</small>`;
+}
+const pingClass = (uri: string | undefined) => { const ms = pings.get(uri); return `ping${ms === undefined ? '' : ` ${pingTone(ms)}`}`; };
+const pingTitle = (uri: string | undefined) => uri ? t('server.pingTitle', { server: serverRegion(uri), n: PING_WINDOW }) : '';
+/** Updates the ping cells, the header chip and the play line in place (samples arrive every 4 s). */
+function renderPings() {
+  menu.querySelectorAll<HTMLElement>('#rooms [data-ping]').forEach(el => { el.className = pingClass(el.dataset.ping); el.innerHTML = pingHtml(el.dataset.ping); });
+  const chip = $('#server-chip');
+  const uri = server.uri;
+  chip.hidden = !pingOn || !uri || roomsState !== 'live';
+  if (!chip.hidden) {
+    const ms = pings.get(uri);
+    chip.title = pingTitle(uri);
+    chip.innerHTML = `<span class="server-word">${esc(t('server.label'))} · </span>${esc(serverRegion(uri!))} · <span class="${pingClass(uri)}">${ms === undefined ? '—' : esc(t('server.ms', { n: ms }))}</span>`;
+  }
+  const line = $('#play-ping');
+  const target = playTarget()?.server ?? uri;
+  const ms = pings.get(target);
+  line.hidden = !pingOn || roomsState !== 'live';
+  line.className = pingClass(target);
+  line.title = pingTitle(target);
+  line.textContent = ms === undefined ? t('server.measuring') : t('server.ping', { ms: t('server.ms', { n: ms }) });
 }
 const roomStatus = (r: PublicRoom) => r.phase === 'warmup' ? t('lobby.warmup') : r.phase === 'ended' ? t('lobby.matchOver') : t('lobby.round', { n: r.round });
 const players = (n: number, max: number) => t('common.players', { n, max });
@@ -307,6 +341,7 @@ function renderPlay() {
 function renderRooms() {
   const list = $('#rooms');
   const shown = shownRooms();
+  for (const r of shown) if (pingOn) pings.track(r.server);
   const humans = shown.reduce((n, r) => n + r.humans, 0);
   $('#rooms-count').innerHTML = roomsState === 'live' && shown.length ? `<span class="conn live"><i></i>${plural('lobby.roomCount', shown.length)} · ${plural('lobby.playerCount', humans)}</span>` : '';
   // Keep keyboard focus on the same JOIN button across live updates.
@@ -327,6 +362,7 @@ function renderRooms() {
         <span class="mode" title="${esc(modeName(r.mode))}"><span class="mtag">[${MODE_TAGS[r.mode]}]</span><span class="mname"> ${esc(modeName(r.mode))}</span></span>
         <span class="players">${r.humans}/${r.size * 2}</span>
         <span class="state ${r.phase}">${esc(roomStatus(r))}</span>
+        <span class="${pingClass(r.server)}" data-ping="${esc(r.server)}" title="${esc(pingTitle(r.server))}">${pingHtml(r.server)}</span>
         <button type="button" class="join" data-joinroom="${r.room}" aria-label="${esc(`${roomFull(r) ? t('common.full') : t('common.join')} · ${aria}`)}"${busy ? ' disabled' : ''}>${starting === 'room' && joiningRoom === r.room ? t('lobby.joining') : roomFull(r) ? t('common.full') : t('common.join')}</button>
       </div>`;
     }).join('');
@@ -381,6 +417,7 @@ function refresh() {
   renderFilters();
   renderPlay();
   renderRooms();
+  renderPings();
   renderShowcase();
   renderOthers();
   if (openPop?.id === 'map-pop') renderMapGrid();
