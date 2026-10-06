@@ -46,6 +46,11 @@ const SETS: Record<string, () => Promise<DressingSet>> = {
       district: { mesh: 'taipei-district.glb', atlas: 'taipei-atlas.webp' },
     };
   },
+  // The city round Taipei 101, seen from 88F (the map sets it 383 m down).
+  taipei101: async () => {
+    const [far, { highriseSkyline }] = await Promise.all([import('../../shared/maps/taipei-skyline'), import('./cityfill')]);
+    return { skyline: highriseSkyline(far) };
+  },
 };
 
 type Dressing = Extract<Decor, { kind: 'dressing' }>;
@@ -63,7 +68,7 @@ export async function addDressing(group: THREE.Group, decor: Decor[]) {
     if (!set) { console.warn('unknown dressing set', d.set); continue; }
     if (set.district) group.add(await districtGroup(set.district, d.x, d.z, cutTest(d.cut ?? [])));
     if (set.street) group.add(streetGroup(cutStreet(set.street, d.x, d.z, cutTest([...(d.cut ?? []), ...(d.clear ?? [])])), d.x, d.z, models));
-    if (set.skyline) group.add(buildSkyline(set.skyline, d.x, d.z));
+    if (set.skyline) { const sky = buildSkyline(set.skyline, d.x, d.z); sky.position.y = d.y ?? 0; group.add(sky); }
     if (set.lots) group.add(lotDetail(set.lots, d.x, d.z));
   }
   const byModel = new Map<string, number[]>();

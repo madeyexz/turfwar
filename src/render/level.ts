@@ -29,6 +29,9 @@ const LOOKS = {
   tile: { material: 'floortile', uv: 2.4, color: 0xf0ece4, ao: 0.95 },
   mosaic: { material: 'facadetile', uv: 1.6, color: 0xf2efe8, ao: 0.8 },
   painted: { material: 'painted', uv: 1, color: 0xf0f0ec, ao: 0.9 },
+  // Taipei 101's office floor: carpet tiles and the damper's polished gold paint.
+  carpet: { material: 'carpet', uv: 2, color: 0x8a9098, ao: 0.97 },
+  gold: { material: 'gold', uv: 2, color: 0xd9a63c, ao: 1 },
 } as const;
 
 /** Static battlefield visuals built from shared map data (collision stays authoritative). */
@@ -59,6 +62,8 @@ export class LevelView {
       painted: new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.55, metalness: 0.05 }),
       lightPanel: new THREE.MeshBasicMaterial({ color: new THREE.Color(0xfff4e0).multiplyScalar(1.6), toneMapped: false }),
       glass: new THREE.MeshStandardMaterial({ color: 0x6fa8c8, roughness: 0.05, metalness: 0.9, transparent: true, opacity: 0.35 }),
+      // Low-iron glazing: barely there, a faint green cast and a soft sheen of the sky.
+      window: new THREE.MeshStandardMaterial({ color: 0x9cc8b8, roughness: 0.04, metalness: 0.1, transparent: true, opacity: 0.12, depthWrite: false, envMapIntensity: 0.6 }),
       panel: trimMaterial(assets, 'T_Trim_02_BaseColor', 0xd4dade),
       panelDark: trimMaterial(assets, 'T_Trim_01_BaseColor', 0xa8b0b6),
       // Realistic architecture (CC0 Poly Haven sets); per-block tints arrive as vertex colours.
@@ -81,6 +86,8 @@ export class LevelView {
     (this.materials.asphalt as THREE.MeshStandardMaterial).color.setScalar(1.5);
     if (map.decor.some(d => (d.kind === 'block' || d.kind === 'shape') && d.style === 'facade')) this.materials.facade = facadeMaterial();
     if (map.decor.some(d => 'style' in d && d.style === 'curtain')) this.materials.curtain = curtainMaterial();
+    if (map.decor.some(d => 'style' in d && d.style === 'carpet')) this.materials.carpet = carpetMaterial();
+    this.materials.gold = new THREE.MeshStandardMaterial({ vertexColors: true, metalness: 0.85, roughness: 0.32 });
     // Self-lit strips and lamps: vertex colours brighter than white, so bloom picks them up.
     this.materials.neon = new THREE.MeshBasicMaterial({ vertexColors: true });
     const signs: SignDecor[] = [];
@@ -154,7 +161,7 @@ export class LevelView {
       const geometry = mergeGeometries(list, false);
       if (!geometry) continue;
       const mesh = new THREE.Mesh(geometry, this.materials[name]);
-      mesh.castShadow = name !== 'glow' && name !== 'glowWarm' && name !== 'glass' && name !== 'water' && name !== 'marking' && name !== 'lightPanel' && name !== 'neon';
+      mesh.castShadow = name !== 'glow' && name !== 'glowWarm' && name !== 'glass' && name !== 'window' && name !== 'water' && name !== 'marking' && name !== 'lightPanel' && name !== 'neon';
       mesh.receiveShadow = true;
       mesh.name = `level:${name}`;
       this.group.add(mesh);
@@ -204,7 +211,7 @@ export class LevelView {
     const r = rng(index * 977 + 13);
     switch (style) {
       case 'brick': case 'plaster': case 'wood': case 'roof': case 'cobble': case 'slab': case 'steel':
-      case 'paving': case 'asphalt': case 'tile': case 'mosaic': case 'painted': {
+      case 'paving': case 'asphalt': case 'tile': case 'mosaic': case 'painted': case 'carpet': case 'gold': {
         const look = LOOKS[style];
         const g = boxGeo(cx, cy, cz, w, h, d, 0, look.uv);
         tint(g, color ?? look.color, s.minY, h, look.ao);
@@ -283,6 +290,7 @@ export class LevelView {
         return;
       }
       case 'glass': this.add('glass', boxGeo(cx, cy, cz, w, h, d)); return;
+      case 'window': this.add('window', boxGeo(cx, cy, cz, w, h, d)); return;
       case 'curtain': {
         const g = windowBox(cx, s.minY, cz, w, h, d, CURTAIN_BAY * CURTAIN_TILE, CURTAIN_FLOOR * CURTAIN_TILE);
         tint(g, color ?? 0x8fb4b8, s.minY, Math.min(h, 6), 0.9);
@@ -957,6 +965,36 @@ function curtainMaterial() {
   const map = new THREE.CanvasTexture(wall), emissiveMap = new THREE.CanvasTexture(lit);
   for (const t of [map, emissiveMap]) { t.wrapS = t.wrapT = THREE.RepeatWrapping; t.colorSpace = THREE.SRGBColorSpace; t.anisotropy = 4; }
   return new THREE.MeshStandardMaterial({ map, emissiveMap, emissive: 0xffffff, emissiveIntensity: 0.75, roughness: 0.18, metalness: 0.55, vertexColors: true });
+}
+
+/**
+ * Office carpet tiles: 50 cm squares laid quarter-turned, each with a fine loop-pile grain and a
+ * flecked yarn, so the floor reads as tiles up close and as an even tone across a room. One sheet
+ * covers 2 × 2 m (the 'carpet' look's uv scale); blocks tint it.
+ */
+function carpetMaterial() {
+  const size = 512, tile = size / 4, c = document.createElement('canvas');
+  c.width = c.height = size;
+  const g = c.getContext('2d')!, r = rng(23);
+  g.fillStyle = '#e4e4e4'; g.fillRect(0, 0, size, size);
+  for (let ty = 0; ty < 4; ty++) for (let tx = 0; tx < 4; tx++) {
+    const x0 = tx * tile, y0 = ty * tile, across = (tx + ty) % 2 === 0, shade = 0.94 + r() * 0.1;
+    g.fillStyle = `rgb(${232 * shade},${232 * shade},${232 * shade})`; g.fillRect(x0, y0, tile, tile);
+    // Rows of pile along the tile's grain.
+    for (let k = 0; k < tile; k += 3) {
+      g.fillStyle = `rgba(0,0,0,${0.06 + r() * 0.05})`;
+      if (across) g.fillRect(x0, y0 + k, tile, 1); else g.fillRect(x0 + k, y0, 1, tile);
+    }
+    // Flecks of lighter and darker yarn.
+    for (let i = 0; i < 260; i++) {
+      g.fillStyle = r() < 0.5 ? `rgba(255,255,255,${0.08 + r() * 0.1})` : `rgba(0,0,0,${0.08 + r() * 0.1})`;
+      g.fillRect(x0 + r() * tile, y0 + r() * tile, across ? 3 : 1, across ? 1 : 3);
+    }
+    g.fillStyle = 'rgba(0,0,0,0.12)'; g.fillRect(x0, y0, tile, 1); g.fillRect(x0, y0, 1, tile);
+  }
+  const map = new THREE.CanvasTexture(c);
+  map.wrapS = map.wrapT = THREE.RepeatWrapping; map.colorSpace = THREE.SRGBColorSpace; map.anisotropy = 8;
+  return new THREE.MeshStandardMaterial({ map, vertexColors: true, roughness: 0.96, metalness: 0 });
 }
 
 /** Window grid of the facade sheet: 4 bays × 4 floors per tile. */
