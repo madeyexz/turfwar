@@ -23,8 +23,8 @@ const SLOT: Record<AttachmentCategory, { name: string; empty: string }> = {
 };
 const NOTES: Partial<Record<AttachmentId, string>> = {
   irons: 'The free default sights. Choosing them takes the fitted optic off.',
-  reflex: 'Red-dot reflex sight: a little zoom and a cleaner sight picture.',
-  holo: 'Holographic ring reticle: more zoom and steadier aim.',
+  reflex: 'Tube red dot: a small, crisp dot through a round tube; a little zoom.',
+  holo: 'Holographic sight: a wide window and a ring-and-dot reticle; more zoom and steadier aim.',
   acog: 'Magnified 4× prism scope for mid-range fights.',
   x4: 'Pistol scope: 4× magnification on the M9A1.',
   x6: 'Sniper scope: 6× magnification for the M110.',
