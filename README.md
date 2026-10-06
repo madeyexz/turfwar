@@ -162,6 +162,30 @@ the Xinyi Plaza Malls, Militia on Songzhi Rd; Elephant Mountain's foot (象山) 
 (eased toward the edge of the terrain grid). The lots get curtain walls, mullion fins, crowns, lit
 canopies and rooftop plant. About 270 × 290 m; the tower itself is scenery (only its base collides).
 
+**Memorial Hall** (中正紀念堂, 1v1 and 6v6) is a compact arena in and around the National Chiang Kai-shek
+Memorial Hall in Taipei, stylised to the game's low-poly look (`shared/maps/memorial*.ts`). The white
+hall stands on a three-tier base under its blue glazed octagonal roof: a terrace with marble balustrades
+on each tier (4.5, 9 and 13.5 m), the broad 89-step grand staircase up the west face in three flights
+(30 + 30 + 29) with a landing at each terrace, a straight rear staircase east and side stairs hugging the
+north and south faces. The memorial chamber holds the seated bronze statue on its plinth (a simple,
+dignified figure), inscription panels (decorative, not legible), the coffered ceiling with the sun
+emblem, the tall bronze doors swung open, honour-guard posts (no figures) and rope lines. The museum
+fills the base: the entrance hall under the grand staircase, exhibition rooms with glass and wood
+display cases, a lecture hall, a library, the gift shop, the east lobby, and the double-height Gallery
+Hall under the upper gallery's balconies, with switchback stairwells (lifts beside them) up into the
+chamber. **A** is the Gallery Hall, **B** the chamber before the statue; landmarks C–E are the grand
+staircase's upper landing, the north garden and the gift shop. SWAT deploys on the east forecourt,
+Militia on the slice of Liberty Square in front of the grand staircase; screen walls with one
+gateway each and spirit screens close the bases off from the gardens, which are rooms of clipped hedge
+with pines, a pavilion and a lotus pond. The National Theater, the National Concert Hall and the Liberty
+Square gate stand to the west as backdrop. Golden-hour light. About 130 × 97 m; no vehicles.
+`shared/maps/memorial.test.ts` checks that no eye-level line between two places a soldier can stand
+runs longer than 55 m except down the grand staircase's axis, that SWAT reaches each site 1.5–2.5 s
+ahead of Militia (1.8 s at both), that bots reach every room, floor, terrace, stair and garden, and that
+Militia bots arm each site. Because B is above A, a site is armed and disarmed only on its own floor
+(within 2.5 m of the site's height, `onSite` in `shared/match/combat.ts`), and bots plan toward their
+goal's floor.
+
 Every map has ammo crates (one more stands in each base) and open team bases. Sabotage lists only the
 maps with bomb sites.
 
@@ -478,7 +502,7 @@ shared/        Pure TypeScript shared by browser, tests and the SpacetimeDB modu
   maps/          Builder + BeGone's six maps (Crane, Tower, Warehouse, Pipeline, Courtyard,
                  Timbertown) and eight originals (Cinder, Frostline, Verdant, Ochre, Citadel,
                  Railyard, Skyline, Meridian), plus Taipei and Taipei 101 · Xinyi (taipei-data.ts and
-                 xinyi-data.ts, generated from 臺北狂飆),
+                 xinyi-data.ts, generated from 臺北狂飆) and Memorial Hall (memorial*.ts),
                  with ladders, bomb sites and ammo crates
   match/         State, rounds and bomb, combat validation, economy, bots, navigation, packed frame
 src/           Browser client: lobby, game loop, prediction, rendering, view model, soldiers, HUD, store, audio, net
