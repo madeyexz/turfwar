@@ -11,7 +11,10 @@ import { loadMap } from '../../shared/maps/index';
 import { wrapAngle } from '../../shared/math';
 import { eyeHeight } from '../../shared/movement';
 import { HEALTH, type AttachmentId, type WeaponId } from '../../shared/weapons';
+import type { Assets } from '../assets';
 import type { Audio } from '../audio';
+import { THEMES } from '../render/materials';
+import type { Climber } from './trailer-climb';
 import type { Renderer } from '../render/renderer';
 import type { Game } from './game';
 
@@ -23,10 +26,13 @@ declare global { interface Window { __vclock?: VClock; __trailer?: Trailer } }
 export type CamMove =
   | { kind: 'path'; frames: number; keys: { p: V3; t: V3; fov?: number }[]; ease?: boolean }
   | { kind: 'orbit'; frames: number; center: V3; radius: number; height: number; from: number; to: number; fov?: number; lookUp?: number; ease?: boolean }
-  | { kind: 'follow'; target: { soldier?: number; vehicle?: number }; offset: V3; look?: V3; fov?: number; smooth?: number; local?: boolean }
+  | { kind: 'follow'; target: Target; offset: V3; look?: V3; fov?: number; smooth?: number; local?: boolean }
   | { kind: 'fixed'; p: V3; t: V3; fov?: number }
   /** A camera that stays put (or drifts from p to p2) and turns to keep a soldier or vehicle in frame. */
-  | { kind: 'track'; p: V3; p2?: V3; frames?: number; target: { soldier?: number; vehicle?: number }; look?: V3; fov?: number; smooth?: number };
+  | { kind: 'track'; p: V3; p2?: V3; frames?: number; target: Target; look?: V3; fov?: number; smooth?: number };
+
+/** What a following or tracking camera watches: a soldier, a vehicle, or the trailer's climber (chest or feet). */
+type Target = { soldier?: number; vehicle?: number; climber?: 'chest' | 'feet' };
 
 /** Waypoint for the vehicle autopilot: drive to (x, z) at about `speed` m/s, holding the handbrake if `drift`. */
 interface Waypoint { x: number; z: number; speed?: number; drift?: boolean; y?: number }
@@ -60,7 +66,7 @@ export class Trailer {
   private voiceIds = 0;
   hudMode: 'full' | 'none' | 'clean' = 'full';
 
-  constructor(private lb: { readonly game: Game | undefined; renderer: Renderer; step: (n: number, render?: boolean) => number }) {
+  constructor(private lb: { readonly game: Game | undefined; renderer: Renderer; assets: Assets; step: (n: number, render?: boolean) => number }) {
     const style = document.createElement('style');
     style.textContent = `
       body.trailer #hud .fps, body.trailer #hud .netstat, body.trailer #hud .released { display: none !important; }
@@ -173,8 +179,12 @@ export class Trailer {
     if (g.otherViewmodel) g.otherViewmodel.root.visible = false;
   }
 
-  private targetPose(t: { soldier?: number; vehicle?: number }) {
+  private targetPose(t: Target) {
     const g = this.g;
+    if (t.climber && this.climber) {
+      const p = t.climber === 'feet' ? this.climber.feet() : this.climber.chest();
+      return { x: p.x, y: p.y, z: p.z, yaw: this.climber.view.root.rotation.y };
+    }
     if (t.vehicle !== undefined) {
       const own = g.driving.v?.id === t.vehicle ? g.driving.renderPose() : undefined;
       const p = own ?? g.vehicles.pose(t.vehicle);
@@ -425,6 +435,47 @@ export class Trailer {
     if (d.v?.id === id) d.snap(v);
     return true;
   }
+
+  // ---- The Taipei 101 free solo (src/game/trailer-climb.ts) ----
+
+  climber?: Climber;
+  /**
+   * Put the climber on the west face of Taipei 101 (Xinyi) at height `y` and keep him climbing at
+   * `rate` cycles per second (0 holds still); `stand` tops him out on the terrace at 388 m.
+   */
+  async climb(opts: { y?: number; rate?: number; mode?: 'climb' | 'stand'; look?: number; heli?: V3 | null; heliYaw?: number }) {
+    if (!this.climber) {
+      const { Climber } = await import('./trailer-climb');
+      this.climber = new Climber(this.lb.assets, this.lb.renderer.scene);
+    }
+    const c = this.climber;
+    if (opts.y !== undefined) c.y = opts.y;
+    if (opts.mode) c.mode = opts.mode;
+    if (opts.look !== undefined) c.look = opts.look;
+    if (opts.heli !== undefined) c.setHeli(opts.heli ? new THREE.Vector3(...opts.heli) : null, opts.heliYaw ?? 0);
+    const rate = opts.rate ?? 0.6;
+    this.drivers.set('climb', dt => c.update(dt, rate));
+    c.update(0, 0);
+    return true;
+  }
+  /** Ease the climber's head turn (standing) toward a value over `seconds`. */
+  turnHead(to: number, seconds: number) {
+    const c = this.climber!, from = c.look;
+    let t = 0;
+    this.drivers.set('head', dt => { t += dt; c.look = from + (to - from) * ease(Math.min(1, t / seconds)); });
+    return true;
+  }
+  /** Move the climber's helicopter along a path over `seconds` (rising into frame for the punchline). */
+  heliPath(from: V3, to: V3, seconds: number, yaw = 0) {
+    let t = 0;
+    this.drivers.set('heli', dt => {
+      t += dt; const u = ease(Math.min(1, t / seconds));
+      this.climber?.setHeli(new THREE.Vector3(from[0] + (to[0] - from[0]) * u, from[1] + (to[1] - from[1]) * u, from[2] + (to[2] - from[2]) * u), yaw);
+    });
+    return true;
+  }
+  /** Relight the scene with another theme (the free solo plays Xinyi at golden hour). */
+  light(theme: keyof typeof THEMES, sun: { x: number; y: number; z: number }) { this.lb.renderer.setTheme(THEMES[theme], sun); return true; }
 
   /** Floor height under (x, z) at or below y. */
   ground(x: number, z: number, y = 3) { return loadMap(this.game!.mapId).world.groundHeight(x, z, y, 0.3); }

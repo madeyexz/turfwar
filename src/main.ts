@@ -825,7 +825,7 @@ async function boot() {
   if (params.get('autostart') || benchMode) void startNow();
   if (import.meta.env.DEV) Object.assign(window, { __lb: { get game() { return game; }, get bench() { return bench; }, renderer, assets, step: stepFrames, start: startNow } });
   // Dev-only trailer director (trailer/README.md): scripted shots driven frame by frame by the capture tools.
-  if (import.meta.env.DEV && params.has('trailer')) void import('./game/trailer').then(m => m.installTrailer({ get game() { return game; }, renderer, step: stepFrames }));
+  if (import.meta.env.DEV && params.has('trailer')) void import('./game/trailer').then(m => m.installTrailer({ get game() { return game; }, renderer, assets, step: stepFrames }));
 }
 
 void boot().catch(error => {

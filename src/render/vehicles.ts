@@ -159,6 +159,8 @@ function heliModel(): Model {
 function buildModel(kind: VehicleKind, id: number) {
   return kind === 'car' ? carModel(id) : kind === 'scooter' ? scooterModel(id) : heliModel();
 }
+/** A standalone vehicle model (the trailer director's props): its root, rotor and rotor blur. */
+export const vehicleModel = (kind: VehicleKind, id = 0) => { const m = buildModel(kind, id); return { root: m.root, rotor: m.rotor, blur: m.blur }; };
 
 interface View { kind: VehicleKind; model: Model; buffer: InterpBuffer<Sample>; wrecked: boolean; spin: number; roll: number; pose: Sample; embers?: THREE.Object3D }
 

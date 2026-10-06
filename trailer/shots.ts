@@ -55,6 +55,9 @@ const TAIPEI = 'mode=offline&map=taipei&size=squad';
 const T101: [number, number, number] = [1536, 230, 426];
 /** Taipei 101 · Xinyi (24v24): the tower stands at (-60, 6); the mall atrium (site A) at (-9, 10.5). */
 const XINYI = 'mode=offline&map=xinyi&size=war';
+/** The free solo: Xinyi (24v24, its only size; the fight stays far below), relit at golden hour (the 88F map's light). */
+const CLIMB = 'mode=offline&map=xinyi&size=war&game=elimination&team=0';
+const GOLDEN = "T.light('highrise', {x:-0.84, y:0.3, z:-0.2})";
 
 export const SHOTS: Shot[] = [
   // ---- Cold open ---------------------------------------------------------------------------
@@ -217,6 +220,51 @@ export const SHOTS: Shot[] = [
       cue(76, `T.cursor('[data-size="war"]', 16)`), cue(94, `T.click('[data-size="war"]')`),
       cue(116, `T.cursor('#rooms .room:nth-child(1)', 22)`), cue(150, `T.cursor('#rooms .room:nth-child(3)', 22)`),
       cue(185, `T.cursor('#quick', 20)`),
+    ],
+  },
+  // ---- Cold open for the new edit: a SWAT soldier free-solos Taipei 101 (src/game/trailer-climb.ts) ----
+  // A tribute to Alex Honnold's 2025 free solo; trailer-only, at golden hour on the Xinyi map. The
+  // climber is on the west face, 13 m in from the south-west corner, in the eighth segment (354–388 m).
+  {
+    // 1. Wide: the tower at golden hour, a tiny figure on the glass.
+    id: 'climb_wide', url: CLIMB, frames: 90, load: 6000,
+    setup: [js(`T.hud('none'); ${GOLDEN}`), js(`T.climb({y:366, rate:0.6})`), { frames: 10 }],
+    // A slow zoom from the whole tower down to the speck on its glass.
+    cues: [cue(0, `T.camera({kind:'path', frames:90, keys:[{p:[-430,330,150], t:[-60,250,6], fov:44}, {p:[-430,330,150], t:[-80,330,15], fov:12}, {p:[-430,330,150], t:[-84.5,368,19], fov:3.4}]})`)],
+  },
+  {
+    // 2. Close: hands and boots on the green glass.
+    id: 'climb_hands', url: CLIMB, frames: 60, load: 6000,
+    setup: [js(`T.hud('none'); ${GOLDEN}`), js(`T.climb({y:364, rate:0.6})`), { frames: 20 }],
+    cues: [cue(0, `(() => { const c = T.climber.chest(); return T.camera({kind:'track', p:[c.x-1.15,c.y+0.45,c.z-1.5], p2:[c.x-1.05,c.y+0.95,c.z-1.35], frames:60, target:{climber:'chest'}, look:[0.3,0.35,0.1], fov:40, smooth:4}); })()`)],
+  },
+  {
+    // 3. Straight down past his boots to Xinyi Rd, 360 m below.
+    id: 'climb_down', url: CLIMB, frames: 60, load: 6000,
+    setup: [js(`T.hud('none'); ${GOLDEN}`), js(`T.climb({y:366, rate:0.6})`), { frames: 20 }],
+    cues: [cue(0, `(() => { const c = T.climber.chest(); return T.camera({kind:'track', p:[c.x-0.75,c.y+1.5,c.z+0.25], p2:[c.x-0.75,c.y+1.9,c.z+0.25], frames:60, target:{climber:'feet'}, look:[-14,-364,0], fov:66, smooth:3}); })()`)],
+  },
+  {
+    // 4. Orbit round him on the flare of a pagoda segment.
+    id: 'climb_orbit', url: CLIMB, frames: 75, load: 6000,
+    setup: [js(`T.hud('none'); ${GOLDEN}`), js(`T.climb({y:372, rate:0.6})`), { frames: 20 }],
+    cues: [cue(0, `(() => { const c = T.climber.chest(); return T.camera({kind:'orbit', frames:75, center:[c.x,c.y,c.z], radius:3.8, height:0.5, from:2.4, to:3.9, lookUp:0.15, fov:42}); })()`)],
+  },
+  {
+    // 5. Slow push-in along the glass from the side, at the segment's edge.
+    id: 'climb_push', url: CLIMB, frames: 60, load: 6000,
+    setup: [js(`T.hud('none'); ${GOLDEN}`), js(`T.climb({y:380, rate:0.6})`), { frames: 20 }],
+    cues: [cue(0, `(() => { const c = T.climber.chest(); return T.camera({kind:'track', p:[c.x-2.4,c.y+0.8,c.z+8], p2:[c.x-1.5,c.y+1.0,c.z+2.4], frames:60, target:{climber:'chest'}, fov:40, smooth:5}); })()`)],
+  },
+  {
+    // 6. Top-out: he stands at the edge of the terrace at 388 m; a helicopter rises up level with him,
+    //    he turns round to the camera. Cut hard to the title.
+    id: 'climb_top', url: CLIMB, frames: 90, load: 6000,
+    setup: [js(`T.hud('none'); ${GOLDEN}`), js(`T.climb({mode:'stand', look:0})`), { frames: 10 }],
+    cues: [
+      cue(0, `T.camera({kind:'track', p:[-77.5,390.4,25], p2:[-78.5,390.2,24], frames:90, target:{climber:'chest'}, look:[-4,-0.4,-1.5], fov:48, smooth:6})`),
+      cue(8, `T.heliPath([-98,368,16], [-98,387.6,16], 1.7, -1.5708)`),
+      cue(52, `T.turnHead(3.8, 0.55)`),
     ],
   },
   // ---- Maps --------------------------------------------------------------------------------
