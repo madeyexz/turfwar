@@ -297,6 +297,28 @@ fullscreen. On touch-only screens the Controls tab is read-only.
 | V | Vehicle camera: chase view or the driver's seat |
 | Esc or P · M | Menu: release the mouse (pauses solo; Resume or Esc / P to go back) · from the menu, back to the lobby |
 
+## Phone and PWA
+
+Touch-primary devices (a coarse pointer or touch points with no mouse, iPads included) get on-screen
+controls; **Settings → Controls** switches them Auto / On / Off (`?touch=1|0` for testing) and sets the
+finger look speed. The left part of the screen is a floating stick (it appears under the thumb; past
+its ring you sprint; in a vehicle it is throttle, brake and steering), the rest is a look pad, and fire
+also looks while held. Buttons press the same actions as keys (`src/game/touchlayout.ts` →
+`Input.touchHeld` / `touchPress`), and only those that matter are shown: Use appears near a vehicle,
+crate or bomb site (hold it to arm or defuse), vehicle buttons replace the on-foot ones while seated, a
+scooter rider keeps fire and the one-handed guns, and the dead get Next. Quick chat opens the keyboard
+on Type. **Edit touch layout** (Settings → Controls) drags, pinches or slides to resize, hides, sets
+opacity, assigns two custom slots any action, swaps to left-handed and resets; it is saved under
+`lawbreaker.touch` (versioned, only the changes). Phones start on Low graphics, ask for landscape during a
+match, request fullscreen on Android, and keep page scroll, zoom and long-press menus off in play.
+
+The game installs as a web app: `public/manifest.webmanifest` (fullscreen, landscape, icons from
+`bun tools/make-icons.ts`), iOS home-screen meta tags, and a service worker (`src/pwa/sw.ts`, built to
+`/sw.js` with this build's file list) that fetches the page network-first, serves this build's files and
+the models, textures and sounds from caches versioned by the build and by `public/`'s contents, and
+never touches SpacetimeDB, its ping, PostHog or `/admin`. Phone visitors see an install hint in the
+lobby (Install where the browser offers it, Share → Add to Home Screen on iOS) until they dismiss it.
+
 ## Multiplayer architecture
 
 `spacetimedb/src/index.ts` runs the **same** `shared/match` simulation as solo play, server-side:
