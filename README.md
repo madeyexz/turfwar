@@ -97,14 +97,12 @@ homage to the classic two-site layout of CS:GO's Dust II, built from our own geo
 above a city; the street is fatal) and **Meridian District** (a large war-torn city quarter), each with
 bomb sites (two on Ochre Quarter and Meridian District, one elsewhere).
 
-**Taipei** is Ximending (西門町) taken 1:1 from the user's own browser game *臺北狂飆 / TAIPEI RUSH*
+**Taipei** is Ximending (西門町) from the user's own browser game *臺北狂飆 / TAIPEI RUSH*
 (https://taipei-gta.vercel.app), used with its author's permission: the source's street plan,
 building volumes and collision boxes, shop and blade signs, rooftop billboards, the Ximen gateway,
 the walk-in cinema lobby and game arcade, the arcades (騎樓) of the blocks along Zhongxiao W. Rd, the
 median hedges, the Civic Blvd expressway and the Red House, around the spot where that game starts
-its player. Our game only overlays its bases (SWAT under the expressway, Militia on Zhongxiao W. Rd),
-the bomb sites (A Cinema Street, B the arcade), ammo crates and the playable bounds (about 200 × 250 m,
-Squad rooms). `tools/import-taipei.ts` regenerates `shared/maps/taipei-data.ts` from that game's built
+its player. `tools/import-taipei.ts` regenerates `shared/maps/taipei-data.ts` from that game's built
 JavaScript; its header explains how. The same tool also exports what the source *draws*: the
 district's own meshes and canvas atlas (facades, shopfronts, signs, AC units, the cinema and arcade
 interiors: `public/assets/taipei-district.glb`, `taipei-atlas.webp`), its street furniture run through
@@ -115,20 +113,36 @@ YouBike docks, bollards, hydrants, postboxes, planters, rows of parked scooters,
 (`taipei-skyline.ts`: its buildings out to 1.3 km, landmarks, hills and roads), where Taipei 101 stands
 at the source's site, 1.6 km east-southeast, as a detailed 508 m model with its gold-lit segments.
 The renderer loads these on demand (`src/render/dressing.ts`, `skyline.ts`, `lotdetail.ts`), so the
-server and the other maps never carry them. Gameplay additions over the source: enterable ground
-floors (two 7-TWELVEs, a claw-machine shop, the 51嵐 tea shop and a figure shop by site A) with
-counters, shelves and machines as cover, a stair and a ladder up to two parapeted roofs
-(`taipei-interiors.ts`), and the Ximen station underpass under Zhongxiao W. Rd linking both sidewalks
-(`taipei-underpass.ts`); parked cars and taxis stand in the source's car bays. The source's
-pedestrian streets ran straight and bare, so `taipei-cover.ts` adds street life placed for the fight:
-a covered night market (西門夜市) on Wuchang St between sites A and B with staggered stall aisles, a
-two-level scaffold with a covered walkway on Xining S. Rd (SWAT's middle exit), a two-storey container
-site office with a roof ladder on Hanzhong St, a temple stage (廟口戲台) on the Emei St crossing, a
-footbridge (天橋) over Zhongxiao W. Rd with a broken-down bus beside it (Militia's west exit), a
-billboard catwalk up a ladder on the claw-shop roof, and food carts, crates, delivery vans, a box
-truck, kiosks, bus shelters, jersey barriers, planters and roadwork elsewhere. Its pieces sit on the
-bots' 2.5 m navigation grid so bots walk the new aisles and climb the new stairs and ladders; no
-pedestrian street keeps an eye-level line longer than about 75 m (the source's ran up to 165 m). Approximations: medians
+server and the other maps never carry them.
+
+The game plays a compact cut of it (`taipei-compact.ts`, 162.5 × 133.5 m, Squad rooms): the nine
+blocks round Cinema Street and the arcade, ringed by a road made of one carriageway of each boulevard
+(Civic Blvd under the expressway, Huanhe Rd, Zhongxiao W. Rd, Zhonghua Rd). The far carriageways, the
+Red House and the city are backdrop past median fences and a lane closure. SWAT deploys behind a
+police cordon on Civic Blvd's sidewalk, in two squads by its west and east doors with the Ximen Mall
+through the block as its third way out; Militia behind a barricade in Xining S. Rd, out north across
+Emei St or through the shops either side. The bomb sites are A, Cinema Street (電影街), and B, the
+Tomas Bear arcade (湯瑪熊歡樂城); the bases are about 115 m apart on foot and SWAT's nearest squad
+reaches either site about two seconds (sprinting) before Militia's. Over the source:
+- passages through the blocks (`taipei-passages.ts`, on `taipei-interiors.ts`'s shop machinery): the
+  mall, a karaoke house (KTV) behind the 7-TWELVE with a second storey over site B, a run of shops south
+  of Emei St from the barricade to Hanzhong St, the cinema's back corridor from Emei St into its lobby
+  on Cinema Street, a tea house upstairs over Xining S. Rd, and a board-game café into the arcade's
+  back; plus the enterable 7-TWELVEs, claw-machine shop, 51嵐 tea shop and figure shop;
+- level changes (`taipei-heights.ts`): the cinema balcony over site A up stairs at both ends, a
+  plank bridge from the KTV's upper floor across Hanzhong St to a canopy over the arcade's front, the
+  two 7-TWELVE roofs (the helicopter's pad, a ladder shaft) joined by a covered skybridge over Emei
+  St, the scaffold on Xining S. Rd and the container site office, and sign gantries over the streets
+  that cut the long views from up there;
+- street cover (`taipei-cover.ts`, `taipei-streets.ts`): the covered night market (西門夜市) on Wuchang
+  St, the temple stage (廟口戲台), a walled roadwork and a construction compound, kiosks in every
+  crossing, booths across the ring road's sidewalks, stalls, vans, a box truck, crates and barriers.
+Emei St is the cut-through for cars: its lane swings from one side of the street to the other at
+three bends, with the street's cover on the side it is not using. Everything sits on the bots' 2.5 m
+navigation grid (bots walk every passage, stair, deck, bridge and roof), and no eye-level line
+between two places a soldier can stand runs longer than 60 m except along the ring road's drive
+lanes (the old full-size map's ran to 243 m; `shared/maps/taipei.test.ts` checks every node pair).
+Parked cars and taxis stand in the source's car bays off the drive lanes. Approximations: medians
 follow the junction gaps by rule, the generic buildings' balconies, window cages and rooftops are
 drawn by our own rules after the source's, and traffic and pedestrians are not carried over.
 
@@ -157,7 +171,7 @@ Maps can park drivable vehicles (`MapDef.vehicles`, placed with the builder's `v
 
 | Map | Vehicles |
 | --- | --- |
-| **Taipei** (`shared/maps/taipei-vehicles.ts`) | Two cars by each base (yellow taxis and city sedans on Civic Blvd and Zhongxiao W. Rd) and two more on Huanhe and Zhonghua Rds; rows of scooters on the sidewalks by both bases and in Xining S. Rd and Hanzhong St; a helicopter on a painted pad on Zhonghua Rd, about as far from either base |
+| **Taipei** (`shared/maps/taipei-vehicles.ts`) | Two cars on the ring road behind each base (Civic Blvd and Zhongxiao W. Rd) and two more on its Huanhe and Zhonghua Rd sides; scooters in the cordon's kerb lane, outside the barricade and in Xining S. Rd and Hanzhong St; a helicopter on a painted pad on the 7-TWELVE roof in the middle of the map, up its stair house |
 | **Meridian District** | On each base boulevard: two cars, two scooters and a helicopter |
 | **Taipei 101 · Xinyi** (`shared/maps/xinyi-vehicles.ts`) | Two cars by each base (Xinyi Rd in front of the malls; Heping Rd by Songzhi Rd) and one on Songren Rd; scooters on the malls' frontage, on Songzhi Rd and by the 101 west plaza; a helicopter on a painted pad in Xinyi Rd's eastbound lanes past Songren Rd |
 
