@@ -17,10 +17,10 @@ export const TAIPEI_VEHICLES: [kind: VehicleKind, x: number, z: number, yaw: num
   ['car', -812, -292, W], ['car', -760, -292, E],
   ['car', -835, -167.5, W], ['car', -790, -167.5, E],
   ['car', -865.5, -232, N], ['car', -711, -236, S],
-  // Scooters: on the sidewalk outside Militia's barricade, in the cordon's kerb lane, and in
+  // Scooters: on the sidewalk outside Militia's barricade, inside SWAT's cordon, and in
   // Xining S. Rd and Hanzhong St.
   ['scooter', -809.0, -176.6, E], ['scooter', -809.0, -175.4, E], ['scooter', -806.5, -177.2, E],
-  ['scooter', -787.2, -285.8, E], ['scooter', -785.6, -285.8, E], ['scooter', -784.0, -285.8, E],
+  ['scooter', -790.5, -283.6, W], ['scooter', -790.5, -282.4, W], ['scooter', -790.5, -281.2, W],
   ['scooter', -813, -230, N], ['scooter', -757, -262, S],
   // The helicopter on its pad on the 7-TWELVE roof.
   ['heli', -771.5, -222, N],

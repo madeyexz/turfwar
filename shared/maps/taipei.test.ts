@@ -34,6 +34,14 @@ describe('taipei: the compact Ximending', () => {
     expect(show).toEqual([]);
   });
 
+  it('screens both bases: no line over 60 m reaches into them, not even from the ring road', () => {
+    const { world } = loadMap('taipei'); const nav = loadNav('taipei');
+    const bases = [[-805.2, -286.5, -765.6, -278.1], [-819.3, -200.7, -806.7, -178.4]];
+    const inBase = ([x, , z]: [number, number, number]) => bases.some(([x0, z0, x1, z1]) => x + OX > x0 && x + OX < x1 && z + OZ > z0 && z + OZ < z1);
+    const lines = longSightlines(world, nav, 60, undefined, 1).filter(l => inBase(l.a) || inBase(l.b));
+    expect(lines.map(l => `${l.length.toFixed(1)} m: ${[l.a[0] + OX, l.a[2] + OZ]} -> ${[l.b[0] + OX, l.b[2] + OZ]}`)).toEqual([]);
+  });
+
   it('puts the bases 90–120 m apart on foot, and SWAT on each site ahead of Militia', () => {
     const { def } = loadMap('taipei'); const nav = loadNav('taipei');
     const slots = (team: number) => def.spawns.filter(s => s.team === team).slice(0, 12);
