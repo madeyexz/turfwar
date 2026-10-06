@@ -1,5 +1,5 @@
 import { MapBuilder } from './builder';
-import { TOWER, TOWER_LOFTS, TOWER_ORNAMENTS } from './xinyi-data';
+import { TOWER, TOWER_CYLINDERS, TOWER_LAMPS, TOWER_LOFTS, TOWER_ORNAMENTS } from './xinyi-data';
 import type { BlockStyle, MapDef, SignStyle } from './types';
 
 /**
@@ -659,22 +659,34 @@ function renovation(b: B) {
   sign(b, 'board', 0, 3.1, 24.4, N, 3.4, 0.6, '施工中 請勿進入', '#e0b020', '#1a1a1a', 'FIT-OUT IN PROGRESS · AUTHORISED STAFF ONLY');
 }
 
-// ---- Outside: the tower below 88F --------------------------------------------------------------
-/** The xinyi map's Taipei 101 below this floor, shifted down by its height: segments, lit bands and ruyi. */
-function towerBelow(b: B) {
-  const glass = 0x8cc8b4;
-  for (const [y0, y1, h0, n0, h1, n1, color, glow] of TOWER_LOFTS) {
-    if (y0 >= FLOOR_Y) continue;
-    const cut = y1 > FLOOR_Y, top = cut ? FLOOR_Y - 0.02 : y1, half1 = cut ? h0 + (h1 - h0) * (FLOOR_Y - y0) / (y1 - y0) : h1;
+// ---- Outside: the rest of the tower --------------------------------------------------------------
+/**
+ * The xinyi map's Taipei 101 round this floor, shifted down by its height: the segments below the
+ * glass, and above the window head the top segment's lit band, the crown, the spire and its
+ * beacons (seen out of the windows looking down, and from outside in the menu's backdrop).
+ */
+function towerOutside(b: B) {
+  const glass = 0x8cc8b4, head = FLOOR_Y + CEIL + 0.05;
+  const section = (y0: number, y1: number, h0: number, n0: number, h1: number, n1: number, color: number, glow: number) => {
     const lit = glow >= 2.5, isGlass = color === 0xe6fbf6;
     const style: BlockStyle = lit ? 'neon' : isGlass ? 'curtain' : 'steel';
-    b.loft(0, 0, y0 - FLOOR_Y, top - FLOOR_Y, h0, n0, half1, n1, style, lit ? 0xffe0a0 : isGlass ? glass : color);
+    b.loft(0, 0, y0 - FLOOR_Y, y1 - FLOOR_Y, h0, n0, h1, n1, style, lit ? 0xffe0a0 : isGlass ? glass : color, y1 === TOWER.crownTop);
+  };
+  const at = (y0: number, y1: number, h0: number, h1: number, y: number) => h0 + (h1 - h0) * (y - y0) / (y1 - y0);
+  for (const [y0, y1, h0, n0, h1, n1, color, glow] of TOWER_LOFTS) {
+    if (y0 < FLOOR_Y) section(y0, Math.min(y1, FLOOR_Y - 0.02), h0, n0, y1 > FLOOR_Y ? at(y0, y1, h0, h1, FLOOR_Y) : h1, n1, color, glow);
+    if (y1 > head) section(Math.max(y0, head), y1, y0 < head ? at(y0, y1, h0, h1, head) : h0, n0, h1, n1, color, glow);
   }
   for (const [x, y, z, nx, ny, nz, rx, ry, depth, color] of TOWER_ORNAMENTS) {
-    if (y > FLOOR_Y - 3) continue;
+    if (y > FLOOR_Y - 3 && y < head + 3) continue;
     const gold = color === 15252309;
     b.disc(x - TOWER.cx, y - FLOOR_Y, z - TOWER.cz, nx, ny, nz, rx, ry, depth, gold ? 'neon' : 'steel', gold ? 0x8a6a2a : 0x4a5a5a);
   }
+  for (const [x, z, r0, r1, y0, y1, color, glow] of TOWER_CYLINDERS) {
+    if (y0 < head) continue;
+    b.raw({ kind: 'cylinder', x: x - TOWER.cx, y: y0 - FLOOR_Y, z: z - TOWER.cz, radius: r0, top: r1, height: y1 - y0, axis: 'y', style: glow >= 2 ? 'neon' : 'steel', color: glow >= 2 ? 0xfff0c8 : color });
+  }
+  for (const [x, y, z, r] of TOWER_LAMPS) if (y > FLOOR_Y + SHAFT_TOP + 1) b.raw({ kind: 'ball', x: x - TOWER.cx, y: y - FLOOR_Y, z: z - TOWER.cz, radius: r, style: 'neon', color: 0xff3020 });
 }
 
 export function taipei101(): MapDef {
@@ -701,7 +713,7 @@ export function taipei101(): MapDef {
   copyRoom(b);
   offices(b);
   renovation(b);
-  towerBelow(b);
+  towerOutside(b);
   for (const [model, data] of Object.entries(plants)) b.raw({ kind: 'instances', model, data });
   // The city round the tower, 383 m down (client dressing: the Taipei skyline, Xinyi's lots and a fill of blocks).
   b.raw({ kind: 'dressing', set: 'taipei101', x: TOWER.cx, z: TOWER.cz, y: -FLOOR_Y });
