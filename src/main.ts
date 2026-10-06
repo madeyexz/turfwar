@@ -609,7 +609,9 @@ function placePop() {
   const left = Math.max(margin, Math.min(a.left, vw - w - margin));
   // Below the anchor if it fits, else above; failing both, beside the panel (over the backdrop), else as low as fits.
   const below = a.bottom + 6, above = a.top - 6 - h;
-  const side = $('.panel').getBoundingClientRect().right + margin;
+  // (A sideways phone's compact lobby lays the panel's children out without the panel's own box.)
+  const panel = $('.panel').getBoundingClientRect();
+  const side = (panel.width ? panel.right : $('#tabs').getBoundingClientRect().right) + margin;
   const clampTop = (y: number) => Math.max(margin, Math.min(y, vh - h - margin));
   const [x, y] = below + h <= vh - margin ? [left, below] : above >= margin ? [left, above]
     : side + w <= vw - margin ? [side, clampTop(a.top - 60)] : [left, clampTop(vh)];
