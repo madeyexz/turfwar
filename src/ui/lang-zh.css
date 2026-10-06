@@ -7,7 +7,7 @@
   .sb-score small, .sb-clock small, .sb-sub, .progress, .announce small, .spectate small, .released b,
   .scoreboard header, .end > small, .end h4, .bench-banner,
   #menu .label, #menu .callsign .label, #menu .deploy-l, #menu .deploy-r, #menu .go, #menu .browser-head b, #menu .browser-head small, #menu .room .join,
-  #menu .pop-head b, #menu .pop-head small, #menu .code-go, #menu .sub, #menu .choice b, #menu .choice small,
+  #menu .pop-head b, #menu .pop-head small, #menu .code-go, #menu .logo-sub, #menu .sub, #menu .choice b, #menu .choice small,
   .lb-settings .tabs button, #store .clock small, #store .cash small, #store .lo small, #store .slot-head small,
   #store .preview.empty p, #store .act > small, #store .tabs button, #store .buy
 ) { letter-spacing: 0.08em; }

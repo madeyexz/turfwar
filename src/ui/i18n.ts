@@ -26,7 +26,10 @@ const en = {
   'common.seconds': '{n}s', 'common.players': '{n}/{max} players',
 
   // ---- Lobby ----
+  // The game's name: the big line in the current language, the other language under it.
+  'brand.name': 'Turf War: Taipei', 'brand.alt': '角頭械鬥',
   'lobby.title': 'SWAT', 'lobby.titleVs': 'vs Militia',
+  'lobby.defaultName': 'Player-{n}', 'lobby.fallbackName': 'Player',
   'lobby.callsign': 'Callsign', 'lobby.team': 'Team', 'lobby.auto': 'Auto',
   'lobby.playOnline': 'Play online', 'lobby.roomSize': 'Room size',
   'lobby.loading': 'Loading…', 'lobby.loadingPct': 'Loading {n}%',
@@ -227,7 +230,9 @@ const zhTW: Record<Key, string> = {
   'common.join': '加入', 'common.full': '已滿', 'common.free': '免費', 'common.close': '關閉',
   'common.seconds': '{n} 秒', 'common.players': '{n}/{max} 名玩家',
 
+  'brand.name': '角頭械鬥', 'brand.alt': 'Turf War: Taipei',
   'lobby.title': '特警', 'lobby.titleVs': '對決民兵',
+  'lobby.defaultName': '玩家{n}', 'lobby.fallbackName': '玩家',
   'lobby.callsign': '呼號', 'lobby.team': '隊伍', 'lobby.auto': '自動',
   'lobby.playOnline': '線上對戰', 'lobby.roomSize': '房間人數',
   'lobby.loading': '載入中…', 'lobby.loadingPct': '載入中 {n}%',

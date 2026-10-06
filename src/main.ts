@@ -73,10 +73,7 @@ const pop = (id: string, label: Key, body: string) =>
  */
 menu.innerHTML = `
   <header class="top">
-    <div class="brand">
-      <div class="tag">Lawbreaker // Frontline</div>
-      <h1>${L('lobby.title')} <em data-i18n="lobby.titleVs">${t('lobby.titleVs')}</em></h1>
-    </div>
+    <div class="brand"><h1 class="logo" id="logo"></h1></div>
     <div class="who">
       <label class="callsign">${L('lobby.callsign', 'span', 'class="label"')}<input type="text" id="callsign" maxlength="16" autocomplete="off" spellcheck="false"></label>
       ${choice('teams', 'team', [['auto', L('lobby.auto')], ['0', L('team.0', 'span', 'class="swat"')], ['1', L('team.1', 'span', 'class="militia"')]], 'lobby.team')}
@@ -167,7 +164,7 @@ if (!QUALITY[quality]) quality = 'medium';
 const benchMode = params.has('bench');
 if (benchMode) { modeF = 'elimination'; size = sizeOf(params.get('size') ?? 'squad').id; }
 const callsign = $<HTMLInputElement>('#callsign');
-callsign.value = params.get('name') ?? store.get('name', `Lawbreaker-${Math.floor(Math.random() * 900 + 100)}`);
+callsign.value = params.get('name') ?? store.get('name', t('lobby.defaultName', { n: Math.floor(Math.random() * 900 + 100) }));
 const roomCode = $<HTMLInputElement>('#roomcode');
 roomCode.value = cleanCode(params.get('room') ?? '');
 const playBtn = $<HTMLButtonElement>('#play');
@@ -228,6 +225,23 @@ function rulesText(withSize = true) {
   const parts = [withSize ? sizeOf(size).label : '', modeF ? modeName(modeF) : '', mapF ? mapName(mapF) : ''].filter(Boolean);
   if (!modeF && !mapF) parts.push(t('lobby.any'));
   return parts.join(' · ');
+}
+
+/**
+ * The brand lockup: the game's name in the current language, large, with its second half in the
+ * accent (角頭|械鬥, TURF WAR|TAIPEI), and the other language's name and the two sides under it.
+ */
+const CJK_RE = /[\u3400-\u9fff]/;
+function renderBrand() {
+  const name = t('brand.name'), alt = t('brand.alt'), logo = $('#logo');
+  if (logo.dataset.name === name) return;
+  logo.dataset.name = name;
+  const split = (s: string) => CJK_RE.test(s) ? [s.slice(0, 2), s.slice(2)] : s.split(/:\s*/);
+  const [a, b = ''] = split(name);
+  const cjk = (s: string) => CJK_RE.test(s) ? ' lang="zh-TW"' : ' lang="en"';
+  logo.innerHTML = `<span class="logo-name${CJK_RE.test(name) ? ' cjk' : ''}"${cjk(name)}>${esc(a)}<em>${esc(b)}</em></span>
+    <small class="logo-sub"><span class="logo-alt${CJK_RE.test(alt) ? ' cjk' : ''}"${cjk(alt)}>${esc(alt)}</span><i aria-hidden="true"></i><span>${esc(t('lobby.title'))} <b>${esc(t('lobby.titleVs'))}</b></span></small>`;
+  logo.setAttribute('aria-label', `${name} · ${alt}`);
 }
 
 // ---- Rendering: everything on screen follows the filters, the rooms and the language. ----
@@ -358,6 +372,7 @@ function renderOthers() {
 
 /** Everything on screen follows the current choices. */
 function refresh() {
+  renderBrand();
   renderFilters();
   renderPlay();
   renderRooms();
@@ -636,7 +651,7 @@ function resolveRules() {
 }
 
 async function start(action: Action) {
-  const name = callsign.value.trim().slice(0, 16) || 'Lawbreaker';
+  const name = callsign.value.trim().slice(0, 16) || t('lobby.fallbackName');
   const mode = modeOf(action);
   if (!benchMode) {
     store.set('name', name); store.set('mode', mode); store.set('team', team); store.set('skill', skill); store.set('botsFill', botsFill);
