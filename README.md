@@ -439,6 +439,46 @@ atomically; subsequent joins preserve its state. Publish the compatible module b
 the matching commit to `main`, which triggers Vercel's GitHub deployment.
 Verify the production URL and two separate Online clients after each release.
 
+## Players, analytics and the admin page
+
+Players stay anonymous (no login). Two layers answer "how many players, and from where":
+
+- **PostHog** (US cloud, project 649207; `src/analytics.ts`): `VITE_POSTHOG_KEY` (public `phc_…`
+  token) and `VITE_POSTHOG_HOST` are set in Vercel for Production and for Preview on `dev`.
+  posthog-js (slim build, no external scripts) loads lazily once the lobby is up. Autocapture and
+  recordings are off; `$pageview` / `$pageleave` stay on; Do Not Track is respected; PostHog derives
+  the country from the IP on its side. Events: `lobby_view`, `play_clicked`, `match_joined`,
+  `match_left` (also on tab close, by beacon), `round_ended`, `vehicle_entered`, `store_purchase`,
+  `language_changed`, `error_shown`, with super properties `lang`, `app_version` (git SHA),
+  `online_db` and `screen`. Online, the person property `stdb_identity` links a PostHog person to
+  a SpacetimeDB profile. Nothing is sent without a key, under `?bench`, `?trailer`, `?capture`,
+  `?fixeddt`, in headless browsers (`navigator.webdriver`), or from the dev server unless the URL
+  has `?analytics`; dev events then carry `test: true` and a `dev-test-…` distinct id (and are
+  printed to the console as sent).
+- **SpacetimeDB** keeps the ground truth in the private table `player_seen` (first and last seen,
+  sessions, time zone, language, callsign per identity; `player_day` per active day), filled by the
+  join reducers, `hello(tz, lang)` (sent once per connection) and the connect lifecycle.
+  `bun scripts/players.ts <database> [--server maincloud|http://127.0.0.1:3000]` prints totals, new
+  and active players, countries estimated from time zones, who is online and career totals
+  (read-only, `spacetime sql` as the owner). Local checks: `bun scripts/seencheck.ts ws://127.0.0.1:<port> <db>`.
+
+**Admin page** (`/admin`, `admin/index.html`, not linked from the game, `noindex`): live totals,
+rooms, a 30-day chart of new and active players, countries and a sortable player list, for the
+database of the build (`VITE_SPACETIMEDB_*`). The owner logs in with the **admin key**; the module
+keeps only its SHA-256 (`ADMIN_KEY_SHA256` in `spacetimedb/src/admin.ts`). `admin_login(key)` adds
+the browser's SpacetimeDB identity to the private `admin` table (five wrong keys per identity per
+10 minutes, then refused until the window passes), and the `admin_*` views return rows only to
+identities in it. The page remembers only that this browser is logged in, never the key; **Log out**
+calls `admin_logout`.
+
+- *Rotate the key*: `printf %s "$NEW_KEY" | shasum -a 256`, put the hash in `ADMIN_KEY_SHA256`,
+  publish the module (`--delete-data=never`), then sign everyone out (below) and log in again.
+- *Revoke every admin session*: **Sign out all admins** on the admin page (`admin_revoke_all`,
+  admins only), or, without a logged-in browser, the owner's SQL: `spacetime sql <db> "DELETE FROM admin"`.
+- Local check with a test key (never the real one): publish a copy of the module whose
+  `ADMIN_KEY_SHA256` is the test key's hash to a local server, then
+  `ADMIN_TEST_KEY=<test key> bun scripts/admincheck.ts ws://127.0.0.1:<port> <db>`.
+
 ## Assets and licenses
 
 No proprietary game assets are used: the weapon and mode names follow BeGone, but every model,
