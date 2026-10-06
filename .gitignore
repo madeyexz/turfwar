@@ -11,3 +11,7 @@ public/_scratch
 tools/.taipei-work/
 tools/.xinyi-work/
 tools/.font-work/
+
+# Scratch output (screenshots, encodes) and trailer videos kept out of git
+/tmp/
+docs/media/*.mp4
