@@ -160,7 +160,8 @@ class Client {
     // Wander between landmarks so the fight spreads over the map like real players.
     this.goalLeft -= dt;
     if (this.goalLeft <= 0) { this.goal = Math.floor(Math.random() * def.points.length); this.goalLeft = 8 + Math.random() * 12; }
-    const p = def.points[this.goal];
+    // The room may have rotated to a map with fewer landmarks since the goal was picked.
+    const p = def.points[this.goal % def.points.length];
     const want = Math.atan2(-(p.x - this.m.x), -(p.z - this.m.z)) + Math.sin(now / 900 + this.index) * 0.6;
     this.yaw = want;
     const near = Math.hypot(p.x - this.m.x, p.z - this.m.z) < p.radius;
