@@ -121,3 +121,40 @@ export function dailyRows(seen: Iterable<SeenLike>, activeOn: (day: number) => n
   for (let day = last - days + 1; day <= last; day++) rows.push({ day, date: dateOf(day), newPlayers: firstDays.get(day) ?? 0, activePlayers: activeOn(day) });
   return rows;
 }
+
+// ---- Play time (views of their own: changing the row type of an existing view would disconnect
+// every client on publish, so the views above keep their columns) ----------------------------
+
+/** A `player_time` row: seconds credited, and the start of the open stretch (0 = not in a room). */
+export interface TimeLike { identity: string; seconds: bigint; since: bigint }
+export interface RoundsLike { identity: string; roundsPlayed: number }
+
+/** Matches `PlayerRow.id`: rounds played (from `profile`) and online play time per player. */
+export interface PlayTimeRow { id: string; rounds: number; playSeconds: bigint; playingSince: bigint }
+
+/** One row per player ever seen (`ids` are identity hex), by the same short id as `playerRows`; zeros for players without stats or time. */
+export function playTimeRows(ids: Iterable<string>, profiles: Iterable<RoundsLike>, times: Iterable<TimeLike>): PlayTimeRow[] {
+  const rounds = new Map<string, number>();
+  for (const p of profiles) rounds.set(p.identity, p.roundsPlayed);
+  const timeOf = new Map<string, TimeLike>();
+  for (const t of times) timeOf.set(t.identity, t);
+  const rows: PlayTimeRow[] = [];
+  for (const id of ids) {
+    const t = timeOf.get(id);
+    rows.push({ id: shortId(id), rounds: rounds.get(id) ?? 0, playSeconds: t?.seconds ?? 0n, playingSince: t?.since ?? 0n });
+  }
+  return rows;
+}
+
+export interface DailyTimeRow { day: number; date: string; playSeconds: bigint }
+
+/**
+ * Online play time (credited seconds, all players) per UTC day for the `days` days ending with
+ * `lastDay` (the latest day anyone was seen or credited; -1 = none). `playOn(day)` sums a day.
+ */
+export function dailyTimeRows(lastDay: number, playOn: (day: number) => bigint, days = 30): DailyTimeRow[] {
+  if (lastDay < 0) return [];
+  const rows: DailyTimeRow[] = [];
+  for (let day = lastDay - days + 1; day <= lastDay; day++) rows.push({ day, date: dateOf(day), playSeconds: playOn(day) });
+  return rows;
+}

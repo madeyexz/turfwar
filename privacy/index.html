@@ -13,7 +13,7 @@
       The privacy notice, in English and Traditional Chinese. Without script both languages show,
       stacked; src/privacy/main.ts shows the game's language (?lang=, the saved choice, the browser)
       and the toggle switches it. Keep the two versions saying the same thing, and keep every claim
-      true to the code: src/analytics.ts (PostHog), player_seen and profile in spacetimedb/src/index.ts,
+      true to the code: src/analytics.ts (PostHog), player_seen, player_time and profile in spacetimedb/src/index.ts,
       inject() in src/main.ts (Vercel Web Analytics), and the lawbreaker.* localStorage keys.
     -->
     <header class="bar">
@@ -37,7 +37,7 @@
         <p>Online matches run on our game server (SpacetimeDB). For each anonymous game ID it keeps:</p>
         <ul>
           <li>your callsign and your gameplay stats (kills, deaths, assists, headshots, rounds and matches played and won);</li>
-          <li>when you first and last played, how many sessions and on which days, and your browser's time zone and language, which we use to estimate which countries players come from.</li>
+          <li>when you first and last played, how much time you spent in online matches (in total and per day), how many sessions and on which days, and your browser's time zone and language, which we use to estimate which countries players come from.</li>
         </ul>
         <p>Your callsign and stats are public: other players see them in matches and on the in-game leaderboard. Chat messages go to the players in your room.</p>
 
@@ -66,7 +66,7 @@
         <p>線上對戰在我們的遊戲伺服器（SpacetimeDB）上進行。每個匿名遊戲 ID 會保存：</p>
         <ul>
           <li>你的呼號與遊戲戰績（擊殺、陣亡、助攻、爆頭，以及參與和獲勝的回合數、場數）；</li>
-          <li>你第一次與最近一次遊玩的時間、遊玩次數與日期，以及瀏覽器的時區與語言，用來估計玩家來自哪些國家。</li>
+          <li>你第一次與最近一次遊玩的時間、在線上對戰中遊玩的時間（總計與每日）、遊玩次數與日期，以及瀏覽器的時區與語言，用來估計玩家來自哪些國家。</li>
         </ul>
         <p>你的呼號與戰績是公開的：其他玩家會在對戰中與遊戲內排行榜上看到。聊天訊息會傳給同一房間的玩家。</p>
 

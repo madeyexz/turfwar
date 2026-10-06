@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { sha256Hex } from '../../shared/sha256';
 import {
   ADMIN_KEY_SHA256, ADMIN_MAX_FAILURES, ADMIN_WINDOW_MICROS, AdminError, adminLogin, adminLogout, adminRevokeAll, dailyRows, DAY_MICROS,
-  forAdmin, keyMatches, playerRows, shortId, type AdminAttempts, type AdminStore,
+  dailyTimeRows, forAdmin, keyMatches, playerRows, playTimeRows, shortId, type AdminAttempts, type AdminStore,
 } from '../src/admin';
 
 // A test key and its hash, injected in place of the real one (which only the owner knows).
@@ -131,5 +131,30 @@ describe('admin views', () => {
     expect(rows[27]).toMatchObject({ day: 100, newPlayers: 1, activePlayers: 1 });
     expect(rows[0]).toMatchObject({ day: 73, newPlayers: 0, activePlayers: 0 });
     expect(dailyRows([], () => 0)).toEqual([]);
+  });
+
+  it('give every player seen their rounds and play time by the same short id (zeros when missing)', () => {
+    const rounds = [{ identity: 'aa11', roundsPlayed: 37 }];
+    const times = [{ identity: 'aa11', seconds: 3n * 3600n + 720n, since: 0n }, { identity: 'bb22', seconds: 2700n, since: day(102) }];
+    const rows = playTimeRows(seen.map(s => s.identity), rounds, times);
+    expect(rows).toEqual([
+      { id: shortId('aa11'), rounds: 37, playSeconds: 11_520n, playingSince: 0n },
+      { id: shortId('bb22'), rounds: 0, playSeconds: 2700n, playingSince: day(102) },
+      { id: shortId('cc33'), rounds: 0, playSeconds: 0n, playingSince: 0n },
+    ]);
+    // The ids line up with admin_players, so the page can join them.
+    expect(new Set(rows.map(r => r.id))).toEqual(new Set(playerRows(seen, profiles).map(r => r.id)));
+    // Only players ever seen are listed.
+    expect(playTimeRows([], rounds, times)).toEqual([]);
+  });
+
+  it('sum play time per day for the 30 days up to the latest day', () => {
+    const play: Record<number, bigint> = { 101: 600n, 103: 120n };
+    const rows = dailyTimeRows(103, d => play[d] ?? 0n);
+    expect(rows).toHaveLength(30);
+    expect(rows[29]).toEqual({ day: 103, date: '1970-04-14', playSeconds: 120n });
+    expect(rows[27]).toMatchObject({ day: 101, playSeconds: 600n });
+    expect(rows[28]).toMatchObject({ playSeconds: 0n });
+    expect(dailyTimeRows(-1, () => 1n)).toEqual([]);
   });
 });
