@@ -4,9 +4,10 @@ import type { VehicleSpot } from '../vehicles';
 
 /**
  * Dusk (low sun), twilight (blue hour), steppe (dry midday) and meadow light the BeGone maps under Earth skies;
- * taipei is a humid city evening over asphalt; xinyi is the same city after dark, lit by its towers.
+ * taipei is a humid city evening over asphalt; xinyi is the same city after dark, lit by its towers;
+ * highrise is golden hour seen from an office floor 380 m up Taipei 101.
  */
-export type ThemeId = 'desert' | 'snow' | 'forest' | 'dusk' | 'twilight' | 'steppe' | 'meadow' | 'taipei' | 'xinyi';
+export type ThemeId = 'desert' | 'snow' | 'forest' | 'dusk' | 'twilight' | 'steppe' | 'meadow' | 'taipei' | 'xinyi' | 'highrise';
 
 /** Visual treatment of a solid. Collision is identical regardless of style. */
 export type BlockStyle =
@@ -21,6 +22,7 @@ export type BlockStyle =
   | 'pillar'
   | 'shield'      // team spawn shield (energy)
   | 'glass'
+  | 'window'      // clear, faintly green floor-to-ceiling glazing (a tower's curtain wall seen from inside)
   // Realistic architecture (the BeGone maps):
   | 'brick'       // red brick masonry
   | 'plaster'     // weathered, moss-streaked plaster
@@ -40,6 +42,8 @@ export type BlockStyle =
   | 'mosaic'      // small white facade tiles of Taipei walk-ups, tinted per block
   | 'light'       // a lit ceiling panel (decorative)
   | 'painted'     // smooth painted surface (shop fittings, ceilings), tinted per block
+  | 'carpet'      // office carpet tiles, tinted per block
+  | 'gold'        // polished gold-painted steel (Taipei 101's tuned mass damper)
   | 'invisible';
 
 /** Stairs and plain ramps are walkways; 'roof' draws a corrugated pitched-roof plane. */
@@ -100,7 +104,9 @@ export type Decor =
    * A dressing set the renderer loads on demand (src/render/dressing.ts): street furniture and the
    * skyline past the map, in its own coordinates less (x, z). Purely visual; its colliders are solids.
    */
-  | { kind: 'dressing'; set: string; x: number; z: number; cut?: number[]; clear?: number[] }
+  | { kind: 'dressing'; set: string; x: number; z: number; cut?: number[]; clear?: number[];
+      /** Height of the set's ground (default 0): a map high up a tower sets the city far below it. */
+      y?: number }
   /**
    * Instances of a renderer model (parked cars and taxis, …): rows of x, y, z, heading, scale, roll,
    * colour, extra. Decorative; colliders come from boxes placed with them.

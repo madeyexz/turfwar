@@ -1,7 +1,7 @@
 import { ScheduleAt, type Identity } from 'spacetimedb';
 import { schema, table, t, SenderError, type ReducerCtx, type InferSchema } from 'spacetimedb/server';
 import { loadMap, loadNav } from '../../shared/maps/index';
-import { cleanCode, isRoomSize, mapsFor, roomCode } from '../../shared/match/rooms';
+import { cleanCode, filterError, isRoomSize, mapsFor, newRoomRules, nextRoomRules, pickRoom, roomCode, type RoomFilter, type RoomView } from '../../shared/match/rooms';
 import type { SimContext } from '../../shared/match/combat';
 import { encodeFrame } from '../../shared/match/frame';
 import {
@@ -9,7 +9,7 @@ import {
   reportVehicle, resetMatch, switchWeapon, throwGrenade, tickMatch, useAmmoCrate, TICK_RATE,
 } from '../../shared/match/sim';
 import {
-  ONLINE_CONFIG, type BombState, type BotBrain, type MatchConfig, type MatchEvent, type MatchState, type Mode, type RoundStats, type Soldier, type Team,
+  ONLINE_CONFIG, type BombState, type BotBrain, type MatchConfig, type MatchEvent, type MatchState, type RoundStats, type Soldier, type Team,
 } from '../../shared/match/state';
 import { ATTACHMENTS, DEFAULT_WEAPONS, STAMINA, WEAPONS, normalizeAttachments, type AttachmentId, type Attachments, type Slot, type WeaponId } from '../../shared/weapons';
 import { newRoundStats, type BuyItem } from '../../shared/match/economy';
@@ -18,8 +18,9 @@ import { VEHICLE_KINDS, type Vehicle, type VehicleKind } from '../../shared/vehi
 
 /**
  * Authoritative multiplayer: the same shared match simulation the offline client runs, executed
- * here on a 30 Hz scheduled reducer per room. One database holds many rooms: Quick Play fills
- * public rooms of a size (1v1, 6v6, 24v24), private rooms are joined with a four-letter code. A room
+ * here on a 30 Hz scheduled reducer per room. One database holds many rooms: Play Online fills
+ * public rooms of a size (1v1, 6v6, 24v24), optionally of a mode and a map; private rooms are joined
+ * with a four-letter code. A room
  * exists (and ticks) only while humans are in it. Player reducers only queue their input (a cheap private-row
  * write); the tick loads the match once, applies every queued report and command through the
  * shared validation rules, simulates, and publishes one packed `frame` row plus the slow-changing
@@ -465,14 +466,6 @@ function mySoldier(ctx: Ctx) {
 
 const micros = (ctx: Ctx) => ctx.timestamp.microsSinceUnixEpoch;
 
-/** Next public match: the next map this room size plays, alternating Sabotage (where the map has bomb sites) and Elimination. */
-function nextMatch(current: string, mode: Mode, perTeam: number): { mapId: string; mode: Mode } {
-  const maps = mapsFor(perTeam);
-  const mapId = maps[(maps.indexOf(current) + 1) % maps.length] ?? current;
-  const wantSabotage = mode === 'elimination' && !!loadMap(mapId).def.sabotage?.sites.length;
-  return { mapId, mode: wantSabotage ? 'sabotage' : 'elimination' };
-}
-
 // ---- Rooms --------------------------------------------------------------------------------
 
 const TICK_EVERY = () => ScheduleAt.interval(BigInt(Math.round(1_000_000 / TICK_RATE)));
@@ -535,23 +528,36 @@ function enterRoom(ctx: Ctx, room: number, name: string, team: number) {
   });
 }
 
-/** Quick Play: the fullest public room of this size with a free slot, or a new one. */
-function quickPlay(ctx: Ctx, name: string, perTeam: number, team: number) {
-  if (!isRoomSize(perTeam)) throw new SenderError('Unknown room size');
+/**
+ * Play Online (and Quick Play, which is Play Online with any mode and any map): the fullest public
+ * room of the filter's size whose current mode and map match ('' = any) with a free slot
+ * (`pickRoom`), or a new public room with those rules. A new room keeps the map and mode that were
+ * asked for from match to match; what was "any" rotates as Quick Play rooms always have. Like every
+ * room reducer this only looks rooms up; the caller's own soldier is added the way joining always has.
+ */
+function matchmake(ctx: Ctx, name: string, filter: RoomFilter, team: number) {
+  const error = filterError(filter);
+  if (error) throw new SenderError(error);
   const mine = ctx.db.player.identity.find(ctx.sender);
-  let best = -1, bestHumans = -1;
+  const rooms: RoomView[] = [];
   for (const row of ctx.db.match.iter()) {
-    if (row.code !== '' || configOf(row).teamSize !== perTeam) continue;
+    if (row.code !== '') continue;
+    const config = configOf(row);
+    if (config.teamSize !== filter.size) continue;
+    // Our own seat does not count against the room we are already in.
     const humans = humansIn(ctx, row.id) - (mine?.room === row.id ? 1 : 0);
-    if (humans < perTeam * 2 && humans > bestHumans) { best = row.id; bestHumans = humans; }
+    rooms.push({ room: row.id, mapId: row.mapId, mode: config.mode, size: config.teamSize, humans, phase: row.phase, fixedMap: config.fixedMap, fixedMode: config.fixedMode });
   }
-  if (best < 0) {
-    const maps = mapsFor(perTeam);
-    const mapId = maps[Math.floor(ctx.random() * maps.length)];
-    const mode: Mode = loadMap(mapId).def.sabotage?.sites.length && ctx.random() < 0.5 ? 'sabotage' : 'elimination';
-    best = openRoom(ctx, mapId, { ...ONLINE_CONFIG, mode, teamSize: perTeam }, '');
+  let room = pickRoom(rooms, filter)?.room;
+  if (room === undefined) {
+    const rules = newRoomRules(filter, () => ctx.random());
+    const config: MatchConfig = { ...ONLINE_CONFIG, mode: rules.mode, teamSize: filter.size };
+    // Only rooms opened for a specific map or mode carry the flags (older rooms simply rotate).
+    if (rules.fixedMap) config.fixedMap = true;
+    if (rules.fixedMode) config.fixedMode = true;
+    room = openRoom(ctx, rules.mapId, config, '');
   }
-  enterRoom(ctx, best, name, team);
+  enterRoom(ctx, room, name, team);
 }
 
 // ---- Lifecycle ----------------------------------------------------------------------------
@@ -625,9 +631,10 @@ export const tick = spacetimedb.reducer({ onSchedule: tickTable }, { arg: tickTa
     loaded.clock.lastTickMicros = now;
     applyInputs(ctx, state, sim);
     if (state.phase === 'ended' && state.phaseLeft - dt <= 0) {
-      // Public rooms rotate maps and modes between matches; private rooms replay the host's choice.
+      // Public rooms rotate maps and modes between matches, except a map or mode they were opened
+      // for (Play Online with a specific choice); private rooms replay the host's choice.
       if (!row.code) {
-        const next = nextMatch(state.mapId, state.config.mode, state.config.teamSize);
+        const next = nextRoomRules(state.mapId, state.config.mode, state.config.teamSize, state.config);
         state.mapId = next.mapId;
         state.config = { ...state.config, mode: next.mode };
       }
@@ -651,12 +658,23 @@ export const tick = spacetimedb.reducer({ onSchedule: tickTable }, { arg: tickTa
 // ---- Player commands ----------------------------------------------------------------------
 
 /** Older clients' join: Quick Play 6v6. */
-export const join = spacetimedb.reducer({ name: t.string(), team: t.i8() }, (ctx, { name, team }) => { quickPlay(ctx, name, 6, team); });
+export const join = spacetimedb.reducer({ name: t.string(), team: t.i8() }, (ctx, { name, team }) => { matchmake(ctx, name, { size: 6, mode: '', map: '' }, team); });
 
-/** Quick Play: the fullest public room of this size (1, 6 or 24 per team) with a free slot. */
+/** Quick Play (older clients): the fullest public room of this size (1, 6 or 24 per team) with a free slot. */
 export const quickJoin = spacetimedb.reducer({ name: t.string(), size: t.u8(), team: t.i8() }, (ctx, { name, size, team }) => {
-  quickPlay(ctx, name, size, team);
+  matchmake(ctx, name, { size, mode: '', map: '' }, team);
 });
+
+/**
+ * Play Online: the fullest public room of this size whose current mode and map match ('' = any),
+ * or a new public room with those rules. Validated: a known size and mode, a map the size plays.
+ */
+export const quickPlay = spacetimedb.reducer({ name: t.string(), size: t.u8(), mode: t.string(), mapId: t.string(), team: t.i8() },
+  (ctx, { name, size, mode, mapId, team }) => {
+    if (!isRoomSize(size)) throw new SenderError('Unknown room size');
+    if (mode !== '' && mode !== 'elimination' && mode !== 'sabotage') throw new SenderError('Unknown mode');
+    matchmake(ctx, name, { size, mode, map: mapId }, team);
+  });
 
 /** Private room: the host picks size, mode, map and bots; friends join with the code. */
 export const createRoom = spacetimedb.reducer({ name: t.string(), size: t.u8(), mode: t.string(), mapId: t.string(), bots: t.bool(), team: t.i8() },

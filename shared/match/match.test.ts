@@ -29,7 +29,7 @@ const report = (s: Soldier, over: Partial<Parameters<typeof reportState>[3]> = {
 /** Start the match and skip the round-start freeze. */
 const goLive = (state: MatchState, ctx: SimContext) => { resetMatch(state, ctx); tick(state, ctx, state.config.freezeTime + 0.1); };
 
-const ASYMMETRIC = ['ochre', 'crane', 'tower', 'pipeline', 'timbertown', 'taipei', 'xinyi'];
+const ASYMMETRIC = ['ochre', 'crane', 'tower', 'pipeline', 'timbertown', 'taipei', 'xinyi', 'taipei101'];
 
 describe('maps and navigation', () => {
   for (const id of MAP_IDS) {
@@ -62,7 +62,7 @@ describe('maps and navigation', () => {
       }
     });
   }
-  // Taipei's own layout checks (sightlines, levels, base distances) are in shared/maps/taipei.test.ts.
+  // Taipei's own layout checks (sightlines, levels, base distances) are in shared/maps/taipei.test.ts, Taipei 101 · 88F's in taipei101.test.ts.
 });
 
 describe('bot matches', () => {
@@ -112,6 +112,18 @@ describe('bot matches', () => {
     const swat = addSoldier(state, ctx, { name: 'S', team: (1 - ATTACKERS) as 0 | 1, bot: false });
     resetMatch(state, ctx);
     for (let i = 0; i < 110 * TICK_RATE && !state.bomb.armed; i++) {
+      swat.m.x = 0; swat.m.y = -30; swat.m.z = 0;
+      tickMatch(state, ctx, 1 / TICK_RATE);
+    }
+    expect(events.some(e => e.type === 'bomb' && e.action === 'armed')).toBe(true);
+  });
+
+  it('Sabotage on Taipei 101 · 88F: Militia bots come up the fire stairs, reach the server room or the boardroom and arm it', () => {
+    const { ctx, state, events } = setup({ ...SABOTAGE, teamSize: 0, warmup: 0, botSkill: 0.2 }, 5, 'taipei101');
+    for (let i = 0; i < 4; i++) addSoldier(state, ctx, { name: `M${i}`, team: ATTACKERS, bot: true });
+    const swat = addSoldier(state, ctx, { name: 'S', team: (1 - ATTACKERS) as 0 | 1, bot: false });
+    resetMatch(state, ctx);
+    for (let i = 0; i < 90 * TICK_RATE && !state.bomb.armed; i++) {
       swat.m.x = 0; swat.m.y = -30; swat.m.z = 0;
       tickMatch(state, ctx, 1 / TICK_RATE);
     }
