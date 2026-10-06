@@ -1,92 +1,135 @@
 /* ---------- Home page / lobby ----------
- * Left: only what starts a match — callsign and team, the room size and QUICK PLAY — then one row of
- * other ways in (private room, join code, vs bots, practice), each opening its drawer below.
- * Right: the live battlefield backdrop with the map in view and, only when there are any, public rooms.
- * Top right: Controls (?) and Settings (gear) open the shared settings dialog.
+ * Top: the brand, then callsign, team, Controls (?) and Settings (gear).
+ * Left panel: the filters (size, mode, map), PLAY ONLINE with a line on where it puts you, the live
+ * rooms those filters match, and one row of other ways in (Solo, Practice, Private room, # code).
+ * Right: the live battlefield backdrop with the map in view.
+ * The map picker and the Solo / Private room options open as popovers (bottom sheets on phones).
  */
 #menu {
+  --panel-w: clamp(540px, 40vw, 680px);
   position: fixed; inset: 0; z-index: 5;
-  display: grid; grid-template-columns: minmax(360px, 440px) 1fr;
+  display: grid; grid-template-columns: var(--panel-w) minmax(0, 1fr); grid-template-rows: auto minmax(0, 1fr);
   background:
-    linear-gradient(90deg, rgba(4, 9, 12, 0.94) 0, rgba(4, 9, 12, 0.84) 440px, rgba(4, 9, 12, 0.2) 60%, rgba(4, 9, 12, 0) 78%),
-    linear-gradient(0deg, rgba(4, 9, 12, 0.8) 0, rgba(4, 9, 12, 0) 30%);
+    linear-gradient(90deg, rgba(4, 9, 12, 0.94) 0, rgba(4, 9, 12, 0.86) var(--panel-w), rgba(4, 9, 12, 0.2) 66%, rgba(4, 9, 12, 0) 82%),
+    linear-gradient(0deg, rgba(4, 9, 12, 0.8) 0, rgba(4, 9, 12, 0) 30%),
+    linear-gradient(180deg, rgba(4, 9, 12, 0.7) 0, rgba(4, 9, 12, 0) 110px);
 }
-
-/* ---- Panel ---- */
-#menu .panel { display: flex; flex-direction: column; min-height: 0; border-right: 1px solid rgba(190, 236, 244, 0.08); }
-#menu .brand { padding: 30px 32px 0; }
-#menu .tag { color: var(--muted); font-weight: 700; letter-spacing: 0.28em; font-size: 11px; text-transform: uppercase; }
-#menu h1 { margin: 6px 0 0; font-size: clamp(30px, 2.6vw, 36px); line-height: 1; letter-spacing: 0.04em; font-weight: 700; text-transform: uppercase; white-space: nowrap; }
-#menu h1 em { font-style: normal; color: var(--accent); }
-#menu .lede { margin: 6px 0 0; color: var(--muted); font-size: 14px; line-height: 1.3; font-weight: 600; letter-spacing: 0.02em; }
-
-#menu .form { flex: 1; min-height: 0; overflow-y: auto; padding: 22px 32px 22px; display: flex; flex-direction: column; gap: 12px; scrollbar-width: thin; scrollbar-color: rgba(190, 236, 244, 0.2) transparent; }
-#menu .field { display: flex; flex-direction: column; gap: 6px; min-width: 0; }
-#menu .label { display: flex; justify-content: space-between; gap: 8px; font-size: 11px; letter-spacing: 0.2em; color: var(--muted); font-weight: 700; text-transform: uppercase; }
-#menu input[type='text'] { width: 100%; min-width: 0; background: rgba(255, 255, 255, 0.05); border: 1px solid var(--line); border-radius: 3px; padding: 7px 11px; font-size: 17px; font-weight: 600; letter-spacing: 0.04em; outline: none; transition: border-color 0.15s; }
-#menu input[type='text']:focus { border-color: var(--accent); }
 #menu :focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
 #menu input:focus-visible { outline: none; }
-
-/* Callsign (label inside the box) and a compact team toggle on one line. */
-#menu .who { display: flex; gap: 8px; align-items: stretch; margin-bottom: 6px; }
-#menu .callsign {
-  flex: 1; min-width: 0; display: flex; align-items: center; gap: 10px; padding: 0 0 0 11px; height: 38px;
-  border: 1px solid var(--line); border-radius: 3px; background: rgba(255, 255, 255, 0.05); transition: border-color 0.15s;
-}
-#menu .callsign:focus-within { border-color: var(--accent); }
-#menu .callsign .label { flex: none; font-size: 10px; letter-spacing: 0.18em; }
-#menu .callsign input[type='text'] { flex: 1; height: 100%; padding: 0 10px 0 0; border: none; background: none; font-size: 16px; }
-#menu .who .segmented { flex: none; width: 162px; grid-template-columns: 0.8fr 0.95fr 1.1fr; }
-#menu .who .segmented .choice { padding: 0 2px; justify-content: center; }
-#menu .who .segmented .choice b { font-size: 11px; letter-spacing: 0.06em; }
-
-/* Choice cards and segmented controls */
-#menu .choices { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; }
-#menu .choice {
-  display: flex; flex-direction: column; gap: 2px; padding: 9px 11px; text-align: left;
-  border: 1px solid var(--line); border-radius: 3px; background: rgba(255, 255, 255, 0.035);
-  transition: border-color 0.15s, background 0.15s;
-}
-#menu .choice:hover:not(:disabled) { border-color: rgba(127, 246, 255, 0.5); background: rgba(127, 246, 255, 0.05); }
-#menu .choice b { font-size: 16px; letter-spacing: 0.08em; text-transform: uppercase; }
-#menu .choice small { color: var(--muted); font-size: 12px; font-weight: 500; line-height: 1.15; }
-#menu .choice[aria-pressed='true'] { border-color: var(--accent); background: rgba(127, 246, 255, 0.09); box-shadow: inset 3px 0 0 var(--accent); }
-#menu .choice:disabled { opacity: 0.4; cursor: not-allowed; }
+#menu .label { font-size: 11px; letter-spacing: 0.2em; color: var(--muted); font-weight: 700; text-transform: uppercase; white-space: nowrap; }
 #menu .mtag { color: var(--accent); letter-spacing: 0.02em; }
-#menu .choices.segmented { grid-template-columns: repeat(var(--n, 3), minmax(0, 1fr)); gap: 0; border: 1px solid var(--line); border-radius: 3px; overflow: hidden; }
-#menu .segmented .choice { border: none; border-radius: 0; padding: 8px 4px; align-items: center; text-align: center; background: transparent; min-width: 0; }
-#menu .segmented .choice + .choice { border-left: 1px solid var(--line); }
-#menu .segmented .choice b { font-size: 13px; white-space: nowrap; }
-#menu .segmented .choice[aria-pressed='true'] { box-shadow: inset 0 -2px 0 var(--accent); }
-#menu .segmented.sizes .choice { padding: 6px 4px; }
-#menu .segmented.sizes .choice b { font-size: 15px; letter-spacing: 0.06em; }
-#menu .segmented.sizes .choice small { font-size: 10px; letter-spacing: 0.08em; text-transform: uppercase; white-space: nowrap; }
 #menu .swat { color: var(--aegis); }
 #menu .militia { color: var(--crimson); }
 
-/* ---- Play online: sizes, Quick Play, one quiet status line ---- */
-#menu .block { display: flex; flex-direction: column; gap: 8px; }
-#menu .hint { margin: 0; color: var(--muted); font-size: 13px; line-height: 1.3; font-weight: 500; }
-#menu .hint:empty { display: none; }
-#menu .unavailable { margin: 0; color: var(--amber); font-size: 13px; line-height: 1.3; font-weight: 600; }
-#menu .unavailable:empty { display: none; }
-#menu .block.off > :not(.unavailable) { opacity: 0.45; }
-
-#menu .deploy {
-  width: 100%; padding: 13px 18px; font-size: 20px; font-weight: 700; letter-spacing: 0.22em; text-transform: uppercase;
-  border: 1px solid var(--accent); border-radius: 3px; color: #031014; background: var(--accent);
-  box-shadow: 0 0 28px rgba(127, 246, 255, 0.25); transition: filter 0.15s, box-shadow 0.15s;
+/* ---- Top bar ---- */
+#menu .top { grid-column: 1 / -1; display: flex; align-items: center; justify-content: space-between; gap: 20px; padding: 18px 28px 12px 32px; min-width: 0; }
+#menu .brand { min-width: 0; }
+#menu .tag { color: var(--muted); font-weight: 700; letter-spacing: 0.28em; font-size: 11px; text-transform: uppercase; white-space: nowrap; }
+#menu h1 { margin: 4px 0 0; font-size: clamp(24px, 2.1vw, 32px); line-height: 1; letter-spacing: 0.04em; font-weight: 700; text-transform: uppercase; white-space: nowrap; }
+#menu h1 em { font-style: normal; color: var(--accent); }
+#menu .who { display: flex; align-items: center; gap: 8px; min-width: 0; }
+#menu .callsign {
+  display: flex; align-items: center; gap: 10px; width: 250px; min-width: 0; height: 38px; padding: 0 0 0 11px;
+  border: 1px solid var(--line); border-radius: 3px; background: rgba(6, 12, 16, 0.6); backdrop-filter: blur(4px); transition: border-color 0.15s;
 }
-#menu .deploy:hover:not(:disabled) { filter: brightness(1.08); box-shadow: 0 0 36px rgba(127, 246, 255, 0.4); }
-#menu .deploy:disabled { background: transparent; color: var(--muted); border-color: var(--line); box-shadow: none; cursor: not-allowed; }
-/* Another choice is in focus (a drawer or a public room): Quick Play steps back to an outline. */
-#menu:not(.focus-quick) .deploy:not(:disabled) { background: rgba(127, 246, 255, 0.08); color: var(--accent); box-shadow: none; padding: 10px 18px; font-size: 18px; }
+#menu .callsign:focus-within { border-color: var(--accent); }
+#menu .callsign .label { flex: none; font-size: 10px; letter-spacing: 0.18em; }
+#menu .callsign input { flex: 1; min-width: 0; height: 100%; padding: 0 10px 0 0; border: none; background: none; font-size: 16px; font-weight: 600; letter-spacing: 0.04em; outline: none; }
+#menu .who .segmented { flex: none; width: 176px; height: 38px; grid-template-columns: 0.8fr 0.95fr 1.1fr; background: rgba(6, 12, 16, 0.6); }
+#menu .who .segmented .choice { padding: 0 2px; justify-content: center; }
+#menu .who .segmented .choice b { font-size: 11px; letter-spacing: 0.06em; }
+#menu .icons { display: flex; gap: 8px; margin-left: 4px; }
+#menu .icon-btn {
+  position: relative; display: grid; place-items: center; width: 38px; height: 38px; padding: 0;
+  border: 1px solid var(--line); border-radius: 3px; background: rgba(6, 12, 16, 0.6); backdrop-filter: blur(4px);
+  color: var(--ink); font-size: 18px; font-weight: 700; line-height: 1; transition: border-color 0.15s, color 0.15s, background 0.15s;
+}
+#menu .icon-btn svg { width: 20px; height: 20px; fill: none; stroke: currentColor; stroke-width: 1.8; stroke-linecap: round; }
+#menu .icon-btn:hover { border-color: rgba(127, 246, 255, 0.6); color: var(--accent); background: rgba(6, 12, 16, 0.8); }
+/* Tooltip: the button's name, under it. */
+#menu .icon-btn::after {
+  content: attr(data-tip); position: absolute; top: calc(100% + 6px); right: 0; z-index: 3; padding: 3px 8px; white-space: nowrap; pointer-events: none;
+  border: 1px solid var(--line); border-radius: 3px; background: rgba(6, 12, 16, 0.92); color: var(--ink);
+  font-size: 11px; font-weight: 700; letter-spacing: 0.16em; text-transform: uppercase; opacity: 0; transform: translateY(-2px); transition: opacity 0.12s, transform 0.12s;
+}
+#menu .icon-btn:hover::after, #menu .icon-btn:focus-visible::after { opacity: 1; transform: none; }
 
+/* ---- Segmented choices (filters, team, popover options) ---- */
+#menu .choices { display: grid; }
+#menu .choice {
+  display: flex; flex-direction: column; justify-content: center; gap: 1px; min-width: 0; padding: 8px 6px; text-align: center; align-items: center;
+  border: none; background: transparent; transition: background 0.15s, color 0.15s, box-shadow 0.15s;
+}
+#menu .choice:hover:not(:disabled) { background: rgba(127, 246, 255, 0.06); }
+#menu .choice b { font-size: 14px; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; white-space: nowrap; }
+#menu .choice small { color: var(--muted); font-size: 10px; font-weight: 600; letter-spacing: 0.1em; text-transform: uppercase; white-space: nowrap; }
+#menu .choice[aria-pressed='true'] { background: rgba(127, 246, 255, 0.12); box-shadow: inset 0 -2px 0 var(--accent); color: var(--accent); }
+#menu .choice[aria-pressed='true'] small { color: rgba(127, 246, 255, 0.75); }
+#menu .choice:disabled { opacity: 0.4; cursor: not-allowed; }
+#menu .choices.segmented { grid-template-columns: repeat(var(--n, 3), minmax(0, 1fr)); border: 1px solid var(--line); border-radius: 3px; overflow: hidden; }
+#menu .segmented .choice + .choice { border-left: 1px solid var(--line); }
+
+/* ---- Panel ---- */
+#menu .panel {
+  grid-column: 1; grid-row: 2; display: flex; flex-direction: column; gap: 14px; min-height: 0;
+  padding: 10px 32px 18px; border-right: 1px solid rgba(190, 236, 244, 0.08);
+}
+
+/* Filters: label column, then the controls. */
+#menu .filters { display: grid; grid-template-columns: 64px minmax(0, 1fr); gap: 8px 12px; align-items: center; }
+#menu .frow { display: contents; }
+#menu .filters .segmented { height: 44px; }
+#menu .sizes .choice { padding: 4px; }
+#menu .sizes .choice b { font-size: 16px; letter-spacing: 0.06em; }
+#menu #modes .choice b { font-size: 13px; }
+
+#menu .mapline { position: relative; display: flex; align-items: center; gap: 8px; min-width: 0; height: 44px; }
+#menu .map-trigger {
+  position: relative; flex: none; display: flex; align-items: center; gap: 9px; height: 100%; min-width: 190px; max-width: 62%; padding: 0 10px 0 12px;
+  border: 1px solid var(--accent); border-radius: 3px; background: rgba(127, 246, 255, 0.1); text-align: left; transition: background 0.15s;
+}
+#menu .map-trigger:hover { background: rgba(127, 246, 255, 0.18); }
+#menu .map-trigger[aria-expanded='true'] { background: rgba(127, 246, 255, 0.2); }
+#menu .map-trigger .sw { flex: none; width: 10px; height: 22px; border-radius: 2px; background: var(--swatch, var(--accent)); }
+#menu .map-trigger.any .sw { background: repeating-linear-gradient(180deg, #d9a75e 0 4px, #7fc56b 4px 8px, #8aa6c8 8px 12px, #ff5ad8 12px 16px, #cfe8f2 16px 22px); }
+#menu .map-trigger b { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 15px; letter-spacing: 0.08em; text-transform: uppercase; color: var(--accent); }
+#menu .map-trigger small { flex: none; margin-left: auto; color: #9be8b9; font-size: 11px; font-weight: 700; letter-spacing: 0.08em; white-space: nowrap; }
+#menu .map-trigger small:empty { display: none; }
+#menu .caret { flex: none; width: 16px; height: 16px; margin-left: auto; fill: none; stroke: var(--accent); stroke-width: 2.2; stroke-linecap: round; stroke-linejoin: round; transition: transform 0.15s; }
+#menu .map-trigger small + .caret { margin-left: 0; }
+#menu .map-trigger[aria-expanded='true'] .caret { transform: rotate(180deg); }
+/* Shortcuts that do not fit wrap onto a hidden second line, so a chip is shown whole or not at all. */
+#menu .quick-maps { display: flex; flex-wrap: wrap; align-items: center; gap: 7px 6px; height: 30px; min-width: 0; overflow: hidden; white-space: nowrap; }
+#menu .qmap {
+  position: relative; flex: none; display: inline-flex; align-items: baseline; gap: 5px; height: 30px; padding: 0 9px 0 13px;
+  border: 1px solid var(--line); border-radius: 3px; background: rgba(255, 255, 255, 0.03); font-size: 13px; font-weight: 700;
+  letter-spacing: 0.06em; text-transform: uppercase; align-items: center; transition: border-color 0.15s, background 0.15s;
+}
+#menu .qmap::before { content: ''; position: absolute; left: 4px; top: 7px; bottom: 7px; width: 3px; border-radius: 2px; background: var(--swatch, var(--muted)); }
+#menu .qmap small { color: #9be8b9; font-size: 11px; }
+#menu .qmap:hover { border-color: rgba(127, 246, 255, 0.5); background: rgba(127, 246, 255, 0.05); }
+/* The map row's note (a map reset to Any) takes the shortcuts' place for a few seconds. */
+#menu .notice { position: absolute; left: 0; right: 0; bottom: -18px; margin: 0; color: var(--amber); font-size: 12px; font-weight: 600; letter-spacing: 0.04em; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; opacity: 0; transition: opacity 0.2s; pointer-events: none; }
+#menu.noticing .notice { opacity: 1; }
+
+/* ---- PLAY ONLINE ---- */
+#menu .play-block { display: flex; flex-direction: column; gap: 7px; margin-top: 10px; }
+#menu .deploy {
+  display: flex; align-items: center; justify-content: space-between; gap: 16px; width: 100%; min-height: 62px; padding: 0 22px;
+  border: 1px solid var(--accent); border-radius: 3px; color: #031014; background: var(--accent);
+  box-shadow: 0 0 30px rgba(127, 246, 255, 0.28); transition: filter 0.15s, box-shadow 0.15s;
+}
+#menu .deploy:hover:not(:disabled) { filter: brightness(1.08); box-shadow: 0 0 40px rgba(127, 246, 255, 0.42); }
+#menu .deploy:active:not(:disabled) { filter: brightness(0.96); }
+#menu .deploy:disabled { background: transparent; color: var(--muted); border-color: var(--line); box-shadow: none; cursor: not-allowed; }
+#menu .deploy-l { display: flex; align-items: center; gap: 12px; min-width: 0; font-size: 22px; font-weight: 700; letter-spacing: 0.2em; text-transform: uppercase; white-space: nowrap; }
+#menu .deploy-l svg { flex: none; width: 20px; height: 20px; fill: currentColor; }
+#menu .deploy-r { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 15px; font-weight: 700; letter-spacing: 0.1em; text-transform: uppercase; opacity: 0.78; }
 #menu .rooms-line { display: flex; align-items: center; gap: 8px; margin: 0; min-height: 18px; color: var(--muted); font-size: 13px; font-weight: 600; letter-spacing: 0.02em; line-height: 1.25; }
+#menu .rooms-line > span:last-child { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 #menu .rooms-line[hidden] { display: none; }
 
-/* Connection dot (status line and public rooms) */
+/* Connection dot (status line and room count) */
 #menu .conn { display: inline-flex; align-items: center; gap: 7px; font-size: 11px; font-weight: 700; letter-spacing: 0.14em; text-transform: uppercase; color: var(--muted); white-space: nowrap; min-width: 0; }
 #menu .conn i { flex: none; width: 7px; height: 7px; border-radius: 50%; background: var(--muted); }
 #menu .conn.live i { background: #5df29a; box-shadow: 0 0 8px #5df29a; }
@@ -95,42 +138,127 @@
 #menu .conn.off i { background: var(--crimson); }
 @keyframes lobby-pulse { 50% { opacity: 0.3; } }
 
-/* ---- Other ways in: one row of small actions, each opening its drawer ---- */
-#menu .subs { display: flex; gap: 6px; margin-top: 8px; padding-top: 14px; border-top: 1px solid rgba(190, 236, 244, 0.1); }
+/* ---- Live rooms: fills the panel's spare height (at least three rows), scrolls beyond ---- */
+#menu .browser {
+  flex: 1 1 auto; display: flex; flex-direction: column; min-height: 178px; max-height: 560px;
+  border: 1px solid var(--line); border-radius: 4px; background: rgba(6, 12, 16, 0.72); backdrop-filter: blur(6px); overflow: hidden;
+}
+#menu .browser-head { flex: none; display: flex; align-items: baseline; gap: 10px; padding: 9px 12px 8px; border-bottom: 1px solid rgba(190, 236, 244, 0.1); }
+#menu .browser-head b { font-size: 12px; letter-spacing: 0.24em; text-transform: uppercase; color: var(--accent); white-space: nowrap; }
+#menu .browser-head small { font-size: 11px; letter-spacing: 0.16em; text-transform: uppercase; color: var(--muted); font-weight: 700; }
+#menu .browser-head .count { margin-left: auto; min-width: 0; }
+#menu .browser-rows { flex: 1 1 0; min-height: 0; overflow-y: auto; scrollbar-width: thin; scrollbar-color: rgba(190, 236, 244, 0.2) transparent; }
+#menu .room {
+  position: relative; display: grid; grid-template-columns: minmax(0, 1.25fr) minmax(0, 1fr) 46px minmax(0, 0.7fr) 66px; gap: 10px; align-items: center;
+  height: 42px; padding: 0 10px 0 16px; border-top: 1px solid rgba(190, 236, 244, 0.06); font-size: 14px; font-weight: 600;
+}
+#menu .room:first-child { border-top: none; }
+#menu .room::before { content: ''; position: absolute; left: 0; top: 9px; bottom: 9px; width: 3px; border-radius: 2px; background: var(--swatch, var(--muted)); opacity: 0.85; }
+#menu .room:hover { background: rgba(127, 246, 255, 0.05); }
+/* The room PLAY ONLINE would join. */
+#menu .room.target { background: rgba(127, 246, 255, 0.07); }
+#menu .room.target .join:not(:disabled) { background: rgba(127, 246, 255, 0.24); }
+#menu .room .srv { display: flex; align-items: center; gap: 7px; min-width: 0; white-space: nowrap; }
+#menu .room .srv b { font-size: 15px; letter-spacing: 0.07em; text-transform: uppercase; overflow: hidden; text-overflow: ellipsis; }
+#menu .room .fixed { flex: none; display: inline-flex; color: var(--muted); }
+#menu .lock { width: 13px; height: 13px; fill: none; stroke: currentColor; stroke-width: 2; }
+#menu .room .mode { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; font-size: 13px; color: var(--ink); }
+#menu .room .players { font-variant-numeric: tabular-nums; text-align: right; white-space: nowrap; color: var(--ink); }
+#menu .room .state { font-size: 11px; letter-spacing: 0.1em; text-transform: uppercase; color: #5df29a; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+#menu .room .state.warmup { color: var(--amber); }
+#menu .room .state.ended { color: var(--muted); }
+#menu .room .join { height: 28px; padding: 0; border: 1px solid var(--accent); border-radius: 3px; background: rgba(127, 246, 255, 0.1); color: var(--accent); font-size: 12px; font-weight: 700; letter-spacing: 0.16em; text-transform: uppercase; white-space: nowrap; }
+#menu .room .join:hover:not(:disabled) { background: rgba(127, 246, 255, 0.3); }
+#menu .room .join:disabled { color: var(--muted); border-color: var(--line); background: transparent; cursor: not-allowed; }
+#menu .browser .empty { display: grid; place-items: center; height: 100%; min-height: 126px; padding: 16px; text-align: center; color: var(--muted); font-size: 14px; font-weight: 600; letter-spacing: 0.04em; line-height: 1.35; }
+/* What the filters hide: always one line tall, so the box never jumps. */
+#menu .browser-foot { flex: none; display: flex; align-items: center; gap: 6px; height: 30px; padding: 0 12px; border-top: 1px solid rgba(190, 236, 244, 0.08); color: var(--muted); font-size: 12px; font-weight: 600; letter-spacing: 0.04em; white-space: nowrap; overflow: hidden; }
+#menu .browser-foot:empty { visibility: hidden; }
+#menu .browser-foot .dot { opacity: 0.6; }
+#menu .link { padding: 0 2px; border: none; background: none; color: var(--accent); font-size: inherit; font-weight: 700; letter-spacing: 0.04em; text-decoration: underline; text-decoration-color: rgba(127, 246, 255, 0.4); text-underline-offset: 3px; }
+#menu .link:hover { text-decoration-color: var(--accent); }
+
+/* ---- Other ways in: Solo, Practice, Private room, # code ---- */
+#menu .others { flex: none; margin-top: auto; display: grid; grid-template-columns: 1fr 0.8fr 1fr 1.25fr; gap: 6px; }
 #menu .sub {
-  flex: 1 1 auto; min-width: 0; padding: 8px 6px; border: 1px solid var(--line); border-radius: 3px; background: rgba(255, 255, 255, 0.03);
-  font-size: 12px; font-weight: 700; letter-spacing: 0.06em; text-transform: uppercase; color: var(--ink); white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+  min-width: 0; height: 40px; padding: 0 8px; border: 1px solid var(--line); border-radius: 3px; background: rgba(6, 12, 16, 0.6);
+  font-size: 13px; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; color: var(--ink); white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
   transition: border-color 0.15s, background 0.15s, color 0.15s;
 }
-#menu .sub:hover:not(:disabled) { border-color: rgba(127, 246, 255, 0.5); background: rgba(127, 246, 255, 0.05); }
-#menu .sub[aria-expanded='true'] { border-color: var(--accent); color: var(--accent); background: rgba(127, 246, 255, 0.09); box-shadow: inset 0 -2px 0 var(--accent); }
+#menu .sub:hover:not(:disabled) { border-color: rgba(127, 246, 255, 0.5); background: rgba(127, 246, 255, 0.06); }
+#menu .sub[aria-expanded='true'] { border-color: var(--accent); color: var(--accent); background: rgba(127, 246, 255, 0.1); }
 #menu .sub:disabled { opacity: 0.4; cursor: not-allowed; }
+#menu .code-box { display: flex; align-items: center; min-width: 0; height: 40px; border: 1px solid var(--line); border-radius: 3px; background: rgba(6, 12, 16, 0.6); transition: border-color 0.15s; }
+#menu .code-box:focus-within { border-color: var(--accent); }
+#menu .code-box .hash { flex: none; padding: 0 2px 0 10px; color: var(--muted); font-weight: 700; font-size: 15px; }
+#menu .code-box input { flex: 1; min-width: 0; height: 100%; padding: 0 4px; border: none; background: none; outline: none; font-size: 16px; font-weight: 700; letter-spacing: 0.32em; text-transform: uppercase; }
+#menu .code-box input::placeholder { letter-spacing: 0.12em; color: rgba(159, 179, 185, 0.6); text-transform: uppercase; font-size: 13px; }
+#menu .code-box input:disabled { cursor: not-allowed; }
+#menu .code-go { flex: none; height: 100%; padding: 0 12px; border: none; border-left: 1px solid var(--line); background: rgba(127, 246, 255, 0.1); color: var(--accent); font-size: 12px; font-weight: 700; letter-spacing: 0.16em; text-transform: uppercase; }
+#menu .code-go:disabled { color: var(--muted); background: transparent; cursor: not-allowed; }
+#menu .unavailable { margin: 0; color: var(--amber); font-size: 13px; line-height: 1.3; font-weight: 600; }
+#menu .unavailable:empty { display: none; }
+#menu.no-server .play-block { opacity: 0.5; }
 
-#menu .drawer { display: none; flex-direction: column; gap: 12px; padding: 12px; border: 1px solid rgba(127, 246, 255, 0.35); border-radius: 3px; background: rgba(127, 246, 255, 0.04); }
-#menu .drawer.open { display: flex; }
+/* Status line (connecting, errors) under the panel, only when there is something to say. */
+#menu .status { margin: -4px 0 0; padding: 8px 12px; border: 1px solid var(--line); border-radius: 3px; background: rgba(4, 9, 12, 0.85); font-size: 13px; color: var(--ink); letter-spacing: 0.06em; font-weight: 600; }
+#menu .status:empty { display: none; }
+
+/* ---- Stage: the map in view ---- */
+#menu .stage { grid-column: 2; grid-row: 2; position: relative; display: flex; flex-direction: column; justify-content: flex-end; padding: 0 36px 32px; min-width: 0; min-height: 0; pointer-events: none; }
+#menu .showcase { align-self: flex-end; max-width: 460px; text-align: right; text-shadow: 0 2px 18px rgba(0, 0, 0, 0.7); }
+#menu .showcase h2 { margin: 0; font-size: clamp(30px, 3vw, 46px); line-height: 1; letter-spacing: 0.05em; text-transform: uppercase; }
+#menu .showcase .meta { margin-top: 10px; display: inline-block; padding: 3px 10px; font-size: 13px; font-weight: 700; letter-spacing: 0.12em; text-transform: uppercase; border: 1px solid var(--line); border-radius: 999px; background: rgba(4, 9, 12, 0.55); text-shadow: none; }
+
+/* ---- Popovers ---- */
+#menu .pop {
+  position: fixed; z-index: 20; display: flex; flex-direction: column; gap: 12px; width: 340px; max-width: calc(100vw - 24px); padding: 14px;
+  border: 1px solid rgba(127, 246, 255, 0.45); border-radius: 4px; background: rgba(6, 12, 16, 0.96); backdrop-filter: blur(10px);
+  box-shadow: 0 18px 50px rgba(0, 0, 0, 0.6);
+}
+#menu .pop[hidden] { display: none; }
+#menu .pop-head { display: flex; align-items: baseline; justify-content: space-between; gap: 12px; min-width: 0; }
+#menu .pop-head b { font-size: 13px; letter-spacing: 0.22em; text-transform: uppercase; color: var(--accent); white-space: nowrap; }
+#menu .pop-head small { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--muted); font-size: 12px; font-weight: 700; letter-spacing: 0.1em; text-transform: uppercase; }
+#menu .pop .field { display: flex; flex-direction: column; gap: 6px; }
+#menu .pop .segmented { height: 38px; }
+#menu .pop .segmented .choice b { font-size: 12px; }
 #menu .go {
-  width: 100%; padding: 11px 14px; font-size: 17px; font-weight: 700; letter-spacing: 0.2em; text-transform: uppercase;
+  width: 100%; height: 44px; font-size: 16px; font-weight: 700; letter-spacing: 0.2em; text-transform: uppercase;
   border: 1px solid var(--accent); border-radius: 3px; color: #031014; background: var(--accent);
   box-shadow: 0 0 22px rgba(127, 246, 255, 0.22); transition: filter 0.15s, box-shadow 0.15s;
 }
 #menu .go:hover:not(:disabled) { filter: brightness(1.08); box-shadow: 0 0 30px rgba(127, 246, 255, 0.36); }
 #menu .go:disabled { color: var(--muted); border-color: var(--line); background: transparent; box-shadow: none; cursor: not-allowed; }
-#menu .code-row { display: grid; grid-template-columns: minmax(0, 1fr) 110px; gap: 8px; }
-#menu .code-row input[type='text'] { text-transform: uppercase; letter-spacing: 0.4em; font-size: 20px; text-align: center; }
-#menu .code-row .go { padding: 8px 10px; }
+#menu .hint { margin: 0; color: var(--muted); font-size: 13px; line-height: 1.35; font-weight: 500; }
 
-/* Map picker: a compact grid; maps the size or mode cannot host are hidden. */
-#menu .maps { display: grid; grid-template-columns: 1fr 1fr; gap: 5px; }
-#menu .map {
-  position: relative; display: flex; flex-direction: column; min-width: 0; padding: 5px 8px 5px 12px; text-align: left;
+/* Map picker: a card grid; maps the mode cannot host are shown but disabled. */
+#menu #map-pop { width: min(700px, calc(100vw - 24px)); max-height: calc(100vh - 24px); }
+#menu .map-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 8px; min-height: 0; overflow-y: auto; padding: 2px; scrollbar-width: thin; scrollbar-color: rgba(190, 236, 244, 0.2) transparent; }
+#menu .mcard {
+  display: flex; flex-direction: column; gap: 2px; min-width: 0; padding: 6px 6px 7px; text-align: left;
   border: 1px solid var(--line); border-radius: 3px; background: rgba(255, 255, 255, 0.03); transition: border-color 0.15s, background 0.15s;
 }
-#menu .map[hidden] { display: none; }
-#menu .map::before { content: ''; position: absolute; left: 4px; top: 6px; bottom: 6px; width: 3px; border-radius: 2px; background: var(--swatch, var(--muted)); opacity: 0.85; }
-#menu .map b { font-size: 13px; letter-spacing: 0.06em; text-transform: uppercase; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-#menu .map small { font-size: 11px; color: var(--muted); letter-spacing: 0.06em; text-transform: uppercase; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-#menu .map:hover { border-color: rgba(127, 246, 255, 0.5); }
-#menu .map[aria-pressed='true'] { border-color: var(--accent); background: rgba(127, 246, 255, 0.1); }
+#menu .mcard:hover:not(:disabled) { border-color: rgba(127, 246, 255, 0.55); background: rgba(127, 246, 255, 0.06); }
+#menu .mcard[aria-pressed='true'] { border-color: var(--accent); background: rgba(127, 246, 255, 0.12); box-shadow: inset 0 0 0 1px var(--accent); }
+#menu .mcard:disabled { opacity: 0.38; cursor: not-allowed; }
+#menu .mcard .thumb { display: block; height: 72px; margin-bottom: 4px; border-radius: 2px; overflow: hidden; background: rgba(4, 9, 12, 0.9); border-bottom: 2px solid var(--swatch, var(--muted)); }
+/* (style.css pins every canvas full-screen for the renderer; thumbnails sit in their card.) */
+#menu .mcard .thumb canvas { position: static; inset: auto; display: block; width: 100%; height: 100%; object-fit: cover; }
+#menu .mcard .any-thumb { display: grid; place-items: center; border-bottom-color: var(--accent); background: radial-gradient(circle at 50% 50%, rgba(127, 246, 255, 0.14), rgba(4, 9, 12, 0.9) 70%); }
+#menu .mcard .any-thumb svg { width: 34px; height: 34px; fill: none; stroke: var(--accent); stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; }
+#menu .mcard b { font-size: 14px; letter-spacing: 0.07em; text-transform: uppercase; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; padding: 0 2px; }
+#menu .mcard small { font-size: 11px; color: var(--muted); font-weight: 600; letter-spacing: 0.06em; text-transform: uppercase; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; padding: 0 2px; }
+#menu .mcard .live { display: flex; align-items: center; gap: 6px; padding: 0 2px; font-size: 11px; font-weight: 700; letter-spacing: 0.08em; color: var(--muted); white-space: nowrap; }
+#menu .mcard .live.on { color: #9be8b9; }
+#menu .mcard .live i { width: 6px; height: 6px; border-radius: 50%; background: #5df29a; box-shadow: 0 0 6px #5df29a; }
+
+/* Bottom sheet on phones. */
+#menu .pop.sheet { left: 0 !important; right: 0; bottom: 0; top: auto !important; width: auto; max-width: none; max-height: 80vh; border-radius: 10px 10px 0 0; border-bottom: none; padding: 16px 16px max(16px, env(safe-area-inset-bottom)); }
+#menu #map-pop.sheet { width: auto; max-height: 80vh; }
+#menu .pop.sheet .map-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+
+/* Map swatches (src/ui/mapthumb.ts has the same colours). */
 #menu [data-theme='desert'] { --swatch: #d9a75e; }
 #menu [data-theme='snow'] { --swatch: #cfe8f2; }
 #menu [data-theme='forest'] { --swatch: #7fc56b; }
@@ -141,86 +269,47 @@
 #menu [data-theme='taipei'] { --swatch: #ff5ad8; }
 #menu [data-theme='xinyi'] { --swatch: #5fd0c0; }
 
-/* Status line (connecting, errors): pinned under the panel, only when there is something to say. */
-#menu .status { padding: 10px 32px 12px; border-top: 1px solid rgba(190, 236, 244, 0.1); background: rgba(4, 9, 12, 0.7); font-size: 13px; color: var(--ink); letter-spacing: 0.06em; font-weight: 600; }
-#menu .status:empty { display: none; }
-
-/* ---- Top right: Controls and Settings ---- */
-#menu .corner { position: absolute; top: 18px; right: 20px; z-index: 2; display: flex; gap: 8px; }
-#menu .icon-btn {
-  position: relative; display: grid; place-items: center; width: 38px; height: 38px; padding: 0;
-  border: 1px solid var(--line); border-radius: 3px; background: rgba(6, 12, 16, 0.6); backdrop-filter: blur(4px);
-  color: var(--ink); font-size: 18px; font-weight: 700; line-height: 1; transition: border-color 0.15s, color 0.15s, background 0.15s;
-}
-#menu .icon-btn svg { width: 20px; height: 20px; fill: none; stroke: currentColor; stroke-width: 1.8; stroke-linecap: round; }
-#menu .icon-btn:hover { border-color: rgba(127, 246, 255, 0.6); color: var(--accent); background: rgba(6, 12, 16, 0.8); }
-/* Tooltip: the button's name, under it. */
-#menu .icon-btn::after {
-  content: attr(data-tip); position: absolute; top: calc(100% + 6px); right: 0; padding: 3px 8px; white-space: nowrap; pointer-events: none;
-  border: 1px solid var(--line); border-radius: 3px; background: rgba(6, 12, 16, 0.92); color: var(--ink);
-  font-size: 11px; font-weight: 700; letter-spacing: 0.16em; text-transform: uppercase; opacity: 0; transform: translateY(-2px); transition: opacity 0.12s, transform 0.12s;
-}
-#menu .icon-btn:hover::after, #menu .icon-btn:focus-visible::after { opacity: 1; transform: none; }
-
-/* ---- Stage: the map in view and the public rooms ---- */
-#menu .stage { position: relative; display: flex; flex-direction: column; justify-content: space-between; gap: 20px; padding: 88px 36px 28px; min-width: 0; min-height: 0; pointer-events: none; }
-#menu .stage > * { pointer-events: auto; }
-#menu .showcase { align-self: flex-end; max-width: 440px; text-align: right; text-shadow: 0 2px 18px rgba(0, 0, 0, 0.7); }
-#menu .showcase h2 { margin: 0; font-size: clamp(30px, 3vw, 44px); line-height: 1; letter-spacing: 0.05em; text-transform: uppercase; }
-#menu .showcase .meta { margin-top: 10px; display: inline-block; padding: 3px 10px; font-size: 13px; font-weight: 700; letter-spacing: 0.12em; text-transform: uppercase; border: 1px solid var(--line); border-radius: 999px; background: rgba(4, 9, 12, 0.55); text-shadow: none; }
-
-/* Public rooms: a slim card list, only while there are rooms. */
-#menu .browser { display: flex; flex-direction: column; min-height: 0; width: 100%; max-width: 480px; align-self: flex-end; border: 1px solid var(--line); border-radius: 4px; background: rgba(6, 12, 16, 0.8); backdrop-filter: blur(6px); overflow: hidden; }
-#menu .browser[hidden] { display: none; }
-#menu .browser-head { display: flex; justify-content: space-between; align-items: center; gap: 12px; padding: 9px 12px 8px; border-bottom: 1px solid rgba(190, 236, 244, 0.1); }
-#menu .browser-head b { font-size: 12px; letter-spacing: 0.24em; text-transform: uppercase; color: var(--accent); white-space: nowrap; }
-#menu .browser-rows { max-height: min(36vh, 300px); overflow-y: auto; scrollbar-width: thin; scrollbar-color: rgba(190, 236, 244, 0.2) transparent; }
-#menu .room {
-  position: relative; display: grid; grid-template-columns: minmax(0, 1fr) auto 42px 44px 58px; gap: 10px; align-items: center;
-  padding: 6px 10px 6px 15px; border-top: 1px solid rgba(190, 236, 244, 0.06); font-size: 14px; font-weight: 600; cursor: pointer; outline: none; transition: background 0.12s;
-}
-#menu .room:first-child { border-top: none; }
-#menu .room::before { content: ''; position: absolute; left: 0; top: 7px; bottom: 7px; width: 3px; border-radius: 2px; background: var(--swatch, var(--muted)); opacity: 0.8; }
-#menu .room:hover, #menu .room:focus-visible { background: rgba(127, 246, 255, 0.06); }
-#menu .room.selected { background: rgba(127, 246, 255, 0.12); box-shadow: inset 0 0 0 1px rgba(127, 246, 255, 0.55); }
-#menu .room .srv { display: flex; align-items: baseline; gap: 8px; min-width: 0; white-space: nowrap; overflow: hidden; }
-#menu .room .srv b { font-size: 15px; letter-spacing: 0.07em; text-transform: uppercase; overflow: hidden; text-overflow: ellipsis; }
-#menu .room .state { flex: none; font-size: 11px; letter-spacing: 0.1em; text-transform: uppercase; color: #5df29a; }
-#menu .room .state.warmup { color: var(--amber); }
-#menu .room .state.ended { color: var(--muted); }
-#menu .room .mode { white-space: nowrap; font-size: 13px; color: var(--muted); }
-#menu .room .size, #menu .room .players { font-variant-numeric: tabular-nums; text-align: right; white-space: nowrap; }
-#menu .room .players { color: var(--muted); }
-#menu .room .join { padding: 4px 0; border: 1px solid var(--accent); border-radius: 3px; background: rgba(127, 246, 255, 0.1); color: var(--accent); font-size: 12px; font-weight: 700; letter-spacing: 0.16em; text-transform: uppercase; }
-#menu .room .join:hover:not(:disabled) { background: rgba(127, 246, 255, 0.22); }
-#menu .room .join:disabled { color: var(--muted); border-color: var(--line); background: transparent; cursor: not-allowed; }
-
-/* Less room: the mode keeps its tag only. */
+/* ---- Tighter screens ---- */
 @media (max-width: 1180px) {
+  #menu .room { grid-template-columns: minmax(0, 1fr) 40px 46px minmax(0, 76px) 62px; }
   #menu .room .mname { display: none; }
+  #menu .callsign { width: 200px; }
+}
+@media (max-height: 760px) and (min-width: 901px) {
+  #menu .top { padding-top: 12px; padding-bottom: 8px; }
+  #menu .panel { gap: 11px; }
+  #menu .deploy { min-height: 56px; }
 }
 
-/* ---- Narrow screens: one scrolling column; public rooms stack under the panel ---- */
+/* ---- Narrow screens: one scrolling column ---- */
 @media (max-width: 900px) {
-  #menu { display: block; overflow-y: auto; overflow-x: hidden; background: rgba(4, 9, 12, 0.92); }
-  #menu .panel { border-right: none; min-height: auto; }
-  #menu .form { flex: none; overflow: visible; }
-  #menu .brand, #menu .form, #menu .status { padding-left: 16px; padding-right: 16px; }
-  #menu .brand { padding-top: 20px; }
-  #menu .brand .tag, #menu h1 { margin-right: 92px; }
-  #menu .corner { top: 16px; right: 16px; }
-  #menu .status { position: sticky; bottom: 0; }
-  #menu .stage { padding: 0 16px 24px; gap: 16px; }
-  #menu .showcase { display: none; }
-  #menu .browser { align-self: stretch; max-width: none; }
-  #menu .browser-rows { max-height: none; }
+  #menu { display: block; overflow-y: auto; overflow-x: hidden; background: rgba(4, 9, 12, 0.9); }
+  #menu .top { flex-wrap: wrap; padding: 16px 16px 8px; gap: 12px; }
+  #menu .who { flex: 1 1 100%; flex-wrap: wrap; }
+  #menu .callsign { flex: 1 1 200px; width: auto; }
+  #menu .panel { padding: 8px 16px 24px; border-right: none; }
+  #menu .browser { flex: none; min-height: 0; }
+  #menu .browser-rows { flex: none; min-height: 126px; max-height: 50vh; }
+  #menu .stage { display: none; }
 }
-@media (max-width: 440px) {
-  #menu h1 { font-size: 28px; }
-  #menu .who { flex-wrap: wrap; }
-  #menu .callsign { flex-basis: 100%; }
-  #menu .who .segmented { width: 100%; height: 34px; }
-  #menu .sub { font-size: 11px; letter-spacing: 0.04em; }
-  #menu .room { grid-template-columns: minmax(0, 1fr) auto 40px 40px 52px; gap: 8px; }
+@media (max-width: 560px) {
+  #menu .brand { flex: 1; }
+  #menu .top { position: relative; }
+  #menu .icons { position: absolute; top: 16px; right: 16px; margin: 0; }
+  #menu .who .segmented { flex: 1 1 100%; width: auto; }
+  #menu .filters { grid-template-columns: 1fr; gap: 6px; }
+  #menu .frow > .label { margin-top: 4px; }
+  #menu .mapline { height: auto; flex-wrap: wrap; }
+  #menu .map-trigger { flex: 1 1 100%; max-width: none; height: 44px; }
+  #menu .quick-maps { flex: 1 1 100%; }
+  #menu .notice { position: static; flex: 1 1 100%; white-space: normal; }
+  #menu .notice:empty { display: none; }
+  #menu .deploy { flex-direction: column; align-items: flex-start; justify-content: center; gap: 2px; padding: 10px 18px; }
+  #menu .deploy-l { font-size: 20px; }
+  #menu .deploy-r { font-size: 13px; padding-left: 32px; max-width: 100%; }
+  #menu .rooms-line > span:last-child { white-space: normal; }
+  #menu .room { grid-template-columns: minmax(0, 1fr) 30px 46px 60px; gap: 8px; padding-left: 12px; }
   #menu .room .state { display: none; }
+  #menu .others { grid-template-columns: 1fr 1fr; }
+  #menu .code-box { grid-column: 1 / -1; }
 }
