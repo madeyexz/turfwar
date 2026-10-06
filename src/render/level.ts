@@ -6,7 +6,9 @@ import { LADDER_DIRS, terrainHeight, type Ladder, type Ramp, type Solid } from '
 import { fbm } from '../../shared/maps/builder';
 import type { BlockStyle, Decor, MapDef, RampStyle } from '../../shared/maps/types';
 import { rng } from '../../shared/math';
+import { separateCoplanar, type DrawnBox } from './coplanar';
 import { addDressing } from './dressing';
+import { CJK_STACK, UI_STACK, cjkFontReady } from '../ui/fonts';
 import { shieldMaterial, surfaceMaterial, terrainMaterial, type Theme } from './materials';
 
 const TEAM_COLORS = [new THREE.Color(0x3aa0ff), new THREE.Color(0xff4a3a)];
@@ -29,6 +31,9 @@ const LOOKS = {
   tile: { material: 'floortile', uv: 2.4, color: 0xf0ece4, ao: 0.95 },
   mosaic: { material: 'facadetile', uv: 1.6, color: 0xf2efe8, ao: 0.8 },
   painted: { material: 'painted', uv: 1, color: 0xf0f0ec, ao: 0.9 },
+  // Taipei 101's office floor: carpet tiles and the damper's polished gold paint.
+  carpet: { material: 'carpet', uv: 2, color: 0x8a9098, ao: 0.97 },
+  gold: { material: 'gold', uv: 2, color: 0xd9a63c, ao: 1 },
 } as const;
 
 /** Static battlefield visuals built from shared map data (collision stays authoritative). */
@@ -59,6 +64,8 @@ export class LevelView {
       painted: new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.55, metalness: 0.05 }),
       lightPanel: new THREE.MeshBasicMaterial({ color: new THREE.Color(0xfff4e0).multiplyScalar(1.6), toneMapped: false }),
       glass: new THREE.MeshStandardMaterial({ color: 0x6fa8c8, roughness: 0.05, metalness: 0.9, transparent: true, opacity: 0.35 }),
+      // Low-iron glazing: barely there, a faint green cast and a soft sheen of the sky.
+      window: new THREE.MeshStandardMaterial({ color: 0x9cc8b8, roughness: 0.04, metalness: 0.1, transparent: true, opacity: 0.12, depthWrite: false, envMapIntensity: 0.6 }),
       panel: trimMaterial(assets, 'T_Trim_02_BaseColor', 0xd4dade),
       panelDark: trimMaterial(assets, 'T_Trim_01_BaseColor', 0xa8b0b6),
       // Realistic architecture (CC0 Poly Haven sets); per-block tints arrive as vertex colours.
@@ -81,22 +88,21 @@ export class LevelView {
     (this.materials.asphalt as THREE.MeshStandardMaterial).color.setScalar(1.5);
     if (map.decor.some(d => (d.kind === 'block' || d.kind === 'shape') && d.style === 'facade')) this.materials.facade = facadeMaterial();
     if (map.decor.some(d => 'style' in d && d.style === 'curtain')) this.materials.curtain = curtainMaterial();
+    if (map.decor.some(d => 'style' in d && d.style === 'carpet')) this.materials.carpet = carpetMaterial();
+    this.materials.gold = new THREE.MeshStandardMaterial({ vertexColors: true, metalness: 0.85, roughness: 0.32 });
     // Self-lit strips and lamps: vertex colours brighter than white, so bloom picks them up.
     this.materials.neon = new THREE.MeshBasicMaterial({ vertexColors: true });
     const signs: SignDecor[] = [];
     let shapes = 0;
     this.buildTerrain();
+    const drawn = drawnBoxes(map);
     map.decor.forEach((d, i) => {
       switch (d.kind) {
-        case 'block': this.block(map.solids[d.solid], d.style, d.solid, d.color); break;
-        case 'detail': this.block({ minX: d.x - d.w / 2, maxX: d.x + d.w / 2, minY: d.y, maxY: d.y + d.h, minZ: d.z - d.d / 2, maxZ: d.z + d.d / 2, surface: 'metal' }, d.style, 100000 + i, d.color); break;
+        case 'block': this.block(drawn.get(i) ?? map.solids[d.solid], d.style, d.solid, d.color); break;
+        case 'detail': this.block(drawn.get(i)!, d.style, 100000 + i, d.color); break;
         case 'loft': this.loft(d); break;
         case 'disc': this.disc(d); break;
-        case 'shape': {
-          const [minX, minY, minZ] = d.min, [maxX, maxY, maxZ] = d.max;
-          this.block({ minX, minY, minZ, maxX, maxY, maxZ, surface: 'concrete' }, d.style, 100000 + shapes++, d.color);
-          break;
-        }
+        case 'shape': this.block(drawn.get(i)!, d.style, 100000 + shapes++, d.color); break;
         case 'cylinder': this.cylinder(d.x, d.y, d.z, d.radius, d.height, d.axis, d.style, d.color, d.sides, d.top); break;
         case 'water': this.add('water', boxGeo(d.x, d.y - 0.01, d.z, d.w, 0.02, d.d)); break;
         case 'ball': this.ball(d.x, d.y, d.z, d.radius, d.style, d.color); break;
@@ -121,13 +127,16 @@ export class LevelView {
     });
     for (const l of map.ladders ?? []) this.ladder(l);
     this.flush();
-    if (signs.length) this.group.add(signMesh(signs));
     if (!theme.urban) this.scatter();
     // Maps with a dressing set bring their own skyline in place of the generic mountain ring.
     const dressed = map.decor.some(d => d.kind === 'dressing');
     if (!dressed) this.horizon();
-    /** Resolves once the map's dressing sets and model instances are built (they load on demand). */
-    this.ready = addDressing(this.group, map.decor).catch(e => console.warn('dressing failed', e));
+    // Signs bake their text into a canvas: wait for the Chinese face so they never keep a fallback font.
+    const signsBuilt = signs.length
+      ? cjkFontReady(signs.map(s => s.text + (s.sub ?? '')).join('')).then(() => { this.group.add(signMesh(signs)); })
+      : Promise.resolve();
+    /** Resolves once the map's signs, dressing sets and model instances are built (they load on demand). */
+    this.ready = Promise.all([signsBuilt, addDressing(this.group, map.decor).catch(e => console.warn('dressing failed', e))]).then(() => undefined);
   }
   readonly ready: Promise<void>;
 
@@ -154,7 +163,7 @@ export class LevelView {
       const geometry = mergeGeometries(list, false);
       if (!geometry) continue;
       const mesh = new THREE.Mesh(geometry, this.materials[name]);
-      mesh.castShadow = name !== 'glow' && name !== 'glowWarm' && name !== 'glass' && name !== 'water' && name !== 'marking' && name !== 'lightPanel' && name !== 'neon';
+      mesh.castShadow = name !== 'glow' && name !== 'glowWarm' && name !== 'glass' && name !== 'window' && name !== 'water' && name !== 'marking' && name !== 'lightPanel' && name !== 'neon';
       mesh.receiveShadow = true;
       mesh.name = `level:${name}`;
       this.group.add(mesh);
@@ -204,7 +213,7 @@ export class LevelView {
     const r = rng(index * 977 + 13);
     switch (style) {
       case 'brick': case 'plaster': case 'wood': case 'roof': case 'cobble': case 'slab': case 'steel':
-      case 'paving': case 'asphalt': case 'tile': case 'mosaic': case 'painted': {
+      case 'paving': case 'asphalt': case 'tile': case 'mosaic': case 'painted': case 'carpet': case 'gold': {
         const look = LOOKS[style];
         const g = boxGeo(cx, cy, cz, w, h, d, 0, look.uv);
         tint(g, color ?? look.color, s.minY, h, look.ao);
@@ -283,6 +292,7 @@ export class LevelView {
         return;
       }
       case 'glass': this.add('glass', boxGeo(cx, cy, cz, w, h, d)); return;
+      case 'window': this.add('window', boxGeo(cx, cy, cz, w, h, d)); return;
       case 'curtain': {
         const g = windowBox(cx, s.minY, cz, w, h, d, CURTAIN_BAY * CURTAIN_TILE, CURTAIN_FLOOR * CURTAIN_TILE);
         tint(g, color ?? 0x8fb4b8, s.minY, Math.min(h, 6), 0.9);
@@ -769,6 +779,25 @@ function beam(a: THREE.Vector3, b: THREE.Vector3, thickness: number, height: num
   return g;
 }
 
+/** The map's blocks, details and shapes as drawn (by decor index), with flush overlays stood off their bases. */
+function drawnBoxes(map: MapDef): Map<number, Solid> {
+  const index: number[] = [], boxes: DrawnBox[] = [], source: Solid[] = [];
+  map.decor.forEach((d, i) => {
+    let s: Solid | undefined;
+    if (d.kind === 'block') s = map.solids[d.solid];
+    else if (d.kind === 'detail') s = { minX: d.x - d.w / 2, maxX: d.x + d.w / 2, minY: d.y, maxY: d.y + d.h, minZ: d.z - d.d / 2, maxZ: d.z + d.d / 2, surface: 'metal' };
+    else if (d.kind === 'shape') s = { minX: d.min[0], minY: d.min[1], minZ: d.min[2], maxX: d.max[0], maxY: d.max[1], maxZ: d.max[2], surface: 'concrete' };
+    if (!s) return;
+    index.push(i); source.push(s);
+    boxes.push({ min: [s.minX, s.minY, s.minZ], max: [s.maxX, s.maxY, s.maxZ] });
+  });
+  const out = new Map<number, Solid>();
+  separateCoplanar(boxes).forEach((b, k) => out.set(index[k], {
+    ...source[k], minX: b.min[0], minY: b.min[1], minZ: b.min[2], maxX: b.max[0], maxY: b.max[1], maxZ: b.max[2],
+  }));
+  return out;
+}
+
 function boxGeo(cx: number, cy: number, cz: number, w: number, h: number, d: number, bevel = 0, uvScale = 3) {
   const g = bevel > 0.01 ? new RoundedBoxGeometry(w, h, d, 2, bevel) : new THREE.BoxGeometry(w, h, d);
   g.translate(cx, cy, cz);
@@ -886,7 +915,7 @@ function bannerTexture(team: 0 | 1) {
   if (team === 0) { ctx.moveTo(128, 70); ctx.lineTo(200, 120); ctx.lineTo(200, 200); ctx.lineTo(128, 250); ctx.lineTo(56, 200); ctx.lineTo(56, 120); ctx.closePath(); }
   else { ctx.moveTo(60, 80); ctx.lineTo(196, 80); ctx.lineTo(128, 240); ctx.closePath(); }
   ctx.stroke();
-  ctx.fillStyle = accent; ctx.font = 'bold 28px system-ui, sans-serif'; ctx.textAlign = 'center';
+  ctx.fillStyle = accent; ctx.font = `bold 28px ${UI_STACK}`; ctx.textAlign = 'center';
   ctx.fillText(team === 0 ? 'AEGIS' : 'CRIMSON', 128, 290);
   const tex = new THREE.CanvasTexture(canvas); tex.colorSpace = THREE.SRGBColorSpace;
   return tex;
@@ -957,6 +986,36 @@ function curtainMaterial() {
   const map = new THREE.CanvasTexture(wall), emissiveMap = new THREE.CanvasTexture(lit);
   for (const t of [map, emissiveMap]) { t.wrapS = t.wrapT = THREE.RepeatWrapping; t.colorSpace = THREE.SRGBColorSpace; t.anisotropy = 4; }
   return new THREE.MeshStandardMaterial({ map, emissiveMap, emissive: 0xffffff, emissiveIntensity: 0.75, roughness: 0.18, metalness: 0.55, vertexColors: true });
+}
+
+/**
+ * Office carpet tiles: 50 cm squares laid quarter-turned, each with a fine loop-pile grain and a
+ * flecked yarn, so the floor reads as tiles up close and as an even tone across a room. One sheet
+ * covers 2 × 2 m (the 'carpet' look's uv scale); blocks tint it.
+ */
+function carpetMaterial() {
+  const size = 512, tile = size / 4, c = document.createElement('canvas');
+  c.width = c.height = size;
+  const g = c.getContext('2d')!, r = rng(23);
+  g.fillStyle = '#e4e4e4'; g.fillRect(0, 0, size, size);
+  for (let ty = 0; ty < 4; ty++) for (let tx = 0; tx < 4; tx++) {
+    const x0 = tx * tile, y0 = ty * tile, across = (tx + ty) % 2 === 0, shade = 0.94 + r() * 0.1;
+    g.fillStyle = `rgb(${232 * shade},${232 * shade},${232 * shade})`; g.fillRect(x0, y0, tile, tile);
+    // Rows of pile along the tile's grain.
+    for (let k = 0; k < tile; k += 3) {
+      g.fillStyle = `rgba(0,0,0,${0.06 + r() * 0.05})`;
+      if (across) g.fillRect(x0, y0 + k, tile, 1); else g.fillRect(x0 + k, y0, 1, tile);
+    }
+    // Flecks of lighter and darker yarn.
+    for (let i = 0; i < 260; i++) {
+      g.fillStyle = r() < 0.5 ? `rgba(255,255,255,${0.08 + r() * 0.1})` : `rgba(0,0,0,${0.08 + r() * 0.1})`;
+      g.fillRect(x0 + r() * tile, y0 + r() * tile, across ? 3 : 1, across ? 1 : 3);
+    }
+    g.fillStyle = 'rgba(0,0,0,0.12)'; g.fillRect(x0, y0, tile, 1); g.fillRect(x0, y0, 1, tile);
+  }
+  const map = new THREE.CanvasTexture(c);
+  map.wrapS = map.wrapT = THREE.RepeatWrapping; map.colorSpace = THREE.SRGBColorSpace; map.anisotropy = 8;
+  return new THREE.MeshStandardMaterial({ map, vertexColors: true, roughness: 0.96, metalness: 0 });
 }
 
 /** Window grid of the facade sheet: 4 bays × 4 floors per tile. */
@@ -1050,7 +1109,7 @@ function shopfrontMaterial() {
 }
 
 type SignDecor = Extract<Decor, { kind: 'sign' }>;
-const SIGN_FONT = `'PingFang TC','Noto Sans TC','Microsoft JhengHei','Heiti TC',sans-serif`;
+const SIGN_FONT = CJK_STACK;
 
 /**
  * Every sign of the map in one draw: each sign is painted once into a shared canvas atlas (text,

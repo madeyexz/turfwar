@@ -1,7 +1,7 @@
 import type { Identity, Infer } from 'spacetimedb';
 import type { Vec3 } from '../../shared/math';
 import type { ClientReport, MatchEvent, MatchState, Mode, ShotClaim, Soldier, Team, VehicleReport } from '../../shared/match/state';
-import { sizeLabel } from '../../shared/match/rooms';
+import { sizeLabel, type RoomView } from '../../shared/match/rooms';
 import type { Body } from '../../shared/world';
 import { maxSlack, type Vehicle } from '../../shared/vehicles';
 import type { CareerStats, GameLink } from '../game/link';
@@ -12,6 +12,7 @@ import { roundLength } from '../../shared/match/sim';
 import { decodeFrame, type DecodedFrame, type FramePose } from '../../shared/match/frame';
 import { DEFAULT_WEAPONS, STAMINA, WEAPONS, normalizeAttachments, weaponStats, type AttachmentId, type Attachments, type Slot, type WeaponId } from '../../shared/weapons';
 import { newRoundStats, type BuyItem } from '../../shared/match/economy';
+import { plural, t } from '../ui/i18n';
 
 type RosterRow = Infer<typeof RosterTable>;
 
@@ -58,8 +59,12 @@ function soldierFrom(r: RosterRow, p: FramePose, reloadLeft: number, sinceShot: 
   };
 }
 
-/** How to get into a room: Quick Play by size, a new private room, or a private room's code. */
+/**
+ * How to get into a room: Play Online by size with an optional mode and map ('' = any), Quick Play
+ * by size (older servers), a new private room, a private room's code, or a listed public room.
+ */
 export type OnlineEntry =
+  | { kind: 'play'; size: number; mode: Mode | ''; mapId: string }
   | { kind: 'quick'; size: number }
   | { kind: 'create'; size: number; mode: Mode; mapId: string; bots: boolean }
   | { kind: 'code'; code: string }
@@ -165,7 +170,8 @@ export class OnlineLink implements GameLink {
     if (this.me < 0 && this.entry && !this.rejoining && !this.disconnected) {
       // Backgrounded tabs stop reporting and get dropped as idle; rejoin the same room transparently.
       this.rejoining = true;
-      const info = this.roomInfo(), how: OnlineEntry = info?.code ? { kind: 'code', code: info.code } : this.entry.how.kind === 'code' ? this.entry.how : { kind: 'quick', size: JSON.parse(match.configJson).teamSize };
+      const info = this.roomInfo(), was = this.entry.how;
+      const how: OnlineEntry = info?.code ? { kind: 'code', code: info.code } : was.kind === 'code' || was.kind === 'play' ? was : { kind: 'quick', size: JSON.parse(match.configJson).teamSize };
       void enter(this.conn, { ...this.entry, how }).catch(() => undefined).finally(() => { setTimeout(() => { this.rejoining = false; }, 2000); });
     }
     // Mid-rotation the frame may still describe the previous map: hold its bomb back.
@@ -197,11 +203,11 @@ export class OnlineLink implements GameLink {
   }
 
   status() {
-    if (this.disconnected) return 'DISCONNECTED';
+    if (this.disconnected) return t('net.disconnected');
     const humans = this.view?.soldiers.filter(s => !s.bot).length ?? 0;
     const info = this.roomInfo();
-    const room = info ? (info.code ? `ROOM ${info.code} · ${info.size}` : `QUICK PLAY ${info.size}`) : 'ONLINE';
-    return `${room} · ${humans} PLAYER${humans === 1 ? '' : 'S'} · ${Math.round(this.pingMs)} MS`;
+    const room = info ? (info.code ? t('net.room', { code: info.code, size: info.size }) : t('net.quick', { size: info.size })) : t('net.online');
+    return `${room} · ${plural('net.players', humans)} · ${Math.round(this.pingMs)} MS`;
   }
 
   report(r: ClientReport) {
@@ -236,17 +242,26 @@ export class OnlineLink implements GameLink {
   }
 }
 
-/** Ask the server for a room (Quick Play, new private room, or by code). */
-function enter(conn: DbConnection, e: { name: string; team: number; how: OnlineEntry }) {
+/** Ask the server for a room (Play Online, Quick Play, new private room, by code, or a listed room). */
+async function enter(conn: DbConnection, e: { name: string; team: number; how: OnlineEntry }) {
   const { name, team, how } = e;
+  if (how.kind === 'play') {
+    try {
+      return await conn.reducers.quickPlay({ name, team, size: how.size, mode: how.mode, mapId: how.mapId });
+    } catch (error) {
+      // A server published before quick_play: fall back to Quick Play by size, which it has.
+      if (!/no such reducer|reducer.*not found|unknown reducer/i.test(String((error as Error)?.message ?? error))) throw error;
+      return conn.reducers.quickJoin({ name, team, size: how.size });
+    }
+  }
   if (how.kind === 'quick') return conn.reducers.quickJoin({ name, team, size: how.size });
   if (how.kind === 'create') return conn.reducers.createRoom({ name, team, size: how.size, mode: how.mode, mapId: how.mapId, bots: how.bots });
   if (how.kind === 'room') return conn.reducers.joinPublic({ name, team, room: how.room });
   return conn.reducers.joinRoom({ name, team, code: how.code });
 }
 
-/** A public room as the lobby lists it. */
-export interface PublicRoom { room: number; mapId: string; mode: Mode; size: number; humans: number; phase: string; round: number }
+/** A public room as the lobby lists it (and as Play Online's matching sees it). */
+export interface PublicRoom extends RoomView { phase: string; round: number }
 
 /**
  * Live list of public rooms for the lobby: a light connection that only subscribes to the room rows
@@ -263,8 +278,12 @@ export async function watchRooms(onChange: (rooms: PublicRoom[]) => void, onStat
     const rooms: PublicRoom[] = [];
     for (const r of conn.db.match.iter()) {
       if (r.code !== '') continue;
-      const config = JSON.parse(r.configJson) as { mode: Mode; teamSize: number };
-      rooms.push({ room: r.id, mapId: r.mapId, mode: config.mode, size: config.teamSize, humans: r.humans, phase: r.phase, round: r.score0 + r.score1 + 1 });
+      let config: { mode?: Mode; teamSize?: number; fixedMap?: boolean; fixedMode?: boolean } = {};
+      try { config = JSON.parse(r.configJson); } catch { /* malformed row: listed with defaults */ }
+      rooms.push({
+        room: r.id, mapId: r.mapId, mode: config.mode === 'sabotage' ? 'sabotage' : 'elimination', size: config.teamSize ?? 6, humans: r.humans,
+        phase: r.phase, round: r.score0 + r.score1 + 1, fixedMap: !!config.fixedMap, fixedMode: !!config.fixedMode,
+      });
     }
     onChange(rooms.sort((a, b) => b.humans - a.humans || a.room - b.room));
   };
@@ -284,18 +303,18 @@ export async function watchRooms(onChange: (rooms: PublicRoom[]) => void, onStat
 export async function connectOnline(name: string, team: Team | undefined, how: OnlineEntry, status: (s: string) => void): Promise<OnlineLink> {
   const { uri, database } = onlineConfig();
   if (!uri || !database) throw new Error('No SpacetimeDB server configured.');
-  status('Connecting to SpacetimeDB…');
+  status(t('net.connecting'));
   const { DbConnection } = await import('../module_bindings');
   const tokenKey = `lawbreaker.token:${uri}:${database}`;
   let token: string | undefined;
   try { token = localStorage.getItem(tokenKey) ?? undefined; } catch { /* storage disabled */ }
   return new Promise<OnlineLink>((resolve, reject) => {
     let link: OnlineLink | undefined;
-    const timer = setTimeout(() => reject(new Error('Timed out connecting to the match server.')), 20_000);
+    const timer = setTimeout(() => reject(new Error(t('net.timeout'))), 20_000);
     const conn = DbConnection.builder().withUri(uri).withDatabaseName(database).withToken(token)
       .onConnect((connection, identity, nextToken) => {
         try { localStorage.setItem(tokenKey, nextToken); } catch { /* anonymous identity still works */ }
-        status('Joining the battlefield…');
+        status(t('net.joining'));
         link = new OnlineLink(connection, identity);
         connection.subscriptionBuilder()
           .onApplied(async () => {
@@ -309,12 +328,12 @@ export async function connectOnline(name: string, team: Team | undefined, how: O
               wait();
             } catch (error) { clearTimeout(timer); reject(error); }
           })
-          .onError(() => { clearTimeout(timer); reject(new Error('Subscription failed.')); })
+          .onError(() => { clearTimeout(timer); reject(new Error(t('net.subscription'))); })
           // Rooms (match rows), players and career stats; the room's own roster, frame and events
           // follow once we know our room. `soldier` and `body` are server-side detail.
           .subscribe(['SELECT * FROM match', 'SELECT * FROM player', 'SELECT * FROM profile']);
       })
-      .onConnectError((_ctx, error) => { clearTimeout(timer); reject(new Error(`Could not reach the match server (${error?.message ?? 'connection refused'}).`)); })
+      .onConnectError((_ctx, error) => { clearTimeout(timer); reject(new Error(t('net.unreachable', { error: error?.message ?? t('net.refused') }))); })
       .onDisconnect(() => { link?.markDisconnected(); })
       .build();
     void conn;

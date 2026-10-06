@@ -6,7 +6,8 @@
   "scripts": {
     "import-assets": "bun import-assets.ts",
     "import-guns": "bun import-guns.ts",
-    "fetch-sounds": "bun fetch-sounds.ts"
+    "fetch-sounds": "bun fetch-sounds.ts",
+    "subset-font": "bun subset-font.ts"
   },
   "dependencies": {
     "@gltf-transform/core": "4.2.1",

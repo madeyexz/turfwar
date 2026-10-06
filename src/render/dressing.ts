@@ -2,10 +2,12 @@ import * as THREE from 'three';
 import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader.js';
 import { MeshoptDecoder } from 'three/examples/jsm/libs/meshopt_decoder.module.js';
 import { mergeGeometries } from 'three/examples/jsm/utils/BufferGeometryUtils.js';
+import { cutTest, modelCut, type Cut } from '../../shared/maps/dressing';
 import type { Decor } from '../../shared/maps/types';
 import { rng } from '../../shared/math';
 import { buildSkyline, type SkylineData } from './skyline';
 import { lotDetail, type LotRow } from './lotdetail';
+import { CJK_STACK, cjkFontReady } from '../ui/fonts';
 
 /**
  * Dressing sets (street furniture and skylines) and model instances. A set is plain data the
@@ -46,6 +48,11 @@ const SETS: Record<string, () => Promise<DressingSet>> = {
       district: { mesh: 'taipei-district.glb', atlas: 'taipei-atlas.webp' },
     };
   },
+  // The city round Taipei 101, seen from 88F (the map sets it 383 m down).
+  taipei101: async () => {
+    const [far, { highriseSkyline }] = await Promise.all([import('../../shared/maps/taipei-skyline'), import('./cityfill')]);
+    return { skyline: highriseSkyline(far) };
+  },
 };
 
 type Dressing = Extract<Decor, { kind: 'dressing' }>;
@@ -62,8 +69,10 @@ export async function addDressing(group: THREE.Group, decor: Decor[]) {
     const set = await SETS[d.set]?.();
     if (!set) { console.warn('unknown dressing set', d.set); continue; }
     if (set.district) group.add(await districtGroup(set.district, d.x, d.z, cutTest(d.cut ?? [])));
+    // Street-name plates and boards bake Chinese into a canvas: load the face first.
+    if (set.street) await cjkFontReady(set.street.plates.map(p => p[6]).join(''));
     if (set.street) group.add(streetGroup(cutStreet(set.street, d.x, d.z, cutTest([...(d.cut ?? []), ...(d.clear ?? [])])), d.x, d.z, models));
-    if (set.skyline) group.add(buildSkyline(set.skyline, d.x, d.z));
+    if (set.skyline) { const sky = buildSkyline(set.skyline, d.x, d.z); sky.position.y = d.y ?? 0; group.add(sky); }
     if (set.lots) group.add(lotDetail(set.lots, d.x, d.z));
   }
   const byModel = new Map<string, number[]>();
@@ -71,33 +80,22 @@ export async function addDressing(group: THREE.Group, decor: Decor[]) {
   for (const [model, data] of byModel) for (const m of instanced(model, data, 0, 0, models)) group.add(m);
 }
 
-/** Point test against cut boxes (minX, minY, minZ, maxX, maxY, maxZ, map coordinates). */
-type Cut = (x: number, y: number, z: number) => boolean;
-function cutTest(c: number[]): Cut {
-  return (x, y, z) => {
-    for (let i = 0; i < c.length; i += 6) if (x > c[i] && x < c[i + 3] && y > c[i + 1] && y < c[i + 4] && z > c[i + 2] && z < c[i + 5]) return true;
-    return false;
-  };
-}
-
 /** The street set without what stands in the cut boxes. */
 function cutStreet(s: StreetData, ox: number, oz: number, cut: Cut): StreetData {
-  const keep = (list: number[], stride: number, at: (r: number[]) => [number, number, number]) => {
+  const keep = (list: number[], stride: number, gone: (r: number[]) => boolean) => {
     const out: number[] = [];
-    for (let i = 0; i < list.length; i += stride) { const r = list.slice(i, i + stride), [x, y, z] = at(r); if (!cut(x - ox, y, z - oz)) out.push(...r); }
+    for (let i = 0; i < list.length; i += stride) { const r = list.slice(i, i + stride); if (!gone(r)) out.push(...r); }
     return out;
   };
-  const p3 = (r: number[]): [number, number, number] => [r[0], r[1] + 0.1, r[2]];
+  const at = (x: number, y: number, z: number) => cut(x - ox, y, z - oz);
+  const p3 = (r: number[]) => at(r[0], r[1] + 0.1, r[2]);
   return {
     boxes: keep(s.boxes, 8, p3), glows: keep(s.glows, 8, p3),
-    cyls: keep(s.cyls, 8, r => [(r[0] + r[3]) / 2, Math.min(r[1], r[4]) + 0.1, (r[2] + r[5]) / 2]),
-    plates: s.plates.filter(p => !cut(p[0] - ox, p[1], p[2] - oz)),
-    marks: keep(s.marks, 9, r => [r[0], r[1] + 0.05, r[2]]),
+    cyls: keep(s.cyls, 8, r => at((r[0] + r[3]) / 2, Math.min(r[1], r[4]) + 0.1, (r[2] + r[5]) / 2)),
+    plates: s.plates.filter(p => !at(p[0], p[1], p[2])),
+    marks: keep(s.marks, 9, r => at(r[0], r[1] + 0.05, r[2])),
     // A model goes when any part of it (about a metre round its foot) is in a cut.
-    models: Object.fromEntries(Object.entries(s.models).map(([k, v]) => [k, keep(v, STRIDE, r => {
-      for (const [dx, dz] of [[0, 0], [0.9, 0], [-0.9, 0], [0, 0.9], [0, -0.9]]) if (cut(r[0] + dx - ox, r[1] + 0.1, r[2] + dz - oz)) return [r[0] + dx, r[1] + 0.1, r[2] + dz];
-      return [r[0], r[1] + 0.1, r[2]];
-    })])),
+    models: Object.fromEntries(Object.entries(s.models).map(([k, v]) => [k, keep(v, STRIDE, r => modelCut(cut, r[0] - ox, r[1], r[2] - oz))])),
   };
 }
 
@@ -241,7 +239,7 @@ function markMesh(marks: number[], ox: number, oz: number) {
 
 // ---- Sign plates ---------------------------------------------------------------------------
 
-const PLATE_FONT = `'PingFang TC','Noto Sans TC','Microsoft JhengHei','Heiti TC',sans-serif`;
+const PLATE_FONT = CJK_STACK;
 
 /** Sign art drawn into a cell: traffic signs, banners, bus and YouBike boards, street-name plates, ads. */
 function drawPlate(c: CanvasRenderingContext2D, key: string, x: number, y: number, w: number, h: number) {

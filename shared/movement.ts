@@ -1,5 +1,6 @@
 import { CollisionWorld, LADDER_DIRS } from './collision';
 import { clamp } from './math';
+import { obstacleGround, resolveObstacles, type Obstacle } from './obstacles';
 
 /** Infantry movement tuned for a fast browser arena shooter. Shared by players and bots. */
 export const MOVE = {
@@ -69,8 +70,12 @@ export const bodyHeight = (s: Pick<MoveState, 'crouch'>) => MOVE.standHeight + (
 export const isSprinting = (s: MoveState, input: MoveInput) =>
   input.sprint && input.forward > 0.1 && !input.ads && s.slideTime <= 0 && s.crouch < 0.5;
 
-/** Advance one soldier by dt seconds. Mutates the state and returns feel events. */
-export function stepMovement(world: CollisionWorld, s: MoveState, input: MoveInput, dt: number, team = -1): MoveEvents {
+/**
+ * Advance one soldier by dt seconds. Mutates the state and returns feel events. `obstacles` are
+ * moving solids (vehicles' bodies): they block like walls, carry their tops as floors, and push a
+ * soldier out of their way (with a shove when they come fast).
+ */
+export function stepMovement(world: CollisionWorld, s: MoveState, input: MoveInput, dt: number, team = -1, obstacles?: readonly Obstacle[]): MoveEvents {
   const events: MoveEvents = { jumped: false, landed: 0, slideStarted: false, stepped: 0 };
   const speedH = Math.hypot(s.vx, s.vz);
   const crouchPressed = input.crouch && !s.prevCrouchInput;
@@ -164,16 +169,30 @@ export function stepMovement(world: CollisionWorld, s: MoveState, input: MoveInp
   const steps = Math.max(1, Math.ceil(travel / (MOVE.radius * 0.5)));
   const startX = s.x, startZ = s.z, startY = s.y;
   let blocked = false;
+  let mover: Obstacle | undefined;
   for (let i = 0; i < steps; i++) {
     s.x += s.vx * dt / steps; s.z += s.vz * dt / steps;
     const pos = { x: s.x, y: s.y, z: s.z };
+    // Vehicles first, the static world last: pinned between the two, the wall wins.
+    const pusher = resolveObstacles(obstacles, pos, MOVE.radius, height);
+    if (pusher) { blocked = true; if (Math.hypot(pusher.vx, pusher.vz) > 0.3) mover = pusher; }
     if (world.resolveCylinder(pos, MOVE.radius, height, team)) blocked = true;
     s.x = pos.x; s.z = pos.z;
     // Allow stepping onto low ledges mid-sweep.
-    const g = world.groundHeight(s.x, s.z, s.y, MOVE.radius);
+    const g = Math.max(world.groundHeight(s.x, s.z, s.y, MOVE.radius), obstacleGround(obstacles, s.x, s.z, s.y, MOVE.radius));
     if (s.grounded && g > s.y && g <= s.y + 0.6) { events.stepped += g - s.y; s.y = g; }
   }
+  // Blocked: the velocity is what the sweep actually moved (a vehicle pushing us lends us its own).
   if (blocked && dt > 0) { s.vx = (s.x - startX) / dt; s.vz = (s.z - startZ) / dt; }
+  if (mover) {
+    // A moving vehicle pushes us aside, off its line (never just along ahead of its bumper); a
+    // fast one (a run-over) knocks us off our feet too.
+    const speed = Math.hypot(mover.vx, mover.vz), ux = mover.vx / speed, uz = mover.vz / speed;
+    const side = Math.sign((s.x - mover.x) * -uz + (s.z - mover.z) * ux) || 1;
+    const lx = -uz * side, lz = ux * side, aside = s.vx * lx + s.vz * lz, want = speed * 0.6;
+    if (aside < want) { s.vx += lx * (want - aside); s.vz += lz * (want - aside); }
+    if (mover.shove > 0) { s.vy = Math.max(s.vy, mover.shove); s.grounded = false; s.slideTime = 0; }
+  }
   if (climbing && ladder && s.y < ladder.y1 - 0.6) {
     // Below the landing a climber stays in front of the rungs, never under a deck the ladder leans on.
     const [nx, nz] = LADDER_DIRS[ladder.dir];
@@ -185,7 +204,7 @@ export function stepMovement(world: CollisionWorld, s: MoveState, input: MoveInp
   const wasGrounded = s.grounded;
   const fallSpeed = -s.vy;
   s.y += s.vy * dt;
-  const ground = world.groundHeight(s.x, s.z, Math.max(s.y, startY), MOVE.radius);
+  const ground = Math.max(world.groundHeight(s.x, s.z, Math.max(s.y, startY), MOVE.radius), obstacleGround(obstacles, s.x, s.z, Math.max(s.y, startY), MOVE.radius));
   if (s.y <= ground) {
     if (!wasGrounded && fallSpeed > 1) events.landed = fallSpeed;
     s.y = ground; s.vy = 0; s.grounded = true;

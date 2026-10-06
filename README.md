@@ -1,4 +1,6 @@
-# Lawbreaker // Frontline
+# 角頭械鬥 · Turf War: Taipei
+
+Formerly *Lawbreaker // Frontline*: the repository, databases (`lawbreaker-dev`, `3d-game-c4lhd`) and the Vercel project keep the old name; the game lives at https://turfwar.ianhsiao.me (https://lawbreaker.vercel.app still works).
 
 A browser-first, keyboard-and-mouse team shooter faithful to **BeGone** (nPlay's browser FPS):
 SWAT against Militia in short rounds with one life each, cash for every kill, a store in your
@@ -14,7 +16,8 @@ runner (`bun` / `bunx`, never npm/npx).
 
 | Area | Implemented |
 | --- | --- |
-| Lobby | Callsign and team, then **Play online**: pick 1v1 / 6v6 / 24v24 and press **Quick Play** (the fullest public room of that size, or a new one), or open *Create private room* (mode, map, bots; you get a 4-letter code) / *Join with code*. A live **Public rooms** list on the right joins any open room directly. **Play offline**: *Play vs bots* (mode, size, map, difficulty) or *Practice range* (no bots, free store). Options: graphics, crosshair, scope view, reticle, sensitivity and aim sensitivity, field of view, volume, controls. In a match, Esc or P opens the same settings; F toggles fullscreen. |
+| Lobby | Callsign and team at the top, then three filters: **size** (1v1 / 6v6 / 24v24), **mode** (Any / Elimination / Sabotage) and **map** (Any, a map card from the picker with a plan of the map, its region or bomb sites and who is playing there, or one of the shortcuts beside it). **Play online** joins the fullest public room whose current mode and map match (Any matches anything) or opens a new one with those rules; its label sums the choice up ("6v6 · Sabotage · Taipei") and the line under it says which room it would join. **Live rooms** below lists the rooms the same filters match (map, mode, players, round, Join), with "showing N of M · clear filters" or links to other sizes when the filters hide some. The bottom row: *Solo vs bots* (the filters, Any picked at random; bot difficulty), *Practice* (the map filter; no bots, free store), *Private room* (the filters, Any picked at random; bots on or off; you get a 4-letter code) and a *# code* box to join one. A map the size or mode cannot host goes back to Any with a note; the filters are remembered. Options: language (English / 繁體中文), graphics, crosshair, scope view, reticle, sensitivity and aim sensitivity, field of view, volume, controls. In a match, Esc or P opens the same settings; F toggles fullscreen. |
+| Language | English and Traditional Chinese (Taiwan, 繁體中文): every lobby, settings, HUD, store, scoreboard and end-of-match string (`src/ui/i18n.ts`; SWAT 特警, Militia 民兵, Elimination 殲滅戰, Sabotage 爆破戰, maps by their Chinese names such as 西門町 and 台北101・信義; guns keep their real names). It follows the browser (zh-TW, zh-HK, zh-Hant read Chinese) until a choice is saved in Settings; `?lang=zh-TW` / `?lang=en` overrides it for the visit. Switching applies at once, in the lobby and in a match; kill-feed lines and toasts already on screen keep their language until they fade. Text the server sends (cash award reasons, room errors) stays English on the wire and is translated in the client. |
 | Teams | **SWAT** (team 0, navy tactical kit) and **Militia** (team 1, desert and olive irregulars). In Sabotage Militia attacks and SWAT defends. No friendly fire. |
 | Rounds | 4 s freeze at round start (buy, no moving), the round, a 5 s round-over pause; first team to **10 round wins** takes the match, then 10 s on the result screen and a new match. Nobody respawns inside a round; everyone respawns at the next round start. Dead players spectate their killer immediately (RMB cycles players); their chat is hidden from the living. |
 | Elimination `[E]` | 120 s rounds. Kill the whole other team. If time runs out with both teams alive the round is a draw: it replays and nobody scores. When the last two players trade kills the team that killed last wins. |
@@ -162,6 +165,48 @@ the Xinyi Plaza Malls, Militia on Songzhi Rd; Elephant Mountain's foot (象山) 
 (eased toward the edge of the terrain grid). The lots get curtain walls, mullion fins, crowns, lit
 canopies and rooftop plant. About 270 × 290 m; the tower itself is scenery (only its base collides).
 
+**Taipei 101 · 88F** (台北101・高樓辦公層; 1v1 and 6v6, Elimination and Sabotage) moves the fight
+indoors, onto an office floor near the top of the same tower (`shared/maps/taipei101.ts`). The floor
+plate is the tower's notched square, 50 m across at the glass, set at the height (about 383 m) where
+the xinyi map's top-segment loft reaches that width, so the segments below the glass come from the
+same data. A 3 × 3 plan round a stone core: the Chairman's and CEO's corner suites either side of
+the **Sky Lobby** (SWAT steps out of the lifts by the reception and logo wall); **A**, the server room
+(two zigzag rows of racks), and **B**, the boardroom, either side of the core; the pantry and the copy
+room below them; open offices with desk pods (and two glass meeting rooms in the SE) by the south
+glass, and between them the floor under renovation by the fire stairs and freight lift, where Militia
+comes up. Three lanes: the west rooms, the east rooms and the core's **damper hall**, where the tuned
+mass damper (41 stacked gold plates, 5.8 m across, on eight cables over its hydraulic pedestal) hangs
+in a shaft through 89F; a stair either side of the hall climbs to the 89F viewing gallery round the
+shaft (glass balustrades higher than a jump), which looks down into the hall. SWAT reaches each site
+about 1.8 s ahead of Militia; the bases are about 37 m apart on foot; no eye-level line between two
+standing spots exceeds 45 m (`shared/maps/taipei101.test.ts`). Glass stops bullets, as everywhere.
+The city below — the shared Taipei skyline (less the 101), Xinyi's lots and a seeded fill of blocks
+over the basin's flat ground — is the client-only `taipei101` dressing set (`src/render/cityfill.ts`),
+lit by a golden-hour theme (`highrise`) through clear window glass. No vehicles.
+**Memorial Hall** (中正紀念堂, 1v1 and 6v6) is a compact arena in and around the National Chiang Kai-shek
+Memorial Hall in Taipei, stylised to the game's low-poly look (`shared/maps/memorial*.ts`). The white
+hall stands on a three-tier base under its blue glazed octagonal roof: a terrace with marble balustrades
+on each tier (4.5, 9 and 13.5 m), the broad 89-step grand staircase up the west face in three flights
+(30 + 30 + 29) with a landing at each terrace, a straight rear staircase east and side stairs hugging the
+north and south faces. The memorial chamber holds the seated bronze statue on its plinth (a simple,
+dignified figure), inscription panels (decorative, not legible), the coffered ceiling with the sun
+emblem, the tall bronze doors swung open, honour-guard posts (no figures) and rope lines. The museum
+fills the base: the entrance hall under the grand staircase, exhibition rooms with glass and wood
+display cases, a lecture hall, a library, the gift shop, the east lobby, and the double-height Gallery
+Hall under the upper gallery's balconies, with switchback stairwells (lifts beside them) up into the
+chamber. **A** is the Gallery Hall, **B** the chamber before the statue; landmarks C–E are the grand
+staircase's upper landing, the north garden and the gift shop. SWAT deploys on the east forecourt,
+Militia on the slice of Liberty Square in front of the grand staircase; screen walls with one
+gateway each and spirit screens close the bases off from the gardens, which are rooms of clipped hedge
+with pines, a pavilion and a lotus pond. The National Theater, the National Concert Hall and the Liberty
+Square gate stand to the west as backdrop. Golden-hour light. About 130 × 97 m; no vehicles.
+`shared/maps/memorial.test.ts` checks that no eye-level line between two places a soldier can stand
+runs longer than 55 m except down the grand staircase's axis, that SWAT reaches each site 1.5–2.5 s
+ahead of Militia (1.8 s at both), that bots reach every room, floor, terrace, stair and garden, and that
+Militia bots arm each site. Because B is above A, a site is armed and disarmed only on its own floor
+(within 2.5 m of the site's height, `onSite` in `shared/match/combat.ts`), and bots plan toward their
+goal's floor.
+
 Every map has ammo crates (one more stands in each base) and open team bases. Sabotage lists only the
 maps with bomb sites.
 
@@ -197,8 +242,16 @@ any driving. A body reduced to 0 wrecks: it explodes (7 m blast),
 kills its crew and stays as a charred hulk until the round ends. Crashes (speed lost against walls,
 hard landings, a pilotless helicopter falling) damage the body. A driven car or scooter faster than
 6 m/s hurts enemies it touches. No friendly fire on a crewed vehicle; an empty one is fair game.
-Vehicles are not obstacles for soldiers or each other, the rotor does not collide, and bots ignore
-vehicles. Models are built procedurally (`src/render/vehicles.ts`); engines, the scooter's buzz and
+Vehicles are solid (`blocks` in `shared/vehicles.ts`, oriented boxes in `shared/obstacles.ts`): a
+car's lower body and cabin, a scooter's small box, the helicopter's cabin and tail boom (crouch to
+pass under it; the rotor never collides). Soldiers stop against them, jump onto them and stand on
+their roofs (a moving vehicle drives out from under them; riding on one is not supported), and a
+moving vehicle pushes them aside, shoving them off their feet above 6 m/s. Vehicles bounce off each
+other, sharing the impact by mass (crash damage as against walls); a rammed driverless vehicle is
+shoved by the host. Grenades bounce off them. Bots plan round vehicles at their parking spots (the
+navigation grid counts them as solids) and steer round them wherever they are. Scooter riders stay
+seated facing the bike: the torso twists toward the aim at most about 60°, the arms bring the
+weapon round. Models are built procedurally (`src/render/vehicles.ts`); engines, the scooter's buzz and
 the rotor chop are synthesized.
 
 ## Controls
@@ -229,13 +282,19 @@ the rotor chop are synthesized.
 
 - Rooms: one database holds many rooms. The `match`, `clock` and `frame` rows are keyed by room id,
   and soldiers, bodies, players, the roster and events carry a `room` column; soldier and body ids
-  come from a global `counter`. `quick_join(size)` puts the caller in the fullest public room of that
-  size (1, 6 or 24 per team) or opens one; `create_room` opens a private room with a 4-letter code and
-  the host's mode, map, size and bots; `join_room(code)` joins it (`join` is Quick Play 6v6 for older
-  clients). Each room has its own `tick_schedule` row while humans are in it and closes (rows and
-  schedule deleted) when the last one leaves, so idle rooms cost nothing. Public rooms move to the next
-  map their size plays and alternate Elimination and Sabotage after each match; private rooms replay
-  the host's choice. Clients subscribe to `match`, `player` and `profile`, then only their room's
+  come from a global `counter`. `quick_play(size, mode, map)` (Play Online; '' = any mode or map)
+  puts the caller in the fullest public room of that size (1, 6 or 24 per team) whose current mode and
+  map match, or opens one with those rules; the server checks the size, the mode and that the size (and
+  mode) can play the map, and the choice itself is `pickRoom` in `shared/match/rooms.ts`. `quick_join(size)`
+  and `join` (6v6) are the same with any mode and map, kept for older clients. `create_room` opens a
+  private room with a 4-letter code and the host's mode, map, size and bots; `join_room(code)` joins it;
+  `join_public(room)` joins a listed public room. Each room has its own `tick_schedule` row while humans
+  are in it and closes (rows and schedule deleted) when the last one leaves, so idle rooms cost nothing.
+  After each match a public room keeps a map or a mode it was opened for (`fixedMap` / `fixedMode` in
+  its config JSON); what was "any" rotates: the next map its size (and a fixed mode) plays, and
+  Elimination and Sabotage alternate where the map has bomb sites (`nextRoomRules`). A room on its end
+  screen that is about to rotate away no longer matches a filter for its old map or mode. Private rooms
+  replay the host's choice. Clients subscribe to `match`, `player` and `profile`, then only their room's
   `roster`, `frame` and `match_event` rows.
 - Player reducers only **queue** input: `report` overwrites the soldier's row in a private `inbox`
   (elapsed time accumulates for the movement budget) and `fire`, `grenade`, `reload_weapon`,
@@ -283,6 +342,17 @@ the rotor chop are synthesized.
   then rides a scooter through drifts both ways while firing sideways, with two identities. It
   expects zero corrections, every rider shot accepted from its claimed muzzle, the other client
   seeing the vehicles move and the rider turned to its aim, and a rejected teleport.
+- Vehicle bodies on the server: a soldier's report may not walk into a vehicle's body (deeper than
+  the vehicle's own speed explains, and deeper than where he stood: a vehicle driving onto him is
+  not his fault); vehicle roofs count as floors; a moving vehicle nearby adds its speed to the
+  movement budget (shoves). A driver's report may not drive into another vehicle's body the same
+  way, and a vehicle nearby adds to its budget (pushed). Driving clients bounce off the other
+  vehicles' latest replicated poses; the host hands a rammed driverless vehicle the blow (from the
+  rammer's velocity at its previous report, by mass) and steps driverless vehicles against the rest.
+  `bun scripts/collisioncheck.ts ws://127.0.0.1:<port> <db>` (local only): a driver creeps into
+  another client's soldier standing in the road (pushed aside, no corrections either side, never
+  inside the car in the server's frames), backs into a parked car (shoved, no corrections), and a
+  report inside a parked car is corrected.
 - Client-side: own movement is predicted with the shared controller; remote soldiers and grenades
   are interpolated ~100 ms behind from the frame; a rejected position snaps the client back; dropped
   (idle) clients rejoin automatically.
@@ -320,10 +390,18 @@ game and the match server. After changing the module, regenerate client bindings
 `spacetime generate --lang typescript --out-dir src/module_bindings --module-path spacetimedb`.
 In Amp orbs, `.amp/services.yaml` declares both services (`amp orb services ensure`).
 
-Lobby URL flags: `?mode=offline|online|lab`, `&game=elimination|sabotage`,
-`&size=duel|squad|war`, `&room=CODE` (Online: join a private room), `&map=<id>`, `&team=0|1|auto`, `&skill=0.25…0.75`,
-`&name=…`, `&autostart=1`. Choices are remembered per browser under `lawbreaker.*` in localStorage
-(`lawbreaker.crosshair` holds the crosshair style the HUD draws).
+Lobby URL flags: `?mode=offline|online|lab` (what `&autostart=1` starts: Solo, Play Online or Practice),
+`&game=elimination|sabotage` (mode filter), `&size=duel|squad|war`, `&map=<id>` (map filter; a 24v24 map
+picks 24v24 unless `size` says otherwise), `&room=CODE` (fills the code box; with `autostart` joins it),
+`&team=0|1|auto`, `&skill=0.25…0.75`, `&name=…`, `&autostart=1`. Choices are remembered per browser under
+`lawbreaker.*` in localStorage (`lawbreaker.lobby.mode` and `lawbreaker.lobby.map` hold the filters, ''
+for Any; `lawbreaker.crosshair` holds the crosshair style the HUD draws).
+
+`bun scripts/roomcheck.ts ws://127.0.0.1:<port> <db>` (local only) checks Play Online with separate
+identities: the same filters share a room, different maps split, Any joins a specific-map room,
+`quick_join` and `join` still work, bad sizes, modes and maps are refused, and after a match fixed rooms
+keep their map (and mode) while Any rooms rotate (it ends matches early with `spacetime sql`, owner-only).
+`scripts/loadtest.ts` takes `--mode` and `--map` to Play Online with filters.
 
 Testing the store: the practice range always buys for free, anywhere; add `&freebuy` to the URL for a
 free-buy Solo match; for a **local** Online database, set `"freeBuy":true` in the match's
@@ -339,7 +417,7 @@ everything above 6 m to see under roofs),
 
 ## Deploy
 
-Production: https://lawbreaker.vercel.app. The private GitHub repository
+Production: https://turfwar.ianhsiao.me (also https://lawbreaker.vercel.app). The private GitHub repository
 `madeyexz/lawbreaker` is connected to Vercel project `madeyexzs-projects/lawbreaker`, with
 `main` as its shared development and production branch. Maincloud database: `3d-game-c4lhd`
 (dashboard: https://spacetimedb.com/3d-game-c4lhd).
@@ -393,6 +471,13 @@ texture, sound and line of code here is original or CC0/OFL.
   cobblestone architecture of the BeGone maps): Poly Haven, CC0 1.0, fetched by `tools/fetch-textures.ts`; see
   `public/assets/tex/LICENSE.txt`.
 - Font: Rajdhani by Indian Type Foundry, SIL Open Font License 1.1 (`public/fonts/OFL.txt`).
+- Chinese font: Noto Sans TC by Google and Adobe, SIL Open Font License 1.1
+  (`public/fonts/NotoSansTC-OFL.txt`), from google/fonts. `tools/subset-font.ts` (`bun tools/subset-font.ts`;
+  needs `uv`, or Python with fontTools and brotli) cuts the variable font to weights 500–900 and to the
+  characters the game uses (every Chinese character in `src/`, `shared/` and `index.html`, Taiwan's 4,808
+  common characters from `tools/font/edu-standard-4808.txt`, CJK punctuation, Bopomofo and full-width forms):
+  `public/fonts/noto-sans-tc.woff2`, about 1.4 MB and 5,084 glyphs, loaded only for Chinese text
+  (`unicode-range`). `src/ui/font.test.ts` fails when the source uses a character the font lacks.
 - Taipei map layout: the Ximending quarter of *臺北狂飆 / TAIPEI RUSH* (https://taipei-gta.vercel.app)
   — its streets, buildings, signs and landmarks — used with the author's permission and extracted by
   `tools/import-taipei.ts` into `shared/maps/taipei-data.ts`. Its shop names are that game's own parody
@@ -403,6 +488,8 @@ texture, sound and line of code here is original or CC0/OFL.
   streets, hills and lots — used with the author's permission and extracted by `tools/import-xinyi.ts`
   into `shared/maps/xinyi-data.ts`. Its mall and shop names are that game's own parodies. The mall's
   interior, the sunken garden and the curtain-wall detailing are this project's own.
+- Taipei 101 · 88F: the tower's sections below the floor and the city's skyline and lots reuse the two
+  imports above; the floor's plan, fit-out and the damper are this project's own.
 - Sky, terrain, architecture, effects and the remaining audio (knife, casings, footsteps,
   explosions, heartbeat, bomb, round and cash cues, UI, and the fallback weapon voices used before
   the recordings load) are procedural.
@@ -420,7 +507,11 @@ half-resolution bloom). Budgets: merged static geometry per material, one draw c
 at most three dynamic point lights (pooled muzzle/explosion flashes), pooled effects. Remote soldiers
 use a crowd level of detail: off-screen soldiers are hidden and not animated; on screen, full
 animation and shadows within 30 m, half-rate animation to 70 m, quarter rate beyond. Remote gunfire
-beyond 110 m is not drawn and gunshot audio is limited to 85 m and six voices per frame. The largest
+beyond 110 m is not drawn and gunshot audio is limited to 85 m, six voices per frame and 14 ringing at
+once (a near shot takes the oldest's place). Every sound leaves the mix when its last source ends
+(`src/voices.ts`): Chrome otherwise keeps rendering finished voices until garbage collection, and a long
+firefight starved the audio thread into seconds-long dropouts. `?audiodebug` logs the mix's levels,
+compressor reduction and audio-clock rate (below 1 means the audio thread is falling behind). The largest
 room (24v24, 48 soldiers) is lighter than the 100-soldier matches this engine was
 measured with (Solo 50v50 on Meridian: 59.9 fps average on an M3 Pro, Chrome, medium).
 
@@ -435,8 +526,8 @@ screens can exceed 60. The lobby also has Low / Medium / High graphics presets (
 
 ## Known limitations and what remains
 
-- Online has Quick Play and private rooms but no public room list, clans, vote kick or skill-based
-  matchmaking. All rooms share one database; capacity per database has been measured only locally.
+- Online has filtered Play Online, a live room list and private rooms, but no clans, vote kick or
+  skill-based matchmaking. All rooms share one database; capacity per database has been measured only locally.
 - No full lag compensation or server-side rewind for hit validation; very high latency can make
   moving targets harder to hit or let claims fail validation. Latency spikes and movement
   corrections have been observed.
@@ -454,8 +545,8 @@ screens can exceed 60. The lobby also has Low / Medium / High graphics presets (
 
 ## 60-second demo script — one continuous shot
 
-1. **0–6 s** — Lobby: choose *Solo*, **[S] Sabotage**, room size *6v6*, the *Ochre Quarter*
-   row in the server browser, team *Militia*. Click **Start match**.
+1. **0–6 s** — Lobby: size *6v6*, mode **[S] Sabotage**, map *Ochre Quarter* from the map picker,
+   team *Militia*. Click *Solo vs bots*, then **Start match**.
 2. **6–16 s** — Freeze time: press **B** in your base. You start with $1,000 and the MP5 and M9A1;
    open *Attachments* and fit a **Reflex sight** to the MP5 ($800). Close the store.
 3. **16–35 s** — Sprint toward site A (Shift; watch stamina), hold RMB to zoom through the reflex and
@@ -478,13 +569,14 @@ shared/        Pure TypeScript shared by browser, tests and the SpacetimeDB modu
   maps/          Builder + BeGone's six maps (Crane, Tower, Warehouse, Pipeline, Courtyard,
                  Timbertown) and eight originals (Cinder, Frostline, Verdant, Ochre, Citadel,
                  Railyard, Skyline, Meridian), plus Taipei and Taipei 101 · Xinyi (taipei-data.ts and
-                 xinyi-data.ts, generated from 臺北狂飆),
+                 xinyi-data.ts, generated from 臺北狂飆) and Taipei 101 · 88F (taipei101.ts),
+                 xinyi-data.ts, generated from 臺北狂飆) and Memorial Hall (memorial*.ts),
                  with ladders, bomb sites and ammo crates
   match/         State, rounds and bomb, combat validation, economy, bots, navigation, packed frame
 src/           Browser client: lobby, game loop, prediction, rendering, view model, soldiers, HUD, store, audio, net
 spacetimedb/   SpacetimeDB module (tables, scheduled tick, validated reducers)
 scripts/       Local load test and simulation benchmark
-tools/         Reproducible CC0 asset import, sound and texture fetch scripts, and the Taipei and Xinyi map imports
+tools/         Reproducible CC0 asset import, sound and texture fetch scripts, the Taipei and Xinyi map imports and the Chinese font subset
 dev/           Development preview pages
 ```
 

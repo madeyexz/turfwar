@@ -1,0 +1,23 @@
+/*
+ * Traditional Chinese typography (<html lang="zh-TW">). Rajdhani's wide tracking (0.16–0.3em) suits
+ * its narrow capitals but spreads ideographs into separate words, so the widely tracked labels pull
+ * in; small labels get a touch more size because CJK strokes clog below ~11px.
+ */
+:lang(zh-TW) :is(
+  .sb-score small, .sb-clock small, .sb-sub, .progress, .announce small, .spectate small, .released b,
+  .scoreboard header, .end > small, .end h4, .bench-banner,
+  #menu .label, #menu .callsign .label, #menu .deploy-l, #menu .deploy-r, #menu .go, #menu .browser-head b, #menu .browser-head small, #menu .room .join,
+  #menu .pop-head b, #menu .pop-head small, #menu .code-go, #menu .logo-sub, #menu .sub, #menu .choice b, #menu .choice small,
+  .lb-settings .tabs button, #store .clock small, #store .cash small, #store .lo small, #store .slot-head small,
+  #store .preview.empty p, #store .act > small, #store .tabs button, #store .buy
+) { letter-spacing: 0.08em; }
+:lang(zh-TW) :is(.lb-settings h2, .lb-settings .resume, #store h2, .end h2, .scoreboard h3) { letter-spacing: 0.14em; }
+:lang(zh-TW) #menu .icon-btn::after { letter-spacing: 0.08em; }
+
+:lang(zh-TW) :is(.sb-score small, .sb-clock small) { font-size: 11px; }
+:lang(zh-TW) .sb-sub { font-size: 12px; }
+:lang(zh-TW) .meter span { letter-spacing: 0.06em; }
+
+/* Short labels and buttons stay on one line: CJK may otherwise break between any two characters. */
+:lang(zh-TW) :is(#store h2, #store .tabs button, #store .clock small, #store .clock b, #store .cash small, #store dt, #store dd, #store .badge,
+  .lb-settings .tabs button, .lb-settings .seg button, #menu .sub, #menu .choice b, #menu .qmap, #menu .mcard b, .sb-clock small, .meter span) { white-space: nowrap; }

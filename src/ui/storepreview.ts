@@ -3,6 +3,7 @@ import { RoomEnvironment } from 'three/examples/jsm/environments/RoomEnvironment
 import type { Assets } from '../assets';
 import { GUN_FIT, fitAttachments } from '../render/optics';
 import { ATTACHMENT_SLOTS, WEAPONS, type AttachmentCategory, type Attachments, type WeaponId } from '../../shared/weapons';
+import { applyI18n, t } from './i18n';
 
 /** What the store's preview shows: a weapon with a set of attachments (one slot called out), or the M67. */
 export type PreviewItem =
@@ -83,9 +84,9 @@ export class StorePreview {
     this.callout.hidden = true;
     if (!assets) {
       this.el.classList.add('empty');
-      this.el.innerHTML = '<p>Preview unavailable</p>';
+      this.el.innerHTML = `<p data-i18n="store.previewOff">${t('store.previewOff')}</p>`;
     } else {
-      this.el.innerHTML = '<span class="hint">Drag to rotate · scroll to zoom</span>';
+      this.el.innerHTML = `<span class="hint" data-i18n="store.previewHint">${t('store.previewHint')}</span>`;
       this.el.appendChild(this.callout);
     }
     this.scene.add(this.turntable);
@@ -180,6 +181,9 @@ export class StorePreview {
     this.scene.environmentIntensity = 1.1;
     this.renderer = r;
   }
+
+  /** Language changed: the hint text (the callout follows the next `show`). */
+  relabel() { applyI18n(this.el); }
 
   /** Show `item` (the same item keeps its angle; a new weapon swings in from the default angle). */
   show(item: PreviewItem) {

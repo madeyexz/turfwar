@@ -17,6 +17,8 @@ export interface BotBrain {
   /** Seconds before the bot picks a new goal. */
   goalLeft: number;
   goalX: number; goalZ: number;
+  /** Height of the goal's floor (absent: plan on the bot's own floor). */
+  goalY?: number;
   path: number[];
   pathIndex: number;
   repath: number;
@@ -139,6 +141,12 @@ export interface MatchConfig {
   freeBuy?: boolean;
   /** No bots fill empty slots (private rooms can turn them off). */
   noBots?: boolean;
+  /**
+   * Online public rooms opened for a specific map or mode keep it from match to match
+   * (`nextRoomRules`); rooms opened for "any" rotate. Absent = rotate (older rooms).
+   */
+  fixedMap?: boolean;
+  fixedMode?: boolean;
 }
 
 /** BeGone's GameSettings.json: 4 s round start, 5 s round over, 10 s match over, first to 10. */

@@ -1,8 +1,9 @@
 import { MOVE, createMoveState } from '../movement';
-import { clamp } from '../math';
+import { clamp, type Vec3 } from '../math';
+import { blocksHeight, near, obstacleGround, penetration, type Obstacle } from '../obstacles';
 import {
-  HELI_CEILING, RUN_OVER_SPEED, ROTOR_SPINUP, VEHICLES, createVehicle, exitSpot, forwardOf, idleVehicleInput, maxSlack, reachOf,
-  seatPosition, slackSpeed, speedOf, stepVehicle, vehicleBlocked, vehicleGround, type Vehicle,
+  HELI_CEILING, RUN_OVER_SPEED, ROTOR_SPINUP, VEHICLES, bodyReach, createVehicle, exitSpot, forwardOf, idleVehicleInput, maxSlack, obstaclesOf, reachOf,
+  seatPosition, slackSpeed, speedOf, stepVehicle, vehicleBlocked, vehicleGround, vehicleObstacles, type Vehicle, type VehicleContact,
 } from '../vehicles';
 import { oneHanded } from '../weapons';
 import { MOVE_SLACK, applyDamage, damageVehicle, seatOf, type SimContext } from './combat';
@@ -66,7 +67,7 @@ export function exitVehicle(state: MatchState, ctx: SimContext, id: number) {
   const { vehicle: v, seat } = seated;
   const floor = ctx.world.groundHeight(v.x, v.z, v.y + 0.2, 0.5);
   if (v.kind === 'heli' && v.y - floor > BAIL_HEIGHT) return false;
-  const p = exitSpot(ctx.world, v, seat, MOVE.radius);
+  const p = exitSpot(ctx.world, v, seat, MOVE.radius, MOVE.standHeight, obstaclesOf(state.vehicles, v.id));
   if (seat === 0) v.driver = -1; else v.passenger = -1;
   const ground = ctx.world.groundHeight(p.x, p.z, p.y + 0.05, MOVE.radius);
   s.m = createMoveState(p.x, p.y, p.z);
@@ -101,7 +102,9 @@ export function reportVehicle(state: MatchState, ctx: SimContext, id: number, r:
   if (![r.x, r.y, r.z, r.vx, r.vy, r.vz, r.yaw, r.pitch, r.roll].every(Number.isFinite)) return false;
   const spec = VEHICLES[v.kind];
   const dt = clamp(elapsed, 0, 0.5);
-  v.slack = Math.min(maxSlack(v.kind), v.slack + slackSpeed(v.kind) * dt);
+  // Another vehicle may have shoved this one since the last report: its speed adds to the budget.
+  const shove = movingNear(state, v, bodyReach(spec) + 4);
+  v.slack = Math.min(maxSlack(v.kind) + shove * 0.3, v.slack + (slackSpeed(v.kind) + shove) * dt);
   const moved = Math.hypot(r.x - v.x, r.y - v.y, r.z - v.z);
   const frozen = state.phase === 'live' && state.roundPhase === 'freeze' && !state.config.practice;
   const b = ctx.map.bounds;
@@ -109,6 +112,9 @@ export function reportVehicle(state: MatchState, ctx: SimContext, id: number, r:
   let bad = moved > v.slack || (frozen && moved > 0.5)
     || r.x < b.minX - 1 || r.x > b.maxX + 1 || r.z < b.minZ - 1 || r.z > b.maxZ + 1
     || vehicleBlocked(ctx.world, pose);
+  // Not into another vehicle's body (any deeper than where it was, or than that vehicle's own
+  // motion since our last look at it explains).
+  bad ||= intoVehicles(state, v, pose, { kind: v.kind, x: v.x, y: v.y, z: v.z, yaw: v.yaw });
   const floor = vehicleGround(ctx.world, { ...pose, y: r.y + 0.3 });
   if (v.kind === 'heli') {
     // No lift before the rotor has spun up, nothing above the ceiling.
@@ -124,6 +130,7 @@ export function reportVehicle(state: MatchState, ctx: SimContext, id: number, r:
   const crash = change - allowed;
   v.slack -= moved;
   const cap = Math.hypot(spec.maxSpeed, spec.climb) * 1.3, speed = Math.hypot(r.vx, r.vy, r.vz), k = speed > cap ? cap / speed : 1;
+  const before = { vx: v.vx, vz: v.vz };
   v.x = r.x; v.y = r.y; v.z = r.z; v.vx = r.vx * k; v.vy = r.vy * k; v.vz = r.vz * k;
   v.yaw = r.yaw; v.pitch = clamp(r.pitch, -0.6, 0.6); v.roll = clamp(r.roll, -0.6, 0.6);
   v.grounded = v.y - floor < 0.1;
@@ -131,8 +138,136 @@ export function reportVehicle(state: MatchState, ctx: SimContext, id: number, r:
   const aim = spec.driverArms && Number.isFinite(r.aimYaw) && Number.isFinite(r.aimPitch);
   s.yaw = aim ? r.aimYaw! : r.yaw; s.pitch = aim ? clamp(r.aimPitch!, -1.5, 1.5) : 0;
   if (crash > spec.crashSpeed) damageVehicle(state, ctx, v, id, (crash - spec.crashSpeed) * spec.crashDamage, 'crash');
+  ram(state, ctx, v, before, id);
   placeCrew(state, v);
   return true;
+}
+
+/** Fastest other vehicle (m/s) whose body comes within `range` of this one's origin (it may be pushing it). */
+function movingNear(state: MatchState, self: Vehicle, range: number) {
+  let fastest = 0;
+  for (const o of state.vehicles) {
+    if (o === self || Math.abs(o.x - self.x) > range + 8 || Math.abs(o.z - self.z) > range + 8) continue;
+    if (Math.hypot(o.x - self.x, o.z - self.z) < range + bodyReach(VEHICLES[o.kind])) fastest = Math.max(fastest, speedOf(o));
+  }
+  return fastest;
+}
+
+/**
+ * How deep (m) a vehicle's cylinders (trimmed like `vehicleBlocked`) sink into another vehicle's
+ * body; 0 when clear.
+ */
+function bodyDepth(pose: Pick<Vehicle, 'kind' | 'x' | 'y' | 'z' | 'yaw'>, obstacles: readonly Obstacle[], trim = 0.6) {
+  const spec = VEHICLES[pose.kind], f = forwardOf(pose.yaw);
+  let depth = 0;
+  for (const ob of obstacles) {
+    if (ob.y1 <= pose.y + 0.3 || ob.y0 >= pose.y + spec.height) continue;
+    for (const [o, r] of spec.circles) {
+      const x = pose.x + f.x * o, z = pose.z + f.z * o;
+      if (near(ob, x, z, r)) depth = Math.max(depth, penetration(ob, x, z, r * trim).depth);
+    }
+  }
+  return depth;
+}
+
+/**
+ * Validation: does the reported pose drive into another vehicle's body? Allowed are overlaps no
+ * deeper than before (it drove onto us, or we were pushed together) and within what that
+ * vehicle's speed explains (it moves on the server between what the driver last saw and now).
+ */
+function intoVehicles(state: MatchState, v: Vehicle, pose: Pick<Vehicle, 'kind' | 'x' | 'y' | 'z' | 'yaw'>, from: Pick<Vehicle, 'kind' | 'x' | 'y' | 'z' | 'yaw'>) {
+  const reach = bodyReach(VEHICLES[v.kind]);
+  for (const o of state.vehicles) {
+    if (o === v || Math.hypot(o.x - pose.x, o.z - pose.z) > reach + bodyReach(VEHICLES[o.kind]) + 1) continue;
+    const obs = vehicleObstacles(o);
+    const depth = bodyDepth(pose, obs);
+    if (depth > 0.25 + speedOf(o) * 0.35 && depth > bodyDepth(from, obs) + 0.05) return true;
+  }
+  return false;
+}
+
+/** Restitution of a ram (like the shared vehicle impacts). */
+const RAM_BOUNCE = 0.25;
+
+/**
+ * A driven vehicle rammed a driverless one: the driver's client bounced off it (it cannot move
+ * other vehicles), so the host hands it the blow, from the rammer's velocity at its previous
+ * report, shared by mass, and clears any overlap left by moving the struck vehicle.
+ */
+function ram(state: MatchState, ctx: SimContext, v: Vehicle, before: { vx: number; vz: number }, driver: number) {
+  const spec = VEHICLES[v.kind], f = forwardOf(v.yaw), reach = bodyReach(spec);
+  for (const o of state.vehicles) {
+    if (o === v || o.driver >= 0 || Math.hypot(o.x - v.x, o.z - v.z) > reach + bodyReach(VEHICLES[o.kind]) + 0.5) continue;
+    const other = VEHICLES[o.kind];
+    let px = 0, pz = 0, tx = 0, tz = 0, touch = false;
+    for (const ob of vehicleObstacles(o)) {
+      if (ob.y1 <= v.y + 0.3 || ob.y0 >= v.y + spec.height) continue;
+      for (const [off, r] of spec.circles) {
+        const x = v.x + f.x * off, z = v.z + f.z * off;
+        // In contact (a hand's breadth counts: the rammer's client stopped it just short).
+        const c = penetration(ob, x, z, r + 0.25);
+        if (c.depth <= 0) continue;
+        touch = true; tx += c.x; tz += c.z;
+        const p = penetration(ob, x, z, r);
+        if (p.depth > 0) { px += p.x; pz += p.z; }
+      }
+    }
+    if (!touch) continue;
+    // Leftover overlap: the struck body gives way.
+    o.x -= px; o.z -= pz;
+    const tl = Math.hypot(tx, tz) || 1, nx = tx / tl, nz = tz / tl;
+    const rel = (before.vx - o.vx) * nx + (before.vz - o.vz) * nz;
+    if (rel > -0.5) continue;
+    const dv = -rel * (1 + RAM_BOUNCE) * spec.mass / (spec.mass + other.mass);
+    o.vx -= nx * dv; o.vz -= nz * dv;
+    if (dv > other.crashSpeed) damageVehicle(state, ctx, o, driver, (dv - other.crashSpeed) * other.crashDamage, 'crash');
+  }
+}
+
+/** Give a driverless vehicle the velocity change a contact left it with (driven ones answer to their driver's client). */
+function shoveVehicle(state: MatchState, ctx: SimContext, c: VehicleContact) {
+  const o = state.vehicles[c.id];
+  if (!o || o.driver >= 0) return;
+  o.vx += c.dvx; o.vz += c.dvz;
+  const spec = VEHICLES[o.kind], dv = Math.hypot(c.dvx, c.dvz);
+  if (dv > spec.crashSpeed) damageVehicle(state, ctx, o, -1, (dv - spec.crashSpeed) * spec.crashDamage, 'crash');
+}
+
+/** The vehicles' bodies near a point, as obstacles (soldier validation). */
+export function obstaclesNear(state: Pick<MatchState, 'vehicles'>, x: number, z: number, range: number) {
+  const out: Obstacle[] = [];
+  for (const v of state.vehicles) {
+    if (Math.abs(v.x - x) < range + 6 && Math.abs(v.z - z) < range + 6) vehicleObstacles(v, out);
+  }
+  return out;
+}
+
+/** Highest vehicle roof under a soldier's feet, up to a step above them (he stands on it like on any floor), or -Infinity. */
+export const vehicleRoof = (state: Pick<MatchState, 'vehicles'>, p: Vec3) => obstacleGround(obstaclesNear(state, p.x, p.z, 1), p.x, p.z, p.y, MOVE.radius);
+
+/**
+ * Validation: does a soldier's reported position walk into a vehicle's body? Allowed are overlaps
+ * within what the vehicle's speed explains (it moves on the server ahead of the soldier's view of
+ * it) and ones no deeper than where the soldier last stood (a vehicle drove onto him).
+ */
+export function walksIntoVehicle(state: Pick<MatchState, 'vehicles'>, from: Vec3, to: Vec3, height = 1.2) {
+  for (const ob of obstaclesNear(state, to.x, to.z, 1)) {
+    if (!near(ob, to.x, to.z, MOVE.radius) || !blocksHeight(ob, to.y, height)) continue;
+    const depth = penetration(ob, to.x, to.z, MOVE.radius).depth;
+    if (depth <= 0.3 + Math.hypot(ob.vx, ob.vz) * 0.35) continue;
+    const before = blocksHeight(ob, from.y, height) ? penetration(ob, from.x, from.z, MOVE.radius).depth : 0;
+    if (depth > before + 0.05) return true;
+  }
+  return false;
+}
+
+/** Speed (m/s) of the fastest vehicle whose body is within a few metres of a soldier (it may have shoved him). */
+export function shoverSpeed(state: Pick<MatchState, 'vehicles'>, p: Vec3) {
+  let fastest = 0;
+  for (const ob of obstaclesNear(state, p.x, p.z, 2.5)) {
+    if (near(ob, p.x, p.z, MOVE.radius + 2.5)) fastest = Math.max(fastest, Math.hypot(ob.vx, ob.vz));
+  }
+  return fastest;
 }
 
 /** Keep the crew on their seats. */
@@ -158,13 +293,16 @@ export function updateVehicles(state: MatchState, ctx: SimContext, dt: number) {
     if (v.driver >= 0) seated.add(v.driver);
     if (v.passenger >= 0) seated.add(v.passenger);
   }
+  // Driverless vehicles bounce off the others (and hand them their share of the blow).
+  const obstacles = obstaclesOf(state.vehicles);
   for (const v of state.vehicles) {
     if (v.driver < 0 || v.wrecked) {
       const resting = v.grounded && speedOf(v) < 0.02 && Math.abs(v.vy) < 0.02 && v.rotor === 0;
       if (!resting) {
-        const e = stepVehicle(ctx.world, v, idleVehicleInput(v.yaw, false), dt);
+        const e = stepVehicle(ctx.world, v, idleVehicleInput(v.yaw, false), dt, obstacles);
         const spec = VEHICLES[v.kind];
         if (e.impact > spec.crashSpeed) damageVehicle(state, ctx, v, -1, (e.impact - spec.crashSpeed) * spec.crashDamage, 'crash');
+        for (const c of e.contacts ?? []) shoveVehicle(state, ctx, c);
         if (v.grounded && speedOf(v) < 0.05) { v.vx = 0; v.vz = 0; }
       }
     } else if (v.kind === 'heli') v.rotor = Math.min(1, v.rotor + dt / ROTOR_SPINUP);

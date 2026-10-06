@@ -11,14 +11,14 @@ import {
   CASH, award, botShop, buy, buyAttachment, finishReload, newRoundStats, refillAmmo, resetInventory, statsOf, useCrate, type BuyItem,
 } from './economy';
 import {
-  MOVE_SLACK, TICK_RATE, applyDamage, crewTeam, explode, eyeOf, feetOf, killSoldier, resolvePellets, resolveShot, seatOf, shieldedIds, sideOf, spawnSoldier,
+  MOVE_SLACK, TICK_RATE, applyDamage, crewTeam, explode, eyeOf, feetOf, killSoldier, onSite, resolvePellets, resolveShot, seatOf, shieldedIds, sideOf, spawnSoldier,
   throwGrenadeFrom, traceShot, weaponOf, type SimContext, type TraceResult,
 } from './combat';
 import { ATTACKERS, targetVehicle, type ClientReport, type MatchConfig, type MatchEvent, type MatchState, type RoundEnd, type ShotClaim, type Soldier, type Team } from './state';
-import { resetVehicles, updateVehicles } from './vehicles';
-import { VEHICLES, speedOf, vehicleBoxDistance } from '../vehicles';
+import { resetVehicles, shoverSpeed, updateVehicles, vehicleRoof, walksIntoVehicle } from './vehicles';
+import { VEHICLES, obstaclesOf, speedOf, vehicleBoxDistance } from '../vehicles';
 
-export { TICK_RATE } from './combat';
+export { SITE_FLOOR, TICK_RATE, onSite } from './combat';
 export { enterVehicle, exitVehicle, reportVehicle, seatOf } from './vehicles';
 export type { SimContext } from './combat';
 
@@ -114,14 +114,17 @@ export function reportState(state: MatchState, ctx: SimContext, id: number, r: C
   // capped, so jitter (reports bunching up after a gap) passes, but sending reports faster never
   // buys extra distance.
   const dt = clamp(elapsed, 0, 0.5);
-  s.moveSlack = Math.min(MOVE_SLACK.max, s.moveSlack + MOVE_SLACK.speed * dt);
+  // A vehicle near us may have pushed us aside (or run us down): its speed adds to the budget.
+  const shove = state.vehicles.length ? shoverSpeed(state, s.m) : 0;
+  s.moveSlack = Math.min(MOVE_SLACK.max + shove * 0.3, s.moveSlack + (MOVE_SLACK.speed + shove) * dt);
   const horizontal = Math.hypot(r.x - s.m.x, r.z - s.m.z);
   const rise = r.y - s.m.y;
   const cost = Math.hypot(horizontal, Math.max(0, rise));
   // Height checks: nothing lifts a soldier higher above its last floor than a jump plus a
   // step-up onto a ledge (margin for that floor being a report old), and no fall on these maps
   // lasts 2.5 s, so a longer airborne spell is hovering. Either drops the soldier to the floor.
-  const floor = ctx.world.groundHeight(r.x, r.z, r.y + 0.05, MOVE.radius);
+  // Vehicle roofs are floors too.
+  const floor = Math.max(ctx.world.groundHeight(r.x, r.z, r.y + 0.05, MOVE.radius), state.vehicles.length ? vehicleRoof(state, { x: r.x, y: r.y + 0.05, z: r.z }) : -Infinity);
   // A soldier on a ladder is held up by it: it counts as a floor (with slack for a report's lag).
   const climbing = !!ctx.world.ladderAt(r.x, r.y, r.z, MOVE.radius + 0.3);
   const airborne = !climbing && r.y - floor > 0.35;
@@ -136,7 +139,8 @@ export function reportState(state: MatchState, ctx: SimContext, id: number, r: C
   const pos = { x: r.x, y: r.y, z: r.z };
   const b = ctx.map.bounds;
   const outOfBounds = r.x < b.minX - 1 || r.x > b.maxX + 1 || r.z < b.minZ - 1 || r.z > b.maxZ + 1;
-  if (cost > s.moveSlack || outOfBounds || ctx.world.overlapsSolid(pos, MOVE.radius * 0.55, 1.2, s.team)) {
+  if (cost > s.moveSlack || outOfBounds || ctx.world.overlapsSolid(pos, MOVE.radius * 0.55, 1.2, s.team)
+    || (state.vehicles.length && walksIntoVehicle(state, s.m, pos))) {
     s.corrections++;
     return false;
   }
@@ -350,13 +354,13 @@ function endRound(state: MatchState, ctx: SimContext, winner: -1 | Team, reason:
 function updateBomb(state: MatchState, ctx: SimContext, dt: number) {
   const sites = ctx.map.sabotage!.sites.map(id => ctx.map.points.find(p => p.id === id)!);
   const bomb = state.bomb;
-  const holding = (s: Soldier, x: number, z: number) => s.alive && s.using && s.m.grounded && Math.hypot(s.m.vx, s.m.vz) < 0.6
-    && Math.hypot(s.m.x - x, s.m.z - z) < BOMB_REACH;
+  const holding = (s: Soldier, p: { x: number; y: number; z: number }) => s.alive && s.using && s.m.grounded && Math.hypot(s.m.vx, s.m.vz) < 0.6
+    && onSite(p, s.m.x, s.m.y, s.m.z, BOMB_REACH);
   if (!bomb.armed) {
     let armer: Soldier | undefined, site = -1;
     for (const s of state.soldiers) {
       if (s.team !== ATTACKERS) continue;
-      const i = sites.findIndex(p => holding(s, p.x, p.z));
+      const i = sites.findIndex(p => holding(s, p));
       if (i >= 0 && (bomb.by === -1 || bomb.by === s.id)) { armer = s; site = i; break; }
     }
     if (!armer) { bomb.by = -1; bomb.progress = 0; bomb.site = -1; return; }
@@ -371,7 +375,7 @@ function updateBomb(state: MatchState, ctx: SimContext, dt: number) {
     return;
   }
   const p = sites[bomb.site];
-  const defuser = state.soldiers.find(s => s.team !== ATTACKERS && holding(s, p.x, p.z) && (bomb.by === -1 || bomb.by === s.id));
+  const defuser = state.soldiers.find(s => s.team !== ATTACKERS && holding(s, p) && (bomb.by === -1 || bomb.by === s.id));
   if (!defuser) { bomb.by = -1; bomb.progress = 0; return; }
   bomb.by = defuser.id;
   bomb.progress = Math.min(1, bomb.progress + dt / state.config.disarmTime);
@@ -428,9 +432,11 @@ export function tickMatch(state: MatchState, ctx: SimContext, dt: number) {
   }
 
   const frozen = state.roundPhase === 'freeze' || state.phase !== 'live';
+  // The vehicles' bodies, built once per tick: bots walk round them and are pushed by them.
+  const obstacles = state.vehicles.length ? obstaclesOf(state.vehicles) : undefined;
   for (const s of state.soldiers) {
     updateTimers(state, ctx, s, dt);
-    if (s.bot && s.alive && !frozen) updateBot(state, ctx, s, dt);
+    if (s.bot && s.alive && !frozen) updateBot(state, ctx, s, dt, obstacles);
   }
   updateVehicles(state, ctx, dt);
   stepWorld(state, ctx, dt);
@@ -459,7 +465,9 @@ function updateTimers(state: MatchState, ctx: SimContext, s: Soldier, dt: number
 
 function stepWorld(state: MatchState, ctx: SimContext, dt: number) {
   const steps = Math.max(1, Math.ceil(dt / PHYSICS_STEP - 1e-9));
-  for (let i = 0; i < steps; i++) stepBodies(state.bodies, dt / steps, ctx.world);
+  // Grenades bounce off the vehicles where they are after this tick's driving.
+  const obstacles = state.bodies.length && state.vehicles.length ? obstaclesOf(state.vehicles) : undefined;
+  for (let i = 0; i < steps; i++) stepBodies(state.bodies, dt / steps, ctx.world, obstacles);
   const b0 = ctx.map.bounds;
   for (const b of [...state.bodies]) {
     const far = b.x < b0.minX - 60 || b.x > b0.maxX + 60 || b.z < b0.minZ - 60 || b.z > b0.maxZ + 60 || b.y < -40 || b.y > 260;

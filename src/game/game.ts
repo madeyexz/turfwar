@@ -3,13 +3,13 @@ import { hitShape, raycastSoldier } from '../../shared/hitbox';
 import { loadMap } from '../../shared/maps/index';
 import { wrapAngle, type Vec3 } from '../../shared/math';
 import { eyeHeight } from '../../shared/movement';
-import { ATTACKERS, TEAM_NAMES, vehicleTarget, type MatchEvent, type MatchState, type Soldier } from '../../shared/match/state';
-import { VEHICLES, raycastVehicle, seatPosition, speedOf, type Vehicle } from '../../shared/vehicles';
+import { ATTACKERS, vehicleTarget, type MatchEvent, type MatchState, type Soldier } from '../../shared/match/state';
+import { VEHICLES, obstaclesOf, raycastVehicle, seatPosition, speedOf, type Vehicle } from '../../shared/vehicles';
 import { seatFor } from '../../shared/match/vehicles';
 import { WEAPONS, pelletCone, pelletDirs, weaponStats, type HitZone, type WeaponId } from '../../shared/weapons';
 import { CASH, CRATE_REACH, canBuyWeapons, inBase } from '../../shared/match/economy';
 import { seatOf, shieldedIds, sideOf } from '../../shared/match/combat';
-import { BOMB_REACH, modeOf } from '../../shared/match/sim';
+import { BOMB_REACH, modeOf, onSite } from '../../shared/match/sim';
 import type { Assets } from '../assets';
 import { Audio, type EngineVoice } from '../audio';
 import { BodiesView } from '../render/bodies';
@@ -26,7 +26,8 @@ import { SkidMarks } from '../render/skids';
 import { VehiclesView, vehicleName } from '../render/vehicles';
 import { BuyMenu } from '../ui/buymenu';
 import { SettingsMenu } from '../ui/settingsmenu';
-import { Hud } from '../ui/hud';
+import { Hud, weaponLabel } from '../ui/hud';
+import { mapName, roundReason, t, teamName } from '../ui/i18n';
 import { Input } from './input';
 import type { GameLink } from './link';
 import { Driving } from './driving';
@@ -41,8 +42,6 @@ const SHOT_FX_RANGE = 110, SHOT_AUDIO_RANGE = 85;
 const frustum = new THREE.Frustum(), projScreen = new THREE.Matrix4(), lodSphere = new THREE.Sphere(new THREE.Vector3(), 1.3);
 
 interface Remote { view: SoldierView; buffer: InterpBuffer<Sample>; pos: THREE.Vector3; crouch: number; yaw: number; pitch: number; stepDist: number; last?: THREE.Vector3 }
-
-const REASONS: Record<string, string> = { eliminated: 'Team eliminated', time: 'Time ran out', armed: 'Bomb armed', disarmed: 'Bomb disarmed', exploded: 'Target destroyed' };
 
 /** One deployed match: rendering, local prediction, effects, HUD and the link to the match host. */
 export class Game {
@@ -174,7 +173,7 @@ export class Game {
     this.input.canRelock = () => !this.buymenu.open && !this.hud.chatting && !this.menu.open && this.link.state()?.phase !== 'ended';
     if (me) this.player.spawnFrom(me);
     const room = link.roomInfo?.();
-    if (room?.code) this.hud.toast(`Private room ${room.code} · ${room.size} — friends join with this code`, 12000);
+    if (room?.code) this.hud.toast(t('hud.privateToast', { code: room.code, size: room.size }), 12000);
     if (import.meta.env.DEV) Object.assign(window, { __game: this });
   }
 
@@ -294,7 +293,7 @@ export class Game {
     if (this.driving.active) {
       // At the wheel: the controls fly the vehicle; we ride in the driver's seat (no walking). Car and
       // helicopter drivers have no weapon; a scooter rider aims with the mouse (below).
-      const e = this.driving.update(dt, active && state.phase !== 'ended' ? this.input : undefined, this.map.world, this.player.frozen);
+      const e = this.driving.update(dt, active && state.phase !== 'ended' ? this.input : undefined, this.map.world, this.player.frozen, obstaclesOf(state.vehicles, this.driving.v!.id));
       if (e.impact > 5) this.audio.crash(e.impact);
       const v = this.driving.renderPose()!;
       this.player.seat(seatPosition(v, 0), VEHICLES[v.kind].sit, v);
@@ -307,7 +306,8 @@ export class Game {
     const aimed = { yaw: this.player.yaw, pitch: this.player.pitch };
     const result = this.driving.active && !this.driving.armed
       ? this.player.update(dt, undefined, this.map.world, false, true)
-      : this.player.update(dt, active ? this.input : undefined, this.map.world, active && state.phase !== 'ended', this.player.frozen || state.roundPhase === 'over');
+      : this.player.update(dt, active ? this.input : undefined, this.map.world, active && state.phase !== 'ended', this.player.frozen || state.roundPhase === 'over',
+        seat ? undefined : this.vehicleBodies(state));
     if (this.driving.armed) {
       // Recoil kicks the rider's camera (the aim follows the camera, not the other way round).
       this.driving.camPitch += this.player.pitch - aimed.pitch;
@@ -475,12 +475,12 @@ export class Game {
       const buyLeft = free ? -1 : Math.max(0, state.config.buyTime - state.roundClock);
       this.buymenu.update(me, buyWindow, buyLeft, free);
       const showBuy = !!me && buyWindow && (free || !me.alive || inBase(me, this.map.def, side)) && !this.buymenu.open;
-      this.hud.buyHint(showBuy ? (free ? 'B STORE' : `B STORE · ${Math.ceil(buyLeft)}s`) : undefined);
+      this.hud.buyHint(showBuy ? (free ? t('hud.store') : t('hud.storeLeft', { n: Math.ceil(buyLeft) })) : undefined);
       this.hud.prompt(this.promptText(state, me, site, myJob));
       this.hud.vehicle(this.vehicleInfo(state));
       const bomb = state.bomb;
       const mine = bomb.by === myId && bomb.progress > 0;
-      this.hud.progress(mine ? (bomb.armed ? 'DISARMING' : 'ARMING') : undefined, bomb.progress);
+      this.hud.progress(mine ? t(bomb.armed ? 'hud.disarming2' : 'hud.arming2') : undefined, bomb.progress);
       this.hud.matchEnd(state, this.myTeam, state.phase === 'ended' ? link.leaderboard?.() : undefined);
       this.hud.net(link.status());
     }
@@ -488,6 +488,15 @@ export class Game {
     this.fpsFrames++; this.fpsTime += dt;
     if (this.fpsTime > 1) { this.hud.fps(`${Math.round(this.fpsFrames / this.fpsTime)} FPS · ${this.renderer.renderer.info.render.calls} calls`); this.fpsFrames = 0; this.fpsTime = 0; }
     this.input.endFrame();
+  }
+
+  /** The vehicles' bodies where we see them (as rendered): they block us, carry us on their roofs and push us aside. */
+  private vehicleBodies(state: MatchState) {
+    if (!state.vehicles.length) return undefined;
+    return obstaclesOf(state.vehicles.map(v => {
+      const p = this.vehicles.pose(v.id);
+      return p ? { id: v.id, kind: v.kind, x: p.x, y: p.y, z: p.z, yaw: p.yaw, vx: p.vx, vz: p.vz } : v;
+    }));
   }
 
   /** The vehicle E would get us into: the closest one in reach with a seat for us, or -1. */
@@ -530,9 +539,9 @@ export class Game {
     if (!seated || !host) return undefined;
     const v = this.driving.v ?? host, spec = VEHICLES[v.kind];
     const k = (key: string) => `<kbd>${key}</kbd>`;
-    const keys = seated.seat === 1 ? `PASSENGER · ${k('E')}EXIT`
-      : v.kind === 'heli' ? `${k('W')}${k('A')}${k('S')}${k('D')}FLY · MOUSE TURN · ${k('SPACE')}UP · ${k('C')}DOWN · ${k('V')}VIEW · ${k('E')}EXIT`
-      : `${k('W')}${k('S')}DRIVE · ${k('A')}${k('D')}STEER · ${k('SPACE')}DRIFT${v.kind === 'scooter' ? ` · ${k('LMB')}FIRE` : ''} · ${k('V')}VIEW · ${k('E')}EXIT`;
+    const keys = seated.seat === 1 ? `${t('hud.passenger')} · ${k('E')}${t('hud.exit')}`
+      : v.kind === 'heli' ? `${k('W')}${k('A')}${k('S')}${k('D')}${t('hud.fly')} · ${t('hud.mouseTurn')} · ${k('SPACE')}${t('hud.up')} · ${k('C')}${t('hud.down')} · ${k('V')}${t('hud.view')} · ${k('E')}${t('hud.exit')}`
+      : `${k('W')}${k('S')}${t('hud.drive')} · ${k('A')}${k('D')}${t('hud.steer')} · ${k('SPACE')}${t('hud.drift')}${v.kind === 'scooter' ? ` · ${k(t('key.lmb'))}${t('hud.fire')}` : ''} · ${k('V')}${t('hud.view')} · ${k('E')}${t('hud.exit')}`;
     const floor = this.map.world.groundHeight(v.x, v.z, v.y + 0.1, 0.5);
     return { name: vehicleName(v), speed: speedOf(v), altitude: v.kind === 'heli' ? v.y - floor : undefined, health: host.health, max: spec.health, keys };
   }
@@ -618,7 +627,7 @@ export class Game {
     const m = this.player.m;
     return sites.findIndex(id => {
       const p = this.map.def.points.find(x => x.id === id);
-      return !!p && Math.hypot(p.x - m.x, p.z - m.z) < BOMB_REACH && (!state.bomb.armed || state.bomb.site === sites.indexOf(id));
+      return !!p && onSite(p, m.x, m.y, m.z, BOMB_REACH) && (!state.bomb.armed || state.bomb.site === sites.indexOf(id));
     });
   }
 
@@ -626,12 +635,12 @@ export class Game {
     const near = state.vehicles[this.nearVehicle];
     if (me?.alive && near && !this.seated) {
       const name = vehicleName(near);
-      return near.driver >= 0 ? `<kbd>E</kbd> RIDE ALONG · ${name}` : `<kbd>E</kbd> ${VEHICLES[near.kind].verb} ${near.kind === 'car' ? `THE ${name}` : name}`;
+      return `<kbd>E</kbd> ${near.driver >= 0 ? t('hud.rideAlong', { name }) : t(near.kind === 'car' ? 'hud.enterCar' : near.kind === 'scooter' ? 'hud.enterScooter' : 'hud.enterHeli', { name })}`;
     }
     if (!me?.alive || state.roundPhase !== 'live') return '';
-    if (site >= 0 && myJob) return `HOLD <kbd>E</kbd> TO ${state.bomb.armed ? 'DISARM THE BOMB' : `ARM THE BOMB AT ${this.map.def.sabotage!.sites[site]}`}`;
+    if (site >= 0 && myJob) return state.bomb.armed ? t('hud.holdDisarm', { key: '<kbd>E</kbd>' }) : t('hud.holdArm', { key: '<kbd>E</kbd>', site: this.map.def.sabotage!.sites[site] });
     if (this.crates.nearest(this.player.m.x, this.player.m.y, this.player.m.z, CRATE_REACH) >= 0 && this.player.slot !== 2) {
-      return `<kbd>E</kbd> AMMO CRATE${me.round.crate || state.config.freeBuy ? '' : ` ($${CASH.crate})`}`;
+      return `<kbd>E</kbd> ${t('hud.crate')}${me.round.crate || state.config.freeBuy ? '' : ` ($${CASH.crate})`}`;
     }
     return '';
   }
@@ -825,7 +834,7 @@ export class Game {
         const killer = find(e.killer), victim = find(e.victim);
         this.hud.killfeed(killer, victim, e.weapon, e.head, e.killer === myId || e.victim === myId);
         if (e.killer === myId && e.victim !== myId) { this.hud.hit('kill'); this.audio.hitmarker(e.head, true); }
-        if (e.victim === myId) this.hud.announce('YOU DIED', killer && killer.id !== myId ? `${killer.name} · ${e.weapon.toUpperCase()}` : '', 'var(--crimson)');
+        if (e.victim === myId) this.hud.announce(t('hud.youDied'), killer && killer.id !== myId ? `${killer.name} · ${weaponLabel(e.weapon)}` : '', 'var(--crimson)');
         break;
       }
       case 'reward': if (e.id === myId) { this.hud.reward(e.amount, e.reason); this.audio.cash(); } break;
@@ -837,20 +846,20 @@ export class Game {
           this.skids.clear();
           this.audio.roundStart();
           const sabotage = modeOf(state, this.map.def) === 'sabotage';
-          const goal = !sabotage ? 'Eliminate the enemy team' : me?.team === ATTACKERS ? 'Arm the bomb or eliminate SWAT' : 'Defend the sites or eliminate the Militia';
-          this.hud.announce(`ROUND ${e.round}`, goal, 'var(--accent)');
+          const goal = t(!sabotage ? 'hud.goal.elim' : me?.team === ATTACKERS ? 'hud.goal.attack' : 'hud.goal.defend');
+          this.hud.announce(t('hud.round', { n: e.round }), goal, 'var(--accent)');
         } else if (e.phase === 'over') {
           const won = e.winner === -1 ? undefined : e.winner === this.myTeam;
           this.audio.roundEnd(won);
-          const title = e.winner === -1 ? 'DRAW · ROUND REPLAYS' : `${TEAM_NAMES[e.winner].toUpperCase()} WINS THE ROUND`;
-          this.hud.announce(title, REASONS[e.reason ?? ''] ?? '', e.winner === -1 ? 'var(--ink)' : e.winner === 0 ? 'var(--aegis)' : 'var(--crimson)');
+          const title = e.winner === -1 ? t('hud.roundDraw') : t('hud.winsRound', { team: teamName(e.winner).toUpperCase() });
+          this.hud.announce(title, roundReason(e.reason), e.winner === -1 ? 'var(--ink)' : e.winner === 0 ? 'var(--aegis)' : 'var(--crimson)');
         }
         break;
       }
       case 'bomb': {
         const letter = this.map.def.sabotage?.sites[e.site] ?? '';
-        if (e.action === 'armed') { this.audio.bombArmed(); this.hud.announce('BOMB ARMED', `Site ${letter}`, 'var(--crimson)'); this.beepTimer = 0; }
-        if (e.action === 'disarmed') { this.audio.bombDisarmed(); this.hud.announce('BOMB DISARMED', `Site ${letter}`, 'var(--aegis)'); }
+        if (e.action === 'armed') { this.audio.bombArmed(); this.hud.announce(t('hud.armedTitle'), t('hud.site', { site: letter }), 'var(--crimson)'); this.beepTimer = 0; }
+        if (e.action === 'disarmed') { this.audio.bombDisarmed(); this.hud.announce(t('hud.disarmedTitle'), t('hud.site', { site: letter }), 'var(--aegis)'); }
         break;
       }
       case 'vehicle': {
@@ -876,9 +885,9 @@ export class Game {
       case 'phase': {
         if (e.phase === 'ended') {
           const won = e.winner === this.myTeam;
-          this.hud.announce(won ? 'VICTORY' : 'DEFEAT', `${TEAM_NAMES[e.winner === -1 ? 0 : e.winner]} wins the match`, won ? 'var(--accent)' : 'var(--crimson)');
+          this.hud.announce(t(won ? 'hud.victory' : 'hud.defeat'), t('hud.winsMatch', { team: teamName(e.winner === -1 ? 0 : e.winner) }), won ? 'var(--accent)' : 'var(--crimson)');
         }
-        if (e.phase === 'warmup') this.hud.announce('NEW MATCH', this.map.def.name);
+        if (e.phase === 'warmup') this.hud.announce(t('hud.newMatch'), mapName(this.map.def.id, this.map.def.name));
         break;
       }
       case 'chat': {
@@ -890,7 +899,7 @@ export class Game {
         this.hud.chatLine(e.name, e.team, e.text, e.teamOnly, dead);
         break;
       }
-      case 'join': if (e.id !== myId && !find(e.id)?.bot) this.hud.toast(`${e.name} joined ${TEAM_NAMES[e.team]}`); break;
+      case 'join': if (e.id !== myId && !find(e.id)?.bot) this.hud.toast(t('hud.joined', { name: e.name, team: teamName(e.team) })); break;
       case 'leave': break;
       case 'spawn': break;
     }
