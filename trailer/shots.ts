@@ -366,7 +366,7 @@ export const SHOTS: Shot[] = [
   {
     // The new lobby: filters (size, mode, a map from the picker), PLAY ONLINE, the live room list.
     id: 'lobby2', url: 'mode=online&size=squad&name=Lawbreaker', frames: 240, lobby: true, load: 6000, scale: 2, native: true,
-    setup: [{ until: `document.querySelectorAll('#rooms .room').length >= 2`, max: 600 }, { frames: 10 }],
+    setup: [{ until: `document.querySelectorAll('#rooms .room').length >= 1`, max: 600 }, { frames: 10 }],
     cues: [
       cue(0, `T.cursor('[data-size="squad"]', 18)`), cue(20, `T.click('[data-size="squad"]')`),
       cue(34, `T.cursor('[data-gamemode="sabotage"]', 16)`), cue(52, `T.click('[data-gamemode="sabotage"]')`),
