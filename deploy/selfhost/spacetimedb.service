@@ -1,0 +1,18 @@
+[Unit]
+Description=SpacetimeDB (Lawbreaker match server)
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+User=spacetimedb
+Group=spacetimedb
+ExecStart=/stdb/spacetime --root-dir=/stdb start --listen-addr=127.0.0.1:3000 --non-interactive
+# SpacetimeDB shuts down gracefully on Ctrl+C (SIGINT), not on systemd's default SIGTERM.
+KillSignal=SIGINT
+TimeoutStopSec=60
+Restart=always
+RestartSec=3
+LimitNOFILE=65536
+
+[Install]
+WantedBy=multi-user.target

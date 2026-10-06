@@ -1,0 +1,5 @@
+# SpacetimeDB server config (/stdb/data/config.toml). The server snapshots whenever it opens a new
+# commitlog segment, so 256 MiB segments (default 1 GiB) give the nightly prune more, smaller
+# pieces to drop: a busy 6v6 room fills one in ~9 minutes.
+[commitlog]
+max-segment-size = 268435456

@@ -1,0 +1,9 @@
+__DOMAIN__ {
+	# Public: only what the game client uses (its websocket and token exchange) plus a health ping.
+	# Publishing, SQL and logs stay on localhost; publish through an SSH tunnel (publish.sh).
+	@client path_regexp ^/v1/(identity(/websocket-token)?|ping|database/[^/]+/subscribe)$
+	handle @client {
+		reverse_proxy 127.0.0.1:3000
+	}
+	respond 404
+}

@@ -1,0 +1,6 @@
+[Unit]
+Description=Prune the SpacetimeDB commitlog (waits until no one is playing)
+
+[Service]
+Type=oneshot
+ExecStart=/usr/local/lib/lawbreaker/maintenance.sh
