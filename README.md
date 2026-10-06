@@ -1,6 +1,6 @@
 # 角頭械鬥 · Turf War: Taipei
 
-Formerly *Lawbreaker // Frontline*: the repository, databases (`lawbreaker-dev`, `3d-game-c4lhd`) and the `lawbreaker.vercel.app` URL keep the old name.
+Formerly *Lawbreaker // Frontline*: the repository, databases (`lawbreaker-dev`, `3d-game-c4lhd`) and the Vercel project keep the old name; the game lives at https://turfwar.ianhsiao.me (https://lawbreaker.vercel.app still works).
 
 A browser-first, keyboard-and-mouse team shooter faithful to **BeGone** (nPlay's browser FPS):
 SWAT against Militia in short rounds with one life each, cash for every kill, a store in your
@@ -417,7 +417,7 @@ everything above 6 m to see under roofs),
 
 ## Deploy
 
-Production: https://lawbreaker.vercel.app. The private GitHub repository
+Production: https://turfwar.ianhsiao.me (also https://lawbreaker.vercel.app). The private GitHub repository
 `madeyexz/lawbreaker` is connected to Vercel project `madeyexzs-projects/lawbreaker`, with
 `main` as its shared development and production branch. Maincloud database: `3d-game-c4lhd`
 (dashboard: https://spacetimedb.com/3d-game-c4lhd).
