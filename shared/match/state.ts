@@ -139,6 +139,12 @@ export interface MatchConfig {
   freeBuy?: boolean;
   /** No bots fill empty slots (private rooms can turn them off). */
   noBots?: boolean;
+  /**
+   * Online public rooms opened for a specific map or mode keep it from match to match
+   * (`nextRoomRules`); rooms opened for "any" rotate. Absent = rotate (older rooms).
+   */
+  fixedMap?: boolean;
+  fixedMode?: boolean;
 }
 
 /** BeGone's GameSettings.json: 4 s round start, 5 s round over, 10 s match over, first to 10. */

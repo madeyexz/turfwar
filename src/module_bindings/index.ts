@@ -46,6 +46,7 @@ import JoinPublicReducer from "./join_public_reducer";
 import JoinRoomReducer from "./join_room_reducer";
 import LeaveReducer from "./leave_reducer";
 import QuickJoinReducer from "./quick_join_reducer";
+import QuickPlayReducer from "./quick_play_reducer";
 import ReloadWeaponReducer from "./reload_weapon_reducer";
 import ReportReducer from "./report_reducer";
 import SayReducer from "./say_reducer";
@@ -185,6 +186,7 @@ const reducersSchema = __reducers(
   __reducerSchema("join_room", JoinRoomReducer),
   __reducerSchema("leave", LeaveReducer),
   __reducerSchema("quick_join", QuickJoinReducer),
+  __reducerSchema("quick_play", QuickPlayReducer),
   __reducerSchema("reload_weapon", ReloadWeaponReducer),
   __reducerSchema("report", ReportReducer),
   __reducerSchema("say", SayReducer),

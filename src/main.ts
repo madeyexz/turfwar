@@ -1,6 +1,6 @@
 import { inject } from '@vercel/analytics';
 import { loadMap, mapSummaries } from '../shared/maps/index';
-import { cleanCode, ROOM_SIZES, sizeLabel } from '../shared/match/rooms';
+import { cleanCode, hasSites, mapsFor, newRoomRules, pickRoom, roomFull, roomMatches, ROOM_SIZES, sizeLabel, type RoomFilter } from '../shared/match/rooms';
 import { ELIMINATION, SABOTAGE, type Mode, type Team } from '../shared/match/state';
 import { loadAssets, type Assets } from './assets';
 import { Audio } from './audio';
@@ -16,6 +16,7 @@ import { QUALITY, Renderer } from './render/renderer';
 import { renderTheme, THEME_START } from './theme';
 import { SettingsMenu, type GraphicsQuality, type SettingsTab } from './ui/settingsmenu';
 import { cjkFontReady } from './ui/fonts';
+import { drawMapThumb } from './ui/mapthumb';
 import { L, applyI18n, escapeHtml as esc, isZh, mapName as localMapName, mapRegion, modeName, onLang, plural, serverError, sizeName, t, type Key } from './ui/i18n';
 import './style.css';
 import './menu.css';
@@ -35,18 +36,14 @@ const store = {
 const SIZES = ROOM_SIZES;
 type SizeId = (typeof SIZES)[number]['id'];
 const sizeOf = (id: string) => SIZES.find(s => s.id === id) ?? SIZES[1];
+const MODE_TAGS: Record<Mode, string> = { elimination: 'E', sabotage: 'S' };
 /**
- * What the lobby is pointed at. Quick Play is the default; every other way in is an inline drawer
- * (or a selected public room) with its own button. Enter runs whichever is in focus.
+ * Ways into a match. `play` is the primary one (Play Online with the filters); the rest are the
+ * live room list (`room`), the bottom row (`solo`, `range`, `private`) and the code box (`code`).
  */
-type Focus = 'quick' | 'create' | 'join' | 'room' | 'bots' | 'range';
-/** How the match is reached: the old `mode` / `onlineKind` pair, still what storage and URLs speak. */
-const modeOf = (f: Focus) => f === 'bots' ? 'offline' : f === 'range' ? 'lab' : 'online';
-const kindOf = (f: Focus) => f === 'create' ? 'create' : f === 'join' ? 'code' : f === 'room' ? 'room' : 'quick';
-const MODES: Record<Mode, { tag: string; readonly name: string }> = {
-  elimination: { tag: 'E', get name() { return modeName('elimination'); } },
-  sabotage: { tag: 'S', get name() { return modeName('sabotage'); } },
-};
+type Action = 'play' | 'room' | 'solo' | 'range' | 'private' | 'code';
+/** How the match is reached, as storage and `?mode=` speak it. */
+const modeOf = (a: Action) => a === 'solo' ? 'offline' : a === 'range' ? 'lab' : 'online';
 
 const menu = document.createElement('div');
 menu.id = 'menu';
@@ -54,93 +51,89 @@ const maps = mapSummaries();
 const mapName = (id: string) => localMapName(id, maps.find(m => m.id === id)?.name ?? id);
 const server = onlineConfig();
 const online = onlineAvailable();
-const vs = (n: number) => `${n}v${n}`;
-/** Segmented buttons; `items` are [value, label HTML] (labels built with `L` follow the language). */
-const choice = (group: string, attr: string, items: [string, string][], label?: Key) =>
-  `<div class="choices segmented" id="${group}" style="--n:${items.length}"${label ? ` role="group" aria-label="${t(label)}" data-i18n-aria-label="${label}"` : ''}>${items.map(([v, text]) => `<button class="choice" data-${attr}="${v}"><b>${text}</b></button>`).join('')}</div>`;
-const sizeChoice = (group: string) =>
-  `<div class="choices segmented sizes" id="${group}" style="--n:${SIZES.length}" role="group" aria-label="${t('lobby.roomSize')}" data-i18n-aria-label="lobby.roomSize">${SIZES.map(s => `<button class="choice" data-size="${s.id}"><b>${s.label}</b><small>${L(`size.${s.id}`)}${s.perTeam > 12 ? ` · ${L('lobby.bigMap')}` : ''}</small></button>`).join('')}</div>`;
-const modeChoice = (group: string) => choice(group, 'gamemode', (Object.keys(MODES) as Mode[]).map(id => [id, `<span class="mtag">[${MODES[id].tag}]</span> ${L(`mode.${id}`)}`]));
-const mapChoice = (group: string) =>
-  `<div class="maps" id="${group}">${maps.map(m => `<button class="map" data-map="${m.id}" data-theme="${m.theme}"><b>${esc(mapName(m.id))}</b><small></small></button>`).join('')}</div>`;
-const field = (label: Key, body: string) => `<div class="field">${L(label, 'span', 'class="label"')}${body}</div>`;
+/** Featured first in the map row's shortcuts: Taipei's two maps, then the usual order. */
+const FEATURED = ['taipei', 'xinyi', ...maps.map(m => m.id).filter(id => id !== 'taipei' && id !== 'xinyi')];
+
 const GEAR = '<svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="3.2"/><path d="M12 2.8v2.6M12 18.6v2.6M21.2 12h-2.6M5.4 12H2.8M18.5 5.5l-1.84 1.84M7.34 16.66 5.5 18.5M18.5 18.5l-1.84-1.84M7.34 7.34 5.5 5.5"/><circle cx="12" cy="12" r="6.4"/></svg>';
+const PLAY = '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M7 4.5v15l12.5-7.5z"/></svg>';
+const CARET = '<svg class="caret" viewBox="0 0 24 24" aria-hidden="true"><path d="m6 9 6 6 6-6"/></svg>';
+const LOCK = '<svg class="lock" viewBox="0 0 24 24" aria-hidden="true"><rect x="5" y="11" width="14" height="10" rx="2"/><path d="M8 11V8a4 4 0 0 1 8 0v3"/></svg>';
+const ROTATE = '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M20 12a8 8 0 0 1-14 5.3M4 12a8 8 0 0 1 14-5.3"/><path d="M18 3v4h-4M6 21v-4h4"/></svg>';
+
+/** Segmented buttons; `items` are [value, label HTML] (labels built with `L` follow the language). */
+const choice = (group: string, attr: string, items: [string, string][], label: Key) =>
+  `<div class="choices segmented" id="${group}" style="--n:${items.length}" role="group" aria-label="${t(label)}" data-i18n-aria-label="${label}">${items.map(([v, text]) => `<button type="button" class="choice" data-${attr}="${v}"><b>${text}</b></button>`).join('')}</div>`;
+const pop = (id: string, label: Key, body: string) =>
+  `<div class="pop" id="${id}" role="dialog" aria-label="${t(label)}" data-i18n-aria-label="${label}" hidden>${body}</div>`;
 
 /*
- * Left: only what starts a match (callsign, team, size, Quick Play) and one row of other ways in, each
- * opening its drawer. Right: the live backdrop with the map in view and, when any exist, public rooms.
- * Settings and controls live behind the gear (top right).
+ * Top: the name, team, controls and settings. Left panel: the filters (size, mode, map), PLAY ONLINE,
+ * the live rooms those filters match, and one row of other ways in. Right: the live battlefield
+ * backdrop with the map in view. The map picker and the Solo / Private room options are popovers.
  */
 menu.innerHTML = `
-  <section class="panel">
-    <header class="brand">
-      <div class="tag">Lawbreaker // Frontline</div>
-      <h1>${L('lobby.title')} <em data-i18n="lobby.titleVs">${t('lobby.titleVs')}</em></h1>
-      ${L('lobby.lede', 'p', 'class="lede"')}
-    </header>
-    <div class="form">
-      <div class="who">
-        <label class="callsign">${L('lobby.callsign', 'span', 'class="label"')}<input type="text" id="callsign" maxlength="16" autocomplete="off" spellcheck="false"></label>
-        ${choice('teams', 'team', [['auto', L('lobby.auto')], ['0', L('team.0', 'span', 'class="swat"')], ['1', L('team.1', 'span', 'class="militia"')]], 'lobby.team')}
-      </div>
-
-      <section class="block" id="online-block" aria-label="${t('lobby.playOnline')}" data-i18n-aria-label="lobby.playOnline">
-        ${sizeChoice('sizes-online')}
-        <button class="deploy" id="quick" data-act="quick" disabled>${t('lobby.loading')}</button>
-        <p class="rooms-line" id="rooms-line"><span class="conn" id="conn"><i></i></span><span id="quick-hint"></span></p>
-        <p class="unavailable" id="online-off"></p>
-      </section>
-
-      <div class="subs" role="group" aria-label="${t('lobby.more')}" data-i18n-aria-label="lobby.more">
-        ${L('lobby.sub.create', 'button', 'class="sub" data-toggle="create" aria-expanded="false" aria-controls="drawer-create"')}
-        ${L('lobby.sub.join', 'button', 'class="sub" data-toggle="join" aria-expanded="false" aria-controls="drawer-join"')}
-        ${L('lobby.sub.bots', 'button', 'class="sub" data-toggle="bots" aria-expanded="false" aria-controls="drawer-bots"')}
-        ${L('lobby.sub.range', 'button', 'class="sub" data-toggle="range" aria-expanded="false" aria-controls="drawer-range"')}
-      </div>
-      <div class="drawer" id="drawer-create">
-        ${field('lobby.field.mode', modeChoice('modes-create'))}
-        ${field('lobby.field.map', mapChoice('maps-create'))}
-        ${field('lobby.field.bots', choice('botsfills', 'botsfill', [['on', L('lobby.bots.on')], ['off', L('lobby.bots.off')]]))}
-        <button class="go" id="create-go" data-act="create">${t('lobby.createRoom')}</button>
-        ${L('lobby.createHint', 'p', 'class="hint"')}
-      </div>
-      <div class="drawer" id="drawer-join">
-        <div class="code-row">
-          <input type="text" id="roomcode" maxlength="4" autocomplete="off" spellcheck="false" placeholder="ABCD" aria-label="${t('lobby.roomCode')}" data-i18n-aria-label="lobby.roomCode">
-          <button class="go" id="join-go" data-act="join">${t('common.join')}</button>
-        </div>
-        ${L('lobby.joinHint', 'p', 'class="hint"')}
-      </div>
-      <div class="drawer" id="drawer-bots">
-        ${field('lobby.field.mode', modeChoice('modes-bots'))}
-        ${field('lobby.field.size', sizeChoice('sizes-bots'))}
-        ${field('lobby.field.map', mapChoice('maps-bots'))}
-        ${field('lobby.field.skill', choice('skills', 'skill', [['0.25', L('lobby.skill.recruit')], ['0.45', L('lobby.skill.veteran')], ['0.75', L('lobby.skill.elite')]]))}
-        <button class="go" id="bots-go" data-act="bots">${t('lobby.startMatch')}</button>
-        ${L('lobby.botsHint', 'p', 'class="hint"')}
-      </div>
-      <div class="drawer" id="drawer-range">
-        ${field('lobby.field.map', mapChoice('maps-range'))}
-        <button class="go" id="range-go" data-act="range">${t('lobby.enterRange')}</button>
-        ${L('lobby.rangeHint', 'p', 'class="hint"')}
+  <header class="top">
+    <div class="brand"><h1 class="logo" id="logo"></h1></div>
+    <div class="who">
+      <label class="callsign">${L('lobby.callsign', 'span', 'class="label"')}<input type="text" id="callsign" maxlength="16" autocomplete="off" spellcheck="false"></label>
+      ${choice('teams', 'team', [['auto', L('lobby.auto')], ['0', L('team.0', 'span', 'class="swat"')], ['1', L('team.1', 'span', 'class="militia"')]], 'lobby.team')}
+      <div class="icons">
+        <button type="button" class="icon-btn" id="open-controls" data-tip="${t('lobby.controls')}" data-i18n-tip="lobby.controls" aria-label="${t('lobby.controls')}" data-i18n-aria-label="lobby.controls" aria-haspopup="dialog">?</button>
+        <button type="button" class="icon-btn" id="open-settings" data-tip="${t('lobby.settings')}" data-i18n-tip="lobby.settings" aria-label="${t('lobby.settings')}" data-i18n-aria-label="lobby.settings" aria-haspopup="dialog">${GEAR}</button>
       </div>
     </div>
+  </header>
+  <section class="panel">
+    <div class="filters" role="group" aria-label="${t('lobby.filters')}" data-i18n-aria-label="lobby.filters">
+      <div class="frow">${L('lobby.field.size', 'span', 'class="label"')}
+        <div class="choices segmented sizes" id="sizes" style="--n:${SIZES.length}" role="group" aria-label="${t('lobby.roomSize')}" data-i18n-aria-label="lobby.roomSize">${SIZES.map(s => `<button type="button" class="choice" data-size="${s.id}"><b>${s.label}</b><small>${L(`size.${s.id}`)}${s.perTeam > 12 ? ` · ${L('lobby.bigMaps')}` : ''}</small></button>`).join('')}</div>
+      </div>
+      <div class="frow">${L('lobby.field.mode', 'span', 'class="label"')}
+        ${choice('modes', 'gamemode', [['', L('lobby.any')], ['elimination', `<span class="mtag">[E]</span> ${L('mode.elimination')}`], ['sabotage', `<span class="mtag">[S]</span> ${L('mode.sabotage')}`]], 'lobby.field.mode')}
+      </div>
+      <div class="frow">${L('lobby.field.map', 'span', 'class="label"')}
+        <div class="mapline">
+          <button type="button" class="map-trigger" id="map-trigger" aria-haspopup="dialog" aria-expanded="false" aria-controls="map-pop"><i class="sw"></i><b></b><small></small>${CARET}</button>
+          <div class="quick-maps" id="quick-maps" role="group" aria-label="${t('lobby.field.map')}" data-i18n-aria-label="lobby.field.map"></div>
+          <p class="notice" id="map-notice" role="status"></p>
+        </div>
+      </div>
+    </div>
+
+    <div class="play-block">
+      <button type="button" class="deploy" id="play" disabled><span class="deploy-l">${PLAY}<span class="deploy-t">${t('lobby.loading')}</span></span><span class="deploy-r" id="play-summary"></span></button>
+      <p class="rooms-line" id="rooms-line"><span class="conn" id="conn"><i></i></span><span id="play-hint"></span></p>
+    </div>
+
+    <section class="browser" id="browser" aria-labelledby="rooms-title">
+      <div class="browser-head"><b id="rooms-title" data-i18n="lobby.liveRooms">${t('lobby.liveRooms')}</b>${L('lobby.matching', 'small')}<span class="count" id="rooms-count"></span></div>
+      <div class="browser-rows" id="rooms" role="list"></div>
+      <div class="browser-foot" id="rooms-foot"></div>
+    </section>
+
+    <nav class="others" aria-label="${t('lobby.more')}" data-i18n-aria-label="lobby.more">
+      <button type="button" class="sub" id="open-solo" aria-haspopup="dialog" aria-expanded="false" aria-controls="solo-pop">${L('lobby.solo')}</button>
+      <button type="button" class="sub" id="go-range" title="${t('lobby.rangeHint')}" data-i18n-title="lobby.rangeHint">${L('lobby.sub.range')}</button>
+      <button type="button" class="sub" id="open-private" aria-haspopup="dialog" aria-expanded="false" aria-controls="private-pop">${L('lobby.sub.create')}</button>
+      <div class="code-box" title="${t('lobby.codeHint')}" data-i18n-title="lobby.codeHint">
+        <span class="hash" aria-hidden="true">#</span>
+        <input type="text" id="roomcode" maxlength="4" autocomplete="off" spellcheck="false" placeholder="${t('lobby.codeShort')}" data-i18n-placeholder="lobby.codeShort" aria-label="${t('lobby.roomCode')}" data-i18n-aria-label="lobby.roomCode">
+        <button type="button" class="code-go" id="join-go" disabled>${t('common.join')}</button>
+      </div>
+    </nav>
+    <p class="unavailable" id="online-off"></p>
     <div class="status" id="status" role="status"></div>
   </section>
   <section class="stage">
-    <div class="showcase" id="showcase">
-      <h2></h2>
-      <div class="meta"></div>
-    </div>
-    <div class="browser" id="browser" hidden>
-      <div class="browser-head">${L('lobby.publicRooms', 'b')}<span id="rooms-count"></span></div>
-      <div class="browser-rows" id="rooms"></div>
-    </div>
+    <div class="showcase" id="showcase"><h2></h2><div class="meta"></div></div>
   </section>
-  <div class="corner">
-    <button class="icon-btn" id="open-controls" data-tip="${t('lobby.controls')}" data-i18n-tip="lobby.controls" aria-label="${t('lobby.controls')}" data-i18n-aria-label="lobby.controls" aria-haspopup="dialog">?</button>
-    <button class="icon-btn" id="open-settings" data-tip="${t('lobby.settings')}" data-i18n-tip="lobby.settings" aria-label="${t('lobby.settings')}" data-i18n-aria-label="lobby.settings" aria-haspopup="dialog">${GEAR}</button>
-  </div>`;
+  ${pop('map-pop', 'lobby.chooseMap', `<div class="pop-head"><b>${L('lobby.chooseMap')}</b><small id="map-pop-sub"></small></div><div class="map-grid" id="map-grid"></div>`)}
+  ${pop('solo-pop', 'lobby.solo', `<div class="pop-head"><b>${L('lobby.solo')}</b><small class="rules" id="solo-rules"></small></div>
+    <div class="field">${L('lobby.field.skill', 'span', 'class="label"')}${choice('skills', 'skill', [['0.25', L('lobby.skill.recruit')], ['0.45', L('lobby.skill.veteran')], ['0.75', L('lobby.skill.elite')]], 'lobby.field.skill')}</div>
+    <button type="button" class="go" id="solo-go">${t('lobby.startMatch')}</button>${L('lobby.botsHint', 'p', 'class="hint"')}`)}
+  ${pop('private-pop', 'lobby.sub.create', `<div class="pop-head"><b>${L('lobby.sub.create')}</b><small class="rules" id="private-rules"></small></div>
+    <div class="field">${L('lobby.field.bots', 'span', 'class="label"')}${choice('botsfills', 'botsfill', [['on', L('lobby.bots.on')], ['off', L('lobby.bots.off')]], 'lobby.field.bots')}</div>
+    <button type="button" class="go" id="private-go">${t('lobby.createRoom')}</button>${L('lobby.createHint', 'p', 'class="hint"')}`)}`;
 app.appendChild(menu);
 document.body.classList.add('menu-open');
 
@@ -151,16 +144,17 @@ const select = (group: string, attr: string, value: string) => menu.querySelecto
 const MODE_ALIASES: Record<string, string> = { solo: 'offline', practice: 'lab' };
 let startMode = params.get('mode') ?? store.get('mode', online.ok ? 'online' : 'offline');
 startMode = MODE_ALIASES[startMode] ?? startMode;
-const storedKind = store.get('onlineKind', 'quick');
-let focus: Focus = params.get('room') ? 'join'
-  : startMode === 'offline' ? 'bots' : startMode === 'lab' ? 'range'
-  : storedKind === 'create' ? 'create' : storedKind === 'code' && params.get('mode') ? 'join' : 'quick';
-if (!online.ok && modeOf(focus) === 'online') focus = 'bots';
-let mapId = params.get('map') ?? store.get('map', maps[0].id);
-if (!maps.some(m => m.id === mapId)) mapId = maps[0].id;
-let gameMode = (params.get('game') ?? store.get('gameMode', 'elimination')) as Mode;
-if (!MODES[gameMode]) gameMode = 'elimination';
 let size: SizeId = sizeOf(params.get('size') ?? store.get('size', 'squad')).id;
+/** The filters: '' = any mode / any map. */
+let modeF = (params.get('game') ?? store.get('lobby.mode', '')) as Mode | '';
+if (modeF !== '' && modeF !== 'elimination' && modeF !== 'sabotage') modeF = '';
+let mapF = params.get('map') ?? store.get('lobby.map', '');
+if (mapF && !maps.some(m => m.id === mapF)) mapF = '';
+// A map from the URL picks the size that plays it (?map=meridian is a 24v24 map) and drops a mode it cannot host.
+if (params.get('map') && mapF) {
+  if (!mapsFor(sizeOf(size).perTeam).includes(mapF) && !params.get('size')) size = SIZES.find(s => mapsFor(s.perTeam).includes(mapF))?.id ?? size;
+  if (modeF === 'sabotage' && !hasSites(mapF)) modeF = '';
+}
 let botsFill = store.get('botsFill', 'on');
 let team = params.get('team') ?? store.get('team', 'auto');
 let skill = params.get('skill') ?? store.get('skill', '0.45');
@@ -168,32 +162,36 @@ let quality = (params.get('quality') ?? store.get('quality', 'medium')) as keyof
 if (!QUALITY[quality]) quality = 'medium';
 /** ?bench: scripted solo run that measures frame times on this device (Elimination, Squad unless ?size). */
 const benchMode = params.has('bench');
-if (benchMode) { focus = 'bots'; gameMode = 'elimination'; size = sizeOf(params.get('size') ?? 'squad').id; }
+if (benchMode) { modeF = 'elimination'; size = sizeOf(params.get('size') ?? 'squad').id; }
 const callsign = $<HTMLInputElement>('#callsign');
-callsign.value = params.get('name') ?? store.get('name', `Lawbreaker-${Math.floor(Math.random() * 900 + 100)}`);
+callsign.value = params.get('name') ?? store.get('name', t('lobby.defaultName', { n: Math.floor(Math.random() * 900 + 100) }));
 const roomCode = $<HTMLInputElement>('#roomcode');
 roomCode.value = cleanCode(params.get('room') ?? '');
-const quickBtn = $<HTMLButtonElement>('#quick');
+const playBtn = $<HTMLButtonElement>('#play');
 const status = $('#status');
 if (!online.ok) {
-  $('#online-block').classList.add('off');
+  menu.classList.add('no-server');
   $('#online-off').dataset.i18n = 'lobby.noServer';
   $('#online-off').textContent = t('lobby.noServer');
-  menu.querySelectorAll<HTMLButtonElement>('#online-block button, [data-toggle="create"], [data-toggle="join"]').forEach(b => { b.disabled = true; });
 }
 
-// ---- Public rooms: a live list from the server while the lobby is open. ----
+const perTeam = () => sizeOf(size).perTeam;
+const filter = (): RoomFilter => ({ size: perTeam(), mode: modeF, map: mapF });
+/** Maps the size (and the mode filter) can play. */
+const validMaps = () => mapsFor(perTeam(), modeF || undefined);
+const mapOk = (id: string) => validMaps().includes(id);
+
+// ---- Live rooms: a light subscription to the server's room rows while the lobby is open. ----
 let rooms: PublicRoom[] = [];
 let roomsState: 'connecting' | 'live' | 'offline' = 'offline';
-let roomId = -1;
 let stopRooms: (() => void) | undefined;
 let roomsGen = 0;
 let roomsRetry: ReturnType<typeof setTimeout> | undefined;
 function watchLobbyRooms() {
   unwatchRooms();
-  if (!online.ok || benchMode) { renderRooms(); return; }
+  if (!online.ok || benchMode) { refresh(); return; }
   const gen = ++roomsGen;
-  void watchRooms(list => { if (gen !== roomsGen) return; rooms = list; renderRooms(); refresh(); }, state => {
+  void watchRooms(list => { if (gen !== roomsGen) return; rooms = list; refresh(); }, state => {
     if (gen !== roomsGen) return;
     roomsState = state;
     if (state === 'offline') {
@@ -201,186 +199,360 @@ function watchLobbyRooms() {
       // The server may come back: try again while the lobby stays open.
       roomsRetry = setTimeout(() => { if (gen === roomsGen && inMenu) watchLobbyRooms(); }, 5000);
     }
-    renderRooms(); refresh();
-  }).then(stop => { if (gen === roomsGen) stopRooms = stop; else stop(); }, () => { if (gen === roomsGen) { roomsState = 'offline'; renderRooms(); } });
+    refresh();
+  }).then(stop => { if (gen === roomsGen) stopRooms = stop; else stop(); }, () => { if (gen === roomsGen) { roomsState = 'offline'; refresh(); } });
 }
 function unwatchRooms() {
   roomsGen++;
   clearTimeout(roomsRetry);
   stopRooms?.(); stopRooms = undefined;
 }
-const full = (r: PublicRoom) => r.humans >= r.size * 2;
 const roomStatus = (r: PublicRoom) => r.phase === 'warmup' ? t('lobby.warmup') : r.phase === 'ended' ? t('lobby.matchOver') : t('lobby.round', { n: r.round });
 const players = (n: number, max: number) => t('common.players', { n, max });
-/** The room Quick Play would put us in: the fullest public room of our size with a free slot (as the server picks). */
-const quickTarget = () => rooms.find(r => r.size === sizeOf(size).perTeam && !full(r));
-const selectedRoom = () => rooms.find(r => r.room === roomId);
+const modeLabel = (m: Mode) => `[${MODE_TAGS[m]}] ${modeName(m)}`;
+/** The room PLAY ONLINE would put us in (the server makes the same choice with `pickRoom`). */
+const playTarget = () => pickRoom(rooms, filter());
+/** Rooms the filters show, fullest first. */
+const shownRooms = () => rooms.filter(r => roomMatches(r, filter()));
+/** Humans in public rooms of this size (and mode filter) per map: the map picker's live counts. */
+function liveByMap() {
+  const counts = new Map<string, number>();
+  for (const r of rooms) if (roomMatches(r, { size: perTeam(), mode: modeF, map: '' })) counts.set(r.mapId, (counts.get(r.mapId) ?? 0) + r.humans);
+  return counts;
+}
+/** "6v6 · [S] Sabotage · Ximending": the filters in a few words (only what is set; "Any" when nothing is). */
+function rulesText(withSize = true) {
+  const parts = [withSize ? sizeOf(size).label : '', modeF ? modeName(modeF) : '', mapF ? mapName(mapF) : ''].filter(Boolean);
+  if (!modeF && !mapF) parts.push(t('lobby.any'));
+  return parts.join(' · ');
+}
 
-/** One quiet line under Quick Play: the server state (dot) and where Quick Play would put you. */
-function renderLine() {
+/**
+ * The brand lockup: the game's name in the current language, large, with its second half in the
+ * accent (角頭|械鬥, TURF WAR|TAIPEI), and the other language's name and the two sides under it.
+ */
+const CJK_RE = /[\u3400-\u9fff]/;
+function renderBrand() {
+  const name = t('brand.name'), alt = t('brand.alt'), logo = $('#logo');
+  if (logo.dataset.name === name) return;
+  logo.dataset.name = name;
+  const split = (s: string) => CJK_RE.test(s) ? [s.slice(0, 2), s.slice(2)] : s.split(/:\s*/);
+  const [a, b = ''] = split(name);
+  const cjk = (s: string) => CJK_RE.test(s) ? ' lang="zh-TW"' : ' lang="en"';
+  logo.innerHTML = `<span class="logo-name${CJK_RE.test(name) ? ' cjk' : ''}"${cjk(name)}>${esc(a)}<em>${esc(b)}</em></span>
+    <small class="logo-sub"><span class="logo-alt${CJK_RE.test(alt) ? ' cjk' : ''}"${cjk(alt)}>${esc(alt)}</span><i aria-hidden="true"></i><span>${esc(t('lobby.title'))} <b>${esc(t('lobby.titleVs'))}</b></span></small>`;
+  logo.setAttribute('aria-label', `${name} · ${alt}`);
+}
+
+// ---- Rendering: everything on screen follows the filters, the rooms and the language. ----
+let ready = false;
+let starting: Action | undefined;
+let loadFraction = -1;
+let joiningRoom = -1;
+const loadingText = () => loadFraction < 0 ? t('lobby.loading') : t('lobby.loadingPct', { n: (loadFraction * 100).toFixed(0) });
+
+function renderFilters() {
+  select('sizes', 'size', size);
+  select('modes', 'gamemode', modeF);
+  select('teams', 'team', team);
+  select('skills', 'skill', skill);
+  select('botsfills', 'botsfill', botsFill);
+  const trigger = $('#map-trigger');
+  const m = maps.find(x => x.id === mapF);
+  trigger.dataset.theme = m?.theme ?? '';
+  trigger.classList.toggle('any', !m);
+  trigger.querySelector('b')!.textContent = m ? mapName(m.id) : t('lobby.anyMap');
+  const live = liveByMap();
+  const n = m ? live.get(m.id) ?? 0 : [...live.values()].reduce((a, b) => a + b, 0);
+  trigger.querySelector('small')!.textContent = n ? t('lobby.playing', { n }) : '';
+  // Shortcuts: up to three featured maps the filters allow (not the one chosen); the picker has them all.
+  const quick = FEATURED.filter(id => id !== mapF && mapOk(id)).slice(0, 3);
+  const box = $('#quick-maps');
+  const key = `${quick.join()}|${[...live].join()}|${isZh()}`;
+  if (box.dataset.key !== key) {
+    box.dataset.key = key;
+    box.innerHTML = quick.map(id => {
+      const c = live.get(id) ?? 0;
+      return `<button type="button" class="qmap" data-pick="${id}" data-theme="${maps.find(x => x.id === id)?.theme ?? ''}">${esc(mapName(id))}${c ? `<small>${c}</small>` : ''}</button>`;
+    }).join('');
+  }
+}
+
+/** PLAY ONLINE and the line under it: where it would put you, or that it opens a room. */
+function renderPlay() {
+  const label = playBtn.querySelector('.deploy-t')!;
+  label.textContent = !ready ? loadingText() : starting === 'play' ? t('lobby.joining') : t('lobby.playOnline');
+  $('#play-summary').textContent = ready ? rulesText() : '';
+  playBtn.disabled = !ready || !!starting || !online.ok;
   const line = $('#rooms-line');
   line.hidden = !online.ok;
   if (!online.ok) return;
-  const target = quickTarget();
+  const target = playTarget();
+  const fixed = [modeF ? modeName(modeF) : '', mapF ? mapName(mapF) : ''].filter(Boolean).join(' · ');
   const [state, text] = roomsState === 'connecting' ? ['wait', t('lobby.connecting')]
     : roomsState === 'offline' ? ['off', t('lobby.serverOffline')]
-    : target ? ['live', t('lobby.quickJoins', { map: mapName(target.mapId), players: players(target.humans, target.size * 2) })]
-    : rooms.length ? ['live', t('lobby.noOpenRoom', { size: sizeOf(size).label })]
-    : ['live', t('lobby.noRooms')];
-  const conn = $('#conn');
-  conn.className = `conn ${state}`;
+    : target ? ['live', t('lobby.playJoins', { map: mapName(target.mapId), mode: modeName(target.mode), players: players(target.humans, target.size * 2) })]
+    : ['live', fixed ? t('lobby.opensFixed', { rules: fixed }) : t('lobby.opensAny')];
+  $('#conn').className = `conn ${state}`;
   line.title = roomsState === 'live' ? t('lobby.liveTitle', { db: server.database ?? 'online' }) : '';
-  $('#quick-hint').textContent = text;
+  $('#play-hint').textContent = text;
 }
 
-/** Public rooms: a slim card list, shown only while there are rooms. */
+/** Live rooms the filters match: fixed-height rows in a box that keeps its size as rooms come and go. */
 function renderRooms() {
-  renderLine();
   const list = $('#rooms');
-  const browser = $('#browser');
-  browser.hidden = !rooms.length;
-  menu.classList.toggle('has-rooms', rooms.length > 0);
-  if (!rooms.length) { list.innerHTML = ''; return; }
-  const humans = rooms.reduce((n, r) => n + r.humans, 0);
-  $('#rooms-count').innerHTML = `<span class="conn live"><i></i>${plural('lobby.roomCount', rooms.length)} · ${plural('lobby.playerCount', humans)}</span>`;
-  list.innerHTML = rooms.map(r => {
-    const m = maps.find(x => x.id === r.mapId), md = MODES[r.mode] ?? MODES.elimination;
-    const aria = t('lobby.roomAria', { map: mapName(r.mapId), mode: md.name, size: sizeLabel(r.size), n: r.humans, max: r.size * 2, status: roomStatus(r) });
-    return `<div class="room${focus === 'room' && r.room === roomId ? ' selected' : ''}" data-room="${r.room}" data-theme="${m?.theme ?? ''}" tabindex="0" role="button" title="${esc(t('lobby.roomTitle', { id: r.room, status: roomStatus(r) }))}" aria-label="${esc(aria)}">
-      <span class="srv"><b>${esc(mapName(r.mapId))}</b><small class="state ${r.phase}">${roomStatus(r)}</small></span>
-      <span class="mode" title="${md.name}"><span class="mtag">[${md.tag}]</span><span class="mname"> ${md.name}</span></span>
-      <span class="size">${sizeLabel(r.size)}</span>
-      <span class="players">${r.humans}/${r.size * 2}</span>
-      <button class="join" data-joinroom="${r.room}"${full(r) || !ready || starting ? ' disabled' : ''}>${full(r) ? t('common.full') : t('common.join')}</button>
-    </div>`;
-  }).join('');
+  const shown = shownRooms();
+  const humans = shown.reduce((n, r) => n + r.humans, 0);
+  $('#rooms-count').innerHTML = roomsState === 'live' && shown.length ? `<span class="conn live"><i></i>${plural('lobby.roomCount', shown.length)} · ${plural('lobby.playerCount', humans)}</span>` : '';
+  // Keep keyboard focus on the same JOIN button across live updates.
+  const focused = (document.activeElement as HTMLElement | null)?.closest?.('[data-joinroom]') as HTMLElement | null;
+  const focusRoom = focused && list.contains(focused) ? focused.dataset.joinroom : undefined;
+  if (!shown.length) {
+    const text = !online.ok ? t('lobby.noServer') : roomsState === 'connecting' ? t('lobby.connecting') : roomsState === 'offline' ? t('lobby.serverOffline') : t('lobby.noMatches');
+    list.innerHTML = `<div class="empty">${esc(text)}</div>`;
+  } else {
+    const target = playTarget();
+    list.innerHTML = shown.map(r => {
+      const m = maps.find(x => x.id === r.mapId);
+      const aria = t('lobby.roomAria', { map: mapName(r.mapId), mode: modeName(r.mode), size: sizeLabel(r.size), n: r.humans, max: r.size * 2, status: roomStatus(r) });
+      const busy = !ready || !!starting || roomFull(r);
+      const lock = r.fixedMap || r.fixedMode ? `<span class="fixed" title="${esc([r.fixedMap ? t('lobby.fixedMap') : '', r.fixedMode ? t('lobby.fixedMode') : ''].filter(Boolean).join(' · '))}">${LOCK}</span>` : '';
+      return `<div class="room${target?.room === r.room ? ' target' : ''}" role="listitem" data-room="${r.room}" data-theme="${m?.theme ?? ''}">
+        <span class="srv"><b>${esc(mapName(r.mapId))}</b>${lock}</span>
+        <span class="mode" title="${esc(modeName(r.mode))}"><span class="mtag">[${MODE_TAGS[r.mode]}]</span><span class="mname"> ${esc(modeName(r.mode))}</span></span>
+        <span class="players">${r.humans}/${r.size * 2}</span>
+        <span class="state ${r.phase}">${esc(roomStatus(r))}</span>
+        <button type="button" class="join" data-joinroom="${r.room}" aria-label="${esc(`${roomFull(r) ? t('common.full') : t('common.join')} · ${aria}`)}"${busy ? ' disabled' : ''}>${starting === 'room' && joiningRoom === r.room ? t('lobby.joining') : roomFull(r) ? t('common.full') : t('common.join')}</button>
+      </div>`;
+    }).join('');
+    if (focusRoom) list.querySelector<HTMLElement>(`[data-joinroom="${focusRoom}"]`)?.focus({ preventScroll: true });
+  }
+  // What the filters hide: other modes and maps (clear them), or rooms of other sizes (switch size).
+  const foot = $('#rooms-foot');
+  const sameSize = rooms.filter(r => r.size === perTeam()).length;
+  const otherSizes = SIZES.filter(s => s.perTeam !== perTeam()).map(s => [s, rooms.filter(r => r.size === s.perTeam).length] as const).filter(([, n]) => n > 0);
+  const parts: string[] = [];
+  if (shown.length < rooms.length) parts.push(`<span>${esc(t('lobby.showing', { n: shown.length, m: rooms.length }))}</span>`);
+  if (shown.length < sameSize) parts.push(`<button type="button" class="link" data-clear>${esc(t('lobby.clearFilters'))}</button>`);
+  else if (otherSizes.length) parts.push(`<span>${esc(t('lobby.otherSizes'))}</span>${otherSizes.map(([s, n]) => `<button type="button" class="link" data-size="${s.id}">${s.label} (${n})</button>`).join('')}`);
+  const html = parts.join('<span class="dot" aria-hidden="true">·</span>');
+  if (foot.innerHTML !== html) foot.innerHTML = html;
 }
 
-/** Maps the current choice can play: the room size decides big or small maps, Sabotage needs bomb sites. */
-const mapFits = (m: (typeof maps)[number]) => focus === 'range'
-  || ((sizeOf(size).perTeam > 12) === m.big && (!(focus === 'create' || focus === 'bots') || gameMode !== 'sabotage' || m.sites > 0));
-const fitMap = () => { const m = maps.find(x => x.id === mapId); if (!m || !mapFits(m)) mapId = maps.find(mapFits)?.id ?? mapId; };
-/** The map the backdrop and showcase present for the current choice. */
-const shownMap = () => {
-  const id = focus === 'quick' ? quickTarget()?.mapId : focus === 'room' ? selectedRoom()?.mapId : undefined;
-  return id && maps.some(m => m.id === id) ? id : mapId;
-};
+/** The backdrop's map: the chosen map, else where PLAY ONLINE would go, else the first map the size plays. */
+const shownMap = () => mapF || playTarget()?.mapId || validMaps()[0] || maps[0].id;
 
-// ---- Buttons: one per way in; labels follow the choices. ----
-let ready = false;
-let starting = false;
-let loadFraction = -1;
-const loadingText = () => loadFraction < 0 ? t('lobby.loading') : t('lobby.loadingPct', { n: (loadFraction * 100).toFixed(0) });
-const LABELS: Record<Exclude<Focus, 'room'>, () => string> = {
-  quick: () => t('lobby.quickPlaySize', { size: sizeOf(size).label }),
-  create: () => t('lobby.createRoomSize', { size: sizeOf(size).label }),
-  join: () => t('common.join'),
-  bots: () => t('lobby.startMatch'),
-  range: () => t('lobby.enterRange'),
-};
-const ACT_BUTTONS: [Exclude<Focus, 'room'>, HTMLButtonElement][] = [
-  ['quick', quickBtn], ['create', $<HTMLButtonElement>('#create-go')], ['join', $<HTMLButtonElement>('#join-go')],
-  ['bots', $<HTMLButtonElement>('#bots-go')], ['range', $<HTMLButtonElement>('#range-go')],
-];
-function syncButtons() {
-  for (const [f, b] of ACT_BUTTONS) {
-    const needsServer = modeOf(f) === 'online';
-    b.disabled = !ready || starting || (needsServer && !online.ok) || (f === 'join' && roomCode.value.length < 4);
-    b.textContent = !ready ? (f === 'quick' || f === 'bots' || f === 'range' ? loadingText() : LABELS[f]())
-      : starting && focus === f ? t(needsServer ? 'lobby.joining' : 'lobby.starting') : LABELS[f]();
-  }
-  menu.querySelectorAll<HTMLButtonElement>('#rooms .join').forEach(b => {
-    const r = rooms.find(x => x.room === Number(b.dataset.joinroom));
-    b.disabled = !ready || starting || !r || full(r);
-    b.textContent = starting && focus === 'room' && r?.room === roomId ? t('lobby.joining') : r && full(r) ? t('common.full') : t('common.join');
-  });
+function renderShowcase() {
+  const box = $('#showcase');
+  const id = shownMap();
+  const target = playTarget();
+  const s = sizeOf(size);
+  box.querySelector('h2')!.textContent = mapF || target ? mapName(id) : `${sizeName(s.id)} ${s.label}`;
+  const meta = target
+    ? `${t('lobby.playOnline')} · ${modeLabel(target.mode)} · ${sizeLabel(target.size)} · ${players(target.humans, target.size * 2)}`
+    : `${t('lobby.newRoom')} · ${modeF ? modeLabel(modeF) : '[E] ⇄ [S]'} · ${s.label}${mapF ? (modeF === 'sabotage' || (!modeF && hasSites(mapF)) ? ` · ${plural('lobby.bombSites', loadMap(mapF).def.sabotage?.sites.length ?? 0)}` : '') : ` · ${t('lobby.mapRotation')}`}`;
+  box.querySelector('.meta')!.textContent = meta;
+}
+
+function renderOthers() {
+  const offlineBusy = !ready || !!starting;
+  const solo = $<HTMLButtonElement>('#solo-go'), priv = $<HTMLButtonElement>('#private-go'), range = $<HTMLButtonElement>('#go-range'), join = $<HTMLButtonElement>('#join-go');
+  solo.disabled = offlineBusy;
+  solo.textContent = !ready ? loadingText() : starting === 'solo' ? t('lobby.starting') : t('lobby.startMatch');
+  range.disabled = offlineBusy;
+  priv.disabled = offlineBusy || !online.ok;
+  priv.textContent = starting === 'private' ? t('lobby.joining') : t('lobby.createRoom');
+  $<HTMLButtonElement>('#open-private').disabled = !online.ok;
+  roomCode.disabled = !online.ok;
+  join.disabled = offlineBusy || !online.ok || roomCode.value.length < 4;
+  join.textContent = starting === 'code' ? '…' : t('common.join');
+  $('#solo-rules').textContent = rulesText();
+  $('#private-rules').textContent = rulesText();
 }
 
 /** Everything on screen follows the current choices. */
-const refresh = () => {
-  if (focus === 'room' && !selectedRoom()) focus = 'quick';
-  fitMap();
-  const s = sizeOf(size), md = MODES[gameMode];
-  for (const g of ['sizes-online', 'sizes-bots']) select(g, 'size', size);
-  for (const g of ['modes-create', 'modes-bots']) select(g, 'gamemode', gameMode);
-  select('botsfills', 'botsfill', botsFill);
-  for (const d of ['create', 'join', 'bots', 'range'] as const) {
-    $(`#drawer-${d}`).classList.toggle('open', focus === d);
-    $(`[data-toggle="${d}"]`).setAttribute('aria-expanded', String(focus === d));
-  }
-  menu.classList.toggle('focus-quick', focus === 'quick');
-  for (const g of ['maps-create', 'maps-bots', 'maps-range']) {
-    menu.querySelectorAll<HTMLButtonElement>(`#${g} [data-map]`).forEach(b => {
-      const m = maps.find(x => x.id === b.dataset.map)!;
-      b.hidden = !mapFits(m);
-      b.setAttribute('aria-pressed', String(m.id === mapId));
-      const region = mapRegion(m.id, m.region).split('/');
-      b.querySelector('b')!.textContent = mapName(m.id);
-      b.querySelector('small')!.textContent = g === 'maps-range' ? (m.big ? t('lobby.bigMapChip') : region[0].trim().toLowerCase())
-        : gameMode === 'sabotage' ? t(m.sites > 1 ? 'lobby.sitesAB' : 'lobby.siteA') : region[1]?.trim().toLowerCase() ?? '';
-    });
-  }
-  // The showcase: the map in view and one line about what you would play there.
-  const target = quickTarget();
-  const box = $('#showcase');
-  const set = (title: string, meta: string) => { box.querySelector('h2')!.textContent = title; box.querySelector('.meta')!.textContent = meta; };
-  const shown = maps.find(x => x.id === shownMap())!;
-  const shownName = mapName(shown.id);
-  const room = focus === 'room' ? selectedRoom() : focus === 'quick' ? target : undefined;
-  if (room) {
-    const rm = MODES[room.mode] ?? MODES.elimination;
-    set(shownName, `${focus === 'quick' ? `${t('lobby.quickPlay')} · ` : ''}[${rm.tag}] ${rm.name} · ${sizeLabel(room.size)} · ${players(room.humans, room.size * 2)}`);
-  } else if (focus === 'quick') {
-    set(`${sizeName(s.id)} ${s.label}`, `${t('lobby.quickPlay')} · [E] ⇄ [S] · ${t('lobby.mapRotation')}${s.perTeam > 12 ? ` · ${t('lobby.bigMaps')}` : ''}`);
-  } else if (focus === 'join') {
-    set(t('lobby.privateRoom'), roomCode.value ? t('lobby.roomNamed', { code: roomCode.value }) : t('lobby.enterCode'));
-  } else if (focus === 'range') {
-    set(shownName, t('lobby.rangeMeta'));
-  } else {
-    set(shownName, `${t(focus === 'create' ? 'lobby.privatePrefix' : 'lobby.botsPrefix')} · [${md.tag}] ${md.name} · ${vs(s.perTeam)}${gameMode === 'sabotage' ? ` · ${plural('lobby.bombSites', shown.sites)}` : ''}`);
-  }
-  renderLine();
-  menu.querySelectorAll<HTMLElement>('#rooms .room').forEach(r => r.classList.toggle('selected', focus === 'room' && Number(r.dataset.room) === roomId));
-  syncButtons();
+function refresh() {
+  renderBrand();
+  renderFilters();
+  renderPlay();
+  renderRooms();
+  renderShowcase();
+  renderOthers();
+  if (openPop?.id === 'map-pop') renderMapGrid();
   showBackdrop();
-};
-const audio = new Audio();
-select('teams', 'team', team); select('skills', 'skill', skill);
+}
 
-/** The open drawer (or picked public room) steps back to Quick Play; offline there is nothing to fall back to. */
-const closeDrawer = () => { if (focus === 'quick' || !online.ok) return false; focus = 'quick'; refresh(); return true; };
-const onClick = (attr: string, fn: (value: string) => void) => menu.querySelectorAll<HTMLButtonElement>(`[data-${attr}]`).forEach(b => b.addEventListener('click', () => { fn(b.dataset[attr]!); audio.ui(); }));
-onClick('toggle', v => {
-  focus = focus === v ? (online.ok ? 'quick' : focus) : v as Focus;
-  refresh();
-  if (focus === 'join') roomCode.focus({ preventScroll: true });
-  // Bring the whole drawer, its button included, into view.
-  if (focus === v) menu.querySelector(`#drawer-${v}`)?.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
+// ---- Filters ----
+let noticeTimer: ReturnType<typeof setTimeout> | undefined;
+/** A short note in the map row (e.g. why the map went back to Any); it fades after a few seconds. */
+function notice(text: string) {
+  const el = $('#map-notice');
+  el.textContent = text;
+  menu.classList.toggle('noticing', !!text);
+  clearTimeout(noticeTimer);
+  if (text) noticeTimer = setTimeout(() => notice(''), 4500);
+}
+/** After a size or mode change: a chosen map the new filters cannot host goes back to Any, with a note. */
+function checkMap(reason: 'size' | 'mode') {
+  if (!mapF || mapOk(mapF)) return;
+  const was = mapName(mapF);
+  mapF = '';
+  notice(reason === 'size' ? t('lobby.mapResetSize', { map: was, size: sizeOf(size).label }) : t('lobby.mapResetMode', { map: was }));
+}
+function saveFilters() {
+  if (benchMode) return;
+  store.set('size', size); store.set('lobby.mode', modeF); store.set('lobby.map', mapF);
+}
+function setSize(id: string) {
+  size = sizeOf(id).id;
+  checkMap('size');
+  saveFilters(); refresh();
+}
+function setMode(m: string) {
+  modeF = m === 'elimination' || m === 'sabotage' ? m : '';
+  checkMap('mode');
+  saveFilters(); refresh();
+}
+function setMap(id: string) {
+  mapF = id && mapOk(id) ? id : '';
+  notice('');
+  saveFilters(); refresh();
+}
+
+const audio = new Audio();
+const onClick = (attr: string, fn: (value: string, el: HTMLElement) => void) => menu.addEventListener('click', e => {
+  const el = (e.target as HTMLElement).closest<HTMLElement>(`[data-${attr}]`);
+  if (!el || !menu.contains(el) || (el as HTMLButtonElement).disabled) return;
+  fn(el.dataset[attr.replace(/-(\w)/g, (_, c: string) => c.toUpperCase())]!, el);
+  audio.ui();
 });
-onClick('act', v => act(v as Focus));
-onClick('gamemode', v => { gameMode = v as Mode; refresh(); });
-onClick('size', v => { size = sizeOf(v).id; if (focus === 'room' || focus === 'join') focus = 'quick'; refresh(); });
-onClick('botsfill', v => { botsFill = v; refresh(); });
-onClick('map', v => { mapId = v; refresh(); });
+onClick('size', v => setSize(v));
+onClick('gamemode', v => setMode(v));
+onClick('pick', v => { setMap(v); closePop(); });
+onClick('clear', () => { modeF = ''; mapF = ''; notice(''); saveFilters(); refresh(); });
 onClick('team', v => { team = v; select('teams', 'team', team); });
 onClick('skill', v => { skill = v; select('skills', 'skill', skill); });
-roomCode.addEventListener('input', () => { roomCode.value = cleanCode(roomCode.value); refresh(); });
-roomCode.addEventListener('focus', () => { if (focus !== 'join' && online.ok) { focus = 'join'; refresh(); } });
+onClick('botsfill', v => { botsFill = v; select('botsfills', 'botsfill', botsFill); });
+onClick('joinroom', v => run('room', Number(v)));
+roomCode.addEventListener('input', () => { roomCode.value = cleanCode(roomCode.value); renderOthers(); });
+playBtn.addEventListener('click', () => { audio.ui(); run('play'); });
+$('#go-range').addEventListener('click', () => { audio.ui(); run('range'); });
+$('#join-go').addEventListener('click', () => { audio.ui(); run('code'); });
+$('#solo-go').addEventListener('click', () => { audio.ui(); run('solo'); });
+$('#private-go').addEventListener('click', () => { audio.ui(); run('private'); });
+$('#rooms').addEventListener('dblclick', e => { const row = (e.target as HTMLElement).closest<HTMLElement>('.room'); if (row) run('room', Number(row.dataset.room)); });
 
-// Public rooms: click a row to preview it, Join (or double-click, or Enter on the row) to play there.
-const roomList = $('#rooms');
-const roomOf = (e: Event) => (e.target as HTMLElement).closest<HTMLElement>('.room');
-roomList.addEventListener('click', e => {
-  const row = roomOf(e);
-  if (!row) return;
-  roomId = Number(row.dataset.room); focus = 'room'; audio.ui();
-  if ((e.target as HTMLElement).closest('.join')) void act('room'); else refresh();
+// ---- Popovers: the map picker, Solo and Private room. One open at a time; Esc or a click outside closes. ----
+let openPop: HTMLElement | undefined;
+let popAnchor: HTMLElement | undefined;
+function placePop() {
+  if (!openPop || !popAnchor) return;
+  const a = popAnchor.getBoundingClientRect(), vw = innerWidth, vh = innerHeight, margin = 12;
+  const p = openPop;
+  if (vw <= 700) { p.classList.add('sheet'); p.style.left = p.style.top = ''; return; }
+  p.classList.remove('sheet');
+  const w = p.offsetWidth, h = p.offsetHeight;
+  const left = Math.max(margin, Math.min(a.left, vw - w - margin));
+  // Below the anchor if it fits, else above; failing both, beside the panel (over the backdrop), else as low as fits.
+  const below = a.bottom + 6, above = a.top - 6 - h;
+  const side = $('.panel').getBoundingClientRect().right + margin;
+  const clampTop = (y: number) => Math.max(margin, Math.min(y, vh - h - margin));
+  const [x, y] = below + h <= vh - margin ? [left, below] : above >= margin ? [left, above]
+    : side + w <= vw - margin ? [side, clampTop(a.top - 60)] : [left, clampTop(vh)];
+  p.style.left = `${x}px`; p.style.top = `${y}px`;
+}
+function showPop(id: string, anchor: HTMLElement) {
+  if (openPop?.id === id) { closePop(); return; }
+  closePop(false);
+  openPop = $(`#${id}`); popAnchor = anchor;
+  if (id === 'map-pop') renderMapGrid();
+  openPop.hidden = false;
+  anchor.setAttribute('aria-expanded', 'true');
+  placePop();
+  const first = openPop.querySelector<HTMLElement>('[aria-pressed="true"], [aria-current="true"]') ?? openPop.querySelector<HTMLElement>('button:not(:disabled)');
+  first?.focus({ preventScroll: true });
+}
+function closePop(restore = true) {
+  if (!openPop) return;
+  openPop.hidden = true;
+  popAnchor?.setAttribute('aria-expanded', 'false');
+  if (restore && popAnchor && openPop.contains(document.activeElement)) popAnchor.focus({ preventScroll: true });
+  openPop = undefined; popAnchor = undefined;
+}
+$('#map-trigger').addEventListener('click', e => { audio.ui(); showPop('map-pop', e.currentTarget as HTMLElement); });
+$('#open-solo').addEventListener('click', e => { audio.ui(); showPop('solo-pop', e.currentTarget as HTMLElement); });
+$('#open-private').addEventListener('click', e => { audio.ui(); showPop('private-pop', e.currentTarget as HTMLElement); });
+document.addEventListener('pointerdown', e => {
+  if (!openPop) return;
+  const target = e.target as Node;
+  if (openPop.contains(target) || popAnchor?.contains(target)) return;
+  closePop(false);
 });
-roomList.addEventListener('dblclick', e => { const row = roomOf(e); if (row) { roomId = Number(row.dataset.room); void act('room'); } });
-roomList.addEventListener('keydown', e => {
-  const row = roomOf(e);
-  if (!row || e.key !== 'Enter' || (e.target as HTMLElement).tagName === 'BUTTON') return;
-  e.preventDefault(); e.stopPropagation(); roomId = Number(row.dataset.room); void act('room');
+addEventListener('resize', placePop);
+menu.addEventListener('scroll', placePop, true);
+menu.addEventListener('focusout', e => {
+  // Tabbing out of a popover closes it.
+  const next = e.relatedTarget as Node | null;
+  if (openPop && next && !openPop.contains(next) && next !== popAnchor) closePop(false);
+});
+
+/** The map picker: "Any map" and every map the size (and mode) can play, with a plan, region and who is playing. */
+const thumbs = new Map<string, HTMLCanvasElement>();
+function thumb(id: string) {
+  let c = thumbs.get(id);
+  if (!c) { c = document.createElement('canvas'); c.width = 168; c.height = 96; drawMapThumb(c, id); thumbs.set(id, c); }
+  return c;
+}
+function renderMapGrid() {
+  const grid = $('#map-grid');
+  const live = liveByMap();
+  const total = [...live.values()].reduce((a, b) => a + b, 0);
+  $('#map-pop-sub').textContent = `${t('lobby.mapsFor', { size: sizeOf(size).label })}${modeF ? ` · ${modeName(modeF)}` : ''}`;
+  const small = (m: (typeof maps)[number]) => modeF === 'sabotage' || hasSites(m.id) && modeF !== 'elimination'
+    ? t(m.sites > 1 ? 'lobby.sitesAB' : m.sites ? 'lobby.siteA' : 'lobby.noSites') : mapRegion(m.id, m.region).split('/')[0].trim();
+  const fits = mapsFor(perTeam());
+  const cards = maps.filter(m => fits.includes(m.id)).map(m => {
+    const ok = mapOk(m.id), n = live.get(m.id) ?? 0;
+    return `<button type="button" class="mcard" data-pick="${m.id}" data-theme="${m.theme}" aria-pressed="${m.id === mapF}"${ok ? '' : ` disabled title="${esc(t('lobby.noSites'))}"`}>
+      <span class="thumb" data-thumb="${m.id}"></span>
+      <b>${esc(mapName(m.id))}</b>
+      <small>${esc(ok ? small(m) : t('lobby.noSites'))}</small>
+      <span class="live${n ? ' on' : ''}">${n ? `<i></i>${esc(t('lobby.playing', { n }))}` : '&nbsp;'}</span>
+    </button>`;
+  });
+  grid.innerHTML = `<button type="button" class="mcard any" data-pick="" aria-pressed="${!mapF}">
+      <span class="thumb any-thumb">${ROTATE}</span><b>${esc(t('lobby.anyMap'))}</b><small>${esc(t('lobby.anyMapSub'))}</small>
+      <span class="live${total ? ' on' : ''}">${total ? `<i></i>${esc(t('lobby.playing', { n: total }))}` : '&nbsp;'}</span>
+    </button>${cards.join('')}`;
+  grid.querySelectorAll<HTMLElement>('[data-thumb]').forEach(el => el.appendChild(thumb(el.dataset.thumb!)));
+  placePop();
+}
+// Arrow keys move through the map cards (by rows and columns as laid out).
+$('#map-grid').addEventListener('keydown', e => {
+  const keys = ['ArrowLeft', 'ArrowRight', 'ArrowUp', 'ArrowDown', 'Home', 'End'];
+  if (!keys.includes(e.key)) return;
+  const cards = Array.from($('#map-grid').querySelectorAll<HTMLButtonElement>('.mcard:not(:disabled)'));
+  const i = cards.indexOf(document.activeElement as HTMLButtonElement);
+  if (i < 0) return;
+  e.preventDefault();
+  const r = cards[i].getBoundingClientRect();
+  let next = i;
+  if (e.key === 'ArrowLeft') next = Math.max(0, i - 1);
+  else if (e.key === 'ArrowRight') next = Math.min(cards.length - 1, i + 1);
+  else if (e.key === 'Home') next = 0;
+  else if (e.key === 'End') next = cards.length - 1;
+  else {
+    // The nearest card in the next row up or down.
+    const down = e.key === 'ArrowDown';
+    let best = Infinity;
+    cards.forEach((c, j) => {
+      const q = c.getBoundingClientRect();
+      if (down ? q.top <= r.top + 4 : q.top >= r.top - 4) return;
+      const d = Math.abs(q.top - r.top) * 4 + Math.abs(q.left - r.left);
+      if (d < best) { best = d; next = j; }
+    });
+  }
+  cards[next].focus();
 });
 
 // ---- Settings and controls: the gear (and ?) open the shared settings menu in its lobby mode. ----
@@ -395,7 +567,7 @@ const options = new SettingsMenu(document.body, {
     current: () => ({ volume: audio.volume, music: audio.musicVolume, quality: quality as GraphicsQuality }),
     music: v => audio.setMusicVolume(v),
     previewVolume: () => audio.cash(),
-    bench: { label: () => t('lobby.bench', { n: BENCH_SECONDS }), run: () => { location.search = `?bench&map=${mapId}&quality=${quality}${params.get('lang') ? `&lang=${params.get('lang')}` : ''}`; } },
+    bench: { label: () => t('lobby.bench', { n: BENCH_SECONDS }), run: () => { location.search = `?bench&map=${shownMap()}&quality=${quality}${params.get('lang') ? `&lang=${params.get('lang')}` : ''}`; } },
     credits: () => t('lobby.credits'),
   },
 });
@@ -403,10 +575,11 @@ const options = new SettingsMenu(document.body, {
 // Language switch (Settings): the lobby's own text follows at once.
 onLang(() => {
   applyI18n(menu);
+  $('#quick-maps').dataset.key = '';
   if (benchPanel) { benchPanel.remove(); if (benchResult) showBenchResult(benchResult); }
-  renderRooms(); refresh();
+  refresh();
 });
-const openOptions = (tab: SettingsTab) => { audio.ui(); options.show(false, tab); };
+const openOptions = (tab: SettingsTab) => { audio.ui(); closePop(false); options.show(false, tab); };
 $('#open-settings').addEventListener('click', () => openOptions('options'));
 $('#open-controls').addEventListener('click', () => openOptions('controls'));
 
@@ -457,25 +630,34 @@ function showBackdrop() {
   renderer.scene.add(backdrop.group);
 }
 
-/** Run one way in: point the lobby at it, then start. */
-function act(f: Focus) {
+/** Run one way in. */
+function run(action: Action, room = -1) {
   if (!ready || starting) return;
-  if (modeOf(f) === 'online' && !online.ok) return;
-  if (f === 'join' && roomCode.value.length < 4) { focus = 'join'; refresh(); roomCode.focus(); return; }
-  if (f === 'room' && !selectedRoom()) { focus = 'quick'; refresh(); return; }
-  focus = f;
-  void start();
+  if (modeOf(action) === 'online' && !online.ok) return;
+  if (action === 'code' && roomCode.value.length < 4) { roomCode.focus(); return; }
+  if (action === 'room' && !rooms.some(r => r.room === room)) return;
+  joiningRoom = room;
+  void start(action);
 }
 
-async function start() {
-  const name = callsign.value.trim().slice(0, 16) || 'Lawbreaker';
-  fitMap();
-  const mode = modeOf(focus), kind = kindOf(focus);
-  if (!benchMode) {
-    store.set('name', name); store.set('mode', mode); store.set('map', mapId); store.set('gameMode', gameMode); store.set('size', size);
-    store.set('team', team); store.set('skill', skill); store.set('onlineKind', kind === 'room' ? 'quick' : kind); store.set('botsFill', botsFill);
+/** A concrete map and mode for Solo, Practice and private rooms: the filters, with "any" picked at random. */
+function resolveRules() {
+  if (benchMode) {
+    // The performance check is repeatable: a fixed map rather than a random one.
+    const id = mapF && mapsFor(perTeam()).includes(mapF) ? mapF : mapsFor(perTeam())[0];
+    return { mapId: params.get('map') && maps.some(m => m.id === params.get('map')) ? params.get('map')! : id, mode: 'elimination' as Mode };
   }
-  starting = true; refresh();
+  return newRoomRules(filter(), Math.random);
+}
+
+async function start(action: Action) {
+  const name = callsign.value.trim().slice(0, 16) || t('lobby.fallbackName');
+  const mode = modeOf(action);
+  if (!benchMode) {
+    store.set('name', name); store.set('mode', mode); store.set('team', team); store.set('skill', skill); store.set('botsFill', botsFill);
+    saveFilters();
+  }
+  starting = action; closePop(false); refresh();
   options.hide();
   status.textContent = '';
   unwatchRooms();
@@ -484,28 +666,31 @@ async function start() {
   audio.stopMusic();
   const teamChoice = team === 'auto' ? undefined : (Number(team) as Team);
   const botSkill = Math.max(0.1, Math.min(0.95, Number(skill) || 0.45));
-  const how: OnlineEntry = kind === 'code' ? { kind: 'code', code: cleanCode(roomCode.value) }
-    : kind === 'create' ? { kind: 'create', size: sizeOf(size).perTeam, mode: gameMode, mapId, bots: botsFill === 'on' }
-    : kind === 'room' ? { kind: 'room', room: roomId }
-    : { kind: 'quick', size: sizeOf(size).perTeam };
+  const rules = resolveRules();
+  // Practice plays any map; the filters only narrow it when they name one.
+  const rangeMap = mapF || rules.mapId;
+  const how: OnlineEntry = action === 'code' ? { kind: 'code', code: cleanCode(roomCode.value) }
+    : action === 'private' ? { kind: 'create', size: perTeam(), mode: rules.mode, mapId: rules.mapId, bots: botsFill === 'on' }
+    : action === 'room' ? { kind: 'room', room: joiningRoom }
+    : { kind: 'play', size: perTeam(), mode: modeF, mapId: mapF };
   let link: GameLink;
   try {
     link = mode === 'online'
       ? await connectOnline(name, teamChoice, how, s => { status.textContent = s; })
       : mode === 'lab'
-        ? new OfflineLink(mapId, name, teamChoice, {}, true)
-        : new OfflineLink(mapId, name, teamChoice, { ...(gameMode === 'sabotage' ? SABOTAGE : ELIMINATION), teamSize: sizeOf(size).perTeam, botSkill, freeBuy: params.has('freebuy') });
+        ? new OfflineLink(rangeMap, name, teamChoice, {}, true)
+        : new OfflineLink(rules.mapId, name, teamChoice, { ...(rules.mode === 'sabotage' ? SABOTAGE : ELIMINATION), teamSize: perTeam(), botSkill, freeBuy: params.has('freebuy') });
   } catch (error) {
     status.textContent = t('lobby.couldNotJoin', { error: serverError((error as Error).message) });
-    starting = false;
+    starting = undefined; joiningRoom = -1;
     inMenu = !benchMode; menuMusic();
     watchLobbyRooms(); refresh();
     return;
   }
-  starting = false;
+  starting = undefined; joiningRoom = -1;
   status.textContent = '';
   if (backdrop) { renderer.scene.remove(backdrop.group); backdrop = undefined; backdropMap = undefined; }
-  const linkMap = link.state()?.mapId ?? mapId;
+  const linkMap = link.state()?.mapId ?? rules.mapId;
   launch(link, linkMap);
   menu.hidden = true;
   document.body.classList.remove('menu-open');
@@ -525,11 +710,6 @@ function launch(link: GameLink, map: string) {
   };
 }
 const typing = (e: KeyboardEvent) => { const t = e.target as HTMLElement | null; return !!t && (t.tagName === 'INPUT' || t.tagName === 'TEXTAREA' || t.isContentEditable); };
-/** Enter: the code box joins; anywhere else it runs the choice in focus (Quick Play unless a drawer or room is picked). */
-function primary() {
-  if (focus === 'quick' && !online.ok) return;
-  act(focus);
-}
 document.addEventListener('keydown', e => {
   if (e.code === 'KeyM' && game && !game.input.locked && e.target === document.body) game.onExit?.();
   // F: fullscreen (BeGone's default key). Entering it can drop pointer lock, so recapture after.
@@ -540,22 +720,22 @@ document.addEventListener('keydown', e => {
       if (relock && game && !game.input.locked) void game.input.lock()?.catch?.(() => undefined);
     }, () => undefined);
   }
-  // Esc in the lobby: close the settings dialog, else the open drawer (or picked room) back to Quick Play.
+  // Esc in the lobby: close the settings dialog, else the open popover.
   if (e.key === 'Escape' && !game && !menu.hidden) {
     if (options.open) { e.preventDefault(); options.close(); return; }
-    const was = focus;
-    if (closeDrawer()) {
-      e.preventDefault();
-      if (was !== 'room') menu.querySelector<HTMLElement>(`[data-toggle="${was}"]`)?.focus({ preventScroll: true });
-    }
+    if (openPop) { e.preventDefault(); closePop(); }
     return;
   }
+  // Enter: the code box joins, an open Solo / Private popover starts it, anywhere else PLAY ONLINE.
   if (e.key === 'Enter' && !e.repeat && !game && !menu.hidden && !options.open && !e.isComposing) {
-    const t = e.target as HTMLElement;
-    if (t === roomCode) { e.preventDefault(); act('join'); return; }
-    // Buttons, toggles and rows keep their own Enter.
-    if (t.closest('button, summary, a, .room')) return;
-    e.preventDefault(); primary();
+    const target = e.target as HTMLElement;
+    if (target === roomCode) { e.preventDefault(); run('code'); return; }
+    // Buttons and links keep their own Enter.
+    if (target.closest('button, summary, a')) return;
+    e.preventDefault();
+    if (openPop?.id === 'solo-pop') run('solo');
+    else if (openPop?.id === 'private-pop') run('private');
+    else if (online.ok) run('play');
   }
 });
 
@@ -592,14 +772,18 @@ function showBenchResult(r: BenchResult) {
   document.exitPointerLock?.();
 }
 
+/** What ?autostart (and the dev hook) runs: ?room joins by code, else the remembered or given `mode`. */
+const startAction = (): Action => benchMode ? 'solo' : params.get('room') ? 'code' : startMode === 'offline' ? 'solo' : startMode === 'lab' ? 'range' : online.ok ? 'play' : 'solo';
+
 async function boot() {
   renderer = new Renderer(app, QUALITY[quality]);
   // Chinese UI: fetch the CJK face with the assets, so the first screens never show a fallback font.
   const fonts = isZh() ? cjkFontReady('繁體中文') : Promise.resolve();
-  assets = await loadAssets(f => { loadFraction = f; syncButtons(); });
+  assets = await loadAssets(f => { loadFraction = f; renderPlay(); renderOthers(); });
   await fonts;
   ready = true;
   refresh();
+  if (params.get('room') && !params.get('autostart')) roomCode.focus({ preventScroll: true });
   if (!benchMode) {
     theme = renderTheme();
     theme.then(menuMusic, error => console.warn('Menu theme unavailable', error));
@@ -637,8 +821,9 @@ async function boot() {
   let simNow = 0;
   /** Advance n fixed frames (capture mode). Returns once the frames are rendered. */
   const stepFrames = (n: number, render = true) => { for (let i = 0; i < n; i++) { simNow += 1000 / 30; step(1 / 30, simNow, render && i === n - 1); } return n; };
-  if (params.get('autostart') || benchMode) void start();
-  if (import.meta.env.DEV) Object.assign(window, { __lb: { get game() { return game; }, get bench() { return bench; }, renderer, assets, step: stepFrames, start } });
+  const startNow = () => start(startAction());
+  if (params.get('autostart') || benchMode) void startNow();
+  if (import.meta.env.DEV) Object.assign(window, { __lb: { get game() { return game; }, get bench() { return bench; }, renderer, assets, step: stepFrames, start: startNow } });
 }
 
 void boot().catch(error => {
