@@ -1,0 +1,4 @@
+# Heavy, regenerated outputs: raw frames and clips, rendered audio, the final cuts.
+captures/
+out/
+build/
