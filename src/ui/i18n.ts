@@ -62,6 +62,9 @@ const en = {
   'server.pingTitle': 'Ping to the {server} server: round trip, median of the last {n} samples',
   // The three online views: Quick Play, Start a Server, Join a Server.
   'lobby.ways': 'Ways to play online', 'lobby.offline': 'Offline',
+  // The footer links: the source on GitHub and the privacy page.
+  'lobby.openSource': 'Open source', 'lobby.openSourceTitle': 'The source code on GitHub (opens in a new tab)',
+  'lobby.privacy': 'Privacy', 'lobby.siteLinks': 'About this game',
   'tab.quick': 'Quick play', 'tab.quickSub': 'No setup', 'tab.start': 'Start a server', 'tab.startSub': 'Your rules',
   'tab.join': 'Join a server', 'tab.joinSub': 'Rooms · code',
   'quick.tag': 'Any room', 'quick.or': 'Or:', 'quick.online': 'Online now',
@@ -301,6 +304,8 @@ const zhTW: Record<Key, string> = {
   'server.ms': '{n} ms', 'server.ping': '延遲 {ms}', 'server.measuring': '正在測量延遲…',
   'server.pingTitle': '到{server}伺服器的延遲：往返時間，取最近 {n} 次的中位數',
   'lobby.ways': '線上玩法', 'lobby.offline': '離線',
+  'lobby.openSource': '開放原始碼', 'lobby.openSourceTitle': 'GitHub 上的原始碼（在新分頁開啟）',
+  'lobby.privacy': '隱私權', 'lobby.siteLinks': '關於本遊戲',
   'tab.quick': '快速遊戲', 'tab.quickSub': '免設定', 'tab.start': '開設房間', 'tab.startSub': '自訂規則',
   'tab.join': '加入房間', 'tab.joinSub': '房間列表 · 代碼',
   'quick.tag': '任意房間', 'quick.or': '或：', 'quick.online': '目前線上',
