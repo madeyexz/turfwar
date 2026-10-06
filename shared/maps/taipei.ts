@@ -2,6 +2,7 @@ import { MapBuilder } from './builder';
 import {
   AREA, BRANDS, EXPRESSWAY, HEDGES, LOTS, POIS, RED_HOUSE, ROADS, START, XIMEN_SHOPS, XIMEN_SOLIDS,
 } from './taipei-data';
+import { taipeiCover } from './taipei-cover';
 import { mrtExit, parkedCars, streetFurniture, type Keep, type Shift } from './taipei-decor';
 import { INTERIOR_BUILDINGS, interiors } from './taipei-interiors';
 import { TAIPEI_VEHICLES, parkTaipeiVehicles } from './taipei-vehicles';
@@ -336,6 +337,7 @@ export function taipei(): MapDef {
   // Nothing of the street dressing (look or collider) stands where a vehicle parks.
   // Nor round the spawns, crates and vehicle spots.
   const clear = keep.flatMap(([x, z, r]) => [x - r, 0.05, z - r, x + r, 3, z + r]);
+  clear.push(...taipeiCover(b, shift, keep));
   streetFurniture(b, shift, keep, cuts, clear);
   parkedCars(b, shift, keep);
   mrtExit(b, shift, KERB);
