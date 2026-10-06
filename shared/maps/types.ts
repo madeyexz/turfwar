@@ -4,9 +4,11 @@ import type { VehicleSpot } from '../vehicles';
 
 /**
  * Dusk (low sun), twilight (blue hour), steppe (dry midday) and meadow light the BeGone maps under Earth skies;
- * taipei is a humid city evening over asphalt; xinyi is the same city after dark, lit by its towers.
+ * taipei is a humid city evening over asphalt; xinyi is the same city after dark, lit by its towers;
+ * memorial is golden hour over Memorial Hall's white marble and its gardens.
  */
-export type ThemeId = 'desert' | 'snow' | 'forest' | 'dusk' | 'twilight' | 'steppe' | 'meadow' | 'taipei' | 'xinyi';
+export type ThemeId = 'desert' | 'snow' | 'forest' | 'dusk' | 'twilight' | 'steppe' | 'meadow' | 'taipei' | 'xinyi'
+  | 'memorial';
 
 /** Visual treatment of a solid. Collision is identical regardless of style. */
 export type BlockStyle =
