@@ -7,7 +7,8 @@
  *   bun scripts/loadtest.ts --uri ws://127.0.0.1:3100 --db lawload --clients 100 --procs 4 --seconds 60
  *   (--size 1|6|24, and --mode / --map to Play Online with those filters instead of Quick Play)
  *
- * Refuses non-local servers: never point this at Maincloud.
+ * Refuses non-local servers: never point this at Maincloud. To measure a real host before launch,
+ * publish the module there as a throwaway database named *-load and pass --remote-load-db <name>.
  */
 import { spawn } from 'node:child_process';
 import { chestPoint } from '../shared/hitbox';
@@ -29,7 +30,11 @@ const size = Number(args.get('size') ?? 6);
 /** Optional Play Online filters ('' or absent = any). */
 const mode = args.get('mode'), map = args.get('map');
 const worker = args.get('worker');
-if (!/^wss?:\/\/(127\.0\.0\.1|localhost)(:\d+)?\/?$/.test(uri)) throw new Error(`Refusing non-local server ${uri}`);
+// A remote server is allowed only for a throwaway load database (its name ends in "-load", so real
+// player stats are never touched), only on request, and never on Maincloud.
+const local = /^wss?:\/\/(127\.0\.0\.1|localhost)(:\d+)?\/?$/.test(uri);
+const throwaway = args.get('remote-load-db') === db && db.endsWith('-load') && !/maincloud\.spacetimedb\.com/.test(uri);
+if (!local && !throwaway) throw new Error(`Refusing non-local server ${uri} (a remote run needs a database named *-load and --remote-load-db <that name>)`);
 
 interface Result { clients: number; joined: number; rooms: number[]; bytes: number; messages: number; rtts: number[]; corrections: number; shots: number; kills: number; ticks: number[]; seconds: number }
 
@@ -38,7 +43,7 @@ if (worker === undefined) {
   const per = Math.ceil(clients / procs);
   const runs = Array.from({ length: procs }, (_, p) => new Promise<Result>((resolve, reject) => {
     const n = Math.min(per, clients - p * per);
-    const child = spawn('bun', [import.meta.path, '--uri', uri, '--db', db, '--seconds', String(seconds), '--size', String(size), ...(mode !== undefined ? ['--mode', mode] : []), ...(map !== undefined ? ['--map', map] : []), '--worker', String(p), '--clients', String(n)], { stdio: ['ignore', 'pipe', 'inherit'] });
+    const child = spawn('bun', [import.meta.path, '--uri', uri, '--db', db, '--seconds', String(seconds), '--size', String(size), ...(mode !== undefined ? ['--mode', mode] : []), ...(map !== undefined ? ['--map', map] : []), '--worker', String(p), '--clients', String(n), ...(args.get('remote-load-db') ? ['--remote-load-db', args.get('remote-load-db')!] : [])], { stdio: ['ignore', 'pipe', 'inherit'] });
     let out = '';
     child.stdout.on('data', d => { out += d; });
     child.on('exit', code => {

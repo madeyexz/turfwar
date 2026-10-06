@@ -64,20 +64,45 @@ Production: https://turfwar.ianhsiao.me (also https://lawbreaker.vercel.app). Th
 [`madeyexz/turfwar`](https://github.com/madeyexz/turfwar) is connected to Vercel project
 `madeyexzs-projects/lawbreaker`: pushing `main` deploys production, and every push to `dev` deploys a
 preview wired to the development database `lawbreaker-dev`. Releases are maintainers merging `dev` into
-`main` (see [CONTRIBUTING.md](../CONTRIBUTING.md)). Production Maincloud database: `3d-game-c4lhd`
-(dashboard: https://spacetimedb.com/3d-game-c4lhd).
+`main` (see [CONTRIBUTING.md](../CONTRIBUTING.md)).
 
-Vercel production build variables are `VITE_SPACETIMEDB_URI=wss://maincloud.spacetimedb.com`
-and `VITE_SPACETIMEDB_DATABASE=3d-game-c4lhd`. Do not use `same-origin` on Vercel; that proxy
-exists only in the development server.
+### Game servers
 
-For module updates, run tests and module type checks, then publish non-destructively:
+| Use | Server | Database |
+| --- | --- | --- |
+| Production | SpacetimeDB 2.10.2 self-hosted on **InstaCloud, Singapore** (`wss://play.turfwar.ianhsiao.me`) | `turfwar` |
+| Legacy production (still published, read by `/admin`) | Maincloud, US East | `3d-game-c4lhd` |
+| Development (`dev` previews) | Maincloud, US East | `lawbreaker-dev` |
+
+The Singapore server (`deploy/instacloud/`, InstaCloud project `5ad5aa00-…`, compute service `stdb`)
+is a slim container with SpacetimeDB's two binaries and a 10 GiB `/data` volume. It **scales to zero**:
+with no traffic it suspends (or stops), and the next request wakes it, ~2 s from a suspend; the
+lobby shows a "waking up" state meanwhile. `start.sh` supervises the server: SpacetimeDB never
+deletes its commitlog (100 players write ~12 GB an hour, ~3x smaller once sealed), so once the data
+passes 4 GB and nothing has been written for 2 minutes it restarts the server around
+`prune-commitlog.sh` (a few seconds), and past 8 GB it does so even mid-match. Measured before
+launch: 100 headless players in nine 6v6 rooms held 30 ticks/s; reducer round trip from Taipei
+~112 ms (Maincloud ~206 ms); ~21 KB/s down per player.
+
+Its owner identity lives outside the repo in `~/.config/turfwar/` (made once with
+`deploy/instacloud/owner.sh <server-url>`, in its own CLI profile so the Maincloud login is untouched).
+Back that folder up: the identity that published `turfwar` is the only one that can update it.
+To rebuild or reconfigure the container: `cd deploy/instacloud && insta --agent deploy . --group stdb --port 8080 --websocket`.
+
+Vercel production build variables are `VITE_SPACETIMEDB_URI=wss://play.turfwar.ianhsiao.me` and
+`VITE_SPACETIMEDB_DATABASE=turfwar`. Do not use `same-origin` on Vercel; that proxy exists only in the
+development server.
+
+For module updates, run tests and module type checks, then publish non-destructively to production
+(it wakes the Singapore server first and publishes there and to the legacy Maincloud database):
 
 ```sh
 bun run test && bun run build && bun run typecheck:module
-spacetime publish -s maincloud -p spacetimedb --delete-data=never --yes=remote,skip-login 3d-game-c4lhd
+bun run publish:prod                 # or: bun run publish:prod -- sg   (Singapore only)
 ```
 
+The dev database is published by hand:
+`spacetime publish lawbreaker-dev -s maincloud -p spacetimedb --delete-data=never -y`.
 Stop if schema changes require deletion; never use the local development script for cloud
 publication. On an existing empty starter database, the first valid join initializes the match
 atomically; subsequent joins preserve its state. Publish the compatible module before pushing

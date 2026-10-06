@@ -10,7 +10,8 @@
     "test": "vitest run",
     "preview": "vite preview --host 0.0.0.0",
     "dev:spacetime": "./scripts/dev-spacetime.sh",
-    "typecheck:module": "bun run --cwd spacetimedb typecheck"
+    "typecheck:module": "bun run --cwd spacetimedb typecheck",
+    "publish:prod": "bash deploy/instacloud/publish.sh"
   },
   "dependencies": {
     "@vercel/analytics": "^2.0.1",
