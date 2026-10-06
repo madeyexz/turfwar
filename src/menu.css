@@ -437,7 +437,7 @@
   #menu .logo-sub { display: none; }
   #menu .who { flex: 1 1 auto; flex-wrap: nowrap; justify-content: flex-end; gap: 6px; }
   #menu .callsign { flex: 1 1 auto; width: auto; max-width: 300px; height: 46px; }
-  #menu .who .segmented { flex: 0 1 168px; width: auto; height: 46px; }
+  #menu .who .segmented { flex: 0 0 156px; width: auto; height: 46px; }
   #menu .icons { position: static; flex: none; margin: 0; gap: 6px; }
   #menu .icon-btn { width: 46px; height: 46px; }
 

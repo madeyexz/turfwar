@@ -13,6 +13,7 @@ import { isMagnified, settings } from '../game/settings';
 import { RETICLE_CSS } from '../render/sights';
 import { UI_STACK } from './fonts';
 import { L, applyI18n, causeName, mapName, modeName, onLang, rewardReason, t, teamName, teamShort } from './i18n';
+import { scoreBarFit, scoreBarRoom } from './scorebarfit';
 
 const TEAM_CSS = ['var(--aegis)', 'var(--crimson)'];
 const TEAM_HEX = ['#4aa8ff', '#ff5544'];
@@ -442,19 +443,11 @@ export class Hud {
     this.fitAt = now;
     const sb = this.el.sb;
     if (!document.body.classList.contains('touch')) { sb.classList.remove('sb-tight'); sb.style.removeProperty('--sbs'); return; }
-    const W = innerWidth;
-    let reserve = 8;
-    for (const b of Array.from(document.querySelectorAll<HTMLElement>('#touch .tc-btn:not([hidden])'))) {
-      const r = b.getBoundingClientRect();
-      if (!r.width || r.top > 46) continue;
-      reserve = Math.max(reserve, (r.left + r.right) / 2 < W / 2 ? r.right + 12 : W - r.left + 12);
-    }
-    const room = Math.max(120, W - 2 * reserve);
-    const MAX = 0.78, MIN_CHIPS = 0.55;
+    const buttons = Array.from(document.querySelectorAll<HTMLElement>('#touch .tc-btn:not([hidden])'), b => b.getBoundingClientRect());
+    const room = scoreBarRoom(innerWidth, buttons);
     sb.classList.remove('sb-tight');
-    let scale = Math.min(MAX, room / Math.max(1, sb.offsetWidth));
-    if (scale < MIN_CHIPS) { sb.classList.add('sb-tight'); scale = Math.min(MAX, room / Math.max(1, sb.offsetWidth)); }
-    sb.style.setProperty('--sbs', Math.max(0.45, scale).toFixed(3));
+    const fit = scoreBarFit(room, sb.offsetWidth, () => { sb.classList.add('sb-tight'); return sb.offsetWidth; });
+    sb.style.setProperty('--sbs', fit.scale.toFixed(3));
   }
 
   // ---- Events ---------------------------------------------------------------------------------
