@@ -40,7 +40,7 @@ describe('taipei: the compact Ximending', () => {
     const inBase = ([x, , z]: [number, number, number]) => bases.some(([x0, z0, x1, z1]) => x + OX > x0 && x + OX < x1 && z + OZ > z0 && z + OZ < z1);
     const lines = longSightlines(world, nav, 60, undefined, 1).filter(l => inBase(l.a) || inBase(l.b));
     expect(lines.map(l => `${l.length.toFixed(1)} m: ${[l.a[0] + OX, l.a[2] + OZ]} -> ${[l.b[0] + OX, l.b[2] + OZ]}`)).toEqual([]);
-  });
+  }, 30_000); // every nav pair: seconds of work, slower while other tests run
 
   it('puts the bases 90–120 m apart on foot, and SWAT on each site ahead of Militia', () => {
     const { def } = loadMap('taipei'); const nav = loadNav('taipei');
