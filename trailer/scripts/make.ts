@@ -9,11 +9,12 @@
  *  3. renders the cards, the score and the game sound (scripts/cards.ts, scripts/audio.ts);
  *  4. cuts trailer/out/lawbreaker-trailer.mp4 and lawbreaker-trailer-30s.mp4 (scripts/build.ts);
  *  5. stops everything it started.
- * Flags: --recapture, --only-build (skip 1–3, reuse captures, cards and audio).
+ * Flags: --recapture, --only-build (skip 1–3, reuse captures, cards and audio), --lang zh-TW (the
+ * Traditional Chinese trailer: the game in Chinese, Chinese cards, the same score; out/<cut>.zh-TW.mp4).
  */
 import { spawn, type ChildProcess } from 'node:child_process';
 import { join } from 'node:path';
-import { REPO, ROOT } from './util';
+import { LANG, REPO, ROOT } from './util';
 
 const args = process.argv.slice(2);
 const STDB_PORT = 3251, VITE_PORT = 5201, DB = 'lbtrailer';
@@ -26,7 +27,7 @@ function start(cmd: string, argv: string[], env: Record<string, string> = {}) {
 }
 function step(script: string, argv: string[] = []) {
   return new Promise<void>((resolve, reject) => {
-    const p = spawn('bun', [join(ROOT, 'scripts', script), ...argv], { cwd: REPO, stdio: 'inherit' });
+    const p = spawn('bun', [join(ROOT, 'scripts', script), ...argv, '--lang', LANG], { cwd: REPO, stdio: 'inherit' });
     p.on('close', code => code === 0 ? resolve() : reject(new Error(`${script} exited ${code}`)));
   });
 }

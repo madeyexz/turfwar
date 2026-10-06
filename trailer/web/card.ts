@@ -5,6 +5,9 @@
 type Kind = 'title' | 'caption' | 'tag' | 'end';
 
 const root = document.querySelector<HTMLElement>('#card')!;
+/** `?lang=zh-TW`: Chinese typography (card.css) and the game's Noto Sans TC. */
+const LANG = new URLSearchParams(location.search).get('lang') ?? 'en';
+document.documentElement.lang = LANG;
 const clamp = (v: number) => Math.max(0, Math.min(1, v));
 const ease = (u: number) => 1 - (1 - clamp(u)) ** 3;
 /** 0→1 over [a, b] frames, eased. */
@@ -71,7 +74,11 @@ function show(kind: Kind, lines: string[], frames: number) {
     };
   }
   pose(0);
-  return Promise.all([500, 600, 700].map(w => document.fonts.load(`${w} 40px Rajdhani`))).then(() => document.fonts.ready).then(() => true);
+  const text = lines.join('');
+  return Promise.all([
+    ...[500, 600, 700].map(w => document.fonts.load(`${w} 40px Rajdhani`)),
+    ...(LANG === 'zh-TW' ? [500, 700, 800].map(w => document.fonts.load(`${w} 40px "Noto Sans TC"`, text)) : []),
+  ]).then(() => document.fonts.ready).then(() => true);
 }
 
 Object.assign(window, { __card: { show, at: (f: number) => { pose(f); return f; } } });

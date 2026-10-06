@@ -1,13 +1,14 @@
 /**
  * Renders every card the cuts use (trailer/web/card.ts) into PNG frames, with alpha for the
  * captions and tags: build/cards/<id>@<frames>/00000.png …
- *   bun trailer/scripts/cards.ts [--force]
+ *   bun trailer/scripts/cards.ts [--force] [--lang zh-TW]
  */
 import { existsSync, mkdirSync, rmSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
-import { CARDS, CUTS } from '../edit';
+import { CARDS, CUTS, cardLines } from '../edit';
 import { Browser } from './cdp';
-import { ROOT } from './util';
+import { missingGlyphs } from './glyphs';
+import { LANG, ROOT } from './util';
 
 const BASE = process.env.TRAILER_URL ?? 'http://127.0.0.1:5201';
 const force = process.argv.includes('--force');
@@ -21,15 +22,19 @@ export function cardUses() {
   }
   return [...uses].map(u => { const [id, n] = u.split('@'); return [id, Number(n)] as const; });
 }
-export const cardDir = (id: string, frames: number) => join(ROOT, 'build', 'cards', `${id}@${frames}`);
+export const cardDir = (id: string, frames: number) => join(ROOT, 'build', 'cards', LANG === 'en' ? '' : LANG, `${id}@${frames}`);
 
 if (import.meta.main) {
+  if (LANG !== 'en') {
+    const missing = missingGlyphs();
+    if (missing.length) throw new Error(`zh-TW card copy uses characters the game font lacks: ${missing.join(' ')}`);
+  }
   const browser = new Browser();
   await browser.launch();
   try {
     const page = await browser.page(1920, 1080, 1);
     await page.send('Emulation.setDefaultBackgroundColorOverride', { color: { r: 0, g: 0, b: 0, a: 0 } });
-    await page.navigate(`${BASE}/trailer/web/card.html`);
+    await page.navigate(`${BASE}/trailer/web/card.html?lang=${LANG}`);
     await page.waitFor('window.__card', 30000, 'card page');
     for (const [id, frames] of cardUses()) {
       const dir = cardDir(id, frames);
@@ -37,7 +42,7 @@ if (import.meta.main) {
       const def = CARDS.find(c => c[0] === id);
       if (!def) throw new Error(`no card ${id}`);
       rmSync(dir, { recursive: true, force: true }); mkdirSync(dir, { recursive: true });
-      await page.eval(`__card.show(${JSON.stringify(def[1])}, ${JSON.stringify(def[2])}, ${frames})`);
+      await page.eval(`__card.show(${JSON.stringify(def[1])}, ${JSON.stringify(cardLines(id, LANG))}, ${frames})`);
       for (let f = 0; f < frames; f++) {
         await page.eval(`__card.at(${f})`);
         writeFileSync(join(dir, `${String(f).padStart(5, '0')}.png`), await page.screenshot('png'));

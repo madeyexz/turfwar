@@ -2,17 +2,17 @@
  * Renders each cut's audio in a headless browser (trailer/web/audio.ts):
  *   build/<cut>.music.wav   the score for the cut's sections (also kept as music/<cut>.flac)
  *   build/<cut>.sfx.wav     the game's sounds replayed from the capture logs, placed by the edit
- *   bun trailer/scripts/audio.ts [--music-only | --sfx-only] [cut ids…]
+ *   bun trailer/scripts/audio.ts [--music-only | --sfx-only] [--lang zh-TW] [cut ids…]
  */
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { CUTS, FPS, cutTimes, type Cut } from '../edit';
 import { Browser, type Page } from './cdp';
-import { FFMPEG, ROOT, run } from './util';
+import { CAPTURES, FFMPEG, LANG, ROOT, SUFFIX, positional, run } from './util';
 
 const BASE = process.env.TRAILER_URL ?? 'http://127.0.0.1:5201';
 const args = process.argv.slice(2);
-const wanted = args.filter(a => !a.startsWith('--'));
+const wanted = positional();
 const BUILD = join(ROOT, 'build');
 mkdirSync(BUILD, { recursive: true });
 
@@ -26,7 +26,7 @@ export function sfxPlan(cut: Cut) {
     const start = at / FPS, t0 = seg.in / FPS, t1 = (seg.in + seg.frames) / FPS;
     at += seg.frames;
     if (seg.clip.startsWith('card:') || seg.sound === false) return;
-    const log = join(ROOT, 'captures', `${seg.clip}.sounds.json`);
+    const log = join(CAPTURES, `${seg.clip}.sounds.json`);
     if (!existsSync(log)) { console.warn(`  no sound log for ${seg.clip}`); return; }
     const { sounds } = JSON.parse(readFileSync(log, 'utf8')) as { sounds: SoundEvent[] };
     const id = (v?: number) => v === undefined ? undefined : i * 100000 + v;
@@ -71,7 +71,8 @@ if (import.meta.main) {
     await page.navigate(`${BASE}/trailer/web/audio.html`);
     await page.waitFor('window.__trailerAudio', 60000, 'audio renderer');
     for (const cut of CUTS.filter(c => !wanted.length || wanted.includes(c.id))) {
-      if (!args.includes('--sfx-only')) {
+      // Every language shares the same score: a localized cut renders it only when it is missing.
+      if (!args.includes('--sfx-only') && (LANG === 'en' || !existsSync(join(BUILD, `${cut.id}.music.wav`)))) {
         const t = Date.now();
         const music = await fetchBase64(page, `__trailerAudio.renderScore(${JSON.stringify(cut.score)}, ${JSON.stringify(cutTimes(cut))})`);
         writeFileSync(join(BUILD, `${cut.id}.music.wav`), music);
@@ -81,7 +82,7 @@ if (import.meta.main) {
       if (!args.includes('--music-only')) {
         const t = Date.now(), plan = sfxPlan(cut);
         const sfx = await fetchBase64(page, `__trailerAudio.renderSfx(${JSON.stringify(plan)})`);
-        writeFileSync(join(BUILD, `${cut.id}.sfx.wav`), sfx);
+        writeFileSync(join(BUILD, `${cut.id}${SUFFIX}.sfx.wav`), sfx);
         console.log(`  ${cut.id}: ${plan.events.length} game sounds in ${((Date.now() - t) / 1000).toFixed(0)} s`);
       }
     }

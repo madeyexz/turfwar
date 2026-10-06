@@ -11,7 +11,9 @@
   --night: #05090c;
 }
 html, body { margin: 0; width: 1920px; height: 1080px; overflow: hidden; background: transparent; }
-body { font-family: 'Rajdhani', 'PingFang TC', 'Heiti TC', sans-serif; color: var(--ink); -webkit-font-smoothing: antialiased; }
+/* Traditional Chinese: the game's own Noto Sans TC (public/fonts, SIL OFL 1.1). Latin stays in Rajdhani. */
+@font-face { font-family: 'Noto Sans TC'; font-weight: 500 900; src: url('/fonts/noto-sans-tc.woff2') format('woff2'); }
+body { font-family: 'Rajdhani', 'Noto Sans TC', sans-serif; color: var(--ink); -webkit-font-smoothing: antialiased; }
 #card { position: absolute; inset: 0; }
 .opaque { background: radial-gradient(ellipse at 50% 45%, #0d1a20 0%, var(--night) 62%, #000 100%); }
 
@@ -46,3 +48,11 @@ body { font-family: 'Rajdhani', 'PingFang TC', 'Heiti TC', sans-serif; color: va
 .end .cta { margin-top: 58px; font-weight: 600; font-size: 46px; letter-spacing: 0.08em; }
 .end .url { display: inline-block; margin-top: 22px; padding: 10px 44px 14px; font-weight: 700; font-size: 76px; letter-spacing: 0.04em; color: var(--night); background: var(--accent); box-shadow: 0 0 60px rgba(127, 246, 255, 0.45); }
 .end .note { margin-top: 34px; font-weight: 500; font-size: 32px; letter-spacing: 0.14em; opacity: 0.75; }
+
+/* ---- zh-TW: ideographs read as words with little tracking and a touch more weight and size ---- */
+:lang(zh-TW) .caption .kicker { font-size: 34px; letter-spacing: 0.24em; font-weight: 700; }
+:lang(zh-TW) .caption .head { font-size: 64px; font-weight: 700; letter-spacing: 0.06em; line-height: 1.25; }
+:lang(zh-TW) .tag b { font-size: 34px; letter-spacing: 0.08em; font-weight: 700; }
+:lang(zh-TW) .title .teams { letter-spacing: 0.22em; padding-left: 0.22em; font-weight: 800; }
+:lang(zh-TW) .end .cta { font-size: 50px; font-weight: 700; letter-spacing: 0.12em; }
+:lang(zh-TW) .end .note { font-size: 30px; letter-spacing: 0.1em; font-weight: 500; }

@@ -8,9 +8,9 @@ import { existsSync, mkdirSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { CUTS, cutTimes } from '../edit';
 import { scoreMarkers } from '../music/score';
-import { FFMPEG, ROOT, run } from './util';
+import { FFMPEG, ROOT, SUFFIX, positional, run } from './util';
 
-const wanted = process.argv.slice(2);
+const wanted = positional();
 const DIR = join(ROOT, 'build', 'analysis');
 mkdirSync(DIR, { recursive: true });
 
@@ -27,9 +27,9 @@ async function curve(input: string) {
 }
 
 for (const cut of CUTS.filter(c => !wanted.length || wanted.includes(c.id))) {
-  const music = join(ROOT, 'build', `${cut.id}.music.wav`), final = join(ROOT, 'out', `${cut.id}.mp4`);
+  const music = join(ROOT, 'build', `${cut.id}.music.wav`), final = join(ROOT, 'out', `${cut.id}${SUFFIX}.mp4`);
   await images(music, `${cut.id}.music`);
-  if (existsSync(final)) await images(final, `${cut.id}.final`);
+  if (existsSync(final)) await images(final, `${cut.id}${SUFFIX}.final`);
   const cuts = cutTimes(cut), m = scoreMarkers(cut.score, cuts);
   let beat = 0;
   const sections = cut.score.map(([k, b]) => { const s = `${k}@${(beat * 0.5).toFixed(1)}`; beat += b; return s; });

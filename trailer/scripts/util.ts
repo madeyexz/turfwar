@@ -20,3 +20,17 @@ export function run(cmd: string, args: string[], opts: { quiet?: boolean; stderr
     p.on('close', code => code === 0 ? resolve(opts.stderr ? err : out) : reject(new Error(`${cmd} ${args.slice(0, 6).join(' ')}… exited ${code}\n${err.slice(-3000)}`)));
   });
 }
+
+/**
+ * Language of the trailer being made: `--lang zh-TW` (or TRAILER_LANG) films the game with `?lang=zh-TW`,
+ * renders the cards in Chinese and writes `out/<cut>.zh-TW.mp4`. English keeps the plain paths.
+ */
+const langFlag = process.argv.indexOf('--lang');
+export const LANG = (langFlag >= 0 ? process.argv[langFlag + 1] : process.env.TRAILER_LANG) || 'en';
+if (!['en', 'zh-TW'].includes(LANG)) throw new Error(`unsupported --lang ${LANG} (en or zh-TW)`);
+/** `.zh-TW` for a localized cut's files, '' for English. */
+export const SUFFIX = LANG === 'en' ? '' : `.${LANG}`;
+/** Captured clips and sound logs for the current language. */
+export const CAPTURES = join(ROOT, 'captures', LANG === 'en' ? '' : LANG);
+/** Positional arguments (not flags, not a flag's value). */
+export const positional = () => process.argv.slice(2).filter((a, i, all) => !a.startsWith('--') && all[i - 1] !== '--lang' && all[i - 1] !== '--only');

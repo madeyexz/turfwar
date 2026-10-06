@@ -5,6 +5,7 @@
  *   bun trailer/scripts/capture.ts --only a,b      # just these (re-captures them)
  *   bun trailer/scripts/capture.ts --preview       # a contact sheet per shot (every 15th frame), fast
  *   bun trailer/scripts/capture.ts --force         # re-capture everything
+ *   bun trailer/scripts/capture.ts --lang zh-TW    # the game in Traditional Chinese, into captures/zh-TW/
  *
  * Needs the Vite dev server (TRAILER_URL, default http://127.0.0.1:5201). Each shot loads the game
  * with `?capture&trailer` under a virtual clock (vclock.ts), runs its setup, then for each frame
@@ -16,7 +17,7 @@ import { join } from 'node:path';
 import { SHOTS, type Shot, type Step } from '../shots';
 import { Browser, type Page } from './cdp';
 import { VCLOCK_SOURCE } from './vclock';
-import { FFMPEG, ROOT, run } from './util';
+import { CAPTURES, FFMPEG, LANG, run } from './util';
 
 const BASE = process.env.TRAILER_URL ?? 'http://127.0.0.1:5201';
 const SCALE = 1.5;
@@ -25,7 +26,6 @@ const flag = (name: string) => args.includes(name);
 const only = args.includes('--only') ? args[args.indexOf('--only') + 1].split(',') : undefined;
 const preview = flag('--preview');
 const keep = flag('--keep');
-const CAPTURES = join(ROOT, 'captures');
 mkdirSync(join(CAPTURES, 'preview'), { recursive: true });
 
 const shots = SHOTS.filter(s => only ? only.includes(s.id) : flag('--force') || preview || !existsSync(join(CAPTURES, `${s.id}.mp4`)));
@@ -70,7 +70,7 @@ async function runSteps(page: Page, steps: Step[] = []) {
 }
 
 async function capture(page: Page, shot: Shot) {
-  const url = `${BASE}/${shot.page ?? ''}?capture&trailer&debuginput&quality=high${shot.lobby ? '' : '&autostart=1'}&${shot.url}`;
+  const url = `${BASE}/${shot.page ?? ''}?capture&trailer&debuginput&quality=high${shot.lobby ? '' : '&autostart=1'}${LANG === 'en' ? '' : `&lang=${LANG}`}&${shot.url}`;
   await page.navigate(url);
   await page.waitFor('window.__trailer && window.__lb', 120000, 'trailer hooks');
   if (!shot.lobby) await page.waitFor('window.__lb.game', 120000, 'game');

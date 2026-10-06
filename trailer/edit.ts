@@ -58,6 +58,40 @@ export const CARDS: [string, 'title' | 'caption' | 'tag' | 'end', string[], numb
   ['end_short', 'end', ['LAWBREAKER', '// FRONTLINE', 'Play free in your browser', 'lawbreaker.vercel.app', 'Solo vs bots · Online rooms 1v1 · 6v6 · 24v24'], 180],
 ];
 
+/**
+ * Traditional Chinese (Taiwan) copy for the zh-TW trailer: written as trailer lines, not translated
+ * word for word. Team, mode, map and gear names match the game's own (src/ui/i18n.ts). The brand and
+ * the URL stay in English.
+ */
+export const CARDS_ZH: Record<string, string[]> = {
+  title: ['LAWBREAKER', '// FRONTLINE', '特警 vs 民兵'],
+  title_short: ['LAWBREAKER', '// FRONTLINE', '特警 vs 民兵'],
+  cap_store: ['商店', '買槍、上配件，直接開打。'],
+  cap_sabotage: ['爆破戰', '炸彈裝下去，或拆掉它。'],
+  cap_elimination: ['殲滅戰', '一回合一條命，先拿十勝。'],
+  cap_vehicles: ['載具', '飆車、騎機車、開直升機。'],
+  cap_maps: ['16 張地圖', '從西門町一路打到台北101。'],
+  cap_online: ['線上對戰', '快速遊戲 · 1v1 · 6v6 · 24v24'],
+  tag_mp5: ['MP5'], tag_m4: ['M4A1 · 全像瞄準鏡'], tag_m110: ['M110 · 6 倍鏡'],
+  tag_m1014: ['M1014 · 一槍 14 顆彈丸'], tag_m249: ['M249 · 86 發彈鏈'], tag_bots: ['空位由電腦玩家補滿'],
+  tag_knife: ['刀'], tag_grenade: ['M67 手榴彈'], tag_binos: ['望遠鏡 · 10 倍'],
+  tag_slide: ['衝刺 · 滑鏟'], tag_ladder: ['爬梯'],
+  tag_heli: ['直升機'], tag_drift: ['手煞車甩尾'], tag_scooter: ['機車 · 單手開火'], tag_flight: ['飛越西門町'],
+  tag_101: ['台北101 · 信義'], tag_atrium: ['信義商場中庭'], tag_market: ['西門夜市'], tag_cinema: ['西門町電影街'],
+  tag_crane: ['起重機'], tag_tower: ['塔樓'], tag_warehouse: ['倉庫'], tag_meridian: ['子午線街區 · 24v24'],
+  end: ['LAWBREAKER', '// FRONTLINE', '打開瀏覽器，免費開打', 'lawbreaker.vercel.app', '單機對戰電腦 · 線上房間 1v1 · 6v6 · 24v24'],
+  end_short: ['LAWBREAKER', '// FRONTLINE', '打開瀏覽器，免費開打', 'lawbreaker.vercel.app', '單機對戰電腦 · 線上房間 1v1 · 6v6 · 24v24'],
+};
+/** A card's lines in a language (English is CARDS' own). */
+export function cardLines(id: string, lang: string) {
+  const en = CARDS.find(c => c[0] === id)?.[2];
+  if (!en) throw new Error(`no card ${id}`);
+  if (lang === 'en') return en;
+  const zh = CARDS_ZH[id];
+  if (!zh) throw new Error(`card ${id} has no ${lang} copy`);
+  return zh;
+}
+
 const s = (clip: string, inFrame: number, frames: number, extra: Partial<Segment> = {}): Segment => ({ clip, in: inFrame, frames, ...extra });
 
 export const FULL: Cut = {

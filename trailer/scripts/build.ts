@@ -3,15 +3,15 @@
  * trims each captured clip, punches in on UI shots, flashes and dips on section changes, lays the
  * cards over the picture, mixes the score with the game's own sound (the score leads, the game sits
  * about 5 LU under it, ducked by it, silent over the cards) and masters to -14 LUFS, under -1 dBTP.
- *   bun trailer/scripts/build.ts [cut ids…] [--sound-only]   (--sound-only re-masters the sound onto the finished picture)
+ *   bun trailer/scripts/build.ts [cut ids…] [--sound-only] [--lang zh-TW → out/<cut>.zh-TW.mp4]   (--sound-only re-masters the sound onto the finished picture)
  */
 import { existsSync, mkdirSync, renameSync, rmSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { CARDS, CUTS, FPS, type Cut, type Segment } from '../edit';
 import { cardDir } from './cards';
-import { FFMPEG, FFPROBE, ROOT, run } from './util';
+import { CAPTURES, FFMPEG, FFPROBE, ROOT, SUFFIX, positional, run } from './util';
 
-const wanted = process.argv.slice(2).filter(a => !a.startsWith('--'));
+const wanted = positional();
 const BUILD = join(ROOT, 'build'), OUT = join(ROOT, 'out');
 mkdirSync(OUT, { recursive: true });
 const X264_INTERMEDIATE = ['-c:v', 'libx264', '-preset', 'veryfast', '-crf', '10', '-pix_fmt', 'yuv420p', '-r', String(FPS)];
@@ -31,7 +31,7 @@ async function segment(seg: Segment, file: string) {
     input = ['-framerate', String(FPS), '-i', join(dir, '%05d.png')];
     filters.push('format=yuv420p');
   } else {
-    const src = join(ROOT, 'captures', `${seg.clip}.mp4`);
+    const src = join(CAPTURES, `${seg.clip}.mp4`);
     if (!existsSync(src)) throw new Error(`missing capture ${seg.clip}`);
     const have = await frames(src);
     if (seg.in + n > have) throw new Error(`${seg.clip}: needs frames ${seg.in}..${seg.in + n} but has ${have}`);
@@ -59,7 +59,7 @@ async function loudness(file: string) {
 
 async function build(cut: Cut) {
   const t0 = Date.now();
-  const dir = join(BUILD, 'seg', cut.id);
+  const dir = join(BUILD, 'seg', `${cut.id}${SUFFIX}`);
   rmSync(dir, { recursive: true, force: true }); mkdirSync(dir, { recursive: true });
   // ---- Picture ----
   const list: string[] = [];
@@ -73,7 +73,7 @@ async function build(cut: Cut) {
   }
   const total = at, seconds = total / FPS;
   writeFileSync(join(dir, 'list.txt'), list.join('\n'));
-  const picture = join(BUILD, `${cut.id}.picture.mp4`);
+  const picture = join(BUILD, `${cut.id}${SUFFIX}.picture.mp4`);
   await run(FFMPEG, ['-v', 'error', '-y', '-f', 'concat', '-safe', '0', '-i', join(dir, 'list.txt'), '-c', 'copy', picture]);
 
   // ---- Cards over the picture ----
@@ -89,7 +89,7 @@ async function build(cut: Cut) {
 
   // ---- Sound ----
   const mixed = await mix(cut, seconds);
-  const outFile = join(OUT, `${cut.id}.mp4`);
+  const outFile = join(OUT, `${cut.id}${SUFFIX}.mp4`);
   const filter = [...chain, `[${last}]format=yuv420p[vout]`, `[${cut.overlays.length + 1}:a]anull[aout]`].join(';');
   await run(FFMPEG, ['-v', 'error', '-y', ...inputs, '-i', mixed, '-filter_complex', filter, '-map', '[vout]', '-map', '[aout]',
     '-c:v', 'libx264', '-preset', 'slow', '-crf', '17', '-profile:v', 'high', '-pix_fmt', 'yuv420p', '-r', String(FPS), '-g', String(FPS * 2),
@@ -117,7 +117,7 @@ async function report(file: string) {
  * beats; the sum is brought to -14 LUFS and held under -1 dBTP by a limiter.
  */
 async function mix(cut: Cut, seconds: number) {
-  const music = join(BUILD, `${cut.id}.music.wav`), sfx = join(BUILD, `${cut.id}.sfx.wav`);
+  const music = join(BUILD, `${cut.id}.music.wav`), sfx = join(BUILD, `${cut.id}${SUFFIX}.sfx.wav`);
   const [lm, ls] = [await loudness(music), await loudness(sfx)];
   const sfxGain = Math.min(6, lm - 5 - ls);
   let at = 0;
@@ -131,14 +131,14 @@ async function mix(cut: Cut, seconds: number) {
     if (kind === 'rise') stops.push(`between(t,${t1 - 0.5},${t1})`);
     beat += beats;
   }
-  const sum = join(BUILD, `${cut.id}.sum.wav`);
+  const sum = join(BUILD, `${cut.id}${SUFFIX}.sum.wav`);
   await run(FFMPEG, ['-v', 'error', '-y', '-i', music, '-i', sfx, '-filter_complex',
     `[0:a]asplit[m][key];[1:a]volume=${sfxGain.toFixed(2)}dB,volume=0:enable='${cards.join('+') || '0'}',volume=0.25:enable='${stops.join('+') || '0'}'[s0];` +
     `[s0][key]sidechaincompress=threshold=0.1:ratio=4:attack=8:release=350:knee=4[s];` +
     `[m][s]amix=inputs=2:normalize=0:duration=first,atrim=0:${seconds.toFixed(3)},afade=t=out:st=${(seconds - 1.5).toFixed(3)}:d=1.5[a]`,
     '-map', '[a]', '-ar', '48000', '-c:a', 'pcm_f32le', sum]);
   // Gain to the target, then a limiter at -2.4 dBFS (headroom for the AAC encode under -1 dBTP); a second pass corrects what the limiter took.
-  const master = join(BUILD, `${cut.id}.mix.wav`);
+  const master = join(BUILD, `${cut.id}${SUFFIX}.mix.wav`);
   let gain = -14 - (await measure(sum)).I;
   for (let pass = 0; pass < 3; pass++) {
     await run(FFMPEG, ['-v', 'error', '-y', '-i', sum, '-af', `volume=${gain.toFixed(2)}dB,alimiter=limit=0.76:attack=1:release=80:level=disabled,aresample=48000`, '-c:a', 'pcm_s24le', master]);
@@ -152,10 +152,10 @@ async function mix(cut: Cut, seconds: number) {
 
 /** Re-master a cut's sound onto its finished picture (no re-encode of the video). */
 async function remux(cut: Cut) {
-  const file = join(OUT, `${cut.id}.mp4`);
+  const file = join(OUT, `${cut.id}${SUFFIX}.mp4`);
   const seconds = cut.segments.reduce((n, s) => n + s.frames, 0) / FPS;
   const mixed = await mix(cut, seconds);
-  const tmp = join(BUILD, `${cut.id}.remux.mp4`);
+  const tmp = join(BUILD, `${cut.id}${SUFFIX}.remux.mp4`);
   await run(FFMPEG, ['-v', 'error', '-y', '-i', file, '-i', mixed, '-map', '0:v', '-map', '1:a', '-c:v', 'copy', '-c:a', 'aac', '-b:a', '256k', '-ac', '2', '-movflags', '+faststart', '-t', seconds.toFixed(3), tmp]);
   renameSync(tmp, file);
   console.log(`  ${cut.id}: new sound on ${file}`);
