@@ -609,7 +609,7 @@ export class Hud {
   }
 
   /** A notice in the chat log (someone joined or left): the name in its team's colour, the rest muted. */
-  chatNotice(key: 'chat.joined' | 'chat.left', name: string, team: number, teamText = '') {
+  chatNotice(key: 'chat.joined' | 'chat.left' | 'chat.switched', name: string, team: number, teamText = '') {
     const line = document.createElement('div');
     line.className = 'line note';
     const [before, after] = t(key, { name: '\u0000', team: teamText }).split('\u0000');
