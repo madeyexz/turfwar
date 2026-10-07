@@ -30,6 +30,7 @@ import { currentDeviceKind, defaultQuality } from './game/device';
 import { onTouchLayout, touchActive } from './game/touchlayout';
 import { InstallBanner } from './ui/installhint';
 import { askCallsign, madeUpCallsign } from './ui/callsign';
+import { ask } from './ui/ask';
 import { registerServiceWorker, warmServiceWorker } from './pwa';
 
 inject();
@@ -427,8 +428,13 @@ const players = (n: number, max: number) => t('common.players', { n, max });
 const modeLabel = (m: Mode) => `[${MODE_TAGS[m]}] ${modeName(m)}`;
 /** The room Quick Play would put us in: the fullest open public room, the lower ping on a tie (the server picks the same way, by fullness). */
 const quickTarget = () => pickAnyRoom(rooms, r => pings.get(r.server));
-/** Rooms Join a Server lists (every public room unless its filters narrow them): joinable first, then the most players, then the lowest ping. */
-const shownRooms = () => listOrder(rooms.filter(r => (!joinSize || r.size === sizeOf(joinSize).perTeam) && (!joinMode || r.mode === joinMode)), r => pings.get(r.server));
+/** A room list's order: public rooms (joinable first, then the most players, then the lowest ping), then private ones the same way. */
+const listed = (list: readonly PublicRoom[]) => {
+  const ping = (r: PublicRoom) => pings.get(r.server);
+  return [...listOrder(list.filter(r => !r.private), ping), ...listOrder(list.filter(r => r.private), ping)];
+};
+/** Rooms Join a Server lists (every room unless its filters narrow them). */
+const shownRooms = () => listed(rooms.filter(r => (!joinSize || r.size === sizeOf(joinSize).perTeam) && (!joinMode || r.mode === joinMode)));
 /** Humans in public rooms of the form's size per map: the map picker's live counts. */
 function liveByMap() {
   const counts = new Map<string, number>();
@@ -536,8 +542,8 @@ function renderQuick() {
   const target = quickTarget();
   renderLine('quick', 'quick', target ? t('quick.joins', { map: mapName(target.mapId), size: sizeLabel(target.size), n: target.humans, max: target.size * 2 }) : t('quick.opens'));
   $('#quick-rooms-count').innerHTML = roomTotals();
-  // Every public room, unfiltered, in Join a Server's order; the one Quick Play would join is marked.
-  renderRoomRows($('#quick-rooms'), listOrder(rooms, r => pings.get(r.server)), `<div class="empty"><p>${esc(t('quick.noRooms'))}</p></div>`, target);
+  // Every room, unfiltered, in Join a Server's order (private ones last); the one Quick Play would join is marked.
+  renderRoomRows($('#quick-rooms'), listed(rooms), `<div class="empty"><p>${esc(t('quick.noRooms'))}</p></div>`, target);
 }
 
 /** START A SERVER: the form, the button and what the room will be. */
@@ -603,13 +609,18 @@ function renderRoomRows(list: HTMLElement, shown: PublicRoom[], none: string, ta
     const aria = t('lobby.roomAria', { map: mapName(r.mapId), mode: modeName(r.mode), size: sizeLabel(r.size), n: r.humans, max: r.size * 2, status: roomStatus(r) });
     const busy = !ready || !!starting || roomFull(r);
     const lock = r.fixedMap || r.fixedMode ? `<span class="fixed" title="${esc([r.fixedMap ? t('lobby.fixedMap') : '', r.fixedMode ? t('lobby.fixedMode') : ''].filter(Boolean).join(' · '))}">${LOCK}</span>` : '';
-    return `<div class="room${roomFull(r) ? ' full' : ''}${r === target ? ' target' : ''}" role="listitem" data-room="${r.room}" data-theme="${m?.theme ?? ''}">
-      <span class="srv"><span class="srv-name"><b>${esc(mapName(r.mapId))}</b>${lock}</span><small class="state ${r.phase}">${esc(roomStatus(r))}${r.noBots ? ` · ${esc(t('join.noBots'))}` : ''}</small></span>
+    // A private room is listed without its code: its button asks for the code (the host shares it).
+    const priv = r.private ? `<span class="priv">${LOCK}${esc(t('join.private'))}</span>` : '';
+    const button = r.private
+      ? `<button type="button" class="join" data-coderoom="${r.room}" aria-label="${esc(`${roomFull(r) ? t('common.full') : t('join.enterCode')} · ${t('join.private')} · ${aria}`)}"${busy ? ' disabled' : ''}>${starting === 'code' && joiningRoom === r.room ? t('lobby.joining') : roomFull(r) ? t('common.full') : t('join.enterCode')}</button>`
+      : `<button type="button" class="join" data-joinroom="${r.room}" aria-label="${esc(`${roomFull(r) ? t('common.full') : t('common.join')} · ${aria}`)}"${busy ? ' disabled' : ''}>${starting === 'room' && joiningRoom === r.room ? t('lobby.joining') : roomFull(r) ? t('common.full') : t('common.join')}</button>`;
+    return `<div class="room${roomFull(r) ? ' full' : ''}${r === target ? ' target' : ''}${r.private ? ' private' : ''}" role="listitem" data-room="${r.room}"${r.private ? ' data-private="1"' : ''} data-theme="${m?.theme ?? ''}">
+      <span class="srv"><span class="srv-name"><b>${esc(mapName(r.mapId))}</b>${lock}${priv}</span><small class="state ${r.phase}">${esc(roomStatus(r))}${r.noBots ? ` · ${esc(t('join.noBots'))}` : ''}</small></span>
       <span class="mode" title="${esc(modeName(r.mode))}"><span class="mtag">[${MODE_TAGS[r.mode]}]</span><span class="mname"> ${esc(modeName(r.mode))}</span></span>
       <span class="size">${sizeLabel(r.size)}</span>
       <span class="players">${r.humans}/${r.size * 2}</span>
       <span class="${pingClass(r.server)}" data-ping="${esc(r.server)}" title="${esc(pingTitle(r.server))}">${pingHtml(r.server)}</span>
-      <button type="button" class="join" data-joinroom="${r.room}" aria-label="${esc(`${roomFull(r) ? t('common.full') : t('common.join')} · ${aria}`)}"${busy ? ' disabled' : ''}>${starting === 'room' && joiningRoom === r.room ? t('lobby.joining') : roomFull(r) ? t('common.full') : t('common.join')}</button>
+      ${button}
     </div>`;
   }).join('');
   if (focusRoom) list.querySelector<HTMLElement>(`[data-joinroom="${focusRoom}"]`)?.focus({ preventScroll: true });
@@ -734,6 +745,7 @@ onClick('clear', () => { joinSize = ''; joinMode = ''; changed(); });
 onClick('team', v => { team = v; select('teams', 'team', team); });
 onClick('skill', v => { skill = v; select('skills', 'skill', skill); });
 onClick('joinroom', v => run('room', Number(v)));
+onClick('coderoom', v => askRoomCode(Number(v)));
 onClick('wake-retry', () => wake.retry());
 $('#wake-retry').addEventListener('click', () => { audio.ui(); wake.retry(); });
 $('#wake-cancel').addEventListener('click', () => { audio.ui(); wake.cancel(); });
@@ -743,7 +755,23 @@ $('#start-go').addEventListener('click', () => { audio.ui(); run('start'); });
 $('#go-range').addEventListener('click', () => { audio.ui(); run('range'); });
 $('#join-go').addEventListener('click', () => { audio.ui(); run('code'); });
 $('#solo-go').addEventListener('click', () => { audio.ui(); run('solo'); });
-for (const id of ['#rooms', '#quick-rooms']) $(id).addEventListener('dblclick', e => { const row = (e.target as HTMLElement).closest<HTMLElement>('.room'); if (row) run('room', Number(row.dataset.room)); });
+for (const id of ['#rooms', '#quick-rooms']) $(id).addEventListener('dblclick', e => {
+  const row = (e.target as HTMLElement).closest<HTMLElement>('.room');
+  if (row) { if (row.dataset.private) askRoomCode(Number(row.dataset.room)); else run('room', Number(row.dataset.room)); }
+});
+/** A listed private room: ask for its code (the host shares it), then join by code like the Join a Server box. */
+function askRoomCode(room: number) {
+  const r = rooms.find(x => x.room === room && x.private);
+  if (!r || !ready || starting || roomFull(r)) return;
+  ask({
+    title: t('join.privateTitle'), why: t('join.privateWhy', { map: mapName(r.mapId), size: sizeLabel(r.size) }),
+    label: t('lobby.roomCode'), placeholder: t('lobby.codeShort'), go: t('common.join'), close: t('cs.close'), maxLength: 4,
+    attrs: 'autocomplete="off" autocapitalize="characters"', clean: cleanCode,
+    check: code => code.length === 4 ? { ok: code } : { error: t('join.codeShort') },
+    // (The room rides along only to mark its row as joining; the code decides where we go.)
+    done: code => { roomCode.value = code; run('code', room); },
+  });
+}
 // Tabs: arrow keys move between them (and select), as a tab list does.
 $('#tabs').addEventListener('keydown', e => {
   const step = e.key === 'ArrowRight' ? 1 : e.key === 'ArrowLeft' ? -1 : 0;
