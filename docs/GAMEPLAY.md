@@ -299,8 +299,8 @@ fullscreen. On touch-only screens the Controls tab is read-only.
 
 Touch-primary devices (a coarse pointer or touch points with no mouse, iPads included) get on-screen
 controls; **Settings → Controls** switches them Auto / On / Off (`?touch=1|0` for testing) and sets the
-finger look speed (default 1.35×: a swipe across an iPhone SE's width turns about 180°, 230° on an
-iPhone 14; aiming scales it by the zoom like the mouse). The left part of the screen is a floating stick
+finger look speed (0.3×–8× on a logarithmic slider; default 2.00×: a swipe across an iPhone SE's width
+turns about 270°, 340° on an iPhone 14; aiming scales it by the zoom like the mouse). The left part of the screen is a floating stick
 (it appears under the thumb; past its ring you sprint; in a vehicle it is throttle, brake and steering),
 the rest is a look pad, and fire also looks while held. **Auto-aim when firing** (on by default,
 `src/game/holdfire.ts`): a tap on fire shoots from the hip at once, holding it past 150 ms raises the

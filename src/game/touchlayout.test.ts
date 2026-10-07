@@ -1,9 +1,9 @@
 import { describe, expect, it, vi } from 'vitest';
 import { ACTIONS, type Scope } from './keybinds';
 import {
-  CONTROLS, CONTROL_IDS, CUSTOM_ACTIONS, DEAD_ZONE, PLACE_IDS, SIZE_RANGE, SPRINT_PUSH, TOUCH_LOOK_DEG_PER_PX, TOUCH_SENS_DEFAULT, TOUCH_SENS_RANGE, TOUCH_VERSION,
+  CONTROLS, CONTROL_IDS, CUSTOM_ACTIONS, DEAD_ZONE, PLACE_IDS, SIZE_RANGE, SPRINT_PUSH, TOUCH_LOOK_DEG_PER_PX, TOUCH_SENS_DEFAULT, TOUCH_SENS_RANGE, TOUCH_SENS_STEPS, TOUCH_VERSION,
   contextControls, controlAction, defaultLayout, edit, moveTo, parseLayout, parseTouchSensitivity, placeOf, serializeLayout, setTouchAutoAim, setTouchSensitivity,
-  stickActions, stickShown, touchAutoAim, touchSensitivity, visibleControls, withOptions, type ControlId, type TouchContext,
+  stickActions, stickShown, touchAutoAim, touchSensFromSlider, touchSensToSlider, touchSensitivity, visibleControls, withOptions, type ControlId, type TouchContext,
 } from './touchlayout';
 
 const ids = (s: Set<ControlId>) => [...s].sort();
@@ -208,16 +208,38 @@ describe('finger look speed', () => {
   /** A swipe across a whole landscape screen this wide, in degrees, at a touch speed. */
   const swipe = (width: number, sens: number) => width * TOUCH_LOOK_DEG_PER_PX * sens;
 
-  it('the default turns about 180° across the smallest phone, faster than the old default', () => {
-    expect(swipe(667, TOUCH_SENS_DEFAULT)).toBeGreaterThan(175);
-    expect(swipe(667, TOUCH_SENS_DEFAULT)).toBeLessThan(190);
-    // The old default (1.00×): 135° across an iPhone SE, 170° across an iPhone 14.
+  it('the default turns about 270° across the smallest phone, faster than the old defaults', () => {
+    expect(swipe(667, TOUCH_SENS_DEFAULT)).toBeGreaterThan(260);
+    expect(swipe(667, TOUCH_SENS_DEFAULT)).toBeLessThan(280);
+    expect(swipe(844, TOUCH_SENS_DEFAULT)).toBeCloseTo(340.5, 0);
+    // The old defaults: 1.00× (135° across an iPhone SE, 170° across an iPhone 14) and 1.35× (180°).
     expect(swipe(667, 1)).toBeCloseTo(134.5, 0);
     expect(swipe(844, 1)).toBeCloseTo(170.2, 0);
-    expect(swipe(844, TOUCH_SENS_DEFAULT)).toBeCloseTo(229.8, 0);
-    // The slider keeps room on both sides of the default.
-    expect(TOUCH_SENS_RANGE[1] / TOUCH_SENS_DEFAULT).toBeGreaterThan(2.5);
-    expect(TOUCH_SENS_DEFAULT / TOUCH_SENS_RANGE[0]).toBeGreaterThan(4);
+    expect(swipe(667, 1.35)).toBeCloseTo(181.6, 0);
+    // The range keeps room on both sides of the default: 4× faster, nearly 7× slower.
+    expect(TOUCH_SENS_RANGE[1] / TOUCH_SENS_DEFAULT).toBeGreaterThanOrEqual(4);
+    expect(TOUCH_SENS_DEFAULT / TOUCH_SENS_RANGE[0]).toBeGreaterThan(6);
+  });
+
+  it('the slider is logarithmic: the ends, the default a little right of centre, and its old values', () => {
+    expect(touchSensToSlider(TOUCH_SENS_RANGE[0])).toBe(0);
+    expect(touchSensToSlider(TOUCH_SENS_RANGE[1])).toBe(TOUCH_SENS_STEPS);
+    expect(touchSensFromSlider(0)).toBe(TOUCH_SENS_RANGE[0]);
+    expect(touchSensFromSlider(TOUCH_SENS_STEPS)).toBe(TOUCH_SENS_RANGE[1]);
+    const middle = touchSensToSlider(TOUCH_SENS_DEFAULT) / TOUCH_SENS_STEPS;
+    expect(middle).toBeGreaterThan(0.5);
+    expect(middle).toBeLessThan(0.65);
+    expect(touchSensFromSlider(touchSensToSlider(TOUCH_SENS_DEFAULT))).toBe(TOUCH_SENS_DEFAULT);
+    // Near the default snaps to it; saved speeds (the old defaults, the old maximum) survive a round trip.
+    expect(touchSensFromSlider(touchSensToSlider(TOUCH_SENS_DEFAULT) + 4)).toBe(TOUCH_SENS_DEFAULT);
+    for (const v of [0.5, 1, 1.35, 3, 4, 6]) expect(Math.abs(touchSensFromSlider(touchSensToSlider(v)) / v - 1)).toBeLessThan(0.005);
+    // Every step moves the same proportion, and the speed only ever rises along the track.
+    let last = 0;
+    for (let p = 0; p <= TOUCH_SENS_STEPS; p += 10) { const v = touchSensFromSlider(p); expect(v).toBeGreaterThanOrEqual(last); last = v; }
+    // Out-of-range positions and speeds are clamped.
+    expect(touchSensFromSlider(-5)).toBe(TOUCH_SENS_RANGE[0]);
+    expect(touchSensFromSlider(5000)).toBe(TOUCH_SENS_RANGE[1]);
+    expect(touchSensToSlider(50)).toBe(TOUCH_SENS_STEPS);
   });
 
   it('nothing saved reads the new default; a saved speed is kept, even the old default', () => {
