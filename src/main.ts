@@ -10,18 +10,19 @@ import { loadLayout, matches } from './game/keybinds';
 import type { GameLink } from './game/link';
 import { OfflineLink } from './game/offline';
 import { Bench, BENCH_SECONDS, benchReport, type BenchResult } from './game/bench';
-import { onlineAvailable, onlineConfig, connectOnline, watchRooms, ConnectError, OnlineLink, type OnlineEntry, type PublicRoom } from './net/online';
+import { onlineAvailable, connectOnline, watchRooms, ConnectError, OnlineLink, type OnlineEntry, type PublicRoom } from './net/online';
 import { PING_WINDOW, PingMonitor, hostAnswers, pingAllowed, pingTone, pingUrl, serverHost, serverRegion } from './net/ping';
+import { currentServer, gameServerList, onServer, type GameServer, type ServerId } from './net/servers';
 import { WakeDriver, wakeProgress, wakeSeconds, type WakeState } from './net/wake';
 import { matchJoined, matchLeft, setSuper, startAnalytics, track, type PlayKind, type Reason } from './analytics';
 import { LevelView } from './render/level';
 import { THEMES } from './render/materials';
 import { QUALITY, Renderer } from './render/renderer';
 import { renderTheme, THEME_START } from './theme';
-import { SettingsMenu, type GraphicsQuality, type SettingsTab } from './ui/settingsmenu';
+import { SettingsMenu, type GraphicsQuality, type SettingsFocus, type SettingsTab } from './ui/settingsmenu';
 import { cjkFontReady } from './ui/fonts';
 import { drawMapThumb } from './ui/mapthumb';
-import { L, applyI18n, escapeHtml as esc, isZh, lang, mapName as localMapName, mapRegion, modeName, onLang, plural, serverError, sizeName, t, type Key } from './ui/i18n';
+import { L, applyI18n, escapeHtml as esc, isZh, lang, mapName as localMapName, modeName, onLang, plural, serverError, sizeName, t, type Key } from './ui/i18n';
 import './style.css';
 import './menu.css';
 import './ui/lang-zh.css';
@@ -61,7 +62,13 @@ const menu = document.createElement('div');
 menu.id = 'menu';
 const maps = mapSummaries();
 const mapName = (id: string) => localMapName(id, maps.find(m => m.id === id)?.name ?? id);
-const server = onlineConfig();
+/**
+ * The game server the lobby shows: the one chosen in Settings (src/net/servers.ts). A choice made in
+ * the lobby applies at once; one made in a match waits until the lobby is back (`followServer`).
+ */
+let server: GameServer | undefined = currentServer();
+/** More than one server to choose from: the server chips open Settings on the choice. */
+const choosable = gameServerList().length > 1;
 const online = onlineAvailable();
 /** Featured first in the map row's shortcuts: Taipei's two maps, then the usual order. */
 const FEATURED = ['taipei', 'xinyi', ...maps.map(m => m.id).filter(id => id !== 'taipei' && id !== 'xinyi')];
@@ -95,6 +102,8 @@ const pop = (id: string, label: Key, body: string) =>
 const field = (label: Key, body: string) => `<div class="frow">${L(label, 'span', 'class="label"')}${body}</div>`;
 /** The line under a big button: a status dot, what it will do, and the ping. */
 const line = (id: string) => `<p class="rooms-line" id="${id}-line"><span class="conn"><i></i></span><span class="line-text" id="${id}-hint"></span><span class="ping" id="${id}-ping"></span></p>`;
+/** "Server · Singapore · 110 ms ▾": which server the lobby shows; with a choice of servers it opens Settings on it. */
+const serverChip = (id: string) => `<button type="button" class="server-chip" id="${id}"${choosable ? ' aria-haspopup="dialog"' : ' disabled'} hidden></button>`;
 const deploy = (id: string, label: Key, right = '') =>
   `<button type="button" class="deploy" id="${id}" disabled><span class="deploy-l">${PLAY}<span class="deploy-t" data-label="${label}">${t('lobby.loading')}</span></span><span class="deploy-r">${right}</span></button>`;
 
@@ -136,7 +145,7 @@ menu.innerHTML = `
       ${line('quick')}
       <div class="quick-card">
         ${L('quick.about', 'p')}
-        <div class="quick-live"><span class="conn" id="quick-live"><i></i><span></span></span><span class="server-chip" id="quick-server"></span></div>
+        <div class="quick-live"><span class="conn" id="quick-live"><i></i><span></span></span>${serverChip('quick-server')}</div>
         <div class="quick-links">${L('quick.or', 'span')}<button type="button" class="link" data-go="start">${L('tab.start')}</button><span aria-hidden="true">·</span><button type="button" class="link" data-go="join">${L('tab.join')}</button></div>
       </div>
     </div>
@@ -163,7 +172,7 @@ menu.innerHTML = `
         ${field('lobby.field.mode', choice('jmodes', 'jmode', [['', L('join.all')], ['elimination', `<span class="mtag">[E]</span><span class="jname"> ${L('mode.elimination')}</span>`], ['sabotage', `<span class="mtag">[S]</span><span class="jname"> ${L('mode.sabotage')}</span>`]], 'lobby.field.mode'))}
       </div>
       <section class="browser" id="browser" aria-labelledby="rooms-title">
-        <div class="browser-head"><b id="rooms-title" data-i18n="lobby.liveRooms">${t('lobby.liveRooms')}</b><span class="count" id="rooms-count"></span><span class="server-chip" id="rooms-server"></span></div>
+        <div class="browser-head"><b id="rooms-title" data-i18n="lobby.liveRooms">${t('lobby.liveRooms')}</b><span class="count" id="rooms-count"></span>${serverChip('rooms-server')}</div>
         <div class="browser-rows" id="rooms" role="list"></div>
         <div class="browser-foot" id="rooms-foot"></div>
       </section>
@@ -280,9 +289,9 @@ if (!mapOk(map)) map = firstMap();
 /** A play action held until the server is up; `retried`: it already failed to reach the server once. */
 interface Queued { action: Action; room: number; retried: boolean }
 let rooms: PublicRoom[] = [];
-const serverPing = server.uri ? pingUrl(server.uri) : undefined;
+/** Pings and connects reach the chosen server (choosing another stops the driver and starts it again). */
 const wake = new WakeDriver<Queued>({
-  ping: signal => serverPing ? hostAnswers(serverPing, signal) : Promise.resolve(false),
+  ping: signal => { const url = server && pingUrl(server.uri); return url ? hostAnswers(url, signal) : Promise.resolve(false); },
   connect: lost => watchRooms(list => { rooms = list; refresh(); }, lost),
 }, s => onWake(s), q => run(q.action, q.room, q.retried));
 const phase = () => wake.state.phase;
@@ -305,9 +314,41 @@ function onWake(s: WakeState<Queued>) {
 }
 function watchLobbyRooms() {
   if (!online.ok || benchMode) { refresh(); return; }
+  // A server chosen during a match applies now.
+  if (followServer()) wake.stop();
   wake.start();
   refresh();
 }
+/** Analytics super properties for the lobby's server: its database, host and the choice (sg/us). */
+const serverProps = () => ({
+  online_db: online.ok ? server?.database ?? '' : '', server_host: online.ok && server ? serverHost(server.uri) : '', server_choice: server?.id ?? '',
+});
+/**
+ * The lobby follows the chosen server: pings (the old server is no longer pinged, which would keep
+ * it awake), the room list, the chips and the analytics super properties. True when it changed.
+ */
+function followServer() {
+  const next = currentServer();
+  if (next === server) return false;
+  pings.untrack(server?.uri);
+  server = next;
+  rooms = [];
+  if (pingOn) pings.track(server?.uri);
+  setSuper(serverProps());
+  return true;
+}
+/**
+ * A server chosen in Settings: in the lobby, the room list, chips and ping switch at once, and the
+ * new server is woken if it sleeps (a play action waiting for the old one is dropped). In a match,
+ * or while joining one, the lobby picks it up when it is back on screen.
+ */
+onServer(() => {
+  if (game || starting || !inMenu) return;
+  const watching = phase() !== 'idle';
+  if (!followServer()) return;
+  wake.stop();
+  if (watching) watchLobbyRooms(); else refresh();
+});
 function unwatchRooms() {
   wake.stop();
   pings.setActive(false);
@@ -330,34 +371,47 @@ document.addEventListener('visibilitychange', () => {
 // ---- Ping: round trip to each room's server, measured only while the lobby is on screen. ----
 const pings = new PingMonitor(() => renderPings());
 const pingOn = online.ok && !benchMode && pingAllowed(location.search);
-if (pingOn) pings.track(server.uri);
+if (pingOn) pings.track(server?.uri);
+/**
+ * Every server choice's ping beside it in Settings: measured only while that dialog is open in the
+ * lobby. (US East never sleeps; a sleeping Singapore server wakes for it while the dialog is open.)
+ */
+const choicePings = new PingMonitor(() => options.refreshPings());
+if (pingOn && choosable) for (const s of gameServerList()) choicePings.track(s.uri);
 /** A room row's ping: "190 ms" ("—" while measuring); the class colours it. */
 function pingHtml(uri: string | undefined) {
   const ms = pings.get(uri);
   return ms === undefined ? '—' : `${ms}<small> ms</small>`;
 }
 const pingClass = (uri: string | undefined) => { const ms = pings.get(uri); return `ping${ms === undefined ? '' : ` ${pingTone(ms)}`}`; };
-const pingTitle = (uri: string | undefined) => uri ? t('server.pingTitle', { server: serverRegion(uri), n: PING_WINDOW }) : '';
-/** "Server · Singapore · 110 ms" for the chips; "Server · Singapore · waking" while it boots. */
+/** The chosen server by its name in Settings ("Singapore", "US East", "Dev server"); any other by its region. */
+const serverName = (uri: string) => server && uri === server.uri ? t(server.label) : serverRegion(uri);
+const pingTitle = (uri: string | undefined) => uri ? t('server.pingTitle', { server: serverName(uri), n: PING_WINDOW }) : '';
+/** "Server · Singapore · 110 ms ▾" for the chips; "Server · Singapore · waking" while it boots. */
 function chipHtml(uri: string) {
   const ms = pings.get(uri), p = phase();
   const value = p === 'waking' ? `<span class="ping waking">${esc(t('wake.chip'))}</span>`
     : p === 'unreachable' ? `<span class="ping">${esc(t('wake.downChip'))}</span>`
     : `<span class="${pingClass(uri)}">${ms === undefined ? '—' : esc(t('server.ms', { n: ms }))}</span>`;
-  return `<span class="server-word">${esc(t('server.label'))} · </span>${esc(serverRegion(uri))} · ${value}`;
+  return `<span class="server-word">${esc(t('server.label'))} · </span>${esc(serverName(uri))} · ${value}${choosable ? CARET : ''}`;
 }
 /** Updates the ping cells, the server chips and the lines under the big buttons in place (samples arrive every 4 s). */
 function renderPings() {
   menu.querySelectorAll<HTMLElement>('#rooms [data-ping]').forEach(el => { el.className = pingClass(el.dataset.ping); el.innerHTML = pingHtml(el.dataset.ping); });
-  const live = pingOn && !!server.uri && phase() === 'ready';
-  // The chips also say when the server is waking (or could not be reached), never an error.
-  const chips = pingOn && !!server.uri && (live || phase() === 'waking' || phase() === 'unreachable');
+  const live = pingOn && !!server && phase() === 'ready';
+  // The chips show from the first connection attempt (so the server can be changed meanwhile) and
+  // say when the server is waking (or could not be reached), never an error.
+  const chips = pingOn && !!server && phase() !== 'idle';
   for (const chip of [$('#rooms-server'), $('#quick-server')]) {
     chip.hidden = !chips;
-    if (chips) { chip.title = live ? pingTitle(server.uri) : ''; chip.innerHTML = chipHtml(server.uri!); }
+    if (!chips || !server) continue;
+    const change = choosable ? t('server.change') : '';
+    chip.title = [live ? pingTitle(server.uri) : '', change].filter(Boolean).join(' · ');
+    const html = chipHtml(server.uri);
+    if (chip.dataset.html !== html) { chip.dataset.html = html; chip.innerHTML = html; }
   }
-  // Quick Play goes to its target room's server; a started room opens on this build's server.
-  const lines: [string, string | undefined][] = [['#quick-ping', quickTarget()?.server ?? server.uri], ['#start-ping', server.uri]];
+  // Quick Play goes to its target room's server; a started room opens on the chosen server.
+  const lines: [string, string | undefined][] = [['#quick-ping', quickTarget()?.server ?? server?.uri], ['#start-ping', server?.uri]];
   for (const [sel, uri] of lines) {
     const el = $(sel), ms = pings.get(uri);
     el.hidden = !live;
@@ -440,7 +494,7 @@ function renderLine(id: string, action: Action, liveText: string) {
     : p === 'unreachable' ? ['down', t('wake.downHead')]
     : ['wait', queuedAction() === action ? t('wake.queued') : t('lobby.connecting')];
   el.querySelector('.conn')!.className = `conn ${state}`;
-  el.title = p === 'ready' ? t('lobby.liveTitle', { db: server.database ?? 'online' }) : '';
+  el.title = p === 'ready' ? t('lobby.liveTitle', { db: server?.database ?? 'online' }) : '';
   setText($(`#${id}-hint`), text);
 }
 
@@ -741,26 +795,44 @@ menu.addEventListener('focusout', e => {
   if (openPop && next && !openPop.contains(next) && next !== popAnchor) closePop(false);
 });
 
-/** The map picker: every map the form's size plays, with a plan, region and who is playing; maps the mode cannot host are disabled. */
-const thumbs = new Map<string, HTMLCanvasElement>();
-function thumb(id: string) {
-  let c = thumbs.get(id);
-  if (!c) { c = document.createElement('canvas'); c.width = 168; c.height = 96; drawMapThumb(c, id); thumbs.set(id, c); }
+/**
+ * A map card's picture: the map's screenshot (public/media/maps/<id>.webp, shot by scripts/mapshots.ts),
+ * or its top-down plan when there is none or it fails to load. Kept per map, so redraws (live
+ * counts arrive often) move the same loaded element instead of loading it again.
+ */
+const thumbs = new Map<string, HTMLElement>();
+function plan(id: string) {
+  const c = document.createElement('canvas');
+  c.width = 168; c.height = 96;
+  drawMapThumb(c, id);
   return c;
 }
+function thumb(id: string) {
+  let el = thumbs.get(id);
+  if (!el) {
+    const img = document.createElement('img');
+    img.loading = 'lazy'; img.decoding = 'async'; img.width = 480; img.height = 270;
+    img.addEventListener('error', () => { const c = plan(id); thumbs.set(id, c); img.replaceWith(c); }, { once: true });
+    img.src = `/media/maps/${id}.webp`;
+    thumbs.set(id, el = img);
+  }
+  if (el instanceof HTMLImageElement) el.alt = mapName(id);
+  return el;
+}
+/** The map picker: every map the form's size plays, with its picture, its bomb sites in Sabotage and who is playing; maps the mode cannot host are disabled. */
 function renderMapGrid() {
   const grid = $('#map-grid');
   const live = liveByMap();
   $('#map-pop-sub').textContent = `${t('lobby.mapsFor', { size: sizeOf(size).label })} · ${modeName(mode)}`;
-  const small = (m: (typeof maps)[number]) => mode === 'sabotage'
-    ? t(m.sites > 1 ? 'lobby.sitesAB' : m.sites ? 'lobby.siteA' : 'lobby.noSites') : mapRegion(m.id, m.region).split('/')[0].trim();
+  // Under the name: the bomb sites in Sabotage, nothing in Elimination (the line keeps its height either way).
+  const sites = (m: (typeof maps)[number]) => mode === 'sabotage' ? t(m.sites > 1 ? 'lobby.sitesAB' : m.sites ? 'lobby.siteA' : 'lobby.noSites') : '';
   const fits = mapsFor(perTeam());
   grid.innerHTML = maps.filter(m => fits.includes(m.id)).map(m => {
-    const ok = mapOk(m.id), n = live.get(m.id) ?? 0;
+    const ok = mapOk(m.id), n = live.get(m.id) ?? 0, note = ok ? sites(m) : t('lobby.noSites');
     return `<button type="button" class="mcard" data-pick="${m.id}" data-theme="${m.theme}" aria-pressed="${m.id === map}"${ok ? '' : ` disabled title="${esc(t('lobby.noSites'))}"`}>
       <span class="thumb" data-thumb="${m.id}"></span>
       <b>${esc(mapName(m.id))}</b>
-      <small>${esc(ok ? small(m) : t('lobby.noSites'))}</small>
+      <small>${note ? esc(note) : '&nbsp;'}</small>
       <span class="live${n ? ' on' : ''}">${n ? `<i></i>${esc(t('lobby.playing', { n }))}` : '&nbsp;'}</span>
     </button>`;
   }).join('');
@@ -811,6 +883,9 @@ const options = new SettingsMenu(document.body, {
     previewVolume: () => audio.cash(),
     bench: { label: () => t('lobby.bench', { n: BENCH_SECONDS }), run: () => { location.search = `?bench&map=${shownMap()}&quality=${quality}${params.get('lang') ? `&lang=${params.get('lang')}` : ''}`; } },
     credits: () => t('lobby.credits'),
+    // The chosen server's ping is already warm in the lobby's own monitor (the same value as its chips).
+    serverPing: s => pings.get(s.uri) ?? choicePings.get(s.uri),
+    onClose: () => choicePings.setActive(false),
   },
 });
 
@@ -825,7 +900,12 @@ onLang(next => {
   if (benchPanel) { benchPanel.remove(); if (benchResult) showBenchResult(benchResult); }
   refresh();
 });
-const openOptions = (tab: SettingsTab) => { audio.ui(); closePop(false); options.show(false, tab); };
+const openOptions = (tab: SettingsTab, focus?: SettingsFocus) => {
+  audio.ui(); closePop(false);
+  choicePings.setActive(pingOn && choosable);
+  options.show(false, tab, focus);
+};
+for (const id of ['#quick-server', '#rooms-server']) $(id).addEventListener('click', () => openOptions('options', 'server'));
 $('#open-settings').addEventListener('click', () => openOptions('options'));
 $('#open-controls').addEventListener('click', () => openOptions('controls'));
 
@@ -859,7 +939,7 @@ watchLobbyRooms();
 track('lobby_view', {});
 // Analytics loads once the lobby is on screen, when the browser is idle: never in the way of the game.
 const idle = (fn: () => void) => ('requestIdleCallback' in window ? requestIdleCallback(fn, { timeout: 3000 }) : setTimeout(fn, 1500));
-idle(() => startAnalytics({ lang: lang(), online_db: online.ok ? server.database ?? '' : '', server_host: online.ok && server.uri ? serverHost(server.uri) : '' }));
+idle(() => startAnalytics({ lang: lang(), ...serverProps() }));
 
 /** Loops the menu theme once the player has interacted (browsers block audio before a gesture). */
 function menuMusic() {
@@ -933,9 +1013,12 @@ async function start(action: Action, retried = false) {
   const kinds: Record<Action, PlayKind> = { quick: 'online', start: isPublic ? 'start' : 'private', room: 'room', code: 'code', solo: 'solo', range: 'practice' };
   // Quick Play, a listed room and a code choose no rules; Start, Solo and Practice send the form's.
   const ruled = action === 'start' || action === 'solo' || action === 'range';
-  track('play_clicked', { kind: kinds[action], size: ruled ? sizeOf(size).label : '', mode: ruled ? mode : '', map: ruled ? map : '' }, { set: { name, lang: lang(), quality } });
+  // An online match goes to the chosen server (connectOnline reads the same choice).
+  const playServer: ServerId | undefined = via === 'online' ? currentServer()?.id : undefined;
+  track('play_clicked', { kind: kinds[action], size: ruled ? sizeOf(size).label : '', mode: ruled ? mode : '', map: ruled ? map : '', ...(playServer ? { server_choice: playServer } : {}) }, { set: { name, lang: lang(), quality } });
   starting = action; closePop(false); refresh();
   options.hide();
+  choicePings.setActive(false);
   status.textContent = '';
   unwatchRooms();
   inMenu = false;
@@ -978,7 +1061,7 @@ async function start(action: Action, retried = false) {
   if (backdrop) { renderer.scene.remove(backdrop.group); backdrop = undefined; backdropMap = undefined; }
   const linkMap = link.state()?.mapId ?? rules.mapId;
   launch(link, linkMap);
-  joined(link, linkMap);
+  joined(link, linkMap, playServer);
   // The map's own files have loaded by now: cache them too on a first visit.
   setTimeout(warmServiceWorker, 15000);
   menu.hidden = true;
@@ -1005,13 +1088,14 @@ function backToLobby(reason: 'menu' | 'disconnect', message = '') {
   if (message) status.textContent = message;
 }
 /** Analytics: we are in a match (once per link; online map rotations keep the same session). */
-function joined(link: GameLink, map: string) {
+function joined(link: GameLink, map: string, serverChoice: ServerId | undefined) {
   const state = link.state(), me = state?.soldiers.find(s => s.id === link.myId());
   const config = state?.config;
   const info = link.roomInfo?.();
   matchJoined({
     online: link.mode === 'online', ...(info ? { room: info.code || `public-${info.room}` } : {}), map,
     mode: config?.mode ?? 'elimination', size: config?.practice ? 'practice' : sizeLabel(config?.teamSize ?? perTeam()), team: me?.team === 1 ? 'militia' : 'swat',
+    ...(serverChoice ? { server_choice: serverChoice } : {}),
   });
   // The server removed us (it stopped hearing from this client) or the connection dropped: back to
   // the lobby with a note, rather than playing on against a frozen match the server no longer runs.

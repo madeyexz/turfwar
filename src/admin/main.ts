@@ -379,7 +379,7 @@ function wakeCard() {
           <p role="status">It did not wake up within 3 minutes. Check the server on InstaCloud, or try again.</p>
           <button type="button" class="btn primary" id="wake-retry">Retry</button></section>`
       : `<section class="wake"><h2><i class="dot wait"></i>Waking the server</h2>
-          <p role="status">The server is asleep to save costs — waking it up (about 30 s). It isn't down: opening this page woke it.</p>
+          <p role="status">The server is asleep to save costs — waking it up (about 30 s). Opening this page woke it.</p>
           <p class="note" id="wake-note"></p>
           <div class="wake-meter" aria-hidden="true"><span class="wake-bar"><i id="wake-fill"></i></span><span class="wake-time" id="wake-time"></span></div></section>`;
     body.querySelector('#wake-retry')?.addEventListener('click', () => driver.retry());

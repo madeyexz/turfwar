@@ -20,6 +20,9 @@ describe('service worker routes', () => {
     expect(get('/assets/tex/brick_nor.webp')).toBe('static');
     expect(get('/assets/sfx/m4a1.mp3')).toBe('static');
     expect(get('/fonts/noto-sans-tc.woff2')).toBe('static');
+    // The map picker's screenshots sit beside the trailers in /media but are cached like any asset.
+    expect(get('/media/maps/taipei.webp')).toBe('static');
+    expect(get('/media/maps/taipei101.webp', 'cors')).toBe('static');
   });
 
   it('never touches SpacetimeDB, the ping, PostHog, analytics, /admin or the dev pages', () => {
@@ -34,6 +37,8 @@ describe('service worker routes', () => {
     expect(get('/admin', 'navigate')).toBe('bypass');
     expect(get('/admin/')).toBe('bypass');
     expect(get('/media/turfwar-trailer-30s.mp4')).toBe('bypass');
+    expect(get('/media/turfwar-trailer-30s.zh-TW.mp4')).toBe('bypass');
+    expect(get('/media/maps/clip.mp4')).toBe('bypass');
     expect(get('/admin/index.html')).toBe('bypass');
     expect(get('/dev/level.html', 'navigate')).toBe('bypass');
     expect(get('/sw.js')).toBe('bypass');
