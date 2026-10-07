@@ -18,8 +18,9 @@ import { VEHICLE_KINDS, type Vehicle, type VehicleKind } from '../../shared/vehi
 import { cleanHello } from '../../shared/hello';
 import { beginPlay, endPlay, flushDue, flushPlay, type PlayStore } from '../../shared/playtime';
 import { acceptNetReport, foldNetDay } from '../../shared/netstats';
+import { acceptDevice } from '../../shared/devicekind';
 import * as Admin from './admin';
-import { AdminError, dailyNetRows, dailyRows, dailyTimeRows, dayOf, forAdmin, playerNetRows, playerRows, playTimeRows, type AdminStore } from './admin';
+import { AdminError, dailyNetRows, dailyRows, dailyTimeRows, dayOf, forAdmin, playerDeviceRows, playerNetRows, playerRows, playTimeRows, type AdminStore } from './admin';
 
 /**
  * Authoritative multiplayer: the same shared match simulation the offline client runs, executed
@@ -204,6 +205,15 @@ const dayNetTable = table({ name: 'player_day_net' }, {
   reports: t.u32(), seconds: t.u32(), p50Sum: t.f64(), p95Sum: t.f64(), corrections: t.u32(),
 });
 
+/**
+ * What each player plays on (shared/devicekind.ts), from `device` reports (one per connection, after
+ * `hello`): the latest kind ('phone', 'tablet' or 'desktop'), connections reported per kind and the
+ * latest report. Its own table so existing ones keep their columns. Private.
+ */
+const deviceTable = table({ name: 'player_device' }, {
+  identity: t.identity().primaryKey(), device: t.string(), phone: t.u32(), tablet: t.u32(), desktop: t.u32(), lastAt: t.timestamp(),
+});
+
 /** Identities logged in to the admin dashboard with the admin key (see admin.ts). Private. */
 const adminTable = table({ name: 'admin' }, { identity: t.identity().primaryKey(), grantedAt: t.timestamp() });
 /** Failed admin logins per identity in the current 10-minute window (the rate limit). Private. */
@@ -217,7 +227,7 @@ const spacetimedb = schema({
   matchEvent: eventTable, tickSchedule: tickTable, profile: profileTable, counter: counterTable,
   vehicle: vehicleTable, vehicleInbox: vehicleInboxTable, playerSeen: seenTable,
   playerDay: dayTable, admin: adminTable, adminAttempt: adminAttemptTable, playerTime: timeTable, playerDayTime: dayTimeTable,
-  playerNet: netTable, playerDayNet: dayNetTable,
+  playerNet: netTable, playerDayNet: dayNetTable, playerDevice: deviceTable,
 });
 export default spacetimedb;
 
@@ -885,6 +895,21 @@ export const netStats = spacetimedb.reducer({ p50Ms: t.u32(), p95Ms: t.u32(), sa
   if (prevDay) ctx.db.playerDayNet.key.update(folded); else ctx.db.playerDayNet.insert(folded);
 });
 
+/**
+ * What the client plays on: 'phone', 'tablet' or 'desktop' (shared/devicekind.ts), sent once per
+ * connection right after `hello`. Only those three kinds, one report per identity per 30 s, only from
+ * identities in `player_seen` (`acceptDevice`); anything else is ignored. Per-identity bookkeeping
+ * only; it never loads a match.
+ */
+export const device = spacetimedb.reducer({ kind: t.string() }, (ctx, { kind }) => {
+  if (!ctx.db.playerSeen.identity.find(ctx.sender)) return;
+  const row = ctx.db.playerDevice.identity.find(ctx.sender);
+  const next = acceptDevice(row ? { ...row, lastAt: row.lastAt.microsSinceUnixEpoch } : undefined, kind, micros(ctx));
+  if (!next) return;
+  const write = { identity: ctx.sender, ...next, lastAt: ctx.timestamp };
+  if (row) ctx.db.playerDevice.identity.update(write); else ctx.db.playerDevice.insert(write);
+});
+
 /** Movement report: stored for the next tick (latest wins; elapsed time accumulates for the budget). */
 export const report = spacetimedb.reducer({
   x: t.f32(), y: t.f32(), z: t.f32(), vx: t.f32(), vy: t.f32(), vz: t.f32(), yaw: t.f32(), pitch: t.f32(),
@@ -1127,4 +1152,14 @@ export const adminDailyNet = spacetimedb.view({ name: 'admin_daily_net', public:
     let last = -1;
     for (const r of ctx.db.playerNet.iter()) last = Math.max(last, dayOf(r.lastAt.microsSinceUnixEpoch));
     return dailyNetRows(last, day => ctx.db.playerDayNet.day.filter(day));
+  }));
+
+// What players play on has a view of its own too (joined to `admin_players` by id on the page).
+
+/** Per player who has reported a device (same short id as `admin_players`): the latest kind, connections per kind, the latest report. */
+export const adminPlayerDevice = spacetimedb.view({ name: 'admin_player_device', public: true },
+  t.array(t.row('AdminPlayerDeviceRow', { id: t.string(), device: t.string(), phone: t.u32(), tablet: t.u32(), desktop: t.u32(), lastAt: t.timestamp() })),
+  ctx => forAdmin(viewAdmins(ctx.db), ctx.sender.toHexString(), () => {
+    const rows = [...ctx.db.playerDevice.iter()].map(r => ({ ...r, identity: r.identity.toHexString(), lastAt: r.lastAt.microsSinceUnixEpoch }));
+    return playerDeviceRows(rows).map(r => ({ ...r, lastAt: new Timestamp(r.lastAt) }));
   }));

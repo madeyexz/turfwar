@@ -40,6 +40,7 @@ import AdminRevokeAllReducer from "./admin_revoke_all_reducer";
 import BuyReducer from "./buy_reducer";
 import BuyAttachmentReducer from "./buy_attachment_reducer";
 import CreateRoomReducer from "./create_room_reducer";
+import DeviceReducer from "./device_reducer";
 import EnterVehicleReducer from "./enter_vehicle_reducer";
 import ExitVehicleReducer from "./exit_vehicle_reducer";
 import FireReducer from "./fire_reducer";
@@ -68,6 +69,7 @@ import AdminDailyRow from "./admin_daily_table";
 import AdminDailyNetRow from "./admin_daily_net_table";
 import AdminDailyTimeRow from "./admin_daily_time_table";
 import AdminOverviewRow from "./admin_overview_table";
+import AdminPlayerDeviceRow from "./admin_player_device_table";
 import AdminPlayerNetRow from "./admin_player_net_table";
 import AdminPlayerTimeRow from "./admin_player_time_table";
 import AdminPlayersRow from "./admin_players_table";
@@ -214,6 +216,13 @@ const tablesSchema = __schema({
     constraints: [
     ],
   }, AdminOverviewRow),
+  adminPlayerDevice: __table({
+    name: 'admin_player_device',
+    indexes: [
+    ],
+    constraints: [
+    ],
+  }, AdminPlayerDeviceRow),
   adminPlayerNet: __table({
     name: 'admin_player_net',
     indexes: [
@@ -259,6 +268,7 @@ const reducersSchema = __reducers(
   __reducerSchema("buy", BuyReducer),
   __reducerSchema("buy_attachment", BuyAttachmentReducer),
   __reducerSchema("create_room", CreateRoomReducer),
+  __reducerSchema("device", DeviceReducer),
   __reducerSchema("enter_vehicle", EnterVehicleReducer),
   __reducerSchema("exit_vehicle", ExitVehicleReducer),
   __reducerSchema("fire", FireReducer),
