@@ -1,11 +1,12 @@
 import { CollisionWorld, terrainHeight } from './collision';
 import { near, raycastObstacle, type Obstacle } from './obstacles';
 
-/** Thrown M67 frags, integrated under plain gravity. */
+/** Thrown M67 frags and M18 smoke grenades, integrated under plain gravity; smoke clouds stay put. */
 export const PHYSICS_STEP = 1 / 120;
 export const GRAVITY = 9.8;
 
-export type BodyKind = 'grenade';
+/** `smokeCloud`: a smoke grenade that has popped (still, `timer` = seconds left). Keep the order: the frame sends the index. */
+export type BodyKind = 'grenade' | 'smoke' | 'smokeCloud';
 
 export interface Body {
   id: number;
@@ -19,11 +20,11 @@ export interface Body {
   team: number;
   /** 2 = carries the High Explosive mod. */
   hp: number;
-  /** Fuse remaining (seconds). */
+  /** Fuse remaining (seconds); for a smoke cloud, the seconds it has left. */
   timer: number;
 }
 
-export const BODY_RADIUS: Record<BodyKind, number> = { grenade: 0.09 };
+export const BODY_RADIUS: Record<BodyKind, number> = { grenade: 0.09, smoke: 0.09, smokeCloud: 0.09 };
 const RESTITUTION = 0.38;
 
 /**
@@ -34,6 +35,7 @@ export function stepBodies(bodies: Body[], dt: number, world: CollisionWorld | u
   if (dt <= 0) return;
   for (let i = bodies.length - 1; i >= 0; i--) {
     const b = bodies[i];
+    if (b.kind === 'smokeCloud') { b.age += dt; continue; }
     b.vy -= GRAVITY * dt;
     const ox = b.x, oy = b.y, oz = b.z;
     b.x += b.vx * dt; b.y += b.vy * dt; b.z += b.vz * dt;

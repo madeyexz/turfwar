@@ -182,18 +182,18 @@ describe('saving', () => {
 
   it('merges a changed default for actions the player left alone', () => {
     const saved = serialize(ok(rebind(defaultBindings(), 'reload', 0, 'KeyH')));
-    // A later version changes the binoculars' default from Z to X.
-    const next: Bindings = { ...defaultBindings(), binoculars: ['KeyX'] };
+    // A later version changes the binoculars' default from Z to N.
+    const next: Bindings = { ...defaultBindings(), binoculars: ['KeyN'] };
     const b = parse(saved, next);
     expect(b.reload).toEqual(['KeyH']);
-    expect(b.binoculars).toEqual(['KeyX']);
+    expect(b.binoculars).toEqual(['KeyN']);
   });
 
   it('lets a saved key win over a new default that would clash with it', () => {
-    const saved = serialize(ok(rebind(defaultBindings(), 'reload', 0, 'KeyX')));
-    const next: Bindings = { ...defaultBindings(), binoculars: ['KeyX', 'KeyZ'] };
+    const saved = serialize(ok(rebind(defaultBindings(), 'reload', 0, 'KeyN')));
+    const next: Bindings = { ...defaultBindings(), binoculars: ['KeyN', 'KeyZ'] };
     const b = parse(saved, next);
-    expect(b.reload).toEqual(['KeyX']);
+    expect(b.reload).toEqual(['KeyN']);
     expect(b.binoculars).toEqual(['KeyZ']);
     expect(allConflicts(b)).toEqual([]);
   });

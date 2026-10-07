@@ -63,6 +63,8 @@ export interface Soldier {
   /** M67 frags carried (0 or 1) and whether they carry the High Explosive mod. */
   grenades: number;
   grenadeHE: boolean;
+  /** M18 smoke grenades carried (0 or 1). */
+  smokes: number;
   stamina: number;
   money: number;
   sinceHit: number;
@@ -208,6 +210,8 @@ export type MatchEvent =
   | { type: 'kill'; killer: number; victim: number; weapon: string; head: boolean }
   | { type: 'spawn'; id: number }
   | { type: 'explosion'; x: number; y: number; z: number; owner: number; radius?: number; weapon?: string }
+  /** A smoke grenade popped here (its cloud is a `smokeCloud` body from now on). */
+  | { type: 'smoke'; x: number; y: number; z: number; owner: number }
   | { type: 'phase'; phase: Phase; winner: -1 | Team }
   | { type: 'round'; phase: RoundPhase; round: number; winner: -1 | Team; reason?: RoundEnd }
   | { type: 'bomb'; action: 'armed' | 'disarmed' | 'exploded'; site: number; by: number }

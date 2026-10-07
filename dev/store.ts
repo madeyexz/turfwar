@@ -17,7 +17,7 @@ info.textContent = '';
 const owned = (params.get('owned') ?? '').split(',').filter(Boolean) as WeaponId[];
 const me = {
   id: 1, alive: true, weapon: 0, weapons: ['mp5', 'm9a1'], owned: ['mp5', 'm9a1', ...owned], attachments: {},
-  ammo: [30, 12], reserve: [90, 36], reloadLeft: 0, switchLeft: 0, grenades: Number(params.get('grenades') ?? 0), grenadeHE: params.has('he'),
+  ammo: [30, 12], reserve: [90, 36], reloadLeft: 0, switchLeft: 0, grenades: Number(params.get('grenades') ?? 0), grenadeHE: params.has('he'), smokes: Number(params.get('smokes') ?? 0),
   money: Number(params.get('money') ?? 4200), m: { x: params.has('away') ? 100 : 0, z: 0 },
 } as unknown as Soldier;
 for (const spec of (params.get('att') ?? '').split(';').filter(Boolean)) {

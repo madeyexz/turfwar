@@ -49,7 +49,7 @@ requests.
 
 The rules follow BeGone (nplay): round-based Elimination and Sabotage (SWAT defends, Militia
 arms the bomb), first to 10 rounds, 4 s freeze and 20 s buy time, BeGone's cash awards, its
-weapons (knife, MP5, M4A1, M1014, M110, M249, M9A1, MP7, M67) and attachments with their exact
+weapons (knife, MP5, M4A1, M1014, M110, M249, M9A1, MP7, M67; plus our own M18 smoke) and attachments with their exact
 stats. Room sizes are 1v1, 6v6 and 24v24 (24v24 only on big maps: Meridian). Solo (bots fill
 the room), Online (one database holds many rooms: Quick Play fills public rooms of a size and
 rotates map and mode; private rooms take a 4-letter code; a room ticks only while humans are in it)

@@ -4,14 +4,15 @@ import { rng } from '../math';
 import { CollisionWorld } from '../collision';
 import { createMoveState, eyeHeight, stepMovement } from '../movement';
 import { hitShape } from '../hitbox';
-import { GRENADE, WEAPONS, pelletCone, pelletDirs, weaponStats } from '../weapons';
+import { GRENADE, SMOKE, WEAPONS, pelletCone, pelletDirs, weaponStats } from '../weapons';
 import { findPath, nearestNode } from './nav';
 import {
   BOMB_REACH, addSoldier, balanceTeams, buyAttachmentFor, buyItem, createContext, createMatch, fireShot, reportState,
-  canSwitchTeam, removeSoldier, resetMatch, switchTeam, tickMatch, useAmmoCrate, TICK_RATE,
+  canSwitchTeam, removeSoldier, resetMatch, switchTeam, throwSmoke, tickMatch, useAmmoCrate, TICK_RATE,
 } from './sim';
 import { ATTACKERS, ELIMINATION, PRACTICE_CONFIG, SABOTAGE, type MatchConfig, type MatchEvent, type MatchState, type Soldier, type Team } from './state';
-import { MOVE_SLACK, killSoldier, sideOf, type SimContext } from './combat';
+import { MOVE_SLACK, killSoldier, sideOf, smokeBlocks, type SimContext } from './combat';
+import { updateBot } from './bots';
 import { CASH } from './economy';
 import { decodeFrame, encodeFrame } from './frame';
 
@@ -534,6 +535,84 @@ describe('store and cash', () => {
   });
 });
 
+describe('M18 smoke grenade', () => {
+  const cloudAt = (x: number, y: number, z: number) => ({ id: 77, kind: 'smokeCloud' as const, x, y, z, vx: 0, vy: 0, vz: 0, age: 0, owner: -1, team: 0, hp: 1, timer: SMOKE.duration });
+  const eye = (s: Soldier) => ({ x: s.m.x, y: s.m.y + eyeHeight(s.m), z: s.m.z });
+  const chest = (s: Soldier) => ({ x: s.m.x, y: s.m.y + 1.2, z: s.m.z });
+
+  it('costs $300, one at a time, and the match reset takes it away', () => {
+    const { state, ctx, a } = duel();
+    a.money = 1000;
+    expect(buyItem(state, ctx, a.id, 'smoke').ok).toBe(true);
+    expect(a.smokes).toBe(1);
+    expect(buyItem(state, ctx, a.id, 'smoke').ok).toBe(false);
+    expect(a.money).toBe(1000 - SMOKE.price);
+    a.smokes = 0; a.money = SMOKE.price - 1;
+    expect(buyItem(state, ctx, a.id, 'smoke').ok).toBe(false);
+    a.smokes = 1;
+    resetMatch(state, ctx);
+    expect(a.smokes).toBe(0);
+  });
+
+  it('pops into a still cloud after its fuse, hurts nobody, and clears after its time', () => {
+    const { state, ctx, a, b, events } = duel();
+    expect(throwSmoke(state, ctx, a.id, eye(a), { x: 1, y: 0, z: 0 })).toBe(false); // none carried
+    a.smokes = 1;
+    expect(throwSmoke(state, ctx, a.id, eye(a), { x: 1, y: 0, z: 0 })).toBe(true);
+    expect(a.smokes).toBe(0);
+    expect(state.bodies.map(x => x.kind)).toEqual(['smoke']);
+    tick(state, ctx, SMOKE.fuse + 0.1);
+    expect(state.bodies.map(x => x.kind)).toEqual(['smokeCloud']);
+    expect(events.filter(e => e.type === 'smoke')).toHaveLength(1);
+    expect(events.some(e => e.type === 'explosion')).toBe(false);
+    expect(a.health).toBe(100); expect(b.health).toBe(100);
+    const cloud = state.bodies[0], at = { x: cloud.x, y: cloud.y, z: cloud.z };
+    tick(state, ctx, 3);
+    expect({ x: cloud.x, y: cloud.y, z: cloud.z }).toEqual(at);
+    tick(state, ctx, SMOKE.duration - 3);
+    expect(state.bodies).toHaveLength(0);
+  });
+
+  it('cannot be thrown in the freeze or by the dead', () => {
+    const { state, ctx, a } = duel();
+    a.smokes = 1;
+    state.roundPhase = 'freeze';
+    expect(throwSmoke(state, ctx, a.id, eye(a), { x: 1, y: 0, z: 0 })).toBe(false);
+    state.roundPhase = 'live'; a.alive = false;
+    expect(throwSmoke(state, ctx, a.id, eye(a), { x: 1, y: 0, z: 0 })).toBe(false);
+    expect(a.smokes).toBe(1);
+  });
+
+  it('blocks sight through it, not bullets', () => {
+    const { state, ctx, a, b } = duel();
+    expect(smokeBlocks(state.bodies, eye(a), chest(b))).toBe(false);
+    state.bodies.push(cloudAt(0, a.m.y, 22));
+    expect(smokeBlocks(state.bodies, eye(a), chest(b))).toBe(true);
+    // A sight line well clear of the cloud is not blocked; standing inside it is.
+    expect(smokeBlocks(state.bodies, { x: -6, y: a.m.y + 1.6, z: 40 }, { x: 6, y: a.m.y + 1.6, z: 40 })).toBe(false);
+    expect(smokeBlocks(state.bodies, { x: 0, y: a.m.y + 1.6, z: 23 }, { x: 0, y: a.m.y + 1.6, z: 60 })).toBe(true);
+    expect(fireShot(state, ctx, a.id, claimAt(a, b))).toBe(true);
+    expect(b.health).toBe(100 - WEAPONS.mp5.damage.body);
+  });
+
+  it('bots do not see an enemy behind it', () => {
+    const env = setup({ ...ELIMINATION, warmup: 0 });
+    const { state, ctx } = env;
+    const bot = addSoldier(state, ctx, { name: 'Bot', team: 0, bot: true });
+    const foe = addSoldier(state, ctx, { name: 'B', team: 1, bot: false });
+    goLive(state, ctx);
+    const look = () => {
+      place(bot, -6, 22, ctx); place(foe, 6, 22, ctx); bot.yaw = -Math.PI / 2;
+      bot.brain!.target = -1; bot.brain!.lastSeen = -100; bot.brain!.think = 0;
+      updateBot(state, ctx, bot, 1 / TICK_RATE);
+      return bot.brain!.target;
+    };
+    expect(look()).toBe(foe.id);
+    state.bodies.push(cloudAt(0, bot.m.y, 22));
+    expect(look()).toBe(-1);
+  });
+});
+
 describe('frame', () => {
   it('the packed frame round-trips poses, round, bomb and shots', () => {
     const { ctx, state } = setup({ ...SABOTAGE, teamSize: 6, warmup: 0 }, 3);
@@ -541,6 +620,8 @@ describe('frame', () => {
     tick(state, ctx, 6);
     state.bomb = { site: 0, armed: true, progress: 0.5, by: 7 };
     state.bodies.push({ id: 999, kind: 'grenade', x: 1, y: 2, z: 3, vx: 30, vy: 1, vz: 0, age: 0, owner: 1, team: 0, hp: 1, timer: 2 });
+    state.bodies.push({ id: 1000, kind: 'smoke', x: 1, y: 2, z: 3, vx: 3, vy: 1, vz: 0, age: 0, owner: 1, team: 0, hp: 1, timer: 1 });
+    state.bodies.push({ id: 1001, kind: 'smokeCloud', x: 4, y: 0, z: -2, vx: 0, vy: 0, vz: 0, age: 0, owner: 1, team: 0, hp: 1, timer: 10 });
     const a = state.soldiers[3];
     a.yaw = -2.5; a.pitch = 0.4; a.reloadLeft = 1; a.sinceShot = 0; a.weapon = 2; a.using = true;
     const shot = { type: 'shot' as const, shooter: a.id, weapon: 'm110' as const, from: { x: 1.23, y: 2, z: -3 }, to: { x: 40.5, y: 1, z: -80.02 }, hit: 1 as const, surface: 'concrete' };
@@ -558,7 +639,8 @@ describe('frame', () => {
     expect(pose.x).toBeCloseTo(a.m.x, 1);
     expect(pose.health).toBe(Math.round(a.health));
     expect(frame.poses[0].ammo).toBe(state.soldiers[0].weapon === 2 ? 0 : state.soldiers[0].ammo[state.soldiers[0].weapon as 0 | 1]);
-    expect(frame.bodies[frame.bodies.length - 1].kind).toBe('grenade');
+    expect(frame.bodies.slice(-3).map(b => b.kind)).toEqual(['grenade', 'smoke', 'smokeCloud']);
+    expect(frame.bodies[frame.bodies.length - 1].x).toBeCloseTo(4, 1);
     expect(frame.shots[0].weapon).toBe('m110');
     expect(frame.shots[0].surface).toBe('concrete');
     expect(frame.shots[0].to.z).toBeCloseTo(-80.02, 1);

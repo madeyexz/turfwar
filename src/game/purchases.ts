@@ -1,6 +1,6 @@
 import type { Soldier } from '../../shared/match/state';
 import type { BuyItem } from '../../shared/match/economy';
-import { ATTACHMENTS, GRENADE, HIGH_EXPLOSIVE, WEAPONS, attachmentPrice, type AttachmentId, type WeaponId } from '../../shared/weapons';
+import { ATTACHMENTS, GRENADE, HIGH_EXPLOSIVE, SMOKE, WEAPONS, attachmentPrice, type AttachmentId, type WeaponId } from '../../shared/weapons';
 
 /**
  * Store purchases for analytics, counted only once the host has applied them (the store's buttons
@@ -10,9 +10,9 @@ import { ATTACHMENTS, GRENADE, HIGH_EXPLOSIVE, WEAPONS, attachmentPrice, type At
 export type BuyRequest = { kind: 'item'; item: BuyItem } | { kind: 'attach'; weapon: WeaponId; attachment: AttachmentId };
 
 /** What a request needs to compare against: copied, because Solo mutates its soldiers in place. */
-export interface Owned { owned: WeaponId[]; grenades: number; grenadeHE: boolean; attachments: Partial<Record<WeaponId, Record<string, string | undefined>>> }
+export interface Owned { owned: WeaponId[]; grenades: number; grenadeHE: boolean; smokes: number; attachments: Partial<Record<WeaponId, Record<string, string | undefined>>> }
 export const ownedOf = (s: Soldier): Owned => ({
-  owned: [...s.owned], grenades: s.grenades, grenadeHE: s.grenadeHE,
+  owned: [...s.owned], grenades: s.grenades, grenadeHE: s.grenadeHE, smokes: s.smokes,
   attachments: Object.fromEntries(Object.entries(s.attachments).map(([w, a]) => [w, { ...a }])),
 });
 
@@ -27,6 +27,7 @@ export function purchaseOf(req: BuyRequest, before: Owned, after: Owned, free: b
   }
   if (req.item === 'grenade') return after.grenades > before.grenades ? priced('grenade', GRENADE.price) : undefined;
   if (req.item === 'highExplosive') return !before.grenadeHE && after.grenadeHE ? priced('highExplosive', HIGH_EXPLOSIVE.price) : undefined;
+  if (req.item === 'smoke') return after.smokes > before.smokes ? priced('smoke', SMOKE.price) : undefined;
   const w = WEAPONS[req.item];
   return w && !before.owned.includes(req.item) && after.owned.includes(req.item) ? priced(req.item, w.price) : undefined;
 }

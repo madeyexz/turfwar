@@ -11,7 +11,7 @@ import {
   CASH, award, botShop, buy, buyAttachment, finishReload, newRoundStats, refillAmmo, resetInventory, statsOf, useCrate, type BuyItem,
 } from './economy';
 import {
-  MOVE_SLACK, TICK_RATE, applyDamage, crewTeam, explode, eyeOf, feetOf, killSoldier, onSite, resolvePellets, resolveShot, seatOf, shieldedIds, sideOf, spawnSoldier,
+  MOVE_SLACK, TICK_RATE, applyDamage, crewTeam, explode, eyeOf, feetOf, killSoldier, onSite, popSmoke, resolvePellets, resolveShot, seatOf, shieldedIds, sideOf, spawnSoldier, throwSmokeFrom,
   throwGrenadeFrom, traceShot, weaponOf, type SimContext, type TraceResult,
 } from './combat';
 import { ATTACKERS, targetVehicle, type ClientReport, type MatchConfig, type MatchEvent, type MatchState, type RoundEnd, type ShotClaim, type Soldier, type Team } from './state';
@@ -50,7 +50,7 @@ export function addSoldier(state: MatchState, ctx: SimContext, opts: { name: str
     id: state.nextId++, name: opts.name.slice(0, 20), team, bot: opts.bot,
     m: createMoveState(0, 0, 0), yaw: 0, pitch: 0, alive: false, health: 0, weapon: 0,
     weapons: ['mp5', 'm9a1'], owned: [], attachments: {}, ammo: [0, 0], reserve: [0, 0],
-    reloadLeft: 0, fireCooldown: 0, switchLeft: 0, grenades: 0, grenadeHE: false, stamina: STAMINA.max, money: 0,
+    reloadLeft: 0, fireCooldown: 0, switchLeft: 0, grenades: 0, grenadeHE: false, smokes: 0, stamina: STAMINA.max, money: 0,
     sinceHit: 99, lastAttacker: -1, kills: 0, deaths: 0, assists: 0, score: 0, sprint: false, ads: false, sinceShot: 99, using: false,
     corrections: 0, moveSlack: MOVE_SLACK.max, groundY: 0, idle: 0, round: newRoundStats(), roundsHere: 0,
   };
@@ -313,6 +313,15 @@ export function useAmmoCrate(state: MatchState, ctx: SimContext, id: number, ind
   return !!s && Number.isInteger(index) && useCrate(state, ctx.map, s, index);
 }
 
+/** Throw the M18 smoke grenade: the same checks as the M67 (alive, live round, not driving, a plausible origin). */
+export function throwSmoke(state: MatchState, ctx: SimContext, id: number, origin: Vec3, dir: Vec3) {
+  const s = state.soldiers.find(x => x.id === id);
+  if (!s || !s.alive || state.phase !== 'live' || state.roundPhase === 'freeze' || seatOf(state, id)?.seat === 0) return false;
+  const eye = eyeOf(s);
+  const o = [origin.x, origin.y, origin.z, dir.x, dir.y, dir.z].every(Number.isFinite) && dist3(origin, eye) < 2.5 ? origin : eye;
+  return !!throwSmokeFrom(state, s, o, normalize3(dir));
+}
+
 export function throwGrenade(state: MatchState, ctx: SimContext, id: number, origin: Vec3, dir: Vec3) {
   const s = state.soldiers.find(x => x.id === id);
   if (!s || !s.alive || state.phase !== 'live' || state.roundPhase === 'freeze' || seatOf(state, id)?.seat === 0) return false;
@@ -506,7 +515,13 @@ function stepWorld(state: MatchState, ctx: SimContext, dt: number) {
   for (const b of [...state.bodies]) {
     const far = b.x < b0.minX - 60 || b.x > b0.maxX + 60 || b.z < b0.minZ - 60 || b.z > b0.maxZ + 60 || b.y < -40 || b.y > 260;
     b.timer -= dt;
-    if (b.timer <= 0 || far) { removeBody(state, b); if (!far) explode(state, ctx, b); }
+    if (b.timer <= 0 || far) {
+      removeBody(state, b);
+      if (far) continue;
+      if (b.kind === 'grenade') explode(state, ctx, b);
+      else if (b.kind === 'smoke') popSmoke(state, ctx, b);
+      // A cloud whose time is up just clears.
+    }
   }
 }
 
