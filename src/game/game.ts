@@ -75,6 +75,8 @@ export class Game {
   private fpsFrames = 0;
   private fpsTime = 0;
   private wasAlive = false;
+  /** We have been deployed in this match (a mid-round joiner waits for the next round, spectating). */
+  private deployed = false;
   private hudReady = false;
   /** Trigger pulls that went off (shots and dry clicks): a touch sniper's release shot waits for the next one. */
   private shotCount = 0;
@@ -186,7 +188,9 @@ export class Game {
     });
     // With the menu up, resuming goes through its button (or Esc / P), not a stray click on the view.
     this.input.canRelock = () => !this.buymenu.open && !this.hud.chatting && !this.menu.open && this.link.state()?.phase !== 'ended';
-    if (me) this.player.spawnFrom(me);
+    // Only a deployed soldier plays: one who joined mid-round (or before the first round) spectates until
+    // the next round deploys it, rather than walking and shooting a body the server has not placed.
+    if (me?.alive) { this.player.spawnFrom(me); this.deployed = true; }
     // Touch controls follow the setting live (Auto / On / Off).
     const applyTouch = () => {
       const on = touchActive();
@@ -305,7 +309,7 @@ export class Game {
     this.hud.driving = this.driving.active && !this.driving.armed;
     if (me) {
       this.myTeam = me.team;
-      if (me.alive && !this.wasAlive) { this.player.spawnFrom(me); this.spectating = -1; this.shownWeapon = ''; }
+      if (me.alive && !this.wasAlive) { this.player.spawnFrom(me); this.spectating = -1; this.shownWeapon = ''; this.deployed = true; }
       else if (me.alive) this.player.syncGear(me);
       if (!me.alive && this.wasAlive) {
         this.player.alive = false;
@@ -704,6 +708,8 @@ export class Game {
       const name = vehicleName(near);
       return `${kbd('use')} ${near.driver >= 0 ? t('hud.rideAlong', { name }) : t(near.kind === 'car' ? 'hud.enterCar' : near.kind === 'scooter' ? 'hud.enterScooter' : 'hud.enterHeli', { name })}`;
     }
+    // Joined mid-round: say why we are only watching.
+    if (me && !me.alive && !this.deployed && state.phase === 'live' && state.roundPhase === 'live') return t('hud.deployNext');
     if (!me?.alive || state.roundPhase !== 'live') return '';
     if (site >= 0 && myJob) return state.bomb.armed ? t('hud.holdDisarm', { key: kbd('use') }) : t('hud.holdArm', { key: kbd('use'), site: this.map.def.sabotage!.sites[site] });
     if (this.crates.nearest(this.player.m.x, this.player.m.y, this.player.m.z, CRATE_REACH) >= 0 && this.player.slot !== 2) {
