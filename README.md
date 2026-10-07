@@ -191,7 +191,7 @@ servers, email **ian@rippling.computer**.
 ## Acknowledgements
 
 - [**BeGone**](https://begone.fandom.com) by nPlay — the rules, numbers and maps this game pays homage to.
-- **臺北狂飆 / TAIPEI RUSH** — the Ximending and Xinyi layouts, used with the author's permission.
+- [**臺北狂飆 / TAIPEI RUSH**](https://taipei-gta.vercel.app/) by [@aicodewithme](https://www.threads.com/share/DhdOGqUWh/) — the Ximending and Xinyi layouts.
 - [Quaternius](https://quaternius.com), [Poly Haven](https://polyhaven.com) and the authors of
   *The Free Firearm Sound Library* — CC0 models, textures and sounds.
 - [Three.js](https://threejs.org), [SpacetimeDB](https://spacetimedb.com), [Vite](https://vite.dev) and [Bun](https://bun.sh).

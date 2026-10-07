@@ -72,6 +72,9 @@ export type OnlineEntry =
   | { kind: 'code'; code: string }
   | { kind: 'room'; room: number };
 
+/** How long our player row may be missing (the transparent rejoin's window) before we leave the match. */
+export const DROP_GRACE_MS = 8000;
+
 /** A match hosted by the SpacetimeDB module; this client renders it and sends validated intents. */
 export class OnlineLink implements GameLink {
   readonly mode = 'online' as const;
@@ -86,6 +89,12 @@ export class OnlineLink implements GameLink {
   private reportsInFlight = 0;
   private disconnected = false;
   private rejoining = false;
+  /** We have had a soldier in a room on this link (so losing it means the server dropped us). */
+  private joinedOnce = false;
+  /** When our player row went missing (0 = it is there). */
+  private missingSince = 0;
+  /** Why the link ended: the server removed us from the match, or the connection dropped. */
+  dropReason?: 'removed' | 'lost';
   /** How we got in, kept so the client can rejoin its room if the server drops an idle soldier. */
   entry?: { name: string; team: number; how: OnlineEntry };
   /** Our room, and the subscription to its roster, frame and events. */
@@ -131,6 +140,7 @@ export class OnlineLink implements GameLink {
   private followRoom() {
     const mine = this.conn.db.player.identity.find(this.identity);
     this.me = mine?.soldierId ?? -1;
+    if (mine) this.joinedOnce = true;
     const room = mine ? mine.room : -1;
     if (room < 0 || room === this.room) return;
     this.room = room; this.frame = undefined; this.view = undefined;
@@ -148,7 +158,24 @@ export class OnlineLink implements GameLink {
     return { code: row.code, size: sizeLabel(config.teamSize), room: this.room };
   }
 
+  /** In a room with a soldier: only then may inputs go out (the server rejects them otherwise). */
+  private inMatch() { return !this.disconnected && !!this.conn.db.player.identity.find(this.identity); }
+
+  /**
+   * The server dropped us (idle, or the room closed) and the transparent rejoin did not bring us back
+   * within DROP_GRACE_MS: end the link so the game returns to the lobby instead of playing on alone
+   * against a frozen view. Checked on every state() read, since a closed room sends no more frames.
+   */
+  private checkRemoved() {
+    if (this.disconnected || !this.joinedOnce) return;
+    if (this.conn.db.player.identity.find(this.identity)) { this.missingSince = 0; return; }
+    const now = performance.now();
+    if (!this.missingSince) this.missingSince = now;
+    else if (now - this.missingSince > DROP_GRACE_MS) { this.dropReason = 'removed'; this.markDisconnected(); }
+  }
+
   state(): MatchState | undefined {
+    this.checkRemoved();
     if (!this.dirty && this.view) return this.view;
     const db = this.conn.db;
     this.followRoom();
@@ -175,7 +202,8 @@ export class OnlineLink implements GameLink {
     soldiers.sort((a, b) => a.id - b.id);
     const bodies: Body[] = frame.bodies.map(b => ({ ...b, age: 0, owner: -1, hp: 1, timer: 0 }));
     const vehicles: Vehicle[] = frame.vehicles.map(v => ({ ...v, steer: 0, slack: maxSlack(v.kind), lastAttacker: -1, lastRun: -9 }));
-    if (this.me < 0 && this.entry && !this.rejoining && !this.disconnected) {
+    // No other human left: the room closes on its next tick, so a rejoin could only fail.
+    if (this.me < 0 && this.entry && !this.rejoining && !this.disconnected && soldiers.some(s => !s.bot)) {
       // Backgrounded tabs stop reporting and get dropped as idle; rejoin the same room transparently.
       this.rejoining = true;
       const info = this.roomInfo();
@@ -220,6 +248,7 @@ export class OnlineLink implements GameLink {
   }
 
   report(r: ClientReport) {
+    if (!this.inMatch()) return;
     if (this.reportsInFlight > 3) return; // never queue up stale movement
     this.reportsInFlight++;
     const sent = performance.now();
@@ -229,24 +258,29 @@ export class OnlineLink implements GameLink {
       .finally(() => { this.reportsInFlight--; });
   }
   fire(c: ShotClaim) {
+    if (!this.inMatch()) return;
     void this.conn.reducers.fire({ weapon: c.weapon, ox: c.origin.x, oy: c.origin.y, oz: c.origin.z, dx: c.dir.x, dy: c.dir.y, dz: c.dir.z, target: c.target, zone: c.zone, px: c.point.x, py: c.point.y, pz: c.point.z }).catch(() => undefined);
   }
-  buy(item: BuyItem) { void this.conn.reducers.buy({ item }).catch(() => undefined); }
-  attach(weapon: WeaponId, attachment: AttachmentId) { void this.conn.reducers.buyAttachment({ weapon, attachment }).catch(() => undefined); }
-  useCrate(index: number) { void this.conn.reducers.useCrate({ index }).catch(() => undefined); }
-  enterVehicle(index: number) { void this.conn.reducers.enterVehicle({ index }).catch(() => undefined); }
-  exitVehicle() { void this.conn.reducers.exitVehicle({}).catch(() => undefined); }
+  buy(item: BuyItem) { if (!this.inMatch()) return; void this.conn.reducers.buy({ item }).catch(() => undefined); }
+  attach(weapon: WeaponId, attachment: AttachmentId) { if (!this.inMatch()) return; void this.conn.reducers.buyAttachment({ weapon, attachment }).catch(() => undefined); }
+  useCrate(index: number) { if (!this.inMatch()) return; void this.conn.reducers.useCrate({ index }).catch(() => undefined); }
+  enterVehicle(index: number) { if (!this.inMatch()) return; void this.conn.reducers.enterVehicle({ index }).catch(() => undefined); }
+  exitVehicle() { if (!this.inMatch()) return; void this.conn.reducers.exitVehicle({}).catch(() => undefined); }
   vehicleReport(r: VehicleReport) {
+    if (!this.inMatch()) return;
     if (this.reportsInFlight > 3) return;
     this.reportsInFlight++;
     void this.conn.reducers.vehicleReport({ ...r, aimYaw: r.aimYaw ?? r.yaw, aimPitch: r.aimPitch ?? 0 }).catch(() => undefined).finally(() => { this.reportsInFlight--; });
   }
-  say(text: string, team: boolean) { void this.conn.reducers.say({ text, team }).catch(() => undefined); }
-  grenade(o: Vec3, d: Vec3) { void this.conn.reducers.grenade({ ox: o.x, oy: o.y, oz: o.z, dx: d.x, dy: d.y, dz: d.z }).catch(() => undefined); }
-  reload() { void this.conn.reducers.reloadWeapon({}).catch(() => undefined); }
-  switchWeapon(slot: Slot) { void this.conn.reducers.switchSlot({ slot }).catch(() => undefined); }
+  say(text: string, team: boolean) { if (!this.inMatch()) return; void this.conn.reducers.say({ text, team }).catch(() => undefined); }
+  grenade(o: Vec3, d: Vec3) { if (!this.inMatch()) return; void this.conn.reducers.grenade({ ox: o.x, oy: o.y, oz: o.z, dx: d.x, dy: d.y, dz: d.z }).catch(() => undefined); }
+  reload() { if (!this.inMatch()) return; void this.conn.reducers.reloadWeapon({}).catch(() => undefined); }
+  switchWeapon(slot: Slot) { if (!this.inMatch()) return; void this.conn.reducers.switchSlot({ slot }).catch(() => undefined); }
   dispose() {
-    void this.conn.reducers.leave({}).catch(() => undefined);
+    // Already dropped by the server: there is nothing to leave (it would only answer "Not joined").
+    if (this.inMatch()) void this.conn.reducers.leave({}).catch(() => undefined);
+    // We are leaving on purpose: the socket closing next is not a drop to report.
+    this.onDrop = undefined;
     setTimeout(() => { try { this.conn.disconnect(); } catch { /* already closed */ } }, 300);
   }
 }
@@ -405,6 +439,7 @@ export async function connectOnline(name: string, team: Team | undefined, how: O
       .onDisconnect(() => {
         // Dropped before we were in a room: as unreachable as a refused connection.
         if (!done) fail(new ConnectError(t('net.unreachable', { error: t('net.refused') })));
+        if (link && !link.dropReason) link.dropReason = 'lost';
         link?.markDisconnected();
       })
       .build();

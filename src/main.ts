@@ -990,15 +990,19 @@ function launch(link: GameLink, map: string) {
   game = new Game(assets, renderer, link, map, audio, app);
   if (benchMode && !bench) startBench(game);
   game.onMapChange = next => { game?.stop(true); launch(link, next); };
-  game.onExit = () => {
-    leftMatch('menu');
-    game?.stop(); game = undefined;
-    track('lobby_view', {});
-    document.body.classList.add('menu-open'); menu.hidden = false;
-    syncOptions();
-    inMenu = !benchMode; menuMusic();
-    watchLobbyRooms(); refresh();
-  };
+  game.onExit = () => backToLobby('menu');
+}
+/** Leave the match for the lobby: chosen (menu), or because the server removed us or the connection dropped. */
+function backToLobby(reason: 'menu' | 'disconnect', message = '') {
+  if (!game) return;
+  leftMatch(reason);
+  game.stop(); game = undefined;
+  track('lobby_view', {});
+  document.body.classList.add('menu-open'); menu.hidden = false;
+  syncOptions();
+  inMenu = !benchMode; menuMusic();
+  watchLobbyRooms(); refresh();
+  if (message) status.textContent = message;
 }
 /** Analytics: we are in a match (once per link; online map rotations keep the same session). */
 function joined(link: GameLink, map: string) {
@@ -1009,7 +1013,9 @@ function joined(link: GameLink, map: string) {
     online: link.mode === 'online', ...(info ? { room: info.code || `public-${info.room}` } : {}), map,
     mode: config?.mode ?? 'elimination', size: config?.practice ? 'practice' : sizeLabel(config?.teamSize ?? perTeam()), team: me?.team === 1 ? 'militia' : 'swat',
   });
-  if (link instanceof OnlineLink) link.onDrop = () => leftMatch('disconnect');
+  // The server removed us (it stopped hearing from this client) or the connection dropped: back to
+  // the lobby with a note, rather than playing on against a frozen match the server no longer runs.
+  if (link instanceof OnlineLink) link.onDrop = () => backToLobby('disconnect', t(link.dropReason === 'removed' ? 'net.removed' : 'net.lost'));
 }
 /** Analytics: the match is over for us (sent once per match). */
 function leftMatch(reason: Reason) {
