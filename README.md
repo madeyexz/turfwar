@@ -243,14 +243,14 @@ texture, sound and line of code here is original or CC0/OFL.
   common characters from `tools/font/edu-standard-4808.txt`, CJK punctuation, Bopomofo and full-width forms):
   `public/fonts/noto-sans-tc.woff2`, about 1.4 MB and 5,084 glyphs, loaded only for Chinese text
   (`unicode-range`). `src/ui/font.test.ts` fails when the source uses a character the font lacks.
-- Taipei map layout: the Ximending quarter of *臺北狂飆 / TAIPEI RUSH*
-  — its streets, buildings, signs and landmarks — used with the author's permission and extracted by
+- Taipei map layout: the Ximending quarter of [*臺北狂飆 / TAIPEI RUSH*](https://taipei-gta.vercel.app/) by
+  [@aicodewithme](https://www.threads.com/share/DhdOGqUWh/) — its streets, buildings, signs and landmarks — extracted by
   `tools/import-taipei.ts` into `shared/maps/taipei-data.ts`. Its shop names are that game's own parody
   brands. Its district meshes and atlas, street furniture, prop meshes (scooter, YouBike, trees,
   plants, signal heads) and skyline are that game's too, exported by the same tool.
 - Taipei 101 · Xinyi map layout: the Xinyi district of the same game — Taipei 101's sections and
   ornaments, its plaza and mall, the Xinyi Plaza Malls, the Xinyi Skywalk, Four Four South Village, the
-  streets, hills and lots — used with the author's permission and extracted by `tools/import-xinyi.ts`
+  streets, hills and lots — extracted by `tools/import-xinyi.ts`
   into `shared/maps/xinyi-data.ts`. Its mall and shop names are that game's own parodies. The mall's
   interior, the sunken garden and the curtain-wall detailing are this project's own.
 - Taipei 101 · 88F: the tower's sections below the floor and the city's skyline and lots reuse the two

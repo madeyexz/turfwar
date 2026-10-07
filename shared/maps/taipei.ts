@@ -13,8 +13,8 @@ import { TAIPEI_VEHICLES, parkTaipeiVehicles } from './taipei-vehicles';
 import type { BlockStyle, Decor, MapDef, SignStyle } from './types';
 
 /**
- * Taipei: Ximending (西門町), from the user's game 臺北狂飆 / TAIPEI RUSH (taipei-gta.vercel.app,
- * used with its author's permission). The street plan, every building volume and collision box,
+ * Taipei: Ximending (西門町), from 臺北狂飆 / TAIPEI RUSH by @aicodewithme
+ * (taipei-gta.vercel.app). The street plan, every building volume and collision box,
  * the Ximen gateway, the cinema and arcade, the Red House, the Civic Blvd expressway and the shop
  * signs all come from shared/maps/taipei-data.ts, which tools/import-taipei.ts extracts from that
  * game's built code.
