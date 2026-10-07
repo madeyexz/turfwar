@@ -368,8 +368,9 @@ async function enter(conn: DbConnection, e: { name: string; team: number; how: O
 export interface PublicRoom extends RoomView { phase: string; round: number; server: string }
 
 /**
- * Live list of public rooms for the lobby: a light connection that only subscribes to the room rows
- * (no joining). `onChange` fires whenever a room opens, fills or closes. One attempt: `live`
+ * Live list of rooms for the lobby: a light connection that only subscribes to the room rows (no
+ * joining). Private rooms are listed too, marked `private`; their code never leaves this function,
+ * so joining one still takes the code. `onChange` fires whenever a room opens, fills or closes. One attempt: `live`
  * resolves once the rooms have arrived and rejects if the connection fails first; `lost` is called
  * (once) if it drops after that. Retrying, and telling a sleeping server from a dead one, is the
  * caller's (src/net/wake.ts).
@@ -393,12 +394,12 @@ export function watchRooms(onChange: (rooms: PublicRoom[]) => void, lost: () => 
     if (!conn || stopped) return;
     const rooms: PublicRoom[] = [];
     for (const r of conn.db.match.iter()) {
-      if (r.code !== '') continue;
       let config: { mode?: Mode; teamSize?: number; fixedMap?: boolean; fixedMode?: boolean; noBots?: boolean } = {};
       try { config = JSON.parse(r.configJson); } catch { /* malformed row: listed with defaults */ }
       rooms.push({
         room: r.id, mapId: r.mapId, mode: config.mode === 'sabotage' ? 'sabotage' : 'elimination', size: config.teamSize ?? 6, humans: r.humans,
         phase: r.phase, round: r.score0 + r.score1 + 1, fixedMap: !!config.fixedMap, fixedMode: !!config.fixedMode, noBots: !!config.noBots, server: uri,
+        ...(r.code !== '' ? { private: true } : {}),
       });
     }
     onChange(rooms.sort((a, b) => b.humans - a.humans || a.room - b.room));
