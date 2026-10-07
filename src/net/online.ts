@@ -16,7 +16,7 @@ import { plural, t } from '../ui/i18n';
 import { setPerson, track } from '../analytics';
 import { NetReporter, SAMPLE_EVERY_MS, type NetFields, type NetReport } from '../../shared/netstats';
 import type { WakeLink } from './wake';
-import { serverIdentityKey } from './ping';
+import { keepAwake, pingUrl, serverIdentityKey } from './ping';
 import { currentServer } from './servers';
 
 type RosterRow = Infer<typeof RosterTable>;
@@ -85,6 +85,8 @@ export class OnlineLink implements GameLink {
   /** Connection quality (shared/netstats.ts): round trips, corrections, room time; reported every 2 minutes and on leaving. */
   private net = new NetReporter(performance.now());
   private netTimer = setInterval(() => this.pollNet(), 5000);
+  /** Stops the in-match requests that keep the server from sleeping under us (`keepServerAwake`). */
+  private stopAwake?: () => void;
   private reportsInFlight = 0;
   private disconnected = false;
   private rejoining = false;
@@ -133,6 +135,7 @@ export class OnlineLink implements GameLink {
     if (this.disconnected) return;
     this.disconnected = true;
     clearInterval(this.netTimer);
+    this.stopAwake?.();
     this.onDrop?.();
   }
   myId() { this.state(); return this.me; }
@@ -309,7 +312,11 @@ export class OnlineLink implements GameLink {
   grenade(o: Vec3, d: Vec3) { if (!this.inMatch()) return; void this.conn.reducers.grenade({ ox: o.x, oy: o.y, oz: o.z, dx: d.x, dy: d.y, dz: d.z }).catch(() => undefined); }
   reload() { if (!this.inMatch()) return; void this.conn.reducers.reloadWeapon({}).catch(() => undefined); }
   switchWeapon(slot: Slot) { if (!this.inMatch()) return; void this.conn.reducers.switchSlot({ slot }).catch(() => undefined); }
+  /** While we are in a room, keep the scale-to-zero server from sleeping under the match (`keepAwake`). */
+  keepServerAwake(url: string) { this.stopAwake = keepAwake(url, () => this.inMatch()); }
+
   dispose() {
+    this.stopAwake?.();
     this.netLeft();
     // Already dropped by the server: there is nothing to leave (it would only answer "Not joined").
     if (this.inMatch()) void this.conn.reducers.leave({}).catch(() => undefined);
@@ -450,6 +457,8 @@ export async function connectOnline(name: string, team: Team | undefined, how: O
         // PostHog people can be matched to SpacetimeDB profiles by this property (never identify()).
         setPerson({ stdb_identity: identity.toHexString() });
         link = new OnlineLink(connection, identity);
+        const awake = pingUrl(uri);
+        if (awake) link.keepServerAwake(awake);
         connection.subscriptionBuilder()
           .onApplied(async () => {
             if (done) return;

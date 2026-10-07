@@ -90,7 +90,14 @@ A `dev` preview's own server is `lawbreaker-dev`.
 The Singapore server (`deploy/instacloud/`, InstaCloud project `5ad5aa00-…`, compute service `stdb`)
 is a slim container with SpacetimeDB's two binaries and a 10 GiB `/data` volume. It **scales to zero**:
 with no traffic it suspends (or stops), and the next request wakes it, ~2 s from a suspend; the
-lobby shows a "waking up" state meanwhile. `start.sh` supervises the server: SpacetimeDB never
+lobby shows a "waking up" state meanwhile. Traffic on an already-open WebSocket does not count as
+activity (only requests through the router do), and a match runs entirely on one, so the platform
+used to suspend the server mid-match, 5–13 minutes in, dropping everyone (2026-10-07). Since then a
+client in a room requests `/v1/ping` once a minute (`keepAwake` in `src/net/ping.ts`); it stops once
+the player is out of the room, so the server still sleeps when nobody plays. The lobby pings every
+4 s while visible. With the data volume attached, idle means a stop rather than a suspend, so a wake
+takes ~20–30 s. `cd deploy/instacloud && insta --agent compute logs stdb --deploy` lists the
+platform's suspends and wakes. `start.sh` supervises the server: SpacetimeDB never
 deletes its commitlog (100 players write ~12 GB an hour, ~3x smaller once sealed), so once the data
 passes 4 GB and nothing has been written for 2 minutes it restarts the server around
 `prune-commitlog.sh` (a few seconds), and past 8 GB it does so even mid-match. Measured before
