@@ -58,7 +58,7 @@ export function addSoldier(state: MatchState, ctx: SimContext, opts: { name: str
   refillAmmo(s);
   if (opts.bot) s.brain = createBrain(clamp(state.config.botSkill + (ctx.random() - 0.5) * 0.3, 0.15, 0.95));
   state.soldiers.push(s);
-  ctx.emit({ type: 'join', id: s.id, name: s.name, team });
+  ctx.emit({ type: 'join', id: s.id, name: s.name, team, bot: s.bot });
   // Joining mid-round: you deploy at the next round start (BeGone has no mid-round respawn).
   if (state.phase === 'live' && (state.roundPhase === 'freeze' || state.config.practice)) spawnSoldier(state, ctx, s);
   return s;
@@ -68,7 +68,7 @@ export function removeSoldier(state: MatchState, ctx: SimContext, id: number) {
   const i = state.soldiers.findIndex(s => s.id === id);
   if (i < 0) return;
   const [s] = state.soldiers.splice(i, 1);
-  ctx.emit({ type: 'leave', id, name: s.name });
+  ctx.emit({ type: 'leave', id, name: s.name, team: s.team, bot: s.bot });
 }
 
 /** Soldiers per team on this server (BeGone sizes: Duel 1, Team Duel 2, Mini 4, Medium 6, Large 8, Mega 12). */

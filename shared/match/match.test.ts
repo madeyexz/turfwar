@@ -8,7 +8,7 @@ import { GRENADE, WEAPONS, pelletCone, pelletDirs, weaponStats } from '../weapon
 import { findPath, nearestNode } from './nav';
 import {
   BOMB_REACH, addSoldier, balanceTeams, buyAttachmentFor, buyItem, createContext, createMatch, fireShot, reportState,
-  resetMatch, tickMatch, useAmmoCrate, TICK_RATE,
+  removeSoldier, resetMatch, tickMatch, useAmmoCrate, TICK_RATE,
 } from './sim';
 import { ATTACKERS, ELIMINATION, PRACTICE_CONFIG, SABOTAGE, type MatchConfig, type MatchEvent, type MatchState, type Soldier } from './state';
 import { MOVE_SLACK, killSoldier, sideOf, type SimContext } from './combat';
@@ -604,5 +604,22 @@ describe('idle humans (the server drops a client quiet for over 45 s)', () => {
     play(46);
     expect(a.alive).toBe(true);
     expect(a.idle).toBeGreaterThan(45);
+  });
+});
+
+describe('join and leave events (clients note humans in the chat)', () => {
+  it('say whether the soldier is a bot, and which team a leaver was on', () => {
+    const { ctx, state, events } = setup();
+    const human = addSoldier(state, ctx, { name: 'Ian', team: 1, bot: false });
+    const bot = addSoldier(state, ctx, { name: 'Unit-9', team: 0, bot: true });
+    removeSoldier(state, ctx, human.id);
+    removeSoldier(state, ctx, bot.id);
+    const mine = events.filter(e => (e.type === 'join' || e.type === 'leave') && (e.id === human.id || e.id === bot.id));
+    expect(mine).toEqual([
+      { type: 'join', id: human.id, name: 'Ian', team: 1, bot: false },
+      { type: 'join', id: bot.id, name: 'Unit-9', team: 0, bot: true },
+      { type: 'leave', id: human.id, name: 'Ian', team: 1, bot: false },
+      { type: 'leave', id: bot.id, name: 'Unit-9', team: 0, bot: true },
+    ]);
   });
 });
