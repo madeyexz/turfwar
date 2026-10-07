@@ -90,7 +90,12 @@ Back that folder up: the identity that published `turfwar` is the only one that 
 To rebuild or reconfigure the container: `cd deploy/instacloud && insta --agent deploy . --group stdb --port 8080 --websocket`.
 
 Vercel production build variables are `VITE_SPACETIMEDB_URI=wss://play.turfwar.ianhsiao.me` and
-`VITE_SPACETIMEDB_DATABASE=turfwar`. Do not use `same-origin` on Vercel; that proxy exists only in the
+`VITE_SPACETIMEDB_DATABASE=turfwar` (the custom domain's certificate went live on 2026-10-07; check it with
+`cd deploy/instacloud && insta --agent domain check play.turfwar.ianhsiao.me --group stdb`). The platform's own
+`wss://prod-main-stdb-2b7636-205bvw6d002.compute.instacloud-edge.com` reaches the same server; the client keys
+saved identities by server (`serverIdentityKey` in `src/net/ping.ts`), so either hostname keeps every player.
+`scripts/wsping.ts` measures the round trip but registers a `probe` player (its `hello`): delete that row after
+running it against production. Do not use `same-origin` on Vercel; that proxy exists only in the
 development server.
 
 For module updates, run tests and module type checks, then publish non-destructively to production
