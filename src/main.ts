@@ -26,7 +26,7 @@ import { L, applyI18n, escapeHtml as esc, isZh, lang, mapName as localMapName, m
 import './style.css';
 import './menu.css';
 import './ui/lang-zh.css';
-import { defaultQuality } from './game/device';
+import { currentDeviceKind, defaultQuality } from './game/device';
 import { onTouchLayout, touchActive } from './game/touchlayout';
 import { InstallBanner } from './ui/installhint';
 import { askCallsign, madeUpCallsign } from './ui/callsign';
@@ -1116,7 +1116,7 @@ function joined(link: GameLink, map: string, serverChoice: ServerId | undefined)
   matchJoined({
     online: link.mode === 'online', ...(info ? { room: info.code || `public-${info.room}` } : {}), map,
     mode: config?.mode ?? 'elimination', size: config?.practice ? 'practice' : sizeLabel(config?.teamSize ?? perTeam()), team: me?.team === 1 ? 'militia' : 'swat',
-    ...(serverChoice ? { server_choice: serverChoice } : {}),
+    ...(serverChoice ? { server_choice: serverChoice } : {}), device: currentDeviceKind(),
   });
   // The server removed us (it stopped hearing from this client) or the connection dropped: back to
   // the lobby with a note, rather than playing on against a frozen match the server no longer runs.

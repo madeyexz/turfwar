@@ -2,9 +2,10 @@ import { describe, expect, it } from 'vitest';
 import { sha256Hex } from '../../shared/sha256';
 import {
   ADMIN_KEY_SHA256, ADMIN_MAX_FAILURES, ADMIN_WINDOW_MICROS, AdminError, adminLogin, adminLogout, adminRevokeAll, dailyRows, DAY_MICROS,
-  dailyNetRows, dailyTimeRows, forAdmin, keyMatches, playerNetRows, playerRows, playTimeRows, shortId, type AdminAttempts, type AdminStore,
+  dailyNetRows, dailyTimeRows, forAdmin, keyMatches, playerDeviceRows, playerNetRows, playerRows, playTimeRows, shortId, type AdminAttempts, type AdminStore,
 } from '../src/admin';
 import { foldNetDay, type NetDay } from '../../shared/netstats';
+import { acceptDevice } from '../../shared/devicekind';
 
 // A test key and its hash, injected in place of the real one (which only the owner knows).
 const TEST_KEY = 'test-admin-key-for-vitest';
@@ -186,5 +187,27 @@ describe('admin connection-quality views', () => {
     expect(rows[27]).toEqual({ day: 101, date: '1970-04-12', players: 1, medianP50: 300, medianP95: 900, correctionsPerMin: 6 });
     expect(rows[28]).toMatchObject({ players: 0, medianP50: 0, medianP95: 0, correctionsPerMin: 0 });
     expect(dailyNetRows(-1, () => [])).toEqual([]);
+  });
+});
+
+describe('admin device view', () => {
+  it('gives each reporting player their latest device and connections per kind by the same short id, to admins only', () => {
+    const S = 1_000_000n;
+    let tablet = acceptDevice(undefined, 'desktop', 10n * S)!;
+    tablet = acceptDevice(tablet, 'tablet', 100n * S)!;
+    const records = [{ identity: 'aa11', ...acceptDevice(undefined, 'phone', 5n * S)! }, { identity: 'bb22', ...tablet }];
+    const rows = playerDeviceRows(records);
+    expect(rows).toEqual([
+      { id: shortId('aa11'), device: 'phone', phone: 1, tablet: 0, desktop: 0, lastAt: 5n * S },
+      { id: shortId('bb22'), device: 'tablet', phone: 0, tablet: 1, desktop: 1, lastAt: 100n * S },
+    ]);
+    // Same ids as admin_players, so the page can join them; no identity in the rows; players who never reported have no row.
+    expect(rows[1].id).toBe(playerRows([{ identity: 'bb22', firstSeen: 0n, lastSeen: 0n, sessions: 1, tz: '', lang: '' }], [])[0].id);
+    for (const r of rows) expect(JSON.stringify(r, (_k, v) => (typeof v === 'bigint' ? String(v) : v))).not.toMatch(/aa11|bb22/);
+    expect(playerDeviceRows([])).toEqual([]);
+    const { store } = memoryStore();
+    adminLogin(store, 'owner', TEST_KEY, 0n, TEST_HASH);
+    expect(forAdmin(store, 'someone', () => playerDeviceRows(records))).toEqual([]);
+    expect(forAdmin(store, 'owner', () => playerDeviceRows(records))).toHaveLength(2);
   });
 });

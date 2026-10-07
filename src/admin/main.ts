@@ -8,8 +8,10 @@ import type AdminPlayerTimeRow from '../module_bindings/admin_player_time_table'
 import type AdminDailyTimeRow from '../module_bindings/admin_daily_time_table';
 import type AdminPlayerNetRow from '../module_bindings/admin_player_net_table';
 import type AdminDailyNetRow from '../module_bindings/admin_daily_net_table';
+import type AdminPlayerDeviceRow from '../module_bindings/admin_player_device_table';
 import { countByCountry, countryOf } from '../../shared/tzcountry';
 import { fmtPing, fmtRate, medianCorrections, medianPing, pingByCountry, pingClass, type NetOf } from './net';
+import { deviceCounts, deviceLabel, deviceShare, fmtShare, type DeviceOf } from './devices';
 import { formatPlayTime, liveSeconds } from '../../shared/playtime';
 import { hostAnswers, pingUrl, serverIdentityKey } from '../net/ping';
 import { WakeDriver, wakeProgress, wakeSeconds, type WakeLink } from '../net/wake';
@@ -34,12 +36,16 @@ type PlayerTime = Infer<typeof AdminPlayerTimeRow>;
 type DayTime = Infer<typeof AdminDailyTimeRow>;
 type PlayerNet = Infer<typeof AdminPlayerNetRow>;
 type DayNet = Infer<typeof AdminDailyNetRow>;
+type PlayerDevice = Infer<typeof AdminPlayerDeviceRow>;
 /**
  * An `admin_players` row joined (by id) with its `admin_player_time` row (rounds, and play time
- * including a session in progress) and its `admin_player_net` row, if any (connection quality:
- * `ping` is the typical p50 in ms, `corrPerMin` the corrections per minute).
+ * including a session in progress), its `admin_player_net` row, if any (connection quality:
+ * `ping` is the typical p50 in ms, `corrPerMin` the corrections per minute), and its
+ * `admin_player_device` row, if any (`deviceName`: Phone, Tablet or Computer).
  */
-type Player = Infer<typeof AdminPlayersRow> & { rounds: number; playTime: number; playing: boolean; openSeconds: number; net?: NetOf; ping?: number; corrPerMin?: number };
+type Player = Infer<typeof AdminPlayersRow> & {
+  rounds: number; playTime: number; playing: boolean; openSeconds: number; net?: NetOf; ping?: number; corrPerMin?: number; device?: DeviceOf; deviceName?: string;
+};
 
 const POSTHOG = 'https://us.posthog.com/project/649207';
 const env = import.meta.env as Record<string, string | undefined>;
@@ -97,6 +103,8 @@ let sortKey: keyof Player | 'country' = 'lastSeen';
 let sortDir: 1 | -1 = -1;
 /** The connection-quality views (`admin_player_net`, `admin_daily_net`): subscribed on their own, since an older module lacks them. */
 let netViews: 'wait' | 'on' | 'missing' = 'wait';
+/** The device view (`admin_player_device`): subscribed on its own too, for the same reason. */
+let deviceViews: 'wait' | 'on' | 'missing' = 'wait';
 const setConn = (s: 'wait' | 'live' | 'off', title: string) => { connDot.className = `dot ${s}`; connDot.title = title; };
 
 /** The header: which server, where, which database. */
@@ -164,6 +172,8 @@ function joinedPlayers(): Player[] {
   for (const t of db.adminPlayerTime.iter()) times.set(t.id, t);
   const nets = new Map<string, PlayerNet>();
   if (netViews === 'on') for (const n of db.adminPlayerNet.iter()) nets.set(n.id, n);
+  const devices = new Map<string, PlayerDevice>();
+  if (deviceViews === 'on') for (const d of db.adminPlayerDevice.iter()) devices.set(d.id, d);
   const nowMicros = BigInt(Date.now()) * 1000n;
   return [...db.adminPlayers.iter()].map(p => {
     const t = times.get(p.id);
@@ -172,7 +182,12 @@ function joinedPlayers(): Player[] {
     const live = Number(liveSeconds({ seconds: credited, since }, nowMicros));
     const n = nets.get(p.id);
     const net: NetOf | undefined = n && { pingP50: n.pingP50, pingP95: n.pingP95, worstP95: n.worstP95, correctionsPerMin: n.correctionsPerMin, measuredMinutes: n.measuredMinutes, lastAtMs: n.lastAt.toDate().getTime() };
-    return { ...p, rounds: t?.rounds ?? 0, playTime: live, playing: since > 0n, openSeconds: live - Number(credited), net, ping: net?.pingP50, corrPerMin: net?.correctionsPerMin };
+    const d = devices.get(p.id);
+    const device: DeviceOf | undefined = d && { device: d.device, phone: d.phone, tablet: d.tablet, desktop: d.desktop, lastAtMs: d.lastAt.toDate().getTime() };
+    return {
+      ...p, rounds: t?.rounds ?? 0, playTime: live, playing: since > 0n, openSeconds: live - Number(credited), net, ping: net?.pingP50, corrPerMin: net?.correctionsPerMin,
+      device, deviceName: deviceLabel(device),
+    };
   });
 }
 
@@ -246,6 +261,7 @@ function dashboard() {
         <div class="chart">${chart(days)}</div></section>
       <section class="card"><h2>Where from <small>time zone → country, estimate</small></h2>${countryList}</section>
     </div>
+    <section class="card"><h2>Devices <small>players by the device they last played on online, last 7 days</small></h2>${devicePanel(players, now)}</section>
     <div class="grid2">
       <section class="card"><h2>Ping <small>median of players' p50 and p95 per UTC day, last 30 days</small></h2>${pingChart([...db.adminDailyNet.iter()])}</section>
       <section class="card"><h2>Ping by country <small>median typical p50, time zone → country</small></h2>${countryPing(players)}</section>
@@ -260,11 +276,12 @@ function dashboard() {
       matches counts finished first-to-10 matches, rounds every round played. Play time is online play time only: time spent in an online room
       (lobby time, Solo and Practice are not counted), credited every minute and on leaving. Ping is the round trip of a player's movement reports
       as their browser measured it (typical p50: a mean over their reports, weighted by time in rooms; hover for p95), and corrections are the
-      server's rejections of their reported movement, per minute in rooms; both are reported every 2 minutes in a match and on leaving.</p>
+      server's rejections of their reported movement, per minute in rooms; both are reported every 2 minutes in a match and on leaving.
+      Device is what the game classified the player's browser as (phone, tablet or computer), reported once per online connection.</p>
       <button type="button" class="btn revoke" id="revoke">Sign out all admins</button></footer>`;
   body.querySelectorAll<HTMLButtonElement>('th button[data-sort]').forEach(b => b.addEventListener('click', () => {
     const k = b.dataset.sort as typeof sortKey;
-    if (sortKey === k) sortDir = sortDir === 1 ? -1 : 1; else { sortKey = k; sortDir = k === 'name' || k === 'country' || k === 'tz' ? 1 : -1; }
+    if (sortKey === k) sortDir = sortDir === 1 ? -1 : 1; else { sortKey = k; sortDir = k === 'name' || k === 'country' || k === 'tz' || k === 'deviceName' ? 1 : -1; }
     render();
     body.querySelector<HTMLButtonElement>(`th button[data-sort="${k}"]`)?.focus();
   }));
@@ -282,7 +299,7 @@ const COLUMNS: { key: keyof Player | 'country'; label: string; num?: boolean }[]
   { key: 'name', label: 'Name' }, { key: 'lastSeen', label: 'Last seen' }, { key: 'firstSeen', label: 'First seen' },
   { key: 'playTime', label: 'Play time', num: true }, { key: 'sessions', label: 'Sessions', num: true }, { key: 'rounds', label: 'Rounds', num: true },
   { key: 'matches', label: 'Matches', num: true }, { key: 'kills', label: 'Kills', num: true },
-  { key: 'ping', label: 'Ping', num: true }, { key: 'corrPerMin', label: 'Corr/min', num: true },
+  { key: 'ping', label: 'Ping', num: true }, { key: 'corrPerMin', label: 'Corr/min', num: true }, { key: 'deviceName', label: 'Device' },
   { key: 'country', label: 'Country' }, { key: 'tz', label: 'Time zone' }, { key: 'lang', label: 'Lang' }, { key: 'id', label: 'Id' },
 ];
 const sortLabel = () => `${COLUMNS.find(c => c.key === sortKey)?.label.toLowerCase()}, ${sortDir === 1 ? 'ascending' : 'descending'}`;
@@ -306,7 +323,7 @@ function playerTable(players: Player[]) {
     return `<tr><td>${esc(p.name || '—')}</td><td title="${lastSeen.toISOString()}">${ago(lastSeen)}</td><td title="${firstSeen.toISOString()}">${shortDate(firstSeen)}</td>
       <td class="num"${p.playing ? ' title="In an online room now"' : ''}>${p.playing ? '<i class="dot live" aria-label="In a room now"></i>' : ''}${formatPlayTime(p.playTime)}</td>
       <td class="num">${num(p.sessions)}</td><td class="num">${num(p.rounds)}</td><td class="num">${num(p.matches)}</td><td class="num">${num(p.kills)}</td>
-      ${pingCell(p)}<td class="num">${fmtRate(p.corrPerMin)}</td>
+      ${pingCell(p)}<td class="num">${fmtRate(p.corrPerMin)}</td>${deviceCell(p)}
       <td>${esc(countryOf(p.tz))}</td><td class="tz" title="${esc(p.tz)}">${esc(p.tz || '—')}</td><td>${esc(p.lang || '—')}</td><td class="id">${esc(p.id)}</td></tr>`;
   }).join('');
   const more = sorted.length > playerLimit ? `<button type="button" class="btn more" id="more">Show more (${num(sorted.length - playerLimit)} left)</button>` : '';
@@ -319,6 +336,32 @@ function pingCell(p: Player) {
   if (!n) return '<td class="num">—</td>';
   const title = `p50 ${n.pingP50} ms · p95 ${n.pingP95} ms · worst p95 ${n.worstP95} ms · ${n.measuredMinutes} min measured · last ${ago(new Date(n.lastAtMs))}`;
   return `<td class="num" title="${esc(title)}"><span class="ping ${pingClass(n.pingP50)}">${fmtPing(n.pingP50)}</span></td>`;
+}
+
+/** A player's device (Phone, Tablet or Computer); the title has the connections per kind and the latest report. */
+function deviceCell(p: Player) {
+  const d = p.device;
+  if (!d || !p.deviceName) return `<td${deviceViews === 'missing' ? ' title="Not on this server yet"' : ''}>—</td>`;
+  return `<td title="${esc(`connections: ${deviceCounts(d)} · last ${ago(new Date(d.lastAtMs))}`)}">${esc(p.deviceName)}</td>`;
+}
+
+/**
+ * Share of players by the device they last played on: the last 7 days (the big number and the bar)
+ * and all time, one block per kind; loading, an older module (—) or no reports yet otherwise.
+ */
+function devicePanel(players: Player[], now: number) {
+  if (deviceViews !== 'on') return `<div class="empty">${deviceViews === 'missing' ? "— This server's module has no device view yet." : 'Loading…'}</div>`;
+  const since = now - 7 * DAY_MS;
+  const week = deviceShare(players, since), ever = deviceShare(players);
+  if (!ever.total) return '<div class="empty">No device reports yet.</div>';
+  const blocks = week.kinds.map((k, i) => {
+    const all = ever.kinds[i];
+    return `<div class="device"><small>${k.label}</small><b>${week.total ? fmtShare(k.share) : '—'}</b><span>${num(k.players)} player${k.players === 1 ? '' : 's'}</span>
+      <div class="bar"><i style="width:${(k.share * 100).toFixed(1)}%"></i></div><span class="all">All time ${fmtShare(all.share)} · ${num(all.players)}</span></div>`;
+  }).join('');
+  const active = players.filter(p => p.lastSeen.toDate().getTime() >= since).length;
+  return `<div class="devices">${blocks}</div>
+    <p class="devices-note">${num(week.total)} of ${num(active)} player${active === 1 ? '' : 's'} active in the last 7 days reported a device (${num(ever.total)} ever); each counts once, by their latest report.</p>`;
 }
 
 /** What a connection-quality panel says without data: loading, an older module (—), or nothing reported yet. */
@@ -505,7 +548,10 @@ function adminLink(s: AdminServer, lost: () => void): WakeLink {
     .onConnect((cc, _identity, token) => {
       if (stopped) { cc.disconnect(); return; }
       store.set(key, token);
-      for (const t of [cc.db.adminStatus, cc.db.adminOverview, cc.db.adminRooms, cc.db.adminPlayers, cc.db.adminDaily, cc.db.adminPlayerTime, cc.db.adminDailyTime, cc.db.adminPlayerNet, cc.db.adminDailyNet]) {
+      for (const t of [
+        cc.db.adminStatus, cc.db.adminOverview, cc.db.adminRooms, cc.db.adminPlayers, cc.db.adminDaily, cc.db.adminPlayerTime, cc.db.adminDailyTime, cc.db.adminPlayerNet, cc.db.adminDailyNet,
+        cc.db.adminPlayerDevice,
+      ]) {
         t.onInsert(render); t.onDelete(render);
       }
       // Connection quality on its own subscription: a server whose module predates these views refuses it, and the page shows "—".
@@ -514,6 +560,12 @@ function adminLink(s: AdminServer, lost: () => void): WakeLink {
         .onApplied(() => { if (!stopped) { netViews = 'on'; render(); } })
         .onError(() => { if (!stopped) { netViews = 'missing'; render(); } })
         .subscribe(['SELECT * FROM admin_player_net', 'SELECT * FROM admin_daily_net']);
+      // Devices too: a module without `admin_player_device` refuses only this subscription.
+      deviceViews = 'wait';
+      cc.subscriptionBuilder()
+        .onApplied(() => { if (!stopped) { deviceViews = 'on'; render(); } })
+        .onError(() => { if (!stopped) { deviceViews = 'missing'; render(); } })
+        .subscribe(['SELECT * FROM admin_player_device']);
       cc.subscriptionBuilder()
         .onApplied(() => { if (stopped) return; isLive = true; conn = cc; message = ''; settle.resolve(); render(); })
         .onError(() => {
@@ -545,7 +597,7 @@ let driver = makeDriver();
 function switchServer(next: AdminServer) {
   if (next.id === server.id) return;
   driver.stop();
-  conn = undefined; loggingIn = false; message = ''; messageError = true; playerLimit = 100; netViews = 'wait';
+  conn = undefined; loggingIn = false; message = ''; messageError = true; playerLimit = 100; netViews = 'wait'; deviceViews = 'wait';
   server = next;
   rememberServer(server, storage);
   renderServer();
