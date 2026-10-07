@@ -33,7 +33,10 @@ Lobby URL flags: `?tab=quick|start|join` (the open tab), `?mode=offline|online|l
 starts: Solo, Quick Play or Practice), `&game=elimination|sabotage`, `&size=duel|squad|war` and `&map=<id>`
 (the Start a Server form; a 24v24 map picks 24v24 unless `size` says otherwise), `&room=CODE` (opens Join a
 server with the code filled in; with `autostart` joins it), `&team=0|1|auto`, `&skill=0.25…0.75`, `&name=…`,
-`&autostart=1`, `&server=sg|us` (the game server for this visit; Settings → Server saves a choice). Choices are remembered per browser under `lawbreaker.*` in localStorage (`lawbreaker.start.*`
+`&autostart=1`, `&server=sg|us` (the game server for this visit; Settings → Server saves a choice).
+A player still on the lobby's made-up callsign (`Player-123` / `玩家123`) is asked for one before playing
+(`src/ui/callsign.ts`), so the scoreboard and the server's player list carry chosen names; `&name=`,
+`&autostart` and `?bench` skip the question. Choices are remembered per browser under `lawbreaker.*` in localStorage (`lawbreaker.start.*`
 holds the form; `lawbreaker.crosshair` holds the crosshair style the HUD draws).
 
 `bun scripts/roomcheck.ts ws://127.0.0.1:<port> <db>` (local only) checks Play Online with separate

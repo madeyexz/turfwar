@@ -29,6 +29,7 @@ import './ui/lang-zh.css';
 import { defaultQuality } from './game/device';
 import { onTouchLayout, touchActive } from './game/touchlayout';
 import { InstallBanner } from './ui/installhint';
+import { askCallsign, madeUpCallsign } from './ui/callsign';
 import { registerServiceWorker, warmServiceWorker } from './pwa';
 
 inject();
@@ -960,6 +961,9 @@ function showBackdrop() {
   renderer.scene.add(backdrop.group);
 }
 
+/** A player still on the made-up callsign is asked for one before playing (automation and `?name=` skip it). */
+const needsCallsign = () => !benchMode && !params.get('autostart') && !params.has('name') && madeUpCallsign(callsign.value);
+
 /**
  * Run one way in. An online one pressed while the server is still waking is queued: it runs by
  * itself once the server is up (`retried`: it already failed to reach the server once).
@@ -968,6 +972,11 @@ function run(action: Action, room = -1, retried = false) {
   if (!ready || starting) return;
   if (modeOf(action) === 'online' && !online.ok) return;
   if (action === 'code' && roomCode.value.length < 4) { roomCode.focus(); return; }
+  // Still on the lobby's made-up callsign: ask for a name first, then play from that same tap.
+  if (needsCallsign()) {
+    askCallsign(callsign.value, name => { callsign.value = name; store.set('name', name); run(action, room, retried); });
+    return;
+  }
   if (modeOf(action) === 'online' && phase() !== 'ready') {
     // Still inside the tap: full screen now, as starting would (a queued start runs without a gesture).
     fullscreenForTouch();

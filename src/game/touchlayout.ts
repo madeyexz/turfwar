@@ -342,15 +342,15 @@ export function touchActive() {
  * (`TOUCH_LOOK_DEG_PER_PX` degrees per CSS pixel; CSS pixels are about the same physical size on
  * every phone, so a given thumb movement turns the same amount whatever the screen).
  *
- * The default is 1.35×: 0.27° per pixel, so a swipe across the whole screen of the smallest phone we
- * play on (iPhone SE, 667 px landscape) turns about 180°, and about 230° on an iPhone 14 (844 px). The
- * old default (1.00×, 0.20°/px: 135° on the SE, 170° on the 14) took two swipes across the look side
- * of the screen (the stick has the left 45%) to turn round, slower than phone shooters start you at.
- * Only the default moved: a value the player saved (any speed, even 1.00×) is kept as it is. Aiming
- * scales this by the zoom like the mouse (`Player.lookScale`).
+ * The default is 2.00×: 0.40° per pixel, so a swipe across the whole screen of the smallest phone we
+ * play on (iPhone SE, 667 px landscape) turns about 270°, and about 340° on an iPhone 14 (844 px):
+ * half the screen turns you round. The earlier defaults (1.00×, then 1.35×: 180° on the SE) still felt
+ * dull to look around with, and 4× was not enough headroom, so the range now reaches 8×. Only the
+ * default moved: a value the player saved (any speed, even 1.00×) is kept as it is. Aiming scales this
+ * by the zoom like the mouse (`Player.lookScale`).
  */
-export const TOUCH_SENS_RANGE = [0.3, 4] as const;
-export const TOUCH_SENS_DEFAULT = 1.35;
+export const TOUCH_SENS_RANGE = [0.3, 8] as const;
+export const TOUCH_SENS_DEFAULT = 2;
 /** How much a finger outruns the mouse at 1.00× (per CSS pixel against per mouse count). */
 export const TOUCH_LOOK_SCALE = 1.6;
 /** Degrees turned per CSS pixel of drag at 1.00× (the mouse's 0.0022 rad per count × `TOUCH_LOOK_SCALE`). */
@@ -363,6 +363,22 @@ export function parseTouchSensitivity(raw: string | null | undefined): number {
 }
 export function touchSensitivity() { return parseTouchSensitivity(read(TOUCH_SENS_KEY)); }
 export function setTouchSensitivity(v: number) { write(TOUCH_SENS_KEY, String(clamp(v, TOUCH_SENS_RANGE[0], TOUCH_SENS_RANGE[1]))); notify(); }
+
+/**
+ * The look speed slider runs on a log scale over `TOUCH_SENS_STEPS` positions: each step is the same
+ * proportional change, so the slow end keeps fine steps and the fast end its room (the default sits a
+ * little right of the middle). Positions read back to two decimals, and snap to the default near it.
+ */
+export const TOUCH_SENS_STEPS = 1000;
+const SENS_SPAN = Math.log(TOUCH_SENS_RANGE[1] / TOUCH_SENS_RANGE[0]);
+export function touchSensToSlider(v: number) {
+  return Math.round(Math.log(clamp(v, TOUCH_SENS_RANGE[0], TOUCH_SENS_RANGE[1]) / TOUCH_SENS_RANGE[0]) / SENS_SPAN * TOUCH_SENS_STEPS);
+}
+export function touchSensFromSlider(position: number) {
+  const v = TOUCH_SENS_RANGE[0] * Math.exp(clamp(position, 0, TOUCH_SENS_STEPS) / TOUCH_SENS_STEPS * SENS_SPAN);
+  if (Math.abs(v / TOUCH_SENS_DEFAULT - 1) < 0.02) return TOUCH_SENS_DEFAULT;
+  return clamp(Math.round(v * 100) / 100, TOUCH_SENS_RANGE[0], TOUCH_SENS_RANGE[1]);
+}
 
 /**
  * Hold fire to aim (`lawbreaker.touchAutoAim`, on unless switched off): holding the fire button
