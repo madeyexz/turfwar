@@ -60,7 +60,7 @@ export interface RoomView {
   phase?: string;
   /** The room keeps its map / mode from match to match (it was opened for them). */
   fixedMap?: boolean; fixedMode?: boolean;
-  /** A private room (joined only by its code): never listed, never matched. */
+  /** A private room: joined only by its code, never matched; the lobby lists it without the code. */
   private?: boolean;
   /** The room was started with bots off. */
   noBots?: boolean;
