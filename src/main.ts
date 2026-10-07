@@ -101,12 +101,13 @@ const modeTag = (m: Mode) => `<span class="mtag">[${MODE_TAGS[m]}]</span> ${L(`m
 const pop = (id: string, label: Key, body: string) =>
   `<div class="pop" id="${id}" role="dialog" aria-label="${t(label)}" data-i18n-aria-label="${label}" hidden>${body}</div>`;
 const field = (label: Key, body: string) => `<div class="frow">${L(label, 'span', 'class="label"')}${body}</div>`;
-/** The line under a big button: a status dot, what it will do, and the ping. */
-const line = (id: string) => `<p class="rooms-line" id="${id}-line"><span class="conn"><i></i></span><span class="line-text" id="${id}-hint"></span><span class="ping" id="${id}-ping"></span></p>`;
+/** The line under a big button: a status dot, what it will do, and the ping (or `tail` in its place). */
+const line = (id: string, tail = `<span class="ping" id="${id}-ping"></span>`) =>
+  `<p class="rooms-line" id="${id}-line"><span class="conn"><i></i></span><span class="line-text" id="${id}-hint"></span>${tail}</p>`;
 /** "Server · Singapore · 110 ms ▾": which server the lobby shows; with a choice of servers it opens Settings on it. */
 const serverChip = (id: string) => `<button type="button" class="server-chip" id="${id}"${choosable ? ' aria-haspopup="dialog"' : ' disabled'} hidden></button>`;
-const deploy = (id: string, label: Key, right = '') =>
-  `<button type="button" class="deploy" id="${id}" disabled><span class="deploy-l">${PLAY}<span class="deploy-t" data-label="${label}">${t('lobby.loading')}</span></span><span class="deploy-r">${right}</span></button>`;
+const deploy = (id: string, label: Key, right = '', title?: Key) =>
+  `<button type="button" class="deploy" id="${id}"${title ? ` title="${t(title)}" data-i18n-title="${title}"` : ''} disabled><span class="deploy-l">${PLAY}<span class="deploy-t" data-label="${label}">${t('lobby.loading')}</span></span><span class="deploy-r">${right}</span></button>`;
 
 /*
  * Top: the name, team, controls and settings. Left panel: the three online views as tabs (Quick
@@ -142,15 +143,10 @@ menu.innerHTML = `
     </div>
 
     <div class="view" id="view-quick" role="tabpanel" aria-labelledby="tab-quick">
-      ${deploy('quick-go', 'tab.quick', L('quick.tag'))}
-      ${line('quick')}
-      <div class="quick-card">
-        ${L('quick.about', 'p')}
-        <div class="quick-live"><span class="conn" id="quick-live"><i></i><span></span></span>${serverChip('quick-server')}</div>
-        <div class="quick-links">${L('quick.or', 'span')}<button type="button" class="link" data-go="start">${L('tab.start')}</button><span aria-hidden="true">·</span><button type="button" class="link" data-go="join">${L('tab.join')}</button></div>
-      </div>
+      ${deploy('quick-go', 'tab.quick', L('quick.tag'), 'quick.about')}
+      ${line('quick', serverChip('quick-server'))}
       <section class="browser" aria-labelledby="quick-rooms-title">
-        <div class="browser-head"><b id="quick-rooms-title" data-i18n="lobby.liveRooms">${t('lobby.liveRooms')}</b></div>
+        <div class="browser-head"><b id="quick-rooms-title" data-i18n="lobby.liveRooms">${t('lobby.liveRooms')}</b><span class="count" id="quick-rooms-count"></span></div>
         <div class="browser-rows" id="quick-rooms" role="list"></div>
       </section>
     </div>
@@ -416,7 +412,7 @@ function renderPings() {
     if (chip.dataset.html !== html) { chip.dataset.html = html; chip.innerHTML = html; }
   }
   // Quick Play goes to its target room's server; a started room opens on the chosen server.
-  const lines: [string, string | undefined][] = [['#quick-ping', quickTarget()?.server ?? server?.uri], ['#start-ping', server?.uri]];
+  const lines: [string, string | undefined][] = [['#start-ping', server?.uri]];
   for (const [sel, uri] of lines) {
     const el = $(sel), ms = pings.get(uri);
     el.hidden = !live;
@@ -534,16 +530,12 @@ function renderWake() {
   setText($('#wake-retry'), t('wake.retry'));
 }
 
-/** QUICK PLAY: where it would put you, or that it opens a 6v6 with bots, and every live room to pick from. */
+/** QUICK PLAY: where it would put you (or that it opens a 6v6 with bots) beside the server chip, and every live room to pick from. */
 function renderQuick() {
   renderDeploy($<HTMLButtonElement>('#quick-go'), 'quick', t('lobby.joining'), online.ok);
   const target = quickTarget();
   renderLine('quick', 'quick', target ? t('quick.joins', { map: mapName(target.mapId), size: sizeLabel(target.size), n: target.humans, max: target.size * 2 }) : t('quick.opens'));
-  const humans = rooms.reduce((n, r) => n + r.humans, 0);
-  const live = $('#quick-live');
-  live.hidden = phase() !== 'ready';
-  live.querySelector('span')!.textContent = `${t('quick.online')} · ${plural('lobby.roomCount', rooms.length)} · ${plural('lobby.playerCount', humans)}`;
-  live.className = `conn ${rooms.length ? 'live' : ''}`;
+  $('#quick-rooms-count').innerHTML = roomTotals();
   // Every public room, unfiltered, in Join a Server's order; the one Quick Play would join is marked.
   renderRoomRows($('#quick-rooms'), listOrder(rooms, r => pings.get(r.server)), `<div class="empty"><p>${esc(t('quick.noRooms'))}</p></div>`, target);
 }
@@ -575,6 +567,12 @@ function renderStart() {
   renderDeploy($<HTMLButtonElement>('#start-go'), 'start', t('lobby.starting'), online.ok);
   $('#start-summary').textContent = ready ? `${sizeOf(size).label} · ${t(isPublic ? 'start.public' : 'start.private')}` : '';
   renderLine('start', 'start', `${t(isPublic ? 'start.hintPublic' : 'start.hintPrivate')}${bots ? '' : ` ${t('start.hintBotsOff')}`}`);
+}
+
+/** A room list's header totals: every public room and everyone in them (whatever filters show). */
+function roomTotals() {
+  const humans = rooms.reduce((n, r) => n + r.humans, 0);
+  return phase() === 'ready' && rooms.length ? `<span class="conn live"><i></i>${plural('lobby.roomCount', rooms.length)} · ${plural('lobby.playerCount', humans)}</span>` : '';
 }
 
 /**
@@ -623,8 +621,7 @@ function renderJoin() {
   select('jmodes', 'jmode', joinMode);
   const shown = shownRooms();
   // Header totals: every public room and everyone in them, whatever the filters show.
-  const humans = rooms.reduce((n, r) => n + r.humans, 0);
-  $('#rooms-count').innerHTML = phase() === 'ready' && rooms.length ? `<span class="conn live"><i></i>${plural('lobby.roomCount', rooms.length)} · ${plural('lobby.playerCount', humans)}</span>` : '';
+  $('#rooms-count').innerHTML = roomTotals();
   renderRoomRows($('#rooms'), shown, rooms.length
     ? `<div class="empty"><p>${esc(t('join.emptyFiltered'))}</p><button type="button" class="link" data-clear>${esc(t('lobby.clearFilters'))}</button></div>`
     : `<div class="empty"><p>${esc(t('join.empty'))}</p><div class="empty-go"><button type="button" class="sub" data-go="quick">${esc(t('tab.quick'))}</button><button type="button" class="sub" data-go="start">${esc(t('tab.start'))}</button></div></div>`);

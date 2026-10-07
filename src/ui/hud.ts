@@ -608,6 +608,18 @@ export class Hud {
     setTimeout(() => line.classList.add('old'), 12000);
   }
 
+  /** A notice in the chat log (someone joined or left): the name in its team's colour, the rest muted. */
+  chatNotice(key: 'chat.joined' | 'chat.left', name: string, team: number, teamText = '') {
+    const line = document.createElement('div');
+    line.className = 'line note';
+    const [before, after] = t(key, { name: '\u0000', team: teamText }).split('\u0000');
+    line.innerHTML = `${escape(before ?? '')}<b class="t${team}">${escape(name)}</b>${escape(after ?? '')}`;
+    const box = this.el.chatLines;
+    box.appendChild(line);
+    while (box.children.length > 8) box.firstElementChild!.remove();
+    setTimeout(() => line.classList.add('old'), 12000);
+  }
+
   /**
    * Opens the chat input (Enter: all, T: team); `send` gets the trimmed text. `focusNow`: a tap on a
    * touch screen opened it, and iOS shows the keyboard only for a focus inside that tap.

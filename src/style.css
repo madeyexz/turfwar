@@ -237,6 +237,8 @@ body.menu-open #hud, body.menu-open #hud * { visibility: hidden; }
 .chat .line.team { background: color-mix(in srgb, var(--team) 24%, transparent); }
 .chat em { font-style: normal; font-size: 12px; font-weight: 700; color: var(--muted); margin-right: 5px; letter-spacing: 0.06em; }
 .chat b.t0 { color: var(--aegis); } .chat b.t1 { color: var(--crimson); }
+/* Someone joined or left: muted and a little smaller than what players say. */
+.chat .line.note { color: var(--muted); font-size: 13px; font-weight: 500; }
 .chat-input { display: flex; gap: 8px; align-items: center; margin-top: 4px; padding: 5px 8px; background: var(--panel-solid); border: 1px solid var(--accent); pointer-events: auto; }
 .chat-input.team { border-color: var(--amber); }
 .chat-input span { font-size: 12px; font-weight: 700; letter-spacing: 0.14em; color: var(--accent); text-transform: uppercase; }

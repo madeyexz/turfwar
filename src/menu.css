@@ -145,13 +145,9 @@
 #menu .view { display: flex; flex-direction: column; gap: 10px; min-height: 0; }
 #menu .view[hidden] { display: none; }
 #menu #view-join, #menu #view-quick { flex: 1 1 auto; }
+/* Quick play's list is as tall as its rooms (an empty one stays short), up to the space there is. */
+#menu #view-quick .browser, #menu #view-quick .browser-rows { flex: 0 1 auto; }
 #menu #view-start .deploy { margin-top: 6px; }
-#menu .quick-card { display: flex; flex-direction: column; gap: 12px; margin-top: 4px; padding: 14px 16px; border: 1px solid var(--line); border-radius: 4px; background: rgba(6, 12, 16, 0.72); backdrop-filter: blur(6px); }
-#menu .quick-card p { margin: 0; color: var(--ink); opacity: 0.85; font-size: 14px; line-height: 1.45; font-weight: 500; }
-#menu .quick-live { display: flex; align-items: center; justify-content: space-between; gap: 8px 10px; flex-wrap: wrap; }
-#menu .quick-live .conn[hidden] { display: none; }
-#menu .quick-links { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; color: var(--muted); font-size: 13px; font-weight: 600; }
-#menu .quick-links .link { text-transform: uppercase; letter-spacing: 0.08em; font-size: 12px; }
 #menu .deploy {
   display: flex; align-items: center; justify-content: space-between; gap: 16px; width: 100%; min-height: 62px; padding: 0 22px;
   border: 1px solid var(--accent); border-radius: 3px; color: #031014; background: var(--accent);
@@ -166,10 +162,12 @@
 #menu .rooms-line { display: flex; align-items: center; gap: 8px; margin: 0; min-height: 18px; color: var(--muted); font-size: 13px; font-weight: 600; letter-spacing: 0.02em; line-height: 1.25; }
 #menu .rooms-line .line-text { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 #menu #start-line .line-text { white-space: normal; }
-#menu .rooms-line .ping { flex: none; white-space: nowrap; font-variant-numeric: tabular-nums; }
-#menu .rooms-line .ping::before { content: '·'; margin-right: 8px; color: var(--muted); }
-#menu .rooms-line .ping[hidden] { display: none; }
+#menu .rooms-line > .ping { flex: none; white-space: nowrap; font-variant-numeric: tabular-nums; }
+#menu .rooms-line > .ping::before { content: '·'; margin-right: 8px; color: var(--muted); }
+#menu .rooms-line > .ping[hidden] { display: none; }
 #menu .rooms-line[hidden] { display: none; }
+/* Quick play's line ends with the server chip (where the ping is elsewhere). */
+#menu .rooms-line .server-chip { margin-left: auto; }
 
 /* Connection dot (status line and room count) */
 #menu .conn { display: inline-flex; align-items: center; gap: 7px; font-size: 11px; font-weight: 700; letter-spacing: 0.14em; text-transform: uppercase; color: var(--muted); white-space: nowrap; min-width: 0; }
@@ -517,9 +515,6 @@
   #menu .deploy { flex: none; min-height: 52px; padding: 0 16px; }
   #menu .deploy-l { font-size: 18px; }
   #menu .deploy-r { font-size: 13px; }
-  #menu .quick-card { gap: 8px; margin-top: 0; padding: 10px 12px; }
-  #menu .quick-card p { font-size: 13px; line-height: 1.35; }
-  #menu .quick-links .link { display: inline-flex; align-items: center; min-height: 44px; }
 
   /* Start a server: the form scrolls, START stays in reach at the bottom. */
   #menu .filters { gap: 6px 10px; }

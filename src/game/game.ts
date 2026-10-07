@@ -3,7 +3,7 @@ import { hitShape, raycastSoldier } from '../../shared/hitbox';
 import { loadMap } from '../../shared/maps/index';
 import { wrapAngle, type Vec3 } from '../../shared/math';
 import { eyeHeight } from '../../shared/movement';
-import { ATTACKERS, vehicleTarget, type MatchEvent, type MatchState, type Soldier } from '../../shared/match/state';
+import { ATTACKERS, vehicleTarget, type MatchEvent, type MatchState, type Soldier, type Team } from '../../shared/match/state';
 import { VEHICLES, obstaclesOf, raycastVehicle, seatPosition, speedOf, type Vehicle } from '../../shared/vehicles';
 import { seatFor } from '../../shared/match/vehicles';
 import { WEAPONS, pelletCone, pelletDirs, weaponStats, type HitZone, type WeaponId } from '../../shared/weapons';
@@ -87,6 +87,8 @@ export class Game {
   private shownWeapon = '';
   /** Remote gunshot sounds started this frame. */
   private shotVoices = 0;
+  /** Every soldier seen in this match (bot or not, and team): a leave from an older server names only the soldier, already gone. */
+  private seen = new Map<number, { bot: boolean; team: Team }>();
   /** Last muzzle report per remote shooter (pellet events share one report). */
   private lastReport = new Map<number, number>();
   /** Online: hit markers already shown for predicted hits, so the server's confirmations don't repeat them. */
@@ -379,6 +381,7 @@ export class Game {
     this.shotVoices = 0;
     // The HUD learns who we are in tick(): run it before the first events (kill marks on the score bar).
     if (!this.hudReady) { this.hud.tick(this.player, state, me); this.hudReady = true; }
+    for (const s of state.soldiers) this.seen.set(s.id, { bot: s.bot, team: s.team });
     for (const e of link.drainEvents()) this.handleEvent(e, state, myId);
 
     // ---- World views ----
@@ -984,8 +987,15 @@ export class Game {
         this.hud.chatLine(e.name, e.team, e.text, e.teamOnly, dead);
         break;
       }
-      case 'join': if (e.id !== myId && !find(e.id)?.bot) this.hud.toast(t('hud.joined', { name: e.name, team: teamName(e.team) })); break;
-      case 'leave': break;
+      // Humans arriving and leaving (a quit, a dropped connection or the idle kick) are noted in the chat.
+      case 'join': if (e.id !== myId && !(e.bot ?? find(e.id)?.bot)) this.hud.chatNotice('chat.joined', e.name, e.team, teamName(e.team)); break;
+      case 'leave': {
+        const was = this.seen.get(e.id);
+        this.seen.delete(e.id);
+        const bot = e.bot ?? was?.bot;
+        if (e.id !== myId && bot === false) this.hud.chatNotice('chat.left', e.name, e.team ?? was?.team ?? 0);
+        break;
+      }
       case 'spawn': break;
     }
   }
