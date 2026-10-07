@@ -202,3 +202,18 @@ export function dailyNetRows(lastDay: number, rowsOn: (day: number) => Iterable<
   }
   return rows;
 }
+
+// ---- Device (shared/devicekind.ts; a view of its own, like play time and connection quality) --
+
+/** A `player_device` row (identity hex, `lastAt` in epoch microseconds). */
+export interface DeviceLike { identity: string; device: string; phone: number; tablet: number; desktop: number; lastAt: bigint }
+
+/** Matches `PlayerRow.id`: the kind of the latest report (phone, tablet, desktop), connections per kind, the latest report. */
+export interface PlayerDeviceRow { id: string; device: string; phone: number; tablet: number; desktop: number; lastAt: bigint }
+
+/** One row per player who has reported a device (players without one have no row). */
+export function playerDeviceRows(rows: Iterable<DeviceLike>): PlayerDeviceRow[] {
+  const out: PlayerDeviceRow[] = [];
+  for (const r of rows) out.push({ id: shortId(r.identity), device: r.device, phone: r.phone, tablet: r.tablet, desktop: r.desktop, lastAt: r.lastAt });
+  return out;
+}

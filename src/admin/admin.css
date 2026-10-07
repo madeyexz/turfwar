@@ -120,6 +120,25 @@ section.card h2 small { color: var(--faint); font-weight: 600; letter-spacing: 0
 .countries .bar i { display: block; height: 100%; background: var(--accent); }
 .countries span { color: var(--muted); font-variant-numeric: tabular-nums; }
 
+/* Devices: one block per kind, the last 7 days' share (number and bar) and all time (src/admin/devices.ts). */
+.devices { display: grid; grid-template-columns: repeat(auto-fit, minmax(170px, 1fr)); gap: 10px; }
+.device { border: 1px solid var(--line); border-radius: 8px; padding: 10px 12px; display: grid; gap: 2px; min-width: 0; }
+.device small { color: var(--muted); font-weight: 600; font-size: 13px; text-transform: uppercase; letter-spacing: 0.06em; }
+.device b { font-size: 30px; font-weight: 700; line-height: 1.1; font-variant-numeric: tabular-nums; }
+.device span { color: var(--muted); font-weight: 600; font-size: 14px; font-variant-numeric: tabular-nums; }
+.device span.all { color: var(--faint); font-size: 13px; }
+.device .bar { height: 5px; margin: 6px 0 4px; border-radius: 3px; background: rgba(255, 255, 255, 0.06); overflow: hidden; }
+.device .bar i { display: block; height: 100%; background: var(--accent); }
+.devices-note { margin: 10px 0 0; color: var(--faint); font-size: 13px; }
+@media (max-width: 520px) {
+  .devices { grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 6px; }
+  .device { padding: 8px; }
+  .device small { font-size: 11px; letter-spacing: 0.03em; }
+  .device b { font-size: 24px; }
+  .device span { font-size: 13px; }
+  .device span.all { font-size: 12px; }
+}
+
 /* Connection quality: ping under 80 ms green, under 160 ms amber, slower red (src/admin/net.ts). */
 .ping { font-weight: 700; }
 .ping.good { color: var(--cash); }

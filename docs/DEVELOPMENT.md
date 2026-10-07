@@ -197,6 +197,13 @@ whenever what is collected changes. These answer "how many players, and from whe
   `corrections_per_min`, and `net_sample` goes out every 5 minutes of a match. Ping is measured on the
   page, so a stalled tab inflates it (as it does the HUD's). Local check:
   `ADMIN_TEST_KEY=<test key> bun scripts/netcheck.ts ws://127.0.0.1:<port> <db>`.
+- **Device type** (`deviceKind` in `src/game/device.ts`, rules in `shared/devicekind.ts`): right after
+  `hello` each online connection calls `device(kind)` with `phone`, `tablet` or `desktop` (not
+  touch-primary → desktop; iPhone or Android "Mobile" → phone; iPad → tablet; otherwise a screen whose
+  shorter side is at least 600 CSS px is a tablet). The module keeps the latest kind and connections per
+  kind in the private `player_device` table (only those three kinds, one report per identity per 30 s,
+  only identities in `player_seen`), and `match_joined` carries `device` to PostHog. Local check:
+  `ADMIN_TEST_KEY=<test key> bun scripts/devicecheck.ts ws://127.0.0.1:<port> <db>`.
 
 **Admin page** (`/admin`, `admin/index.html`, not linked from the game, `noindex`): live totals,
 online play time (total, average and median per player, today, 7 days), rooms, 30-day charts of new
@@ -205,7 +212,9 @@ matches, kills …), for the database of the build (`VITE_SPACETIMEDB_*`). Conne
 PING column (typical p50, coloured; hover for p95 and worst p95) and CORR/MIN to the player list,
 median ping cards (24 h, 7 d) and corrections per minute, ping by country and a 30-day ping chart, from
 the views `admin_player_net` and `admin_daily_net` (subscribed separately: a database without them
-shows "—"). Play time comes from the
+shows "—"). A DEVICE column (Phone, Tablet or Computer; hover for connections per kind) and a Devices
+card (share of players by the device they last played on, last 7 days and all time) come from the view
+`admin_player_device`, subscribed separately the same way. Play time comes from the
 views `admin_player_time` and `admin_daily_time`, joined to `admin_players` by the short id: new
 views rather than new columns on the old ones, because changing an existing view's columns makes a
 publish disconnect every client. The owner logs in with the **admin key**; the module

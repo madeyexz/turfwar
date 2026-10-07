@@ -22,8 +22,16 @@ only="${1:-all}"
 
 [ -f "$OWNER_CLI" ] || { echo "No owner profile ($OWNER_CLI). Run deploy/instacloud/owner.sh first." >&2; exit 1; }
 cli() { spacetime --config-path "$OWNER_CLI" "$@"; }
-# Point a server name in the owner profile at a URL (adding it the first time).
-point() { cli server edit "$1" --url "$2" --no-fingerprint -y >/dev/null 2>&1 || cli server add "$1" --url "$2" --no-fingerprint >/dev/null; }
+# Point a server name in the owner profile at a URL: add it the first time, edit it when the URL moved,
+# leave it when it already matches (the CLI refuses an edit that changes nothing).
+point() {
+  local host line
+  host=$(echo "$2" | sed -E 's#^[a-z]+://##; s#/.*##')
+  line=$(cli server list 2>/dev/null | awk -v n="$1" '$NF == n')
+  if [ -z "$line" ]; then cli server add "$1" --url "$2" --no-fingerprint >/dev/null
+  elif ! echo "$line" | grep -qF "$host"; then cli server edit "$1" --url "$2" --no-fingerprint -y >/dev/null
+  fi
+}
 
 if [ "$only" = all ] || [ "$only" = tw ]; then
   point taipei "$TW_URL"

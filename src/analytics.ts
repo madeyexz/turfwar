@@ -1,6 +1,7 @@
 import type { Mode } from '../shared/match/state';
 import type { VehicleKind } from '../shared/vehicles';
 import type { NetFields } from '../shared/netstats';
+import type { DeviceKind } from '../shared/devicekind';
 import type { ServerId } from './net/servers';
 
 /**
@@ -21,7 +22,8 @@ export interface Events {
   lobby_view: Record<string, never>;
   /** `server_choice`: the server an online play goes to (Settings → Server); offline plays leave it out. */
   play_clicked: { kind: PlayKind; size: string; mode: Mode | ''; map: string; server_choice?: ServerId };
-  match_joined: { online: boolean; room?: string; map: string; mode: Mode; size: string; team: 'swat' | 'militia'; server_choice?: ServerId };
+  /** `device`: our own phone/tablet/desktop (src/game/device.ts), which, unlike PostHog's `$device_type`, counts an iPad posing as a Mac as a tablet. */
+  match_joined: { online: boolean; room?: string; map: string; mode: Mode; size: string; team: 'swat' | 'militia'; server_choice?: ServerId; device: DeviceKind };
   /** Online, also the match's connection quality (shared/netstats.ts): ping percentiles over the newest ≤600 samples, totals for the rest. */
   match_left: { seconds: number; kills: number; deaths: number; rounds_played: number; reason: Reason } & Partial<Omit<NetFields, 'seconds'>>;
   round_ended: { won: boolean; mode: Mode; map: string };
