@@ -98,8 +98,8 @@ homage to the classic two-site layout of CS:GO's Dust II, built from our own geo
 above a city; the street is fatal) and **Meridian District** (a large war-torn city quarter), each with
 bomb sites (two on Ochre Quarter and Meridian District, one elsewhere).
 
-**Taipei** is Ximending (西門町) from the user's own browser game *臺北狂飆 / TAIPEI RUSH*
-(https://taipei-gta.vercel.app), used with its author's permission: the source's street plan,
+**Taipei** is Ximending (西門町) from the browser game *臺北狂飆 / TAIPEI RUSH*
+(https://taipei-gta.vercel.app) by @aicodewithme: the source's street plan,
 building volumes and collision boxes, shop and blade signs, rooftop billboards, the Ximen gateway,
 the walk-in cinema lobby and game arcade, the arcades (騎樓) of the blocks along Zhongxiao W. Rd, the
 median hedges, the Civic Blvd expressway and the Red House, around the spot where that game starts
@@ -148,7 +148,7 @@ follow the junction gaps by rule, the generic buildings' balconies, window cages
 drawn by our own rules after the source's, and traffic and pedestrians are not carried over.
 
 **Taipei 101 · Xinyi** (big map, 24v24) is the Xinyi district (信義) around Taipei 101 from the same
-game, used with the same permission. `tools/import-xinyi.ts` runs that game's city code headless and
+game. `tools/import-xinyi.ts` runs that game's city code headless and
 writes `shared/maps/xinyi-data.ts`: the street plan (Xinyi, Songren, Heping, Songzhi and Keelung Rds),
 the basin's hills, every section of Taipei 101 as the source lofts it (the tapering base, the eight
 stacked segments with their lit bands, crown and spire, the ruyi and coin ornaments), the 101 plaza

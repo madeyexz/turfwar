@@ -7,8 +7,8 @@ import type { BlockStyle, MapDef, SignStyle } from './types';
 import { parkXinyiVehicles } from './xinyi-vehicles';
 
 /**
- * Xinyi (信義): Taipei 101 and the blocks around it, from the user's game 臺北狂飆 / TAIPEI RUSH
- * (taipei-gta.vercel.app, used with its author's permission). shared/maps/xinyi-data.ts, which
+ * Xinyi (信義): Taipei 101 and the blocks around it, from 臺北狂飆 / TAIPEI RUSH
+ * by @aicodewithme (taipei-gta.vercel.app). shared/maps/xinyi-data.ts, which
  * tools/import-xinyi.ts extracts from that game's built code, supplies the street plan, the
  * basin's hills, every section of the tower as the source lofts it (base, eight segments, crown,
  * spire, ruyi and coin ornaments), the podium mall's shell, the Xinyi Plaza Malls (信義新天地),
