@@ -359,9 +359,11 @@
 #menu .mcard:hover:not(:disabled) { border-color: rgba(127, 246, 255, 0.55); background: rgba(127, 246, 255, 0.06); }
 #menu .mcard[aria-pressed='true'] { border-color: var(--accent); background: rgba(127, 246, 255, 0.12); box-shadow: inset 0 0 0 1px var(--accent); }
 #menu .mcard:disabled { opacity: 0.38; cursor: not-allowed; }
-#menu .mcard .thumb { display: block; height: 72px; margin-bottom: 4px; border-radius: 2px; overflow: hidden; background: rgba(4, 9, 12, 0.9); border-bottom: 2px solid var(--swatch, var(--muted)); }
+/* The map's screenshot (16:9, so every card is the same height), or its plan when there is none; the theme colour under it. */
+#menu .mcard .thumb { display: block; aspect-ratio: 16 / 9; margin-bottom: 4px; border-radius: 2px; overflow: hidden; background: rgba(4, 9, 12, 0.9); border-bottom: 2px solid var(--swatch, var(--muted)); }
 /* (style.css pins every canvas full-screen for the renderer; thumbnails sit in their card.) */
-#menu .mcard .thumb canvas { position: static; inset: auto; display: block; width: 100%; height: 100%; object-fit: cover; }
+#menu .mcard .thumb canvas, #menu .mcard .thumb img { position: static; inset: auto; display: block; width: 100%; height: 100%; object-fit: cover; }
+#menu .mcard small { min-height: 1.3em; }
 #menu .mcard .any-thumb { display: grid; place-items: center; border-bottom-color: var(--accent); background: radial-gradient(circle at 50% 50%, rgba(127, 246, 255, 0.14), rgba(4, 9, 12, 0.9) 70%); }
 #menu .mcard .any-thumb svg { width: 34px; height: 34px; fill: none; stroke: var(--accent); stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; }
 #menu .mcard b { font-size: 14px; letter-spacing: 0.07em; text-transform: uppercase; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; padding: 0 2px; }

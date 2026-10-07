@@ -21,7 +21,7 @@ import { renderTheme, THEME_START } from './theme';
 import { SettingsMenu, type GraphicsQuality, type SettingsTab } from './ui/settingsmenu';
 import { cjkFontReady } from './ui/fonts';
 import { drawMapThumb } from './ui/mapthumb';
-import { L, applyI18n, escapeHtml as esc, isZh, lang, mapName as localMapName, mapRegion, modeName, onLang, plural, serverError, sizeName, t, type Key } from './ui/i18n';
+import { L, applyI18n, escapeHtml as esc, isZh, lang, mapName as localMapName, modeName, onLang, plural, serverError, sizeName, t, type Key } from './ui/i18n';
 import './style.css';
 import './menu.css';
 import './ui/lang-zh.css';
@@ -741,26 +741,44 @@ menu.addEventListener('focusout', e => {
   if (openPop && next && !openPop.contains(next) && next !== popAnchor) closePop(false);
 });
 
-/** The map picker: every map the form's size plays, with a plan, region and who is playing; maps the mode cannot host are disabled. */
-const thumbs = new Map<string, HTMLCanvasElement>();
-function thumb(id: string) {
-  let c = thumbs.get(id);
-  if (!c) { c = document.createElement('canvas'); c.width = 168; c.height = 96; drawMapThumb(c, id); thumbs.set(id, c); }
+/**
+ * A map card's picture: the map's screenshot (public/media/maps/<id>.webp, shot by scripts/mapshots.ts),
+ * or its top-down plan when there is none or it fails to load. Kept per map, so redraws (live
+ * counts arrive often) move the same loaded element instead of loading it again.
+ */
+const thumbs = new Map<string, HTMLElement>();
+function plan(id: string) {
+  const c = document.createElement('canvas');
+  c.width = 168; c.height = 96;
+  drawMapThumb(c, id);
   return c;
 }
+function thumb(id: string) {
+  let el = thumbs.get(id);
+  if (!el) {
+    const img = document.createElement('img');
+    img.loading = 'lazy'; img.decoding = 'async'; img.width = 480; img.height = 270;
+    img.addEventListener('error', () => { const c = plan(id); thumbs.set(id, c); img.replaceWith(c); }, { once: true });
+    img.src = `/media/maps/${id}.webp`;
+    thumbs.set(id, el = img);
+  }
+  if (el instanceof HTMLImageElement) el.alt = mapName(id);
+  return el;
+}
+/** The map picker: every map the form's size plays, with its picture, its bomb sites in Sabotage and who is playing; maps the mode cannot host are disabled. */
 function renderMapGrid() {
   const grid = $('#map-grid');
   const live = liveByMap();
   $('#map-pop-sub').textContent = `${t('lobby.mapsFor', { size: sizeOf(size).label })} · ${modeName(mode)}`;
-  const small = (m: (typeof maps)[number]) => mode === 'sabotage'
-    ? t(m.sites > 1 ? 'lobby.sitesAB' : m.sites ? 'lobby.siteA' : 'lobby.noSites') : mapRegion(m.id, m.region).split('/')[0].trim();
+  // Under the name: the bomb sites in Sabotage, nothing in Elimination (the line keeps its height either way).
+  const sites = (m: (typeof maps)[number]) => mode === 'sabotage' ? t(m.sites > 1 ? 'lobby.sitesAB' : m.sites ? 'lobby.siteA' : 'lobby.noSites') : '';
   const fits = mapsFor(perTeam());
   grid.innerHTML = maps.filter(m => fits.includes(m.id)).map(m => {
-    const ok = mapOk(m.id), n = live.get(m.id) ?? 0;
+    const ok = mapOk(m.id), n = live.get(m.id) ?? 0, note = ok ? sites(m) : t('lobby.noSites');
     return `<button type="button" class="mcard" data-pick="${m.id}" data-theme="${m.theme}" aria-pressed="${m.id === map}"${ok ? '' : ` disabled title="${esc(t('lobby.noSites'))}"`}>
       <span class="thumb" data-thumb="${m.id}"></span>
       <b>${esc(mapName(m.id))}</b>
-      <small>${esc(ok ? small(m) : t('lobby.noSites'))}</small>
+      <small>${note ? esc(note) : '&nbsp;'}</small>
       <span class="live${n ? ' on' : ''}">${n ? `<i></i>${esc(t('lobby.playing', { n }))}` : '&nbsp;'}</span>
     </button>`;
   }).join('');

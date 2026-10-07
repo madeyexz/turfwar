@@ -573,26 +573,26 @@ export const DICTIONARIES: Record<Lang, Record<Key, string>> = { en, 'zh-TW': zh
 
 // ---- Names that live in shared/ data (English there; Chinese here) ----
 
-/** Map names and the region line under them ("place / feature"). */
-const MAPS_ZH: Record<MapId, { name: string; region: string }> = {
-  crane: { name: '起重機', region: '山頂倉儲 / 倒塌的起重機' },
-  tower: { name: '塔樓', region: '山坡貨運站' },
-  warehouse: { name: '倉庫', region: '貨運站 / 貨箱大廳' },
-  pipeline: { name: '輸油管', region: '北方森林 / 抽油站' },
-  courtyard: { name: '庭園', region: '圍牆花園 / 藍調時刻' },
-  timbertown: { name: '伐木鎮', region: '廢棄莊園 / 木材場' },
-  cinder: { name: '灰燼盆地', region: '沙漠 / 科技前哨' },
-  frostline: { name: '霜線前哨', region: '凍原 / 中繼站' },
-  verdant: { name: '翠綠分水嶺', region: '叢林 / 通訊陣列' },
-  ochre: { name: '赭石舊城', region: '沙漠 / 舊城區' },
-  citadel: { name: '山城要塞', region: '翠綠高地 / 山頂要塞' },
-  railyard: { name: '鐵道貨場', region: '沙漠終點站 / 貨運場' },
-  skyline: { name: '天際屋頂', region: '北境生態城 / 上城區' },
-  meridian: { name: '子午線街區', region: '沙漠 / 市區' },
-  taipei: { name: '西門町', region: '西門町 / 台北' },
-  xinyi: { name: '台北101・信義', region: '信義區 / 台北' },
-  taipei101: { name: '台北101・88F', region: '高樓辦公層 / 信義區' },
-  memorial: { name: '中正紀念堂', region: '中正區 / 台北' },
+/** Map names. */
+const MAPS_ZH: Record<MapId, { name: string }> = {
+  crane: { name: '起重機' },
+  tower: { name: '塔樓' },
+  warehouse: { name: '倉庫' },
+  pipeline: { name: '輸油管' },
+  courtyard: { name: '庭園' },
+  timbertown: { name: '伐木鎮' },
+  cinder: { name: '灰燼盆地' },
+  frostline: { name: '霜線前哨' },
+  verdant: { name: '翠綠分水嶺' },
+  ochre: { name: '赭石舊城' },
+  citadel: { name: '山城要塞' },
+  railyard: { name: '鐵道貨場' },
+  skyline: { name: '天際屋頂' },
+  meridian: { name: '子午線街區' },
+  taipei: { name: '西門町' },
+  xinyi: { name: '台北101・信義' },
+  taipei101: { name: '台北101・88F' },
+  memorial: { name: '中正紀念堂' },
 };
 
 /** Attachment names: the optics in Taiwan players' words (紅點, 全像, ACOG, 倍鏡). */
@@ -678,7 +678,6 @@ export const teamShort = (team: number) => t(team === 1 ? 'team.short.1' : 'team
 export const modeName = (mode: string) => t(mode === 'sabotage' ? 'mode.sabotage' : 'mode.elimination');
 export const sizeName = (id: 'duel' | 'squad' | 'war') => t(`size.${id}`);
 export const mapName = (id: string, english: string) => (isZh() && MAPS_ZH[id as MapId]?.name) || english;
-export const mapRegion = (id: string, english: string) => (isZh() && MAPS_ZH[id as MapId]?.region) || english;
 export const attachmentName = (id: AttachmentId, english: string) => (isZh() && ATTACHMENTS_ZH[id]) || english;
 export const weaponClass = (c: WeaponClass) => t(`class.${c}`);
 export const roundReason = (r: string | undefined) => (r && `reason.${r}` in en ? t(`reason.${r}` as Key) : '');
