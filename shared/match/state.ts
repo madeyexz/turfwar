@@ -212,8 +212,9 @@ export type MatchEvent =
   | { type: 'bomb'; action: 'armed' | 'disarmed' | 'exploded'; site: number; by: number }
   | { type: 'reward'; id: number; amount: number; reason: string }
   | { type: 'chat'; id: number; name: string; team: Team; text: string; teamOnly: boolean }
-  | { type: 'join'; id: number; name: string; team: Team }
-  | { type: 'leave'; id: number; name: string }
+  /** A soldier joined or left the room; `bot` and the leaver's `team` are missing from older servers. */
+  | { type: 'join'; id: number; name: string; team: Team; bot?: boolean }
+  | { type: 'leave'; id: number; name: string; team?: Team; bot?: boolean }
   /** A soldier got in or out of vehicle `vehicle` (seat 0 drives), a hit on its body, or its wreck. */
   | { type: 'vehicle'; action: 'enter' | 'exit' | 'hit' | 'wreck'; vehicle: number; id: number; seat?: number; amount?: number };
 
