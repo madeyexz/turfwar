@@ -251,6 +251,7 @@ body.menu-open #hud, body.menu-open #hud * { visibility: hidden; }
 
 /* Full-screen overlays: low health (grey world, red edge), hit flash, scopes, binoculars */
 .lowhp { position: absolute; inset: 0; backdrop-filter: grayscale(1) contrast(1.05); -webkit-backdrop-filter: grayscale(1) contrast(1.05); background: radial-gradient(ellipse at center, transparent 42%, rgba(150, 0, 0, 0.6)); transition: opacity 0.4s; }
+.smokefog { position: absolute; inset: 0; opacity: 0; background: radial-gradient(ellipse at center, rgba(178, 182, 186, 0.93), rgba(150, 154, 158, 0.99)); }
 .flash { position: absolute; inset: 0; background: radial-gradient(ellipse at center, transparent 40%, rgba(255, 50, 30, 0.24)); opacity: 0; }
 .scope { --lens: 33.2vh; position: absolute; inset: 0;
   /* Soft black surround, chromatic lens edge, then a slight tint that darkens toward the rim. */

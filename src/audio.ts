@@ -783,6 +783,15 @@ export class Audio {
     this.tone(out, t, 'sine', 70, 28, 0.9, 1.1);
   }
 
+  /** An M18 popping: a dull pop, then the canister's long hiss. */
+  smoke(listener: Listener, at: V3) {
+    if (!this.ready) return;
+    const t = this.now(), out = this.out(0.7, listener, at, 0.3);
+    this.noiseBurst(out, t, 0.18, 'lowpass', 700, 0.8, 0.9, 0.003);
+    this.noiseBurst(out, t + 0.05, 2.6, 'highpass', 2400, 0.5, 0.35, 0.25);
+    this.noiseBurst(out, t + 0.05, 2.2, 'bandpass', 900, 0.7, 0.25, 0.3);
+  }
+
   footstep(listener: Listener | undefined, at: V3 | undefined, sprint: boolean) {
     if (!this.ready) return;
     const t = this.now(), out = this.out(listener ? 0.35 : 0.18, listener, at, 0.1);

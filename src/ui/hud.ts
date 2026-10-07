@@ -2,9 +2,10 @@ import * as THREE from 'three';
 import type { CollisionWorld } from '../../shared/collision';
 import { loadMap } from '../../shared/maps';
 import type { MapDef } from '../../shared/maps/types';
+import { smokeBlocks } from '../../shared/match/combat';
 import { statsOf } from '../../shared/match/economy';
 import { ATTACKERS, type MatchState, type Soldier, type Team } from '../../shared/match/state';
-import { ATTACHMENTS, ATTACHMENT_SLOTS, HEALTH, STAMINA, WEAPONS, type AttachmentCategory, type WeaponId } from '../../shared/weapons';
+import { ATTACHMENTS, ATTACHMENT_SLOTS, HEALTH, SMOKE, STAMINA, WEAPONS, type AttachmentCategory, type WeaponId } from '../../shared/weapons';
 import type { CareerStats } from '../game/link';
 import type { ActionId } from '../game/keybinds';
 import { kbd } from './keys';
@@ -85,6 +86,7 @@ export class Hud {
     this.root = document.createElement('div');
     this.root.id = 'hud';
     this.root.innerHTML = `
+      <div class="smokefog" data-k="smokefog"></div>
       <div class="lowhp" data-k="lowhp" hidden></div>
       <div class="flash" data-k="flash"></div>
       <div class="scope" data-k="scope" hidden><svg class="scope-reticle sniper" viewBox="-100 -100 200 200" aria-hidden="true"><g fill="#050607"><rect x="-100" y="-1.3" width="68" height="2.6" rx="1.3"/><rect x="32" y="-1.3" width="68" height="2.6" rx="1.3"/><rect x="-1.3" y="32" width="2.6" height="68" rx="1.3"/><rect x="-1.3" y="-100" width="2.6" height="68" rx="1.3"/></g><g stroke="#050607" stroke-width="0.32"><line x1="-32" y1="0" x2="32" y2="0"/><line x1="0" y1="-32" x2="0" y2="32"/></g><g fill="#050607">${[-24, -18, -12, -6, 6, 12, 18, 24].map(i => `<circle cx="${i}" cy="0" r="0.75"/><circle cx="0" cy="${i}" r="0.75"/>`).join('')}</g><circle class="lit" r="0.55"/></svg><svg class="scope-reticle prism" viewBox="-100 -100 200 200" aria-hidden="true"><g class="lit-stroke" fill="none" stroke-width="1.6" stroke-linejoin="round" filter="url(#hud-glow)"><path d="M -7 7 L 0 -1 L 7 7"/></g><defs><filter id="hud-glow" x="-50%" y="-50%" width="200%" height="200%"><feGaussianBlur stdDeviation="1.2" result="b"/><feMerge><feMergeNode in="b"/><feMergeNode in="SourceGraphic"/></feMerge></filter></defs><g stroke="#08090a" stroke-width="0.5"><line x1="0" y1="9" x2="0" y2="60"/><line x1="-6" y1="18" x2="6" y2="18"/><line x1="-4.5" y1="27" x2="4.5" y2="27"/><line x1="-3.2" y1="36" x2="3.2" y2="36"/><line x1="-2.2" y1="45" x2="2.2" y2="45"/><line x1="-100" y1="0" x2="-30" y2="0"/><line x1="30" y1="0" x2="100" y2="0"/></g></svg><span class="scope-mag" data-k="scopeMag"></span></div>
@@ -261,6 +263,7 @@ export class Hud {
       const d = v.length(), along = v.dot(this.fwd);
       if (d > bestD || along <= 0 || d * d - along * along > 0.75 * 0.75) continue;
       if (!ignoreLos && this.world && !this.world.lineOfSight(this.eye, { x: pos.x, y: pos.y + 1.25, z: pos.z })) continue;
+      if (!ignoreLos && smokeBlocks(state.bodies, this.eye, { x: pos.x, y: pos.y + 1.25, z: pos.z })) continue;
       best = s; bestD = d;
     }
     return best;
@@ -381,8 +384,8 @@ export class Hud {
     const ammo = p.ammo[p.slot as 0 | 1] ?? 0;
     // Without a counter the panel is a plain list of what you carry (key, weapon), the one in hand lit.
     const carried = [['primary', WEAPONS[p.weapons[0]].name, p.slot === 0], ['secondary', WEAPONS[p.weapons[1]].name, p.slot === 1], ['knife', t('cause.knife'), p.slot === 2],
-      ['grenade', `M67 ×${p.grenades}${me?.grenadeHE ? ' HE' : ''}`, false]] as [ActionId, string, boolean][];
-    const list = `<ul class="carried">${carried.map(([k, name, on]) => `<li class="${on ? 'on' : ''}${k === 'grenade' && !p.grenades ? ' none' : ''}">${kbd(k)}${name}</li>`).join('')}</ul>`;
+      ['grenade', `M67 ×${p.grenades}${me?.grenadeHE ? ' HE' : ''}`, false], ['smoke', `M18 ×${p.smokes}`, false]] as [ActionId, string, boolean][];
+    const list = `<ul class="carried">${carried.map(([k, name, on]) => `<li class="${on ? 'on' : ''}${(k === 'grenade' && !p.grenades) || (k === 'smoke' && !p.smokes) ? ' none' : ''}">${kbd(k)}${name}</li>`).join('')}</ul>`;
     this.set('ammo', counter && !melee ? `${ammo}<small>/ ${p.reserve[p.slot as 0 | 1]}</small>` : list, 'html');
     this.el.arms.classList.toggle('listed', !counter || melee);
     this.el.ammo.classList.toggle('low', counter && !melee && ammo > 0 && ammo <= Math.max(3, w.magazine * 0.25));
@@ -390,7 +393,8 @@ export class Hud {
     this.set('reload', `${p.reloading ? (1 - p.reloadLeft / p.reloadTotal) * 100 : 0}%`, 'width');
     const slot = (key: ActionId, name: string, on: boolean, extra = '') => `<span class="${on ? 'on' : ''}">${kbd(key)}${name}${extra}</span>`;
     this.set('slots', slot('knife', t('hud.knife'), p.slot === 2) + slot('secondary', WEAPONS[p.weapons[1]].name, p.slot === 1) + slot('primary', WEAPONS[p.weapons[0]].name, p.slot === 0)
-      + `<span class="nade${p.grenades > 0 ? '' : ' none'}">${kbd('grenade')}M67 ×${p.grenades}${me?.grenadeHE ? '<em>HE</em>' : ''}</span>`, 'html');
+      + `<span class="nade${p.grenades > 0 ? '' : ' none'}">${kbd('grenade')}M67 ×${p.grenades}${me?.grenadeHE ? '<em>HE</em>' : ''}</span>`
+      + `<span class="nade${p.smokes > 0 ? '' : ' none'}">${kbd('smoke')}M18 ×${p.smokes}</span>`, 'html');
   }
 
   /** BeGone's score bar: one avatar per soldier, most kills nearest the clock. */
@@ -649,6 +653,12 @@ export class Hud {
 
   get chatting() { return this.chatOpen; }
 
+  /** How deep the camera sits in smoke (0..1): greys out the whole screen. */
+  smokeFog(k: number) {
+    const v = k < 0.02 ? '0' : k.toFixed(2);
+    if (this.el.smokefog.style.opacity !== v) this.el.smokefog.style.opacity = v;
+  }
+
   /** Rotating minimap: walls, bomb sites, ammo crates, the armed bomb, teammates and enemies who just fired (unsuppressed). */
   minimap(state: MatchState, me: Soldier | undefined, yaw: number, positions: Map<number, THREE.Vector3>, myPos: THREE.Vector3) {
     const ctx = this.minimapCtx, size = 380, scale = 2.1;
@@ -682,6 +692,12 @@ export class Hud {
           if (armed && blink) { ctx.fillStyle = '#ff3a2a'; ctx.beginPath(); ctx.arc(0, 20, 7, 0, Math.PI * 2); ctx.fill(); }
         });
       });
+    }
+    // Smoke clouds: soft grey discs, drawn under everyone (they hide nobody on the map).
+    for (const b of state.bodies) {
+      if (b.kind !== 'smokeCloud') continue;
+      ctx.fillStyle = 'rgba(205,210,214,0.45)';
+      ctx.beginPath(); ctx.arc(b.x * scale, b.z * scale, SMOKE.radius * scale, 0, Math.PI * 2); ctx.fill();
     }
     // Vehicles: white when free, team-coloured when crewed (enemy crews only show while near).
     for (const v of state.vehicles) {

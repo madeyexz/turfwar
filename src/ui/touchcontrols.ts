@@ -21,6 +21,7 @@ export const ICONS: Partial<Record<PlaceId, string>> = {
   zoom: svg('<circle cx="10.5" cy="10.5" r="6" fill="none"/><path d="M15 15l5 5M10.5 8v5M8 10.5h5"/>'),
   binoculars: svg('<circle cx="7" cy="15" r="4" fill="none"/><circle cx="17" cy="15" r="4" fill="none"/><path d="M7 11V6h3v5M17 11V6h-3v5M10 13h4" fill="none"/>'),
   grenade: svg('<ellipse cx="12" cy="14" rx="6" ry="7" fill="none"/><path d="M10 7V4h4v3M14 5h4" fill="none"/>'),
+  smoke: svg('<rect x="6" y="10" width="7" height="11" rx="1.2" fill="none"/><path d="M8 10V7.5h3V10" fill="none"/><path d="M13.5 8.5a2.6 2.6 0 0 1 4.6-1.7 2.4 2.4 0 1 1 .9 4.6H15" fill="none"/>'),
   handbrake: svg('<path d="M7 20V4h5.5a4.5 4.5 0 0 1 0 9H7" fill="none"/>'),
   climb: svg('<path d="M12 20V5M6 11l6-6 6 6" fill="none"/>'),
   descend: svg('<path d="M12 4v15M6 13l6 6 6-6" fill="none"/>'),
@@ -67,6 +68,8 @@ export interface TouchInfo {
   slot: number;
   weapons: [string, string];
   grenades: number;
+  /** M18 smoke grenades carried. */
+  smokes?: number;
   /** What the Use button does here. */
   use?: 'vehicle' | 'crate' | 'arm' | 'disarm';
   /** The store is worth a look: buy time in base, or a free store. */
@@ -197,17 +200,18 @@ export class TouchControls {
       if (!stickShown(ctx.scope)) this.releaseStick();
     }
     if (ctx.scope === 'none' || ctx.scope === 'dead') { this.hold.reset(); this.holdId = undefined; }
-    const ikey = `${info.slot}|${info.weapons}|${info.grenades}|${info.use}|${info.storeHot}`;
+    const ikey = `${info.slot}|${info.weapons}|${info.grenades}|${info.smokes}|${info.use}|${info.storeHot}`;
     if (ikey !== this.infoKey) {
       this.infoKey = ikey;
       const label = (id: ControlId, text: string) => { const l = this.buttons.get(id)?.querySelector('.tc-l'); if (l) l.textContent = text; };
       label('primary', info.weapons[0]); label('secondary', info.weapons[1]);
-      label('grenade', `×${info.grenades}`);
+      label('grenade', `×${info.grenades}`); label('smoke', `×${info.smokes ?? 0}`);
       label('use', t(info.use ? `tc.use.${info.use}` : 'tc.use'));
       this.buttons.get('primary')?.classList.toggle('on', info.slot === 0);
       this.buttons.get('secondary')?.classList.toggle('on', info.slot === 1);
       this.buttons.get('knife')?.classList.toggle('on', info.slot === 2);
       this.buttons.get('grenade')?.classList.toggle('empty', info.grenades <= 0);
+      this.buttons.get('smoke')?.classList.toggle('empty', !info.smokes);
       this.buttons.get('store')?.classList.toggle('hot', !!info.storeHot);
     }
     for (const [id, el] of this.buttons) el.classList.toggle('active', this.held.has(id) || this.toggled.has(id) || this.fingerOn(id));

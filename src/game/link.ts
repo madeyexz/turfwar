@@ -21,6 +21,8 @@ export interface GameLink {
   report(r: ClientReport): void;
   fire(claim: ShotClaim): void;
   grenade(origin: Vec3, dir: Vec3): void;
+  /** Throw the M18 smoke grenade (the host checks we carry one). */
+  smoke(origin: Vec3, dir: Vec3): void;
   reload(): void;
   switchWeapon(slot: Slot): void;
   /** Store purchase (validated by the host: buy time in base, cash). */

@@ -234,6 +234,12 @@ export const WEAPONS: Record<WeaponId, WeaponDef> = Object.fromEntries(WEAPON_ID
 export const GRENADE = { price: 1000, damage: 70, radius: 22, fuse: 2.1, throwSpeed: 28 * 0.75, throwDelay: 1.5, max: 1 };
 /** High Explosive mod for the M67: +45 damage, −6 m radius. */
 export const HIGH_EXPLOSIVE = { price: 1500, damage: 45, radius: -6 };
+/**
+ * M18 smoke grenade (not in BeGone; added 2026-10-07): $300, one carried, thrown like the M67. It
+ * pops `fuse` s after the throw into a cloud that hides what is in it or behind it for `duration` s:
+ * a sphere of `radius` m centred `height` m above where it landed. It blocks sight (bots' too), not bullets.
+ */
+export const SMOKE = { price: 300, max: 1, fuse: 1.6, duration: 15, radius: 4.5, height: 1.6 };
 
 /** 100 HP, no armor, no regeneration within a round; below `critical` the screen desaturates. */
 export const HEALTH = { max: 100, critical: 25 };
