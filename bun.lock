@@ -2,7 +2,7 @@
   "lockfileVersion": 1,
   "workspaces": {
     "": {
-      "name": "lawbreaker",
+      "name": "turfwar",
       "dependencies": {
         "@vercel/analytics": "^2.0.1",
         "posthog-js": "^1.438.1",

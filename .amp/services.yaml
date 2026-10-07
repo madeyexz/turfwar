@@ -6,7 +6,7 @@ services:
     command: bun run dev --port "$PORT" --strictPort
     env:
       VITE_SPACETIMEDB_URI: same-origin
-      VITE_SPACETIMEDB_DATABASE: lawbreaker
+      VITE_SPACETIMEDB_DATABASE: turfwar
     agent: control
     portal:
       url: /

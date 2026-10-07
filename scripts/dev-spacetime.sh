@@ -5,7 +5,7 @@ set -euo pipefail
 cd "$(dirname "$0")/.."
 SPACETIME="${SPACETIME:-$(command -v spacetime || echo "$HOME/.local/bin/spacetime")}"
 PORT="${PORT:-3000}"
-DATABASE="${STDB_DATABASE:-lawbreaker}"
+DATABASE="${STDB_DATABASE:-turfwar}"
 "$SPACETIME" start --listen-addr "127.0.0.1:$PORT" --non-interactive &
 server=$!
 trap 'kill "$server" 2>/dev/null || true' EXIT

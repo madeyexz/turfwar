@@ -20,8 +20,8 @@ bun run typecheck:module
 Online play locally needs the [SpacetimeDB CLI](https://spacetimedb.com/install) (verified with 2.10.2):
 
 ```sh
-bun run dev:spacetime  # starts a local server on :3000 and (re)publishes the module as "lawbreaker"
-VITE_SPACETIMEDB_URI=same-origin VITE_SPACETIMEDB_DATABASE=lawbreaker bun run dev
+bun run dev:spacetime  # starts a local server on :3000 and (re)publishes the module as "turfwar"
+VITE_SPACETIMEDB_URI=same-origin VITE_SPACETIMEDB_DATABASE=turfwar bun run dev
 ```
 
 `same-origin` routes the websocket through the dev server at `/stdb`, so a single URL serves the
