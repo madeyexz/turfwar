@@ -26,8 +26,21 @@ export type AdminAttempt = __Infer<typeof AdminAttempt>;
 export const AdminDaily = __t.object("AdminDaily", {});
 export type AdminDaily = __Infer<typeof AdminDaily>;
 
+export const AdminDailyNet = __t.object("AdminDailyNet", {});
+export type AdminDailyNet = __Infer<typeof AdminDailyNet>;
+
 export const AdminDailyTime = __t.object("AdminDailyTime", {});
 export type AdminDailyTime = __Infer<typeof AdminDailyTime>;
+
+export const AdminDayNetRow = __t.object("AdminDayNetRow", {
+  day: __t.u32(),
+  date: __t.string(),
+  players: __t.u32(),
+  medianP50: __t.u16(),
+  medianP95: __t.u16(),
+  correctionsPerMin: __t.f32(),
+});
+export type AdminDayNetRow = __Infer<typeof AdminDayNetRow>;
 
 export const AdminDayRow = __t.object("AdminDayRow", {
   day: __t.u32(),
@@ -59,6 +72,20 @@ export const AdminOverviewRow = __t.object("AdminOverviewRow", {
   admins: __t.u32(),
 });
 export type AdminOverviewRow = __Infer<typeof AdminOverviewRow>;
+
+export const AdminPlayerNet = __t.object("AdminPlayerNet", {});
+export type AdminPlayerNet = __Infer<typeof AdminPlayerNet>;
+
+export const AdminPlayerNetRow = __t.object("AdminPlayerNetRow", {
+  id: __t.string(),
+  pingP50: __t.u16(),
+  pingP95: __t.u16(),
+  worstP95: __t.u16(),
+  correctionsPerMin: __t.f32(),
+  measuredMinutes: __t.f32(),
+  lastAt: __t.timestamp(),
+});
+export type AdminPlayerNetRow = __Infer<typeof AdminPlayerNetRow>;
 
 export const AdminPlayerRow = __t.object("AdminPlayerRow", {
   id: __t.string(),
@@ -249,6 +276,18 @@ export const PlayerDay = __t.object("PlayerDay", {
 });
 export type PlayerDay = __Infer<typeof PlayerDay>;
 
+export const PlayerDayNet = __t.object("PlayerDayNet", {
+  key: __t.string(),
+  day: __t.u32(),
+  identity: __t.identity(),
+  reports: __t.u32(),
+  seconds: __t.u32(),
+  p50Sum: __t.f64(),
+  p95Sum: __t.f64(),
+  corrections: __t.u32(),
+});
+export type PlayerDayNet = __Infer<typeof PlayerDayNet>;
+
 export const PlayerDayTime = __t.object("PlayerDayTime", {
   key: __t.string(),
   day: __t.u32(),
@@ -256,6 +295,20 @@ export const PlayerDayTime = __t.object("PlayerDayTime", {
   seconds: __t.u32(),
 });
 export type PlayerDayTime = __Infer<typeof PlayerDayTime>;
+
+export const PlayerNet = __t.object("PlayerNet", {
+  identity: __t.identity(),
+  reports: __t.u32(),
+  lastP50: __t.u16(),
+  lastP95: __t.u16(),
+  avgP50: __t.f32(),
+  avgP95: __t.f32(),
+  worstP95: __t.u16(),
+  corrections: __t.u32(),
+  measuredSeconds: __t.u32(),
+  lastAt: __t.timestamp(),
+});
+export type PlayerNet = __Infer<typeof PlayerNet>;
 
 export const PlayerSeen = __t.object("PlayerSeen", {
   identity: __t.identity(),

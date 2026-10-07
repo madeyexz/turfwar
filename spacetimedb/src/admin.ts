@@ -1,4 +1,5 @@
 import { constantTimeEqual, sha256Hex } from '../../shared/sha256';
+import { median, perMinute, type NetDay } from '../../shared/netstats';
 
 /**
  * The owner's admin dashboard (`/admin`), checked inside the module: no owner token anywhere.
@@ -156,5 +157,48 @@ export function dailyTimeRows(lastDay: number, playOn: (day: number) => bigint, 
   if (lastDay < 0) return [];
   const rows: DailyTimeRow[] = [];
   for (let day = lastDay - days + 1; day <= lastDay; day++) rows.push({ day, date: dateOf(day), playSeconds: playOn(day) });
+  return rows;
+}
+
+// ---- Connection quality (shared/netstats.ts; views of their own, like play time) -------------
+
+/** A `player_net` row (identity hex, `lastAt` in epoch microseconds). */
+export interface NetLike { identity: string; avgP50: number; avgP95: number; worstP95: number; corrections: number; measuredSeconds: number; lastAt: bigint }
+
+/** Matches `PlayerRow.id`: typical ping (time-weighted mean of the reported p50 and p95), the worst p95, corrections per minute in a room. */
+export interface PlayerNetRow { id: string; pingP50: number; pingP95: number; worstP95: number; correctionsPerMin: number; measuredMinutes: number; lastAt: bigint }
+
+/** One row per player who has reported connection quality (players without one have no row). */
+export function playerNetRows(rows: Iterable<NetLike>): PlayerNetRow[] {
+  const out: PlayerNetRow[] = [];
+  for (const r of rows) {
+    out.push({
+      id: shortId(r.identity), pingP50: Math.round(r.avgP50), pingP95: Math.round(r.avgP95), worstP95: r.worstP95,
+      correctionsPerMin: perMinute(r.corrections, r.measuredSeconds), measuredMinutes: Math.round((r.measuredSeconds / 60) * 10) / 10, lastAt: r.lastAt,
+    });
+  }
+  return out;
+}
+
+export interface DailyNetRow { day: number; date: string; players: number; medianP50: number; medianP95: number; correctionsPerMin: number }
+
+/**
+ * Connection quality per UTC day for the `days` days ending with `lastDay` (-1 = none): the median
+ * over that day's players of each one's mean p50 and p95 (weighted by seconds), and corrections per
+ * minute over everyone's time in rooms. A day without reports has `players` 0.
+ */
+export function dailyNetRows(lastDay: number, rowsOn: (day: number) => Iterable<NetDay>, days = 30): DailyNetRow[] {
+  if (lastDay < 0) return [];
+  const rows: DailyNetRow[] = [];
+  for (let day = lastDay - days + 1; day <= lastDay; day++) {
+    const p50: number[] = [], p95: number[] = [];
+    let seconds = 0, corrections = 0;
+    for (const r of rowsOn(day)) {
+      if (r.seconds <= 0) continue;
+      p50.push(r.p50Sum / r.seconds); p95.push(r.p95Sum / r.seconds);
+      seconds += r.seconds; corrections += r.corrections;
+    }
+    rows.push({ day, date: dateOf(day), players: p50.length, medianP50: Math.round(median(p50) ?? 0), medianP95: Math.round(median(p95) ?? 0), correctionsPerMin: perMinute(corrections, seconds) });
+  }
   return rows;
 }

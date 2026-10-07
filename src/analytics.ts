@@ -1,5 +1,6 @@
 import type { Mode } from '../shared/match/state';
 import type { VehicleKind } from '../shared/vehicles';
+import type { NetFields } from '../shared/netstats';
 import type { ServerId } from './net/servers';
 
 /**
@@ -21,7 +22,8 @@ export interface Events {
   /** `server_choice`: the server an online play goes to (Settings → Server); offline plays leave it out. */
   play_clicked: { kind: PlayKind; size: string; mode: Mode | ''; map: string; server_choice?: ServerId };
   match_joined: { online: boolean; room?: string; map: string; mode: Mode; size: string; team: 'swat' | 'militia'; server_choice?: ServerId };
-  match_left: { seconds: number; kills: number; deaths: number; rounds_played: number; reason: Reason };
+  /** Online, also the match's connection quality (shared/netstats.ts): ping percentiles over the newest ≤600 samples, totals for the rest. */
+  match_left: { seconds: number; kills: number; deaths: number; rounds_played: number; reason: Reason } & Partial<Omit<NetFields, 'seconds'>>;
   round_ended: { won: boolean; mode: Mode; map: string };
   vehicle_entered: { kind: VehicleKind };
   store_purchase: { item: string; price: number };
@@ -29,6 +31,8 @@ export interface Events {
   error_shown: { where: string; message: string };
   /** The lobby found the game server asleep and it came up after `seconds` (`queued`: a play button was waiting). */
   server_woke: { seconds: number; queued: boolean };
+  /** Every 5 minutes of a long online match: connection quality over those minutes (`seconds` in a room). */
+  net_sample: NetFields;
 }
 type EventName = keyof Events;
 type Props = Record<string, string | number | boolean>;
@@ -160,11 +164,11 @@ export function roundEnded(props: Events['round_ended']) {
   track('round_ended', props);
 }
 
-/** The match is over for us (menu, a dropped connection, or the tab closing); sent once. */
-export function matchLeft(reason: Reason, score: { kills: number; deaths: number }) {
+/** The match is over for us (menu, a dropped connection, or the tab closing); sent once. `net`: online connection quality. */
+export function matchLeft(reason: Reason, score: { kills: number; deaths: number }, net?: Omit<NetFields, 'seconds'>) {
   if (!match) return;
   const seconds = Math.round((performance.now() - match.start) / 1000);
   const rounds = match.rounds;
   match = undefined;
-  track('match_left', { seconds, kills: score.kills, deaths: score.deaths, rounds_played: rounds, reason }, { beacon: reason === 'close' });
+  track('match_left', { seconds, kills: score.kills, deaths: score.deaths, rounds_played: rounds, reason, ...net }, { beacon: reason === 'close' });
 }

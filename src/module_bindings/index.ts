@@ -49,6 +49,7 @@ import JoinReducer from "./join_reducer";
 import JoinPublicReducer from "./join_public_reducer";
 import JoinRoomReducer from "./join_room_reducer";
 import LeaveReducer from "./leave_reducer";
+import NetStatsReducer from "./net_stats_reducer";
 import QuickAnyReducer from "./quick_any_reducer";
 import QuickJoinReducer from "./quick_join_reducer";
 import QuickPlayReducer from "./quick_play_reducer";
@@ -64,8 +65,10 @@ import VehicleReportReducer from "./vehicle_report_reducer";
 
 // Import all table schema definitions
 import AdminDailyRow from "./admin_daily_table";
+import AdminDailyNetRow from "./admin_daily_net_table";
 import AdminDailyTimeRow from "./admin_daily_time_table";
 import AdminOverviewRow from "./admin_overview_table";
+import AdminPlayerNetRow from "./admin_player_net_table";
 import AdminPlayerTimeRow from "./admin_player_time_table";
 import AdminPlayersRow from "./admin_players_table";
 import AdminRoomsRow from "./admin_rooms_table";
@@ -190,6 +193,13 @@ const tablesSchema = __schema({
     constraints: [
     ],
   }, AdminDailyRow),
+  adminDailyNet: __table({
+    name: 'admin_daily_net',
+    indexes: [
+    ],
+    constraints: [
+    ],
+  }, AdminDailyNetRow),
   adminDailyTime: __table({
     name: 'admin_daily_time',
     indexes: [
@@ -204,6 +214,13 @@ const tablesSchema = __schema({
     constraints: [
     ],
   }, AdminOverviewRow),
+  adminPlayerNet: __table({
+    name: 'admin_player_net',
+    indexes: [
+    ],
+    constraints: [
+    ],
+  }, AdminPlayerNetRow),
   adminPlayerTime: __table({
     name: 'admin_player_time',
     indexes: [
@@ -251,6 +268,7 @@ const reducersSchema = __reducers(
   __reducerSchema("join_public", JoinPublicReducer),
   __reducerSchema("join_room", JoinRoomReducer),
   __reducerSchema("leave", LeaveReducer),
+  __reducerSchema("net_stats", NetStatsReducer),
   __reducerSchema("quick_any", QuickAnyReducer),
   __reducerSchema("quick_join", QuickJoinReducer),
   __reducerSchema("quick_play", QuickPlayReducer),
