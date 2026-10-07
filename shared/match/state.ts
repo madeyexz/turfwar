@@ -154,7 +154,8 @@ const BEGONE = { roundsToWin: 10, bombTime: 40, armTime: 5, disarmTime: 5, freez
 export const ELIMINATION: MatchConfig = { ...BEGONE, mode: 'elimination', teamSize: 6, roundTime: 120, roundTimeSingle: 120, warmup: 3, botSkill: 0.45 };
 export const SABOTAGE: MatchConfig = { ...BEGONE, mode: 'sabotage', teamSize: 6, roundTime: 90, roundTimeSingle: 120, warmup: 3, botSkill: 0.45 };
 export const OFFLINE_CONFIG = ELIMINATION;
-export const ONLINE_CONFIG: MatchConfig = { ...ELIMINATION, warmup: 8, botSkill: 0.55 };
+/** Online rooms. Bots were 0.55 until 2026-10-07, when players found them too strong: now Solo's default, 0.45. */
+export const ONLINE_CONFIG: MatchConfig = { ...ELIMINATION, warmup: 8, botSkill: 0.45 };
 export const PRACTICE_CONFIG: MatchConfig = { ...ELIMINATION, teamSize: 0, roundsToWin: 1000, roundTime: 3600, warmup: 1, botSkill: 0.4, practice: true, freeBuy: true };
 
 export interface BombState {

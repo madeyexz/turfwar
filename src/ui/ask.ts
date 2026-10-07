@@ -67,3 +67,30 @@ export function ask(o: AskOptions) {
   document.body.appendChild(el);
   input.focus({ preventScroll: true });
 }
+
+/**
+ * A yes/no question in the same dialog: `go` acts, `stay` (the default focus, so a stray Enter does
+ * not act), Esc or a tap outside closes it.
+ */
+export function confirmDialog(o: { title: string; why: string; go: string; stay: string; done: () => void }) {
+  document.querySelector('.ask-dialog')?.remove();
+  const el = document.createElement('div');
+  el.className = 'ask-dialog';
+  el.innerHTML = `<div class="panel" role="alertdialog" aria-modal="true" aria-labelledby="ask-title" aria-describedby="ask-why">
+    <header><h2 id="ask-title">${esc(o.title)}</h2></header>
+    <p class="why" id="ask-why">${esc(o.why)}</p>
+    <div class="choices"><button type="button" class="stay" data-act="stay">${esc(o.stay)}</button><button type="button" class="go danger" data-act="go">${esc(o.go)}</button></div>
+  </div>`;
+  const close = () => el.remove();
+  el.addEventListener('click', e => {
+    const target = e.target as HTMLElement;
+    const act = target.closest<HTMLElement>('[data-act]')?.dataset.act;
+    if (act === 'go') { close(); o.done(); } else if (act === 'stay' || target === el) close();
+  });
+  el.addEventListener('keydown', e => {
+    e.stopPropagation();
+    if (e.key === 'Escape') { e.preventDefault(); close(); }
+  });
+  document.body.appendChild(el);
+  el.querySelector<HTMLElement>('[data-act="stay"]')!.focus({ preventScroll: true });
+}
