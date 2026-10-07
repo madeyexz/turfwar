@@ -61,7 +61,7 @@ const en = {
   'server.pingTitle': 'Ping to the {server} server: round trip, median of the last {n} samples',
   // Waking the game server (src/net/wake.ts): it sleeps when nobody plays and boots on the next visit.
   'wake.head': 'Waking the server', 'wake.elapsed': '{n} s',
-  'wake.body': "The server is asleep to save costs — waking it up (about 30 s). It isn't down.",
+  'wake.body': 'The server is asleep to save costs — waking it up (about 30 s).',
   'wake.loading': 'Almost there: the server is up and loading the game.',
   'wake.slow': 'Taking a little longer than usual — still trying.',
   'wake.queued': 'Joining as soon as the server is up…', 'wake.cancel': 'Cancel', 'wake.waiting': 'Waiting for the server…',
@@ -342,7 +342,7 @@ const zhTW: Record<Key, string> = {
   'server.ms': '{n} ms', 'server.ping': '延遲 {ms}', 'server.measuring': '正在測量延遲…',
   'server.pingTitle': '到{server}伺服器的延遲：往返時間，取最近 {n} 次的中位數',
   'wake.head': '正在喚醒伺服器', 'wake.elapsed': '{n} 秒',
-  'wake.body': '伺服器休眠中，正在喚醒…（約 30 秒）不是故障，休眠是為了省成本。',
+  'wake.body': '伺服器休眠中，正在喚醒…（約 30 秒）休眠是為了省成本。',
   'wake.loading': '快好了：伺服器已啟動，正在載入遊戲。',
   'wake.slow': '比平常久一點，仍在持續嘗試。',
   'wake.queued': '伺服器一啟動就自動加入…', 'wake.cancel': '取消', 'wake.waiting': '等待伺服器…',
