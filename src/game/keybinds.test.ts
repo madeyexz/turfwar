@@ -41,6 +41,11 @@ describe('default key map', () => {
     expect(b.menu).toEqual(['KeyP']); expect(b.fullscreen).toEqual(['KeyF']); expect(b.leave).toEqual(['KeyM']);
   });
 
+  it('numbers the weapons like the loadout: 1 primary, 2 secondary, 3 knife', () => {
+    expect(b.primary).toEqual(['Digit1']); expect(b.secondary).toEqual(['Digit2']); expect(b.knife).toEqual(['Digit3']);
+    expect(allConflicts(b)).toEqual([]);
+  });
+
   it('reserves Esc everywhere, and the store\'s and menu\'s own keys there', () => {
     for (const a of ACTION_IDS) expect(problemWith(a, 'Escape'), a).toBe('escape');
     expect(RESERVED.MetaLeft).toBe('os');

@@ -59,9 +59,10 @@ export const ACTIONS = {
   /** Arm or disarm the bomb (held), the ammo crate, get into a vehicle. */
   use: { group: 'combat', scopes: FOOT, keys: ['KeyE'], hold: true },
 
-  knife: { group: 'equipment', scopes: ARMED, keys: ['Digit1'] },
+  // Numbered like the loadout: 1 primary, 2 secondary, 3 knife (until 2026-10 it was 1 knife, 3 primary).
+  primary: { group: 'equipment', scopes: ARMED, keys: ['Digit1'] },
   secondary: { group: 'equipment', scopes: ARMED, keys: ['Digit2'] },
-  primary: { group: 'equipment', scopes: ARMED, keys: ['Digit3'] },
+  knife: { group: 'equipment', scopes: ARMED, keys: ['Digit3'] },
   grenade: { group: 'equipment', scopes: ARMED, keys: ['Digit4', 'KeyG'] },
   /** The M18 smoke grenade. */
   smoke: { group: 'equipment', scopes: ARMED, keys: ['Digit5', 'KeyX'] },
