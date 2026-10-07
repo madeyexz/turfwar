@@ -136,6 +136,13 @@ export class PingMonitor {
     this.servers.set(uri, { url, samples: new PingSamples(), busy: false });
     this.reschedule();
   }
+  /** Stop measuring this server (a sample in flight is dropped): another server was chosen, and pings would keep this one awake. */
+  untrack(uri: string | undefined) {
+    const s = uri ? this.servers.get(uri) : undefined;
+    if (!s) return;
+    clearTimeout(s.timer);
+    this.servers.delete(uri!);
+  }
   /** The shown ping of a server in ms, or undefined while measuring (or when it does not answer). */
   get(uri: string | undefined) { return uri ? this.servers.get(uri)?.samples.value : undefined; }
 

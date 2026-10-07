@@ -1,5 +1,6 @@
 import type { Mode } from '../shared/match/state';
 import type { VehicleKind } from '../shared/vehicles';
+import type { ServerId } from './net/servers';
 
 /**
  * Product analytics (PostHog, US cloud): how many players, from where (PostHog derives the country
@@ -17,8 +18,9 @@ export type Reason = 'menu' | 'disconnect' | 'close';
 /** Every event and its properties (kept small and typed). */
 export interface Events {
   lobby_view: Record<string, never>;
-  play_clicked: { kind: PlayKind; size: string; mode: Mode | ''; map: string };
-  match_joined: { online: boolean; room?: string; map: string; mode: Mode; size: string; team: 'swat' | 'militia' };
+  /** `server_choice`: the server an online play goes to (Settings → Server); offline plays leave it out. */
+  play_clicked: { kind: PlayKind; size: string; mode: Mode | ''; map: string; server_choice?: ServerId };
+  match_joined: { online: boolean; room?: string; map: string; mode: Mode; size: string; team: 'swat' | 'militia'; server_choice?: ServerId };
   match_left: { seconds: number; kills: number; deaths: number; rounds_played: number; reason: Reason };
   round_ended: { won: boolean; mode: Mode; map: string };
   vehicle_entered: { kind: VehicleKind };
@@ -102,10 +104,11 @@ function devTestId() {
 /**
  * Load posthog-js and start sending; call once the lobby has rendered. `base` are the super
  * properties every event carries (the app version is added here): the language, the SpacetimeDB
- * database and its host (`server_host`, e.g. play.turfwar.ianhsiao.me), so events can be told
- * apart by server.
+ * database and its host (`server_host`, e.g. play.turfwar.ianhsiao.me) and the player's choice of
+ * server (`server_choice`: sg or us), so events can be told apart by server. The lobby updates the
+ * three with `setSuper` when the player chooses another server.
  */
-export function startAnalytics(base: { lang: string; online_db: string; server_host: string }) {
+export function startAnalytics(base: { lang: string; online_db: string; server_host: string; server_choice: string }) {
   if (state !== 'waiting') return;
   state = 'loading';
   const version = typeof __APP_VERSION__ === 'undefined' ? 'dev' : __APP_VERSION__;
@@ -132,7 +135,7 @@ export function startAnalytics(base: { lang: string; online_db: string; server_h
       } : {}),
       loaded: ph => {
         ph.register({
-          lang: base.lang, app_version: version, online_db: base.online_db, server_host: base.server_host,
+          lang: base.lang, app_version: version, online_db: base.online_db, server_host: base.server_host, server_choice: base.server_choice,
           screen: screenBucket(screen.width, screen.height), ...(guard.test ? { test: true } : {}),
         });
       },

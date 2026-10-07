@@ -194,6 +194,11 @@
 #menu .server-chip[hidden] { display: none; }
 #menu .browser-head .count:empty + .server-chip { margin-left: auto; }
 #menu .server-chip .server-word { white-space: pre; }
+/* With a choice of servers the chip is a button: it opens Settings on the Server choice. */
+#menu button.server-chip { background: rgba(6, 12, 16, 0.6); line-height: inherit; text-transform: none; transition: border-color 0.15s, color 0.15s; }
+#menu button.server-chip:hover:not(:disabled) { border-color: rgba(127, 246, 255, 0.5); color: var(--ink); }
+#menu button.server-chip:disabled { cursor: default; background: none; }
+#menu .server-chip .caret { display: inline-block; width: 11px; height: 11px; margin: 0 0 0 4px; vertical-align: -1px; stroke: currentColor; stroke-width: 2.6; }
 /* Ping: green under 80 ms, amber under 160 ms, red beyond; muted "—" while measuring. */
 #menu .ping { color: var(--muted); }
 #menu .ping.good { color: #5df29a; }

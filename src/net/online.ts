@@ -16,23 +16,18 @@ import { plural, t } from '../ui/i18n';
 import { setPerson } from '../analytics';
 import type { WakeLink } from './wake';
 import { serverIdentityKey } from './ping';
+import { currentServer } from './servers';
 
 type RosterRow = Infer<typeof RosterTable>;
 
-type Env = Record<string, string | undefined>;
-
 /**
- * Where the SpacetimeDB database lives. "same-origin" routes the websocket through the page's
- * own host at /stdb (the dev server proxies it), so a single preview URL serves everything.
+ * Where the SpacetimeDB database lives: the server chosen in Settings (src/net/servers.ts; the
+ * build's own by default), read at every connection, so a new choice reaches the lobby's next
+ * watcher and the next match while a match in progress keeps its own connection.
  */
-export function onlineConfig() {
-  const env = import.meta.env as Env;
-  const params = new URLSearchParams(location.search);
-  let uri = params.get('stdb') ?? env.VITE_SPACETIMEDB_URI;
-  const database = params.get('db') ?? env.VITE_SPACETIMEDB_DATABASE;
-  // Trailing slash matters: the SDK resolves 'v1/...' relative to this base URL.
-  if (uri === 'same-origin') uri = `${location.protocol === 'https:' ? 'wss' : 'ws'}://${location.host}/stdb/`;
-  return { uri, database };
+export function onlineConfig(): { uri?: string; database?: string } {
+  const s = currentServer();
+  return { uri: s?.uri, database: s?.database };
 }
 
 export function onlineAvailable(): { ok: boolean; reason: string } {
