@@ -1014,7 +1014,8 @@ function joined(link: GameLink, map: string) {
 /** Analytics: the match is over for us (sent once per match). */
 function leftMatch(reason: Reason) {
   const link = game?.link, me = link?.state()?.soldiers.find(s => s.id === link.myId());
-  matchLeft(reason, { kills: me?.kills ?? 0, deaths: me?.deaths ?? 0 });
+  // Online: the match's connection quality, and its last report to the server.
+  matchLeft(reason, { kills: me?.kills ?? 0, deaths: me?.deaths ?? 0 }, link instanceof OnlineLink ? link.netLeft() : undefined);
 }
 // Closing the tab mid-match: match_left goes out by beacon.
 addEventListener('pagehide', () => leftMatch('close'));

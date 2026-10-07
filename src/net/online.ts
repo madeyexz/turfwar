@@ -13,7 +13,8 @@ import { decodeFrame, type DecodedFrame, type FramePose } from '../../shared/mat
 import { DEFAULT_WEAPONS, STAMINA, WEAPONS, normalizeAttachments, weaponStats, type AttachmentId, type Attachments, type Slot, type WeaponId } from '../../shared/weapons';
 import { newRoundStats, type BuyItem } from '../../shared/match/economy';
 import { plural, t } from '../ui/i18n';
-import { setPerson } from '../analytics';
+import { setPerson, track } from '../analytics';
+import { NetReporter, SAMPLE_EVERY_MS, type NetFields, type NetReport } from '../../shared/netstats';
 import type { WakeLink } from './wake';
 import { serverIdentityKey } from './ping';
 
@@ -83,6 +84,9 @@ export class OnlineLink implements GameLink {
   private me = -1;
   private pingMs = 0;
   private lastPing = 0;
+  /** Connection quality (shared/netstats.ts): round trips, corrections, room time; reported every 2 minutes and on leaving. */
+  private net = new NetReporter(performance.now());
+  private netTimer = setInterval(() => this.pollNet(), 5000);
   private reportsInFlight = 0;
   private disconnected = false;
   private rejoining = false;
@@ -102,6 +106,8 @@ export class OnlineLink implements GameLink {
     const bump = () => { this.dirty = true; };
     const db = conn.db;
     db.roster.onInsert(bump); db.roster.onUpdate(bump); db.roster.onDelete(bump);
+    // The server corrected our soldier (a rejected movement report): count it for connection quality.
+    db.roster.onUpdate((_ctx, old, row) => { if (row.id === this.me && row.corrections > old.corrections) this.net.meter.correct(row.corrections - old.corrections); });
     db.match.onUpdate(bump); db.match.onInsert(bump);
     db.player.onInsert(bump); db.player.onUpdate(bump); db.player.onDelete(bump);
     const onFrame = (row: { id: number; mapId: string; data: Uint8Array }) => {
@@ -122,6 +128,7 @@ export class OnlineLink implements GameLink {
   markDisconnected() {
     if (this.disconnected) return;
     this.disconnected = true;
+    clearInterval(this.netTimer);
     this.onDrop?.();
   }
   myId() { this.state(); return this.me; }
@@ -224,9 +231,39 @@ export class OnlineLink implements GameLink {
     this.reportsInFlight++;
     const sent = performance.now();
     void this.conn.reducers.report({ ...r, slide: !!r.slide, weapon: r.weapon, use: !!r.use })
-      .then(() => { if (sent - this.lastPing > 500) { this.pingMs = this.pingMs ? this.pingMs * 0.7 + (performance.now() - sent) * 0.3 : performance.now() - sent; this.lastPing = sent; } })
+      .then(() => this.samplePing(sent))
       .catch(() => undefined)
       .finally(() => { this.reportsInFlight--; });
+  }
+  /** A movement report's round trip, at most every 500 ms: the HUD's smoothed ping and a connection-quality sample. */
+  private samplePing(sent: number) {
+    if (sent - this.lastPing <= SAMPLE_EVERY_MS) return;
+    const rtt = performance.now() - sent;
+    this.pingMs = this.pingMs ? this.pingMs * 0.7 + rtt * 0.3 : rtt;
+    this.lastPing = sent;
+    this.net.meter.sample(rtt);
+  }
+  /** Every few seconds: the 2-minute report to the server and the 5-minute analytics sample, when due. */
+  private pollNet() {
+    if (this.disconnected) return;
+    const { report, event } = this.net.poll(performance.now(), !!this.conn.db.player.identity.find(this.identity));
+    if (report) this.sendNet(report);
+    if (event) track('net_sample', event);
+  }
+  private sendNet(report: NetReport) {
+    try { void this.conn.reducers.netStats(report).catch(() => undefined); } catch { /* a server without net_stats */ }
+  }
+  /**
+   * The match is over for us (menu, a dropped connection, the tab closing): the last report to the
+   * server while still connected, and the match's connection quality for analytics. Once; later
+   * calls only return the numbers.
+   */
+  netLeft(): Omit<NetFields, 'seconds'> {
+    clearInterval(this.netTimer);
+    const { report, totals } = this.net.leave(performance.now());
+    if (report && !this.disconnected) this.sendNet(report);
+    // match_left has its own `seconds` (the match's length).
+    return { ping_p50: totals.ping_p50, ping_p95: totals.ping_p95, samples: totals.samples, corrections: totals.corrections, corrections_per_min: totals.corrections_per_min };
   }
   fire(c: ShotClaim) {
     void this.conn.reducers.fire({ weapon: c.weapon, ox: c.origin.x, oy: c.origin.y, oz: c.origin.z, dx: c.dir.x, dy: c.dir.y, dz: c.dir.z, target: c.target, zone: c.zone, px: c.point.x, py: c.point.y, pz: c.point.z }).catch(() => undefined);
@@ -239,13 +276,15 @@ export class OnlineLink implements GameLink {
   vehicleReport(r: VehicleReport) {
     if (this.reportsInFlight > 3) return;
     this.reportsInFlight++;
-    void this.conn.reducers.vehicleReport({ ...r, aimYaw: r.aimYaw ?? r.yaw, aimPitch: r.aimPitch ?? 0 }).catch(() => undefined).finally(() => { this.reportsInFlight--; });
+    const sent = performance.now();
+    void this.conn.reducers.vehicleReport({ ...r, aimYaw: r.aimYaw ?? r.yaw, aimPitch: r.aimPitch ?? 0 }).then(() => this.samplePing(sent)).catch(() => undefined).finally(() => { this.reportsInFlight--; });
   }
   say(text: string, team: boolean) { void this.conn.reducers.say({ text, team }).catch(() => undefined); }
   grenade(o: Vec3, d: Vec3) { void this.conn.reducers.grenade({ ox: o.x, oy: o.y, oz: o.z, dx: d.x, dy: d.y, dz: d.z }).catch(() => undefined); }
   reload() { void this.conn.reducers.reloadWeapon({}).catch(() => undefined); }
   switchWeapon(slot: Slot) { void this.conn.reducers.switchSlot({ slot }).catch(() => undefined); }
   dispose() {
+    this.netLeft();
     void this.conn.reducers.leave({}).catch(() => undefined);
     setTimeout(() => { try { this.conn.disconnect(); } catch { /* already closed */ } }, 300);
   }
