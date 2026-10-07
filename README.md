@@ -194,7 +194,7 @@ servers, email **ian@rippling.computer**.
 - [**臺北狂飆 / TAIPEI RUSH**](https://taipei-gta.vercel.app/) by [@aicodewithme](https://www.threads.com/share/DhdOGqUWh/) — the Ximending and Xinyi layouts.
 - [Quaternius](https://quaternius.com), [Poly Haven](https://polyhaven.com) and the authors of
   *The Free Firearm Sound Library* — CC0 models, textures and sounds.
-- [Three.js](https://threejs.org), [SpacetimeDB](https://spacetimedb.com), [Vite](https://vite.dev) and [Bun](https://bun.sh).
+- [Three.js](https://threejs.org), [SpacetimeDB](https://spacetimedb.com), [InstaCloud](https://instacloud.com), [Vite](https://vite.dev) and [Bun](https://bun.sh).
 - Built largely with [Claude](https://www.anthropic.com/claude) (Claude Opus 5.5).
 
 ## License
