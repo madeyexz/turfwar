@@ -100,7 +100,9 @@ traffic, under the project's NT$1000 budget alert. Request round trip from Taipe
 (Singapore ~125–160 ms). To work on it: `gcloud compute ssh turfwar-tw --zone asia-east1-b
 --project game-turfwar-ianhsiao-me`, then `sudo docker logs turfwar-stdb`; `setup.sh` (re)installs
 Docker, Caddy and the image (`HOSTS="…" sudo bash setup.sh`), `run.sh` (re)starts the container.
-Back up with a disk snapshot (`gcloud compute disks snapshot turfwar-tw --zone asia-east1-b`).
+The disk has a daily snapshot schedule (`turfwar-daily`, 19:00 UTC, kept 7 days); take one by hand
+before risky work with `gcloud compute disks snapshot turfwar-tw --zone asia-east1-b`. `setup.sh` leaves
+the image built; `sudo docker builder prune -af && sudo docker image prune -af` frees the build layers.
 
 The Singapore server (`deploy/instacloud/`, InstaCloud project `5ad5aa00-…`, compute service `stdb`)
 is a slim container with SpacetimeDB's two binaries and a 10 GiB `/data` volume. It **scales to zero**:
