@@ -15,7 +15,7 @@ if [ ! -s "$OWNER" ]; then
 fi
 TOKEN=$(python3 -c "import json,sys; print(json.load(open(sys.argv[1]))['token'])" "$OWNER")
 spacetime --config-path "$CLI" server add instacloud --url "$URL" --default --no-fingerprint 2>/dev/null \
-  || spacetime --config-path "$CLI" server edit instacloud --url "$URL" --no-fingerprint >/dev/null
+  || spacetime --config-path "$CLI" server edit instacloud --url "$URL" --no-fingerprint -y >/dev/null
 spacetime --config-path "$CLI" login --token "$TOKEN" >/dev/null
 chmod 600 "$CLI"
 python3 -c "import json,sys; print('owner identity', json.load(open(sys.argv[1]))['identity'])" "$OWNER"

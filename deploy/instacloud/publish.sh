@@ -23,7 +23,7 @@ if ! curl -fsS -o /dev/null --max-time 15 "$SG_URL/v1/ping" 2>/dev/null; then
   code=$(curl -s -o /dev/null -w '%{http_code}' --max-time 15 "$SG_URL/v1/ping" || true)
   if [ "$code" = "000" ]; then SG_URL="$SG_FALLBACK"; fi
 fi
-spacetime --config-path "$SG_CLI" server edit instacloud --url "$SG_URL" --no-fingerprint >/dev/null 2>&1 || true
+spacetime --config-path "$SG_CLI" server edit instacloud --url "$SG_URL" --no-fingerprint -y >/dev/null 2>&1 || true
 
 echo "Waking the Singapore server ($SG_URL)…"
 for i in $(seq 1 90); do

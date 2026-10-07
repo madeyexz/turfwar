@@ -1,7 +1,7 @@
 /**
  * Measures the WebSocket round trip a player feels: connects like the game does and times `hello`
  * reducer calls (the same reducer-promise round trip the in-game ping uses). Read-only apart from
- * `hello`, which only records the probe's time zone and language.
+ * `hello`, which records the probe as a player (lang "probe"): on production, delete that player_seen row after.
  *   bun scripts/wsping.ts <wss-uri> <database> [calls]
  */
 import { DbConnection } from '../src/module_bindings';
