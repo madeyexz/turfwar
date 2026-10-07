@@ -37,6 +37,8 @@ export interface GameLink {
   vehicleReport(r: VehicleReport): void;
   /** Chat line to everyone, or to the team only. */
   say(text: string, team: boolean): void;
+  /** Change sides; the host applies the shared rule (`canSwitchTeam`). Hosts without it leave it out. */
+  switchTeam?(): void;
   status(): string;
   /** Online: career stats of the players who have played on this server, best first. */
   leaderboard?(): CareerStats[];

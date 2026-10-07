@@ -1,7 +1,7 @@
 import { rng, type Vec3 } from '../../shared/math';
 import {
   addSoldier, balanceTeams, buyAttachmentFor, buyItem, createContext, createMatch, enterVehicle, exitVehicle, fireShot, reload, reportState,
-  reportVehicle, switchWeapon, throwGrenade, tickMatch, useAmmoCrate, TICK_RATE, type SimContext,
+  reportVehicle, switchTeam, switchWeapon, throwGrenade, tickMatch, useAmmoCrate, TICK_RATE, type SimContext,
 } from '../../shared/match/sim';
 import { ELIMINATION, PRACTICE_CONFIG, type ClientReport, type MatchConfig, type MatchEvent, type MatchState, type ShotClaim, type Team, type VehicleReport } from '../../shared/match/state';
 import type { BuyItem } from '../../shared/match/economy';
@@ -58,6 +58,7 @@ export class OfflineLink implements GameLink {
   grenade(origin: Vec3, dir: Vec3) { throwGrenade(this.match, this.ctx, this.me, origin, dir); }
   reload() { reload(this.match, this.me); }
   switchWeapon(slot: Slot) { switchWeapon(this.match, this.me, slot); }
+  switchTeam() { switchTeam(this.match, this.ctx, this.me); }
   buy(item: BuyItem) { buyItem(this.match, this.ctx, this.me, item); }
   attach(weapon: WeaponId, attachment: AttachmentId) { buyAttachmentFor(this.match, this.me, weapon, attachment); }
   useCrate(index: number) { useAmmoCrate(this.match, this.ctx, this.me, index); }

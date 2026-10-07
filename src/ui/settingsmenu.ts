@@ -23,6 +23,10 @@ export interface SettingsActions {
   resume?(): void;
   /** In-game only: the Leave match button. */
   leave?(): void;
+  /** In-game only: the switch-sides button's label, the line under it and whether it can be pressed (hidden when undefined). */
+  team?(): { label: string; note: string; enabled: boolean } | undefined;
+  /** In-game only: the switch-sides button was pressed. */
+  switchTeam?(): void;
   /** Applied live: mouse sensitivity, crosshair, graphics preset, effects volume. */
   sensitivity(value: number): void;
   crosshair(style: CrosshairStyle): void;
@@ -132,6 +136,7 @@ export class SettingsMenu {
       const act = btn.dataset.act;
       if (act === 'resume') return this.actions.resume?.();
       if (act === 'leave') return this.actions.leave?.();
+      if (act === 'team') { this.actions.switchTeam?.(); this.refreshTeam(); return; }
       if (act === 'close') return this.close();
       if (act === 'bench') return lobby?.bench.run();
       const d = btn.dataset;
@@ -226,7 +231,7 @@ export class SettingsMenu {
         ${tabs}
         <div class="pane grid" role="tabpanel" id="${id}-options" data-pane="options" aria-labelledby="${id}-tab-options">${options}</div>
         ${controls}
-        <footer><button type="button" class="leave" data-act="leave">${t('set.leave')}</button></footer>
+        <footer><div class="team-switch" data-k="teamBox" hidden><button type="button" class="team" data-act="team"></button><small data-k="teamNote"></small></div><button type="button" class="leave" data-act="leave">${t('set.leave')}</button></footer>
       </div>`;
     this.root.querySelector('[data-pane="controls"]')!.append(this.touch.el, this.controls.el);
     this.tab(this.current);
@@ -286,6 +291,21 @@ export class SettingsMenu {
     this.root.querySelector('[data-k="title"]')!.textContent = t(solo ? 'set.paused' : 'set.menuOnline');
     this.root.hidden = false;
     this.refresh();
+    this.refreshTeam();
+  }
+
+  /** In-game: the switch-sides button as the match stands (the game calls this while the menu is open). */
+  refreshTeam() {
+    const box = this.root.querySelector<HTMLElement>('[data-k="teamBox"]');
+    if (!box) return;
+    const view = this.actions.team?.();
+    box.hidden = !view;
+    if (!view) return;
+    const btn = box.querySelector<HTMLButtonElement>('button')!, note = box.querySelector<HTMLElement>('small')!;
+    if (btn.textContent !== view.label) btn.textContent = view.label;
+    btn.disabled = !view.enabled;
+    btn.title = view.note;
+    if (note.textContent !== view.note) note.textContent = view.note;
   }
   hide() { this.controls.cancel(); this.root.hidden = true; }
   /** Lobby: close and give focus back to whatever opened the dialog. */

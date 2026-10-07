@@ -309,6 +309,7 @@ export class OnlineLink implements GameLink {
     const sent = performance.now();
     void this.conn.reducers.vehicleReport({ ...r, aimYaw: r.aimYaw ?? r.yaw, aimPitch: r.aimPitch ?? 0 }).then(() => this.samplePing(sent)).catch(() => undefined).finally(() => { this.reportsInFlight--; });
   }
+  switchTeam() { if (!this.inMatch()) return; try { void this.conn.reducers.changeTeam({}).catch(() => undefined); } catch { /* a server without change_team */ } }
   say(text: string, team: boolean) { if (!this.inMatch()) return; void this.conn.reducers.say({ text, team }).catch(() => undefined); }
   grenade(o: Vec3, d: Vec3) { if (!this.inMatch()) return; void this.conn.reducers.grenade({ ox: o.x, oy: o.y, oz: o.z, dx: d.x, dy: d.y, dz: d.z }).catch(() => undefined); }
   reload() { if (!this.inMatch()) return; void this.conn.reducers.reloadWeapon({}).catch(() => undefined); }

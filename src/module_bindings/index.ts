@@ -39,6 +39,7 @@ import AdminLogoutReducer from "./admin_logout_reducer";
 import AdminRevokeAllReducer from "./admin_revoke_all_reducer";
 import BuyReducer from "./buy_reducer";
 import BuyAttachmentReducer from "./buy_attachment_reducer";
+import ChangeTeamReducer from "./change_team_reducer";
 import CreateRoomReducer from "./create_room_reducer";
 import DeviceReducer from "./device_reducer";
 import EnterVehicleReducer from "./enter_vehicle_reducer";
@@ -267,6 +268,7 @@ const reducersSchema = __reducers(
   __reducerSchema("admin_revoke_all", AdminRevokeAllReducer),
   __reducerSchema("buy", BuyReducer),
   __reducerSchema("buy_attachment", BuyAttachmentReducer),
+  __reducerSchema("change_team", ChangeTeamReducer),
   __reducerSchema("create_room", CreateRoomReducer),
   __reducerSchema("device", DeviceReducer),
   __reducerSchema("enter_vehicle", EnterVehicleReducer),

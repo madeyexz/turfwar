@@ -89,6 +89,35 @@ export function balanceTeams(state: MatchState, ctx: SimContext) {
   }
 }
 
+/**
+ * Whether a human may change sides now: `ok`; `later` (mid-round: the client holds the request for
+ * the next round's buy freeze); `even` (the other side does not have fewer humans, so a switch would
+ * not help: it never makes the human split worse, and a lone human may pick either side); `no` (a
+ * bot, the practice range, or no soldier).
+ */
+export function canSwitchTeam(state: MatchState, s: Soldier | undefined): 'ok' | 'later' | 'even' | 'no' {
+  if (!s || s.bot || state.config.practice) return 'no';
+  const humans = (team: Team) => state.soldiers.filter(x => !x.bot && x.team === team).length;
+  if (humans((1 - s.team) as Team) >= humans(s.team)) return 'even';
+  // Only between fights: the buy freeze, the warmup or the result screen.
+  return state.phase === 'live' && state.roundPhase !== 'freeze' ? 'later' : 'ok';
+}
+
+/**
+ * Change a human's side when `canSwitchTeam` allows it: in the buy freeze they redeploy in the new
+ * base (keeping what they own); bots then even out both sides (one leaves the new side, one joins
+ * the old). Returns whether it happened.
+ */
+export function switchTeam(state: MatchState, ctx: SimContext, id: number) {
+  const s = state.soldiers.find(x => x.id === id);
+  if (!s || canSwitchTeam(state, s) !== 'ok') return false;
+  s.team = (1 - s.team) as Team;
+  if (state.phase === 'live' && s.alive) spawnSoldier(state, ctx, s);
+  ctx.emit({ type: 'team', id, name: s.name, team: s.team });
+  balanceTeams(state, ctx);
+  return true;
+}
+
 // ---------------------------------------------------------------------------------------
 // Human commands (validated). The same functions back the offline host and server reducers.
 // ---------------------------------------------------------------------------------------
