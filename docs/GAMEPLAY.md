@@ -19,11 +19,11 @@ Back to the [README](../README.md) · [Architecture](ARCHITECTURE.md) · [Develo
 | Room sizes | Duel 1v1 · Squad 6v6 · War 24v24 (big maps only: Meridian, bases padded to 24 slots). Bots fill every slot without a human (private rooms can turn them off). |
 | Player | 100 health, no armor or regeneration within a round, fall damage, head/body/limb damage per weapon. Below 25 health the screen desaturates and a heartbeat plays that nearby players hear too. Stamina 100: sprinting drains 18/s (5 to start), a jump costs 20, it regenerates 18/s (24 crouched); at 30 or less you cannot sprint. Each weapon sets your move speed. |
 | Economy | See the table below. **B** opens the store inside your own base during the first 20 s of a round (freeze time included); dead players can buy for their next spawn. Weapons you own swap free during that window. Attachments can be bought anywhere, at any time. Weapons and attachments last the whole match and reset with a new one. Ammo crates on every map refill about half a magazine of the held weapon's reserve per use (E): the first use in a round costs $300, later ones are free. |
-| Gunplay | Hitscan with BeGone's per-weapon numbers: fire rate, magazine and reserve, reload and equip times, hip/zoomed accuracy and recoil, zoom and move speed. RMB is "Accuracy": hold to zoom through the fitted optic (iron sights 3.5×). The knife hits for 33 anywhere at about 2 m. The M1014 fires 14 pellets. The M67 has a 2.1 s fuse and 22 m radius. **Z** raises binoculars (10× zoom, no weapon). |
+| Gunplay | Hitscan with BeGone's per-weapon numbers: fire rate, magazine and reserve, reload and equip times, hip/zoomed accuracy and recoil, zoom and move speed. RMB is "Accuracy": hold to zoom through the fitted optic (iron sights 3.5×). The knife hits for 33 anywhere at about 2 m. The M1014 fires 14 pellets. The M67 has a 2.1 s fuse and 22 m radius. The M18 smoke (ours, not BeGone's) pops 1.6 s after the throw into a still cloud 9 m across for 15 s: nobody sees through it, players or bots (enemy name tags included), but bullets pass. **Z** raises binoculars (10× zoom, no weapon). |
 | Feel | First-person arms posed by IK onto CC0 gun models with optics that follow the fitted attachment (irons, reflex, holographic, ACOG, x4, x6), suppressor, laser and flashlight visuals; procedural sway, bob, kick, sprint carry, reloads and equips; muzzle flash, tracers (hidden when suppressed), impacts, explosions; hit markers, cash popups, damage arrows, kill feed, round banners; recorded CC0 gunshots per weapon (distance-muffled and panned, muffled when suppressed), knife, bomb, round and cash cues, footsteps and a 60-second menu theme sequenced from the game's own effects. |
 | Characters | CC0 rigged soldiers in two team outfits, CC0 animation library retargeted by bone name: idle/walk/jog/sprint/crouch/jump/death blend by speed, strafing leg twist, aim pitch, two-bone arm IK onto the weapon, a knife stab, hit flinches. |
 | Bots | Navigation grid per map (roofs, catwalks, stairs), A* paths, field of view and line of sight, reaction delays, aim error that settles, strafing, bursts, reloads and grenades. They shop at round start (the best primary they can afford, sometimes an optic and a grenade). In Sabotage Militia bots head for a site and arm it, SWAT bots spread over the sites, and everyone converges on an armed bomb. |
-| HUD | Score bar with the round clock, round score and an avatar per soldier (alive or dead, teammates' health), health and stamina, cash, weapon with its attachments, ammo and reserve, grenade, bomb status and arming progress, minimap with sites and crates, kill feed, chat (Enter all, T team; it also notes human players joining and leaving the room, never bots), scoreboard (Tab), crosshair that widens with sustained fire, jumping and sprinting in four styles (classic, dot, circle, T), match result. |
+| HUD | Score bar with the round clock, round score and an avatar per soldier (alive or dead, teammates' health), health and stamina, cash, weapon with its attachments, ammo and reserve, grenades (M67 and M18 smoke), bomb status and arming progress, minimap with sites, crates and smoke clouds, a grey screen inside smoke, kill feed, chat (Enter all, T team; it also notes human players joining and leaving the room, never bots), scoreboard (Tab), crosshair that widens with sustained fire, jumping and sprinting in four styles (classic, dot, circle, T), match result. |
 | Vehicles | Cars and taxis, Taiwanese scooters and a light helicopter on Taipei and Meridian District (see [Vehicles](#vehicles)): E to get in or out, arcade driving and flying, chase camera, run-overs, body damage and wrecks; parked back at their spots every round. |
 | Profiles | Online, each identity keeps career stats (kills, deaths, assists, headshots, rounds and matches played and won) in a public `profile` table. |
 
@@ -57,6 +57,7 @@ Back to the [README](../README.md) · [Architecture](ARCHITECTURE.md) · [Develo
 | Primary (3) | M110 | $4,000 | 90 / 40 / 30 | Semi-auto marksman rifle, 6 + 18 |
 | Primary (3) | M249 | $3,800 | 43 / 33 / 21 | Automatic, 86 + 86, slowest movement |
 | Tactical (4 / G) | M67 grenade | $1,000 | 70 (falloff) | One carried, not restocked; High Explosive mod $1,500 (+45 body damage, smaller radius) |
+| Tactical (5 / X) | M18 smoke grenade | $300 | — | One carried; a 9 m cloud for 15 s that blocks sight, not bullets (not in BeGone) |
 
 ### Attachments (one per category per weapon; kept for the match)
 
@@ -283,6 +284,7 @@ fullscreen. On touch-only screens the Controls tab is read-only.
 | C or Ctrl | Crouch |
 | 1 · 2 · 3 | Knife · secondary · primary |
 | 4 or G | M67 grenade |
+| 5 or X | M18 smoke grenade |
 | Q or wheel | Cycle weapons |
 | R · E | Reload · use (arm or disarm the bomb, ammo crate, get in or out of a vehicle) |
 | On a ladder: toward it · away · Space | Climb up · climb down · let go (walk off its top to climb down) |

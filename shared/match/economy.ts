@@ -1,6 +1,6 @@
 import type { MapDef } from '../maps/types';
 import {
-  ATTACHMENTS, DEFAULT_WEAPONS, GRENADE, HIGH_EXPLOSIVE, WEAPONS, attachmentPrice, fitsWeapon, weaponStats,
+  ATTACHMENTS, DEFAULT_WEAPONS, GRENADE, HIGH_EXPLOSIVE, SMOKE, WEAPONS, attachmentPrice, fitsWeapon, weaponStats,
   type AttachmentId, type WeaponDef, type WeaponId,
 } from '../weapons';
 import type { MatchState, RoundStats, Soldier, Team } from './state';
@@ -20,7 +20,7 @@ export const CASH = {
   loyalty: 1000, loyaltyEvery: 5, bomb: 500, crate: 300,
 };
 
-export type BuyItem = WeaponId | 'grenade' | 'highExplosive';
+export type BuyItem = WeaponId | 'grenade' | 'highExplosive' | 'smoke';
 
 /** Distance (m) within which an ammo crate can be used. */
 export const CRATE_REACH = 2.4;
@@ -38,7 +38,7 @@ export function resetInventory(s: Soldier) {
   s.weapons = [...DEFAULT_WEAPONS];
   s.owned = [...DEFAULT_WEAPONS];
   s.attachments = {};
-  s.grenades = 0; s.grenadeHE = false;
+  s.grenades = 0; s.grenadeHE = false; s.smokes = 0;
   s.money = CASH.matchBonus;
 }
 
@@ -71,10 +71,17 @@ export function canBuyWeapons(state: MatchState, map: MapDef, s: Soldier, side: 
 const ok = (message: string) => ({ ok: true, message });
 const no = (message: string) => ({ ok: false, message });
 
-/** Buy (or, if owned, equip for free) a weapon, the M67 or its High Explosive mod. */
+/** Buy (or, if owned, equip for free) a weapon, the M67 or its High Explosive mod, or the M18 smoke. */
 export function buy(state: MatchState, map: MapDef, s: Soldier | undefined, item: BuyItem, side: Team): { ok: boolean; message: string } {
   if (!s || state.phase === 'ended') return no('Not in a match.');
   const free = !!state.config.freeBuy;
+  if (item === 'smoke') {
+    if (s.smokes >= SMOKE.max) return no('You already carry a smoke grenade.');
+    if (!free && s.money < SMOKE.price) return no('Not enough cash.');
+    if (!free) s.money -= SMOKE.price;
+    s.smokes++;
+    return ok('M18 smoke');
+  }
   if (item === 'grenade' || item === 'highExplosive') {
     if (item === 'grenade') {
       if (s.grenades >= GRENADE.max) return no('You already carry an M67.');

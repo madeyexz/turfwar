@@ -5,12 +5,30 @@ import { GUN_FIT, fitAttachments } from '../render/optics';
 import { ATTACHMENT_SLOTS, WEAPONS, type AttachmentCategory, type Attachments, type WeaponId } from '../../shared/weapons';
 import { applyI18n, t } from './i18n';
 
-/** What the store's preview shows: a weapon with a set of attachments (one slot called out), or the M67. */
+/** What the store's preview shows: a weapon with a set of attachments (one slot called out), the M67 or the M18 smoke. */
 export type PreviewItem =
   | { kind: 'weapon'; id: WeaponId; attachments: Attachments; focus?: AttachmentCategory; label?: string }
-  | { kind: 'grenade'; he: boolean };
+  | { kind: 'grenade'; he: boolean }
+  | { kind: 'smoke' };
 
-const key = (item: PreviewItem) => item.kind === 'grenade' ? `grenade|${item.he}` : `${item.id}|${ATTACHMENT_SLOTS.map(c => item.attachments[c] ?? '').join('|')}`;
+const key = (item: PreviewItem) => item.kind === 'smoke' ? 'smoke' : item.kind === 'grenade' ? `grenade|${item.he}` : `${item.id}|${ATTACHMENT_SLOTS.map(c => item.attachments[c] ?? '').join('|')}`;
+
+/** The M18 (no model in the packs): an olive canister, a pale band, the fuse and its spoon. */
+function smokeCanister() {
+  const g = new THREE.Group();
+  const olive = new THREE.MeshStandardMaterial({ color: 0x4d5a3a, roughness: 0.7 }), metal = new THREE.MeshStandardMaterial({ color: 0x6d6f68, roughness: 0.45, metalness: 0.6 });
+  const body = new THREE.Mesh(new THREE.CylinderGeometry(0.032, 0.032, 0.115, 28), olive);
+  const band = new THREE.Mesh(new THREE.CylinderGeometry(0.0326, 0.0326, 0.022, 28), new THREE.MeshStandardMaterial({ color: 0xd8d4c4, roughness: 0.8 }));
+  band.position.y = 0.03;
+  const fuse = new THREE.Mesh(new THREE.CylinderGeometry(0.012, 0.016, 0.026, 16), metal);
+  fuse.position.y = 0.07;
+  const spoon = new THREE.Mesh(new THREE.BoxGeometry(0.008, 0.09, 0.016), metal);
+  spoon.position.set(0.036, 0.035, 0); spoon.rotation.z = -0.08;
+  const ring = new THREE.Mesh(new THREE.TorusGeometry(0.013, 0.0022, 6, 20), metal);
+  ring.position.set(-0.02, 0.082, 0); ring.rotation.y = Math.PI / 2;
+  g.add(body, band, fuse, spoon, ring);
+  return g;
+}
 
 /** Model-space point (barrel -X, up +Y, origin at the grip) where an attachment slot sits on `id`. */
 function slotAnchor(id: WeaponId, slot: AttachmentCategory, muzzle: THREE.Vector3) {
@@ -213,7 +231,7 @@ export class StorePreview {
   private build(item: PreviewItem): Built {
     const weapons = this.assets!.weapons;
     const object = new THREE.Group();
-    const model = weapons.get(item.kind === 'grenade' ? 'Prop_Grenade' : WEAPONS[item.id].model)!.clone();
+    const model = item.kind === 'smoke' ? smokeCanister() : weapons.get(item.kind === 'grenade' ? 'Prop_Grenade' : WEAPONS[item.id].model)!.clone();
     model.position.set(0, 0, 0);
     model.updateMatrixWorld(true);
     // Frame by the bare item so trying attachments on never rescales the view.
@@ -231,7 +249,7 @@ export class StorePreview {
         band.position.copy(centre); ring.position.copy(centre).y += size.y * 0.09;
         model.add(band, ring);
       }
-    } else {
+    } else if (item.kind === 'weapon') {
       const fit = fitAttachments(weapons, item.id, item.attachments, 'third');
       model.add(fit.group);
       muzzle = fit.muzzle;
@@ -241,7 +259,7 @@ export class StorePreview {
     object.add(model);
     // Normalise: a long gun spans one unit; pistols and the grenade read larger than life.
     const longest = Math.max(size.x, size.y, size.z);
-    const target = item.kind === 'grenade' ? 0.42 : WEAPONS[item.id].class === 'pistol' ? 0.62 : 1;
+    const target = item.kind !== 'weapon' ? 0.42 : WEAPONS[item.id].class === 'pistol' ? 0.62 : 1;
     object.scale.setScalar(target / longest);
     return { object, size: size.clone().multiplyScalar(target / longest), muzzle };
   }

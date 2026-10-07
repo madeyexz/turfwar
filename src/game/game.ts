@@ -13,6 +13,7 @@ import { BOMB_REACH, canSwitchTeam, modeOf, onSite } from '../../shared/match/si
 import type { Assets } from '../assets';
 import { Audio, type EngineVoice } from '../audio';
 import { BodiesView } from '../render/bodies';
+import { SmokeView } from '../render/smoke';
 import { BombSitesView } from '../render/bombsite';
 import { Effects } from '../render/effects';
 import { InterpBuffer } from '../render/interp';
@@ -56,6 +57,7 @@ export class Game {
   private level: LevelView;
   private effects = new Effects();
   private bodies: BodiesView;
+  private smoke = new SmokeView();
   private viewmodel: ViewModel;
   private remotes = new Map<number, Remote>();
   private hud: Hud;
@@ -195,7 +197,7 @@ export class Game {
     this.level = new LevelView(assets, def, theme);
     renderer.scene.add(this.level.group, this.effects.group);
     this.bodies = new BodiesView(assets);
-    renderer.scene.add(this.bodies.group);
+    renderer.scene.add(this.bodies.group, this.smoke.group);
     this.crates = new CratesView(assets, def.pickups);
     this.sites = new BombSitesView(def);
     renderer.scene.add(this.crates.group, this.sites.group, this.vehicles.group, this.skids.mesh);
@@ -255,7 +257,8 @@ export class Game {
     this.buymenu.dispose?.();
     this.buymenu.root.remove();
     this.menu.dispose();
-    this.renderer.scene.remove(this.level.group, this.effects.group, this.bodies.group, this.crates.group, this.sites.group, this.vehicles.group);
+    this.renderer.scene.remove(this.level.group, this.effects.group, this.bodies.group, this.smoke.group, this.crates.group, this.sites.group, this.vehicles.group);
+    this.smoke.clear();
     this.vehicles.dispose();
     this.renderer.scene.remove(this.skids.mesh); this.skids.dispose();
     for (const e of [...this.engines.values(), ...this.screeches.values()]) e.stop();
@@ -411,6 +414,7 @@ export class Game {
     if (result.dryFire) this.audio.dryFire(this.player.weapon.id);
     if (result.zoomed) this.player.binoculars ? this.audio.binoculars() : this.audio.ui();
     if (result.grenade) link.grenade(result.grenade.origin, result.grenade.dir);
+    if (result.smoke) link.smoke(result.smoke.origin, result.smoke.dir);
     this.shotCount += result.shots.length + (result.dryFire ? 1 : 0);
     for (const shot of result.shots) this.shoot(shot.origin, shot.dir, shot.weapon.range, state);
 
@@ -434,6 +438,7 @@ export class Game {
       this.lastVersion = link.version();
       this.syncRemotes(state, myId, now);
       this.bodies.sync(state.bodies, now);
+      this.smoke.sync(state.bodies, now);
       this.vehicles.sync(state.vehicles, now);
     }
     const renderTime = now - link.interpDelay - 0.02;
@@ -535,6 +540,8 @@ export class Game {
     this.hud.binoculars(this.player.alive && this.player.binoculars && this.player.ads > 0.5, mag);
     this.hud.zoomTag(this.player.alive && !this.player.binoculars && !this.viewmodel.overlay && this.player.ads > 0.85 && mag >= 1.5 ? mag : undefined);
     this.updateEngines(state);
+    // Smoke after the camera is placed: standing in a cloud greys the whole screen.
+    this.hud.smokeFog(this.smoke.update(performance.now() / 1000, cam.position));
     if (render) this.renderer.render(this.time);
 
     // ---- HUD ----
@@ -596,7 +603,7 @@ export class Game {
       scope: ctx.scope, melee: p.slot === 2, sniper: p.weapon.class === 'sniper', rider: p.rider, binoculars: p.binoculars, throwing: p.throwLeft > 0,
     });
     this.touch!.update(ctx, {
-      slot: p.slot, weapons: [WEAPONS[p.weapons[0]].name, WEAPONS[p.weapons[1]].name], grenades: p.grenades, use,
+      slot: p.slot, weapons: [WEAPONS[p.weapons[0]].name, WEAPONS[p.weapons[1]].name], grenades: p.grenades, smokes: p.smokes, use,
       storeHot: !!me && buyWindow && (free || inBase(me, this.map.def, sideOf(state, this.map.def, me.team))), reloading: p.reloading,
       holdAim, shots: this.shotCount,
     });
@@ -1020,6 +1027,10 @@ export class Game {
         const d = at.distanceTo(this.renderer.camera.position);
         const reach = e.weapon === 'bomb' ? 40 : e.weapon === 'vehicle' ? 28 : 18;
         if (d < reach) this.player.shake = Math.min(4, this.player.shake + (reach - d) * 0.25);
+        break;
+      }
+      case 'smoke': {
+        this.audio.smoke(this.listener(), new THREE.Vector3(e.x, e.y, e.z));
         break;
       }
       case 'phase': {

@@ -1,9 +1,9 @@
 import type { CollisionWorld } from '../collision';
 import { chestPoint, hitShape, raycastSoldier } from '../hitbox';
 import type { MapDef } from '../maps/types';
-import { dist3, type Vec3 } from '../math';
+import { dist3, segmentPointDistance, type Vec3 } from '../math';
 import { MOVE, createMoveState, eyeHeight } from '../movement';
-import { GRENADE, HEALTH, HIGH_EXPLOSIVE, STAMINA, pelletCone, pelletDirs, zoneDamage, type HitZone, type WeaponDef } from '../weapons';
+import { GRENADE, HEALTH, HIGH_EXPLOSIVE, SMOKE, STAMINA, pelletCone, pelletDirs, zoneDamage, type HitZone, type WeaponDef } from '../weapons';
 import { VEHICLES, obstaclesOf, raycastVehicle, vehicleCenter, type Vehicle } from '../vehicles';
 import { deepestOverlap, resolveObstacles } from '../obstacles';
 import type { Body } from '../world';
@@ -249,6 +249,29 @@ export function spawnBody(state: MatchState, kind: Body['kind'], p: Vec3, v: Vec
   const body: Body = { id: state.nextId++, kind, x: p.x, y: p.y, z: p.z, vx: v.x, vy: v.y, vz: v.z, age: 0, owner, team, hp, timer };
   state.bodies.push(body);
   return body;
+}
+
+/** Throw the M18 smoke grenade: the M67's arc; it pops into a cloud after its fuse (`popSmoke`). */
+export function throwSmokeFrom(state: MatchState, s: Soldier, origin: Vec3, dir: Vec3) {
+  if (!s.alive || s.smokes <= 0) return undefined;
+  s.smokes--;
+  const v = { x: dir.x * GRENADE.throwSpeed + s.m.vx * 0.5, y: dir.y * GRENADE.throwSpeed + 2.6, z: dir.z * GRENADE.throwSpeed + s.m.vz * 0.5 };
+  return spawnBody(state, 'smoke', origin, v, s.id, s.team, 1, SMOKE.fuse);
+}
+
+/** A smoke grenade's fuse ran out: a still cloud where it lies, for SMOKE.duration seconds. */
+export function popSmoke(state: MatchState, ctx: SimContext, g: Body) {
+  spawnBody(state, 'smokeCloud', { x: g.x, y: g.y, z: g.z }, { x: 0, y: 0, z: 0 }, g.owner, g.team, 1, SMOKE.duration);
+  ctx.emit({ type: 'smoke', x: g.x, y: g.y, z: g.z, owner: g.owner });
+}
+
+/** Whether smoke hides `b` from `a`: the sight line passes through a cloud (either end inside one counts). */
+export function smokeBlocks(bodies: readonly Body[], a: Vec3, b: Vec3) {
+  for (const c of bodies) {
+    if (c.kind !== 'smokeCloud') continue;
+    if (segmentPointDistance({ x: c.x, y: c.y + SMOKE.height, z: c.z }, a, b).distance < SMOKE.radius) return true;
+  }
+  return false;
 }
 
 /** Throw the M67 (a High Explosive grenade is marked by hp 2). */

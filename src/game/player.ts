@@ -16,6 +16,8 @@ const DEG = Math.PI / 180;
 export interface FrameResult {
   shots: { origin: Vec3; dir: Vec3; weapon: WeaponDef }[];
   grenade?: { origin: Vec3; dir: Vec3 };
+  /** An M18 smoke grenade left the hand (same arc as the M67). */
+  smoke?: { origin: Vec3; dir: Vec3 };
   reloadStarted: boolean;
   /** The scope stepped to its other magnification this frame. */
   zoomed?: boolean;
@@ -53,6 +55,9 @@ export class LocalPlayer {
   bloom = 0;
   ads = 0;
   grenades = 0;
+  /** M18 smoke grenades carried; `throwingSmoke`: the throw under way is a smoke, not the M67. */
+  smokes = 0;
+  private throwingSmoke = false;
   private sinceThrow = 9;
   throwLeft = 0;
   stamina: number = STAMINA.max;
@@ -117,7 +122,7 @@ export class LocalPlayer {
     this.weapons = [...s.weapons]; this.attachments = structuredClone(s.attachments); this.reserve = [...s.reserve];
     this.ammo = [this.statsOf(0).magazine, this.statsOf(1).magazine];
     this.reloadLeft = 0; this.switchLeft = this.statsOf(0).equipTime; this.fireCooldown = 0; this.bloom = 0; this.ads = 0;
-    this.grenades = s.grenades; this.alive = true; this.recoilDebt = 0; this.accumulator = 0;
+    this.grenades = s.grenades; this.smokes = s.smokes; this.alive = true; this.recoilDebt = 0; this.accumulator = 0;
     this.stamina = STAMINA.max; this.binoculars = false; this.zoomLevel = 0;
   }
 
@@ -139,7 +144,7 @@ export class LocalPlayer {
       for (const i of [0, 1] as const) this.ammo[i] = Math.min(this.ammo[i], this.statsOf(i).magazine);
     }
     if (this.reloadLeft <= 0) this.reserve = [...s.reserve];
-    if (this.sinceThrow > 1.5 && this.throwLeft <= 0) this.grenades = s.grenades;
+    if (this.sinceThrow > 1.5 && this.throwLeft <= 0) { this.grenades = s.grenades; this.smokes = s.smokes; }
   }
 
   /** In a vehicle: the seat carries us (set each frame with `seat`); no walking. */
@@ -277,12 +282,16 @@ export class LocalPlayer {
       if (this.slot !== 2 && this.ammo[this.slot] <= 0 && this.switchLeft <= 0 && this.throwLeft <= 0) this.startReload(result);
       const throwKey = input!.take('grenade');
       if (throwKey && !this.rider && this.grenades > 0 && this.throwLeft <= 0 && this.reloadLeft <= 0) {
-        this.throwLeft = 0.32; this.grenades--; this.sinceThrow = 0; this.binoculars = false;
+        this.throwLeft = 0.32; this.grenades--; this.sinceThrow = 0; this.binoculars = false; this.throwingSmoke = false;
+      }
+      const smokeKey = input!.take('smoke');
+      if (smokeKey && !this.rider && this.smokes > 0 && this.throwLeft <= 0 && this.reloadLeft <= 0) {
+        this.throwLeft = 0.32; this.smokes--; this.sinceThrow = 0; this.binoculars = false; this.throwingSmoke = true;
       }
     }
     if (this.throwLeft > 0) {
       this.throwLeft -= dt;
-      if (this.throwLeft <= 0) result.grenade = { origin: this.eye(), dir: dirFromAngles(this.yaw, this.pitch + 0.06) };
+      if (this.throwLeft <= 0) result[this.throwingSmoke ? 'smoke' : 'grenade'] = { origin: this.eye(), dir: dirFromAngles(this.yaw, this.pitch + 0.06) };
     }
 
     const trigger = wantsFire && !this.sprinting && this.sprintRecover <= 0 && this.throwLeft <= 0 && this.usable(this.slot);

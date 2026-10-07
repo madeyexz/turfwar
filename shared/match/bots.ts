@@ -3,7 +3,7 @@ import { clamp, dirFromAngles, wrapAngle, type Vec3 } from '../math';
 import { MOVE, eyeHeight, stepMovement, type MoveInput } from '../movement';
 import { blocksHeight, near, penetration, type Obstacle } from '../obstacles';
 import { GRENADE, STAMINA } from '../weapons';
-import { eyeOf, feetOf, onSite, resolvePellets, resolveShot, sideOf, spreadFor, throwGrenadeFrom, traceShot, weaponOf, type SimContext } from './combat';
+import { eyeOf, feetOf, onSite, resolvePellets, resolveShot, sideOf, smokeBlocks, spreadFor, throwGrenadeFrom, traceShot, weaponOf, type SimContext } from './combat';
 import { findPath, nearestNode } from './nav';
 import { ATTACKERS, type BotBrain, type MatchState, type Soldier } from './state';
 
@@ -119,7 +119,9 @@ function perceive(state: MatchState, ctx: SimContext, bot: Soldier, brain: BotBr
   for (const { s } of candidates.slice(0, SIGHT_CHECKS)) {
     const chest = chestPoint(feetOf(s), s.m.crouch);
     const head = { x: s.m.x, y: s.m.y + eyeHeight(s.m), z: s.m.z };
-    if (ctx.world.lineOfSight(eye, chest, bot.team) || ctx.world.lineOfSight(eye, head, bot.team)) return s;
+    // Smoke hides: a bot sees through a cloud no better than a player does.
+    if ((ctx.world.lineOfSight(eye, chest, bot.team) && !smokeBlocks(state.bodies, eye, chest))
+      || (ctx.world.lineOfSight(eye, head, bot.team) && !smokeBlocks(state.bodies, eye, head))) return s;
   }
   return undefined;
 }
