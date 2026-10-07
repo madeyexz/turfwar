@@ -17,8 +17,9 @@ import { BODY_RADIUS, type Body } from '../../shared/world';
 import { VEHICLE_KINDS, type Vehicle, type VehicleKind } from '../../shared/vehicles';
 import { cleanHello } from '../../shared/hello';
 import { beginPlay, endPlay, flushDue, flushPlay, type PlayStore } from '../../shared/playtime';
+import { acceptNetReport, foldNetDay } from '../../shared/netstats';
 import * as Admin from './admin';
-import { AdminError, dailyRows, dailyTimeRows, dayOf, forAdmin, playerRows, playTimeRows, type AdminStore } from './admin';
+import { AdminError, dailyNetRows, dailyRows, dailyTimeRows, dayOf, forAdmin, playerNetRows, playerRows, playTimeRows, type AdminStore } from './admin';
 
 /**
  * Authoritative multiplayer: the same shared match simulation the offline client runs, executed
@@ -186,6 +187,23 @@ const timeTable = table({ name: 'player_time' }, { identity: t.identity().primar
 /** Play time per player per UTC day (key = identity hex + ':' + day, like `player_day`): the admin page's daily play time. Private. */
 const dayTimeTable = table({ name: 'player_day_time' }, { key: t.string().primaryKey(), day: t.u32().index('btree'), identity: t.identity(), seconds: t.u32() });
 
+/**
+ * Connection quality per player (shared/netstats.ts), from `net_stats` reports: the latest and the
+ * typical (mean weighted by measured seconds) round-trip p50 and p95 in ms, the worst p95, the
+ * server's movement corrections and the seconds in rooms they cover. Its own table so existing ones
+ * keep their columns. Private.
+ */
+const netTable = table({ name: 'player_net' }, {
+  identity: t.identity().primaryKey(), reports: t.u32(), lastP50: t.u16(), lastP95: t.u16(), avgP50: t.f32(), avgP95: t.f32(), worstP95: t.u16(),
+  corrections: t.u32(), measuredSeconds: t.u32(), lastAt: t.timestamp(),
+});
+
+/** Connection quality per player per UTC day (key = identity hex + ':' + day): p50/p95 sums weighted by seconds, for the admin page's daily median. Private. */
+const dayNetTable = table({ name: 'player_day_net' }, {
+  key: t.string().primaryKey(), day: t.u32().index('btree'), identity: t.identity(),
+  reports: t.u32(), seconds: t.u32(), p50Sum: t.f64(), p95Sum: t.f64(), corrections: t.u32(),
+});
+
 /** Identities logged in to the admin dashboard with the admin key (see admin.ts). Private. */
 const adminTable = table({ name: 'admin' }, { identity: t.identity().primaryKey(), grantedAt: t.timestamp() });
 /** Failed admin logins per identity in the current 10-minute window (the rate limit). Private. */
@@ -199,6 +217,7 @@ const spacetimedb = schema({
   matchEvent: eventTable, tickSchedule: tickTable, profile: profileTable, counter: counterTable,
   vehicle: vehicleTable, vehicleInbox: vehicleInboxTable, playerSeen: seenTable,
   playerDay: dayTable, admin: adminTable, adminAttempt: adminAttemptTable, playerTime: timeTable, playerDayTime: dayTimeTable,
+  playerNet: netTable, playerDayNet: dayNetTable,
 });
 export default spacetimedb;
 
@@ -845,6 +864,27 @@ export const leave = spacetimedb.reducer({}, ctx => {
   leaveRoom(ctx, player);
 });
 
+/**
+ * The client's connection quality since its previous report (shared/netstats.ts): round-trip p50 and
+ * p95 in ms, the samples behind them, the server's corrections of its soldier and the seconds in a
+ * room. Sent every 2 minutes in a match and on leaving. Validated and clamped (`acceptNetReport`):
+ * one per identity per 30 s, only from identities in `player_seen`; anything else is ignored.
+ * Per-identity bookkeeping only; it never loads a match.
+ */
+export const netStats = spacetimedb.reducer({ p50Ms: t.u32(), p95Ms: t.u32(), samples: t.u32(), corrections: t.u32(), seconds: t.u32() }, (ctx, report) => {
+  if (!ctx.db.playerSeen.identity.find(ctx.sender)) return;
+  const now = micros(ctx);
+  const row = ctx.db.playerNet.identity.find(ctx.sender);
+  const accepted = acceptNetReport(row ? { ...row, lastAt: row.lastAt.microsSinceUnixEpoch } : undefined, report, now);
+  if (!accepted) return;
+  const next = { identity: ctx.sender, ...accepted.record, lastAt: ctx.timestamp };
+  if (row) ctx.db.playerNet.identity.update(next); else ctx.db.playerNet.insert(next);
+  const day = dayOf(now), key = `${ctx.sender.toHexString()}:${day}`;
+  const prevDay = ctx.db.playerDayNet.key.find(key);
+  const folded = { key, day, identity: ctx.sender, ...foldNetDay(prevDay ?? undefined, accepted.report) };
+  if (prevDay) ctx.db.playerDayNet.key.update(folded); else ctx.db.playerDayNet.insert(folded);
+});
+
 /** Movement report: stored for the next tick (latest wins; elapsed time accumulates for the budget). */
 export const report = spacetimedb.reducer({
   x: t.f32(), y: t.f32(), z: t.f32(), vx: t.f32(), vy: t.f32(), vz: t.f32(), yaw: t.f32(), pitch: t.f32(),
@@ -1062,4 +1102,29 @@ export const adminDailyTime = spacetimedb.view({ name: 'admin_daily_time', publi
     // A session running past midnight credits a day after anyone's last sighting.
     for (let d = last + 1, end = last + 3; last >= 0 && d <= end; d++) if (playOn(d) > 0n) last = d;
     return dailyTimeRows(last, playOn);
+  }));
+
+// Connection quality has views of its own too (joined to `admin_players` by id on the page).
+
+/**
+ * Per player who has reported (same short id as `admin_players`): typical ping p50 and p95 in ms
+ * (means weighted by measured time), the worst p95 reported, corrections per minute in rooms, the
+ * minutes measured and the latest report.
+ */
+export const adminPlayerNet = spacetimedb.view({ name: 'admin_player_net', public: true },
+  t.array(t.row('AdminPlayerNetRow', {
+    id: t.string(), pingP50: t.u16(), pingP95: t.u16(), worstP95: t.u16(), correctionsPerMin: t.f32(), measuredMinutes: t.f32(), lastAt: t.timestamp(),
+  })),
+  ctx => forAdmin(viewAdmins(ctx.db), ctx.sender.toHexString(), () => {
+    const rows = [...ctx.db.playerNet.iter()].map(r => ({ ...r, identity: r.identity.toHexString(), lastAt: r.lastAt.microsSinceUnixEpoch }));
+    return playerNetRows(rows).map(r => ({ ...r, lastAt: new Timestamp(r.lastAt) }));
+  }));
+
+/** Connection quality per UTC day, the 30 days up to the latest report: players, median p50 and p95, corrections per minute. */
+export const adminDailyNet = spacetimedb.view({ name: 'admin_daily_net', public: true },
+  t.array(t.row('AdminDayNetRow', { day: t.u32(), date: t.string(), players: t.u32(), medianP50: t.u16(), medianP95: t.u16(), correctionsPerMin: t.f32() })),
+  ctx => forAdmin(viewAdmins(ctx.db), ctx.sender.toHexString(), () => {
+    let last = -1;
+    for (const r of ctx.db.playerNet.iter()) last = Math.max(last, dayOf(r.lastAt.microsSinceUnixEpoch));
+    return dailyNetRows(last, day => ctx.db.playerDayNet.day.filter(day));
   }));
