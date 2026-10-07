@@ -392,7 +392,7 @@ export class Hud {
     this.el.ammo.classList.toggle('empty', counter && !melee && ammo === 0);
     this.set('reload', `${p.reloading ? (1 - p.reloadLeft / p.reloadTotal) * 100 : 0}%`, 'width');
     const slot = (key: ActionId, name: string, on: boolean, extra = '') => `<span class="${on ? 'on' : ''}">${kbd(key)}${name}${extra}</span>`;
-    this.set('slots', slot('knife', t('hud.knife'), p.slot === 2) + slot('secondary', WEAPONS[p.weapons[1]].name, p.slot === 1) + slot('primary', WEAPONS[p.weapons[0]].name, p.slot === 0)
+    this.set('slots', slot('primary', WEAPONS[p.weapons[0]].name, p.slot === 0) + slot('secondary', WEAPONS[p.weapons[1]].name, p.slot === 1) + slot('knife', t('hud.knife'), p.slot === 2)
       + `<span class="nade${p.grenades > 0 ? '' : ' none'}">${kbd('grenade')}M67 ×${p.grenades}${me?.grenadeHE ? '<em>HE</em>' : ''}</span>`
       + `<span class="nade${p.smokes > 0 ? '' : ' none'}">${kbd('smoke')}M18 ×${p.smokes}</span>`, 'html');
   }

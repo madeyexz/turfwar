@@ -48,14 +48,14 @@ Back to the [README](../README.md) · [Architecture](ARCHITECTURE.md) · [Develo
 
 | Slot (key) | Weapon | Price | Damage head / body / limb | Notes |
 | --- | --- | --- | --- | --- |
-| Melee (1) | Knife | free | 33 / 33 / 33 | Always carried; 2 swings/s; fastest movement |
+| Primary (1) | MP5 | default | 30 / 18 / 12 | Automatic, 12 rounds/s, 32 + 96 |
+| Primary (1) | M4A1 | $3,400 | 33 / 21 / 15 | Automatic, 9 rounds/s, 30 + 90 |
+| Primary (1) | M1014 | $2,800 | 24 / 10 / 8 per pellet | Semi-auto shotgun, 14 pellets, 6 + 18 |
+| Primary (1) | M110 | $4,000 | 90 / 40 / 30 | Semi-auto marksman rifle, 6 + 18 |
+| Primary (1) | M249 | $3,800 | 43 / 33 / 21 | Automatic, 86 + 86, slowest movement |
 | Secondary (2) | M9A1 | default | 29 / 22 / 15 | Semi-auto, 12 + 36 |
 | Secondary (2) | MP7 | $1,800 | 18 / 12 / 8 | Automatic, 13 rounds/s, 20 + 60 |
-| Primary (3) | MP5 | default | 30 / 18 / 12 | Automatic, 12 rounds/s, 32 + 96 |
-| Primary (3) | M4A1 | $3,400 | 33 / 21 / 15 | Automatic, 9 rounds/s, 30 + 90 |
-| Primary (3) | M1014 | $2,800 | 24 / 10 / 8 per pellet | Semi-auto shotgun, 14 pellets, 6 + 18 |
-| Primary (3) | M110 | $4,000 | 90 / 40 / 30 | Semi-auto marksman rifle, 6 + 18 |
-| Primary (3) | M249 | $3,800 | 43 / 33 / 21 | Automatic, 86 + 86, slowest movement |
+| Melee (3) | Knife | free | 33 / 33 / 33 | Always carried; 2 swings/s; fastest movement |
 | Tactical (4 / G) | M67 grenade | $1,000 | 70 (falloff) | One carried, not restocked; High Explosive mod $1,500 (+45 body damage, smaller radius) |
 | Tactical (5 / X) | M18 smoke grenade | $300 | — | One carried; a 9 m cloud for 15 s that blocks sight, not bullets (not in BeGone) |
 
@@ -282,7 +282,7 @@ fullscreen. On touch-only screens the Controls tab is read-only.
 | LMB · RMB | Fire · accuracy (zoom) |
 | Shift · Space | Sprint · jump (both cost stamina) |
 | C or Ctrl | Crouch |
-| 1 · 2 · 3 | Knife · secondary · primary |
+| 1 · 2 · 3 | Primary · secondary · knife |
 | 4 or G | M67 grenade |
 | 5 or X | M18 smoke grenade |
 | Q or wheel | Cycle weapons |
