@@ -149,6 +149,10 @@ menu.innerHTML = `
         <div class="quick-live"><span class="conn" id="quick-live"><i></i><span></span></span>${serverChip('quick-server')}</div>
         <div class="quick-links">${L('quick.or', 'span')}<button type="button" class="link" data-go="start">${L('tab.start')}</button><span aria-hidden="true">·</span><button type="button" class="link" data-go="join">${L('tab.join')}</button></div>
       </div>
+      <section class="browser" aria-labelledby="quick-rooms-title">
+        <div class="browser-head"><b id="quick-rooms-title" data-i18n="lobby.liveRooms">${t('lobby.liveRooms')}</b></div>
+        <div class="browser-rows" id="quick-rooms" role="list"></div>
+      </section>
     </div>
 
     <div class="view" id="view-start" role="tabpanel" aria-labelledby="tab-start" hidden>
@@ -398,7 +402,7 @@ function chipHtml(uri: string) {
 }
 /** Updates the ping cells, the server chips and the lines under the big buttons in place (samples arrive every 4 s). */
 function renderPings() {
-  menu.querySelectorAll<HTMLElement>('#rooms [data-ping]').forEach(el => { el.className = pingClass(el.dataset.ping); el.innerHTML = pingHtml(el.dataset.ping); });
+  menu.querySelectorAll<HTMLElement>('#rooms [data-ping], #quick-rooms [data-ping]').forEach(el => { el.className = pingClass(el.dataset.ping); el.innerHTML = pingHtml(el.dataset.ping); });
   const live = pingOn && !!server && phase() === 'ready';
   // The chips show from the first connection attempt (so the server can be changed meanwhile) and
   // say when the server is waking (or could not be reached), never an error.
@@ -530,7 +534,7 @@ function renderWake() {
   setText($('#wake-retry'), t('wake.retry'));
 }
 
-/** QUICK PLAY: where it would put you, or that it opens a 6v6 with bots. */
+/** QUICK PLAY: where it would put you, or that it opens a 6v6 with bots, and every live room to pick from. */
 function renderQuick() {
   renderDeploy($<HTMLButtonElement>('#quick-go'), 'quick', t('lobby.joining'), online.ok);
   const target = quickTarget();
@@ -540,6 +544,8 @@ function renderQuick() {
   live.hidden = phase() !== 'ready';
   live.querySelector('span')!.textContent = `${t('quick.online')} · ${plural('lobby.roomCount', rooms.length)} · ${plural('lobby.playerCount', humans)}`;
   live.className = `conn ${rooms.length ? 'live' : ''}`;
+  // Every public room, unfiltered, in Join a Server's order; the one Quick Play would join is marked.
+  renderRoomRows($('#quick-rooms'), listOrder(rooms, r => pings.get(r.server)), `<div class="empty"><p>${esc(t('quick.noRooms'))}</p></div>`, target);
 }
 
 /** START A SERVER: the form, the button and what the room will be. */
@@ -571,48 +577,57 @@ function renderStart() {
   renderLine('start', 'start', `${t(isPublic ? 'start.hintPublic' : 'start.hintPrivate')}${bots ? '' : ` ${t('start.hintBotsOff')}`}`);
 }
 
-/** JOIN A SERVER: the filters, the live rooms they show (fixed-height rows in a box that keeps its size) and the code box. */
-function renderJoin() {
-  select('jsizes', 'jsize', joinSize);
-  select('jmodes', 'jmode', joinMode);
-  const list = $('#rooms');
-  const shown = shownRooms();
+/**
+ * A live room list: fixed-height rows, each with its ping and JOIN (Join a Server's filtered list,
+ * Quick Play's full one). Without rooms it says why: no server, waking (Retry after 3 minutes),
+ * connecting, else `none`. `target` marks the room Quick Play would put you in.
+ */
+function renderRoomRows(list: HTMLElement, shown: PublicRoom[], none: string, target?: PublicRoom) {
   for (const r of shown) if (pingOn) pings.track(r.server);
-  // Header totals: every public room and everyone in them, whatever the filters show.
-  const humans = rooms.reduce((n, r) => n + r.humans, 0);
-  const p = phase();
-  $('#rooms-count').innerHTML = p === 'ready' && rooms.length ? `<span class="conn live"><i></i>${plural('lobby.roomCount', rooms.length)} · ${plural('lobby.playerCount', humans)}</span>` : '';
   // Keep keyboard focus on the same JOIN button across live updates.
   const focused = (document.activeElement as HTMLElement | null)?.closest?.('[data-joinroom]') as HTMLElement | null;
   const focusRoom = focused && list.contains(focused) ? focused.dataset.joinroom : undefined;
   if (!shown.length) {
+    const p = phase();
     // While the server wakes the list says so (never an empty box); after 3 minutes it offers Retry.
     const html = !online.ok ? `<div class="empty">${esc(t('lobby.noServer'))}</div>`
       : p === 'waking' ? `<div class="empty waking"><p><span class="conn wait"><i></i></span>${esc(t('wake.rooms'))}</p><small>${esc(t('wake.roomsSub'))}</small></div>`
       : p === 'unreachable' ? `<div class="empty"><p>${esc(t('wake.downHead'))}</p><button type="button" class="sub" data-wake-retry>${esc(t('wake.retry'))}</button></div>`
       : p !== 'ready' ? `<div class="empty">${esc(t('lobby.connecting'))}</div>`
-      : rooms.length ? `<div class="empty"><p>${esc(t('join.emptyFiltered'))}</p><button type="button" class="link" data-clear>${esc(t('lobby.clearFilters'))}</button></div>`
-      : `<div class="empty"><p>${esc(t('join.empty'))}</p><div class="empty-go"><button type="button" class="sub" data-go="quick">${esc(t('tab.quick'))}</button><button type="button" class="sub" data-go="start">${esc(t('tab.start'))}</button></div></div>`;
+      : none;
     // (Unchanged markup is left alone, so a focused Retry keeps its focus.)
     if (list.dataset.html !== html) { list.dataset.html = html; list.innerHTML = html; }
-  } else {
-    list.dataset.html = '';
-    list.innerHTML = shown.map(r => {
-      const m = maps.find(x => x.id === r.mapId);
-      const aria = t('lobby.roomAria', { map: mapName(r.mapId), mode: modeName(r.mode), size: sizeLabel(r.size), n: r.humans, max: r.size * 2, status: roomStatus(r) });
-      const busy = !ready || !!starting || roomFull(r);
-      const lock = r.fixedMap || r.fixedMode ? `<span class="fixed" title="${esc([r.fixedMap ? t('lobby.fixedMap') : '', r.fixedMode ? t('lobby.fixedMode') : ''].filter(Boolean).join(' · '))}">${LOCK}</span>` : '';
-      return `<div class="room${roomFull(r) ? ' full' : ''}" role="listitem" data-room="${r.room}" data-theme="${m?.theme ?? ''}">
-        <span class="srv"><span class="srv-name"><b>${esc(mapName(r.mapId))}</b>${lock}</span><small class="state ${r.phase}">${esc(roomStatus(r))}${r.noBots ? ` · ${esc(t('join.noBots'))}` : ''}</small></span>
-        <span class="mode" title="${esc(modeName(r.mode))}"><span class="mtag">[${MODE_TAGS[r.mode]}]</span><span class="mname"> ${esc(modeName(r.mode))}</span></span>
-        <span class="size">${sizeLabel(r.size)}</span>
-        <span class="players">${r.humans}/${r.size * 2}</span>
-        <span class="${pingClass(r.server)}" data-ping="${esc(r.server)}" title="${esc(pingTitle(r.server))}">${pingHtml(r.server)}</span>
-        <button type="button" class="join" data-joinroom="${r.room}" aria-label="${esc(`${roomFull(r) ? t('common.full') : t('common.join')} · ${aria}`)}"${busy ? ' disabled' : ''}>${starting === 'room' && joiningRoom === r.room ? t('lobby.joining') : roomFull(r) ? t('common.full') : t('common.join')}</button>
-      </div>`;
-    }).join('');
-    if (focusRoom) list.querySelector<HTMLElement>(`[data-joinroom="${focusRoom}"]`)?.focus({ preventScroll: true });
+    return;
   }
+  list.dataset.html = '';
+  list.innerHTML = shown.map(r => {
+    const m = maps.find(x => x.id === r.mapId);
+    const aria = t('lobby.roomAria', { map: mapName(r.mapId), mode: modeName(r.mode), size: sizeLabel(r.size), n: r.humans, max: r.size * 2, status: roomStatus(r) });
+    const busy = !ready || !!starting || roomFull(r);
+    const lock = r.fixedMap || r.fixedMode ? `<span class="fixed" title="${esc([r.fixedMap ? t('lobby.fixedMap') : '', r.fixedMode ? t('lobby.fixedMode') : ''].filter(Boolean).join(' · '))}">${LOCK}</span>` : '';
+    return `<div class="room${roomFull(r) ? ' full' : ''}${r === target ? ' target' : ''}" role="listitem" data-room="${r.room}" data-theme="${m?.theme ?? ''}">
+      <span class="srv"><span class="srv-name"><b>${esc(mapName(r.mapId))}</b>${lock}</span><small class="state ${r.phase}">${esc(roomStatus(r))}${r.noBots ? ` · ${esc(t('join.noBots'))}` : ''}</small></span>
+      <span class="mode" title="${esc(modeName(r.mode))}"><span class="mtag">[${MODE_TAGS[r.mode]}]</span><span class="mname"> ${esc(modeName(r.mode))}</span></span>
+      <span class="size">${sizeLabel(r.size)}</span>
+      <span class="players">${r.humans}/${r.size * 2}</span>
+      <span class="${pingClass(r.server)}" data-ping="${esc(r.server)}" title="${esc(pingTitle(r.server))}">${pingHtml(r.server)}</span>
+      <button type="button" class="join" data-joinroom="${r.room}" aria-label="${esc(`${roomFull(r) ? t('common.full') : t('common.join')} · ${aria}`)}"${busy ? ' disabled' : ''}>${starting === 'room' && joiningRoom === r.room ? t('lobby.joining') : roomFull(r) ? t('common.full') : t('common.join')}</button>
+    </div>`;
+  }).join('');
+  if (focusRoom) list.querySelector<HTMLElement>(`[data-joinroom="${focusRoom}"]`)?.focus({ preventScroll: true });
+}
+
+/** JOIN A SERVER: the filters, the live rooms they show (fixed-height rows in a box that keeps its size) and the code box. */
+function renderJoin() {
+  select('jsizes', 'jsize', joinSize);
+  select('jmodes', 'jmode', joinMode);
+  const shown = shownRooms();
+  // Header totals: every public room and everyone in them, whatever the filters show.
+  const humans = rooms.reduce((n, r) => n + r.humans, 0);
+  $('#rooms-count').innerHTML = phase() === 'ready' && rooms.length ? `<span class="conn live"><i></i>${plural('lobby.roomCount', rooms.length)} · ${plural('lobby.playerCount', humans)}</span>` : '';
+  renderRoomRows($('#rooms'), shown, rooms.length
+    ? `<div class="empty"><p>${esc(t('join.emptyFiltered'))}</p><button type="button" class="link" data-clear>${esc(t('lobby.clearFilters'))}</button></div>`
+    : `<div class="empty"><p>${esc(t('join.empty'))}</p><div class="empty-go"><button type="button" class="sub" data-go="quick">${esc(t('tab.quick'))}</button><button type="button" class="sub" data-go="start">${esc(t('tab.start'))}</button></div></div>`);
   // How many rooms the filters hide.
   const foot = $('#rooms-foot');
   const hiddenRooms = rooms.length - shown.length;
@@ -731,7 +746,7 @@ $('#start-go').addEventListener('click', () => { audio.ui(); run('start'); });
 $('#go-range').addEventListener('click', () => { audio.ui(); run('range'); });
 $('#join-go').addEventListener('click', () => { audio.ui(); run('code'); });
 $('#solo-go').addEventListener('click', () => { audio.ui(); run('solo'); });
-$('#rooms').addEventListener('dblclick', e => { const row = (e.target as HTMLElement).closest<HTMLElement>('.room'); if (row) run('room', Number(row.dataset.room)); });
+for (const id of ['#rooms', '#quick-rooms']) $(id).addEventListener('dblclick', e => { const row = (e.target as HTMLElement).closest<HTMLElement>('.room'); if (row) run('room', Number(row.dataset.room)); });
 // Tabs: arrow keys move between them (and select), as a tab list does.
 $('#tabs').addEventListener('keydown', e => {
   const step = e.key === 'ArrowRight' ? 1 : e.key === 'ArrowLeft' ? -1 : 0;
