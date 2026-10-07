@@ -18,6 +18,7 @@ import { NetReporter, SAMPLE_EVERY_MS, type NetFields, type NetReport } from '..
 import type { WakeLink } from './wake';
 import { keepAwake, pingUrl, serverIdentityKey } from './ping';
 import { currentServer } from './servers';
+import { currentDeviceKind } from '../game/device';
 
 type RosterRow = Infer<typeof RosterTable>;
 
@@ -326,11 +327,13 @@ export class OnlineLink implements GameLink {
   }
 }
 
-/** Tell the server this browser's time zone and language (once per connection; older servers lack `hello`). */
+/** Tell the server this browser's time zone and language, then its kind of device (once per connection; older servers lack `hello`). */
 function sayHello(conn: DbConnection) {
   let tz = '';
   try { tz = Intl.DateTimeFormat().resolvedOptions().timeZone ?? ''; } catch { /* no Intl time zone */ }
   try { void conn.reducers.hello({ tz, lang: navigator.language ?? '' }).catch(() => undefined); } catch { /* server without hello */ }
+  // Then whether this is a phone, tablet or computer (src/game/device.ts; older servers lack `device`).
+  try { void conn.reducers.device({ kind: currentDeviceKind() }).catch(() => undefined); } catch { /* server without device */ }
 }
 
 /** A server published before a reducer existed refuses the call by name. */
@@ -452,7 +455,8 @@ export async function connectOnline(name: string, team: Team | undefined, how: O
         if (done) { connection.disconnect(); return; }
         try { localStorage.setItem(tokenKey, nextToken); } catch { /* anonymous identity still works */ }
         status(t('net.joining'));
-        // Rough "where from" for the owner's player counts (the private player_seen table): time zone and language, no IP.
+        // Rough "where from" for the owner's player counts (the private player_seen table): time zone and language, no IP;
+        // and phone, tablet or computer (player_device).
         sayHello(connection);
         // PostHog people can be matched to SpacetimeDB profiles by this property (never identify()).
         setPerson({ stdb_identity: identity.toHexString() });
