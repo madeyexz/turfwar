@@ -156,13 +156,23 @@ export class OnlineLink implements GameLink {
       .subscribe([`SELECT * FROM roster WHERE room = ${room}`, `SELECT * FROM frame WHERE id = ${room}`, `SELECT * FROM match_event WHERE room = ${room}`]);
   }
 
-  /** The room we play in: its private code ('' = Quick Play) and size. */
+  /**
+   * The room we play in: its private code ('' = Quick Play) and size. The code comes from
+   * `my_room_code` (only players in the room see it), else `match.code` from an older server; it is
+   * remembered, so a rejoin after the server dropped us (and the view went empty) still has it.
+   */
   roomInfo() {
     const row = this.room >= 0 ? this.conn.db.match.id.find(this.room) : undefined;
     if (!row) return undefined;
     const config = JSON.parse(row.configJson) as { teamSize: number };
-    return { code: row.code, size: sizeLabel(config.teamSize), room: this.room };
+    const mine = [...this.conn.db.myRoomCode.iter()].find(r => r.room === this.room)?.code;
+    const code = row.code || mine || (this.codeRoom === this.room ? this.code : '');
+    if (code) { this.code = code; this.codeRoom = this.room; }
+    return { code, size: sizeLabel(config.teamSize), room: this.room };
   }
+  /** The last private code seen for our room (see `roomInfo`). */
+  private code = '';
+  private codeRoom = -1;
 
   /** In a room with a soldier: only then may inputs go out (the server rejects them otherwise). */
   private inMatch() { return !this.disconnected && !!this.conn.db.player.identity.find(this.identity); }
@@ -400,7 +410,7 @@ export function watchRooms(onChange: (rooms: PublicRoom[]) => void, lost: () => 
       rooms.push({
         room: r.id, mapId: r.mapId, mode: config.mode === 'sabotage' ? 'sabotage' : 'elimination', size: config.teamSize ?? 6, humans: r.humans,
         phase: r.phase, round: r.score0 + r.score1 + 1, fixedMap: !!config.fixedMap, fixedMode: !!config.fixedMode, noBots: !!config.noBots, server: uri,
-        ...(r.code !== '' ? { private: true } : {}),
+        ...(r.code !== '' || conn.db.privateRoom.room.find(r.id) ? { private: true } : {}),
       });
     }
     onChange(rooms.sort((a, b) => b.humans - a.humans || a.room - b.room));
@@ -411,10 +421,13 @@ export function watchRooms(onChange: (rooms: PublicRoom[]) => void, lost: () => 
       .onConnect(c => {
         if (stopped) { c.disconnect(); return; }
         c.db.match.onInsert(emit); c.db.match.onUpdate(emit); c.db.match.onDelete(emit);
+        c.db.privateRoom.onInsert(emit); c.db.privateRoom.onDelete(emit);
         c.subscriptionBuilder()
           .onApplied(() => { if (stopped) return; isLive = true; settle.resolve(); emit(); })
           .onError(() => end(new Error('Subscription failed.')))
           .subscribe(['SELECT * FROM match']);
+        // Which rooms are private (their codes stay on the server). A server without the table: none listed.
+        c.subscriptionBuilder().onApplied(emit).onError(() => undefined).subscribe(['SELECT * FROM private_room']);
       })
       // A socket that fails before the handshake reports an error and then a close: `end` keeps the first.
       .onConnectError((_ctx, error) => end(error ?? new Error('Connection failed.')))
@@ -483,6 +496,8 @@ export async function connectOnline(name: string, team: Team | undefined, how: O
           // Rooms (match rows), players and career stats; the room's own roster, frame and events
           // follow once we know our room. `soldier` and `body` are server-side detail.
           .subscribe(['SELECT * FROM match', 'SELECT * FROM player', 'SELECT * FROM profile']);
+        // Our own private room's code (the server keeps codes off the public room rows); none from an older server.
+        connection.subscriptionBuilder().onError(() => undefined).subscribe(['SELECT * FROM my_room_code']);
       })
       .onConnectError((_ctx, error) => fail(new ConnectError(t('net.unreachable', { error: error?.message ?? t('net.refused') }))))
       .onDisconnect(() => {

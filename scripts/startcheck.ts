@@ -17,7 +17,7 @@ const uri = process.argv[2] ?? 'ws://127.0.0.1:3291';
 const db = process.argv[3] ?? 'lbstart';
 localOnly(uri);
 const { check, finish } = checker();
-const QUERIES = ['SELECT * FROM match', 'SELECT * FROM player', 'SELECT * FROM roster'];
+const QUERIES = ['SELECT * FROM match', 'SELECT * FROM player', 'SELECT * FROM roster', 'SELECT * FROM private_room', 'SELECT * FROM my_room_code'];
 const open: Conn[] = [];
 const client = async () => { const { conn } = await connect(uri, db, QUERIES); open.push(conn); return conn; };
 
@@ -34,10 +34,12 @@ const info = (c: Conn, room: number) => {
   const config = JSON.parse(row.configJson);
   let bots = 0, humans = 0;
   for (const r of c.db.roster.iter()) if (r.room === room) { if (r.bot) bots++; else humans++; }
-  return { room, code: row.code, map: row.mapId, mode: config.mode, size: config.teamSize, fixedMap: !!config.fixedMap, fixedMode: !!config.fixedMode, noBots: !!config.noBots, bots, humans };
+  // A private room's code only reaches the players in it (`my_room_code`), never the public row.
+  const code = row.code || [...c.db.myRoomCode.iter()].find(r => r.room === room)?.code || '';
+  return { room, code, private: !!c.db.privateRoom.room.find(room), publicCode: row.code, map: row.mapId, mode: config.mode, size: config.teamSize, fixedMap: !!config.fixedMap, fixedMode: !!config.fixedMode, noBots: !!config.noBots, bots, humans };
 };
 /** Public rooms as the lobby lists them. */
-const listed = (c: Conn) => [...c.db.match.iter()].filter(r => r.code === '').map(r => r.id).sort();
+const listed = (c: Conn) => [...c.db.match.iter()].filter(r => r.code === '' && !c.db.privateRoom.room.find(r.id)).map(r => r.id).sort();
 const refused = async (fn: () => Promise<unknown>) => { try { await fn(); return 'accepted'; } catch (e) { return String((e as Error).message ?? e); } };
 
 check('starts with no rooms', [...(await client()).db.match.iter()].length === 0);
@@ -73,6 +75,7 @@ const privRoom = await roomOf(privHost);
 await wait(400);
 const vInfo = info(privHost, privRoom);
 check('a private started room gets a code', /^[A-Z]{4}$/.test(vInfo.code), vInfo);
+check('its code is kept off the public room row (only its players see it)', vInfo.private && vInfo.publicCode === '' && [...(await client()).db.myRoomCode.iter()].length === 0, vInfo);
 check('bots on: bots fill the private room', !vInfo.noBots && vInfo.bots > 0, vInfo);
 check('a private room is not listed', !listed(privHost).includes(privRoom), listed(privHost));
 // Make the private room the fullest: Quick Play must still not pick it.
