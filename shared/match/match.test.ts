@@ -689,3 +689,29 @@ describe('switching sides (only toward the side with fewer humans, between fight
     expect(canSwitchTeam(practice.state, practice.people[0])).toBe('no');
   });
 });
+
+describe('warmup before a match (everyone in their base, nothing counts)', () => {
+  it('deploys joiners in their own base, keeps bots still and refuses shots, then starts round 1 fresh', () => {
+    const { ctx, state } = setup({ ...ELIMINATION, teamSize: 3, warmup: 8 });
+    expect(state.phase).toBe('warmup');
+    const me = addSoldier(state, ctx, { name: 'Me', team: 0, bot: false });
+    balanceTeams(state, ctx);
+    expect(state.soldiers.every(s => s.alive)).toBe(true);
+    const bases = [0, 1].map(team => state.soldiers.filter(s => s.team === team).map(s => s.m.x));
+    // Each side stands together, apart from the other.
+    expect(Math.abs(Math.max(...bases[0]) - Math.min(...bases[0]))).toBeLessThan(Math.abs(bases[0][0] - bases[1][0]));
+    const bot = state.soldiers.find(s => s.bot)!;
+    const at = { x: bot.m.x, z: bot.m.z };
+    const enemy = state.soldiers.find(s => s.team === 1)!;
+    const from = { x: me.m.x, y: me.m.y + 1.6, z: me.m.z };
+    const dir = { x: enemy.m.x - from.x, y: 0, z: enemy.m.z - from.z };
+    const len = Math.hypot(dir.x, dir.z); dir.x /= len; dir.z /= len;
+    expect(fireShot(state, ctx, me.id, { weapon: 0, origin: from, dir, target: enemy.id, zone: 'body', point: { x: enemy.m.x, y: enemy.m.y + 1.2, z: enemy.m.z } })).toBe(false);
+    tick(state, ctx, 4);
+    expect(Math.hypot(bot.m.x - at.x, bot.m.z - at.z)).toBeLessThan(0.5);
+    expect(state.soldiers.every(s => s.health === 100 && s.kills === 0)).toBe(true);
+    tick(state, ctx, 4.5);
+    expect([state.phase, state.roundPhase, state.round]).toEqual(['live', 'freeze', 1]);
+    expect(state.soldiers.every(s => s.alive && s.money === CASH.matchBonus)).toBe(true);
+  });
+});

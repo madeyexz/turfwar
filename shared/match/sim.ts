@@ -59,8 +59,10 @@ export function addSoldier(state: MatchState, ctx: SimContext, opts: { name: str
   if (opts.bot) s.brain = createBrain(clamp(state.config.botSkill + (ctx.random() - 0.5) * 0.3, 0.15, 0.95));
   state.soldiers.push(s);
   ctx.emit({ type: 'join', id: s.id, name: s.name, team, bot: s.bot });
-  // Joining mid-round: you deploy at the next round start (BeGone has no mid-round respawn).
-  if (state.phase === 'live' && (state.roundPhase === 'freeze' || state.config.practice)) spawnSoldier(state, ctx, s);
+  // Joining mid-round: you deploy at the next round start (BeGone has no mid-round respawn). In the
+  // warmup before a match everyone stands in their base and may walk about (bots wait; nothing can
+  // be shot: fireShot / throwGrenade need a live round) until round 1 deploys everyone fresh.
+  if (state.phase === 'warmup' || (state.phase === 'live' && (state.roundPhase === 'freeze' || state.config.practice))) spawnSoldier(state, ctx, s);
   return s;
 }
 

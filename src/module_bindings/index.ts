@@ -80,8 +80,10 @@ import BodyRow from "./body_table";
 import FrameRow from "./frame_table";
 import MatchRow from "./match_table";
 import MatchEventRow from "./match_event_table";
+import MyRoomCodeRow from "./my_room_code_table";
 import PlayerRow from "./player_table";
 import PointRow from "./point_table";
+import PrivateRoomRow from "./private_room_table";
 import ProfileRow from "./profile_table";
 import RosterRow from "./roster_table";
 import SoldierRow from "./soldier_table";
@@ -153,6 +155,17 @@ const tablesSchema = __schema({
       { name: 'point_id_key', constraint: 'unique', columns: ['id'] },
     ],
   }, PointRow),
+  privateRoom: __table({
+    name: 'private_room',
+    indexes: [
+      { accessor: 'room', name: 'private_room_room_idx_btree', algorithm: 'btree', columns: [
+        'room',
+      ] },
+    ],
+    constraints: [
+      { name: 'private_room_room_key', constraint: 'unique', columns: ['room'] },
+    ],
+  }, PrivateRoomRow),
   profile: __table({
     name: 'profile',
     indexes: [
@@ -259,6 +272,13 @@ const tablesSchema = __schema({
     constraints: [
     ],
   }, AdminStatusRow),
+  myRoomCode: __table({
+    name: 'my_room_code',
+    indexes: [
+    ],
+    constraints: [
+    ],
+  }, MyRoomCodeRow),
 });
 
 /** The schema information for all reducers in this module. This is defined the same way as the reducers would have been defined in the server, except the body of the reducer is omitted in code generation. */
