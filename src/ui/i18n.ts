@@ -104,6 +104,8 @@ const en = {
   'net.disconnected': 'DISCONNECTED', 'net.room': 'ROOM {code} · {size}', 'net.quick': 'PUBLIC ROOM {size}', 'net.online': 'ONLINE',
   'net.players.one': '1 PLAYER', 'net.players.other': '{n} PLAYERS',
   'net.solo': 'SOLO', 'net.practice': 'PRACTICE RANGE',
+  'net.removed': 'You were removed from the match: the server stopped hearing from this browser. Join again any time.',
+  'net.lost': 'Lost the connection to the match server.',
 
   // ---- Performance check ----
   'bench.title': 'Performance check', 'bench.met': '60 fps target met on this device', 'bench.notMet': '60 fps target not met on this device',
@@ -382,6 +384,8 @@ const zhTW: Record<Key, string> = {
   'net.disconnected': '已斷線', 'net.room': '房間 {code} · {size}', 'net.quick': '公開房間 {size}', 'net.online': '線上',
   'net.players.one': '1 名玩家', 'net.players.other': '{n} 名玩家',
   'net.solo': '單人', 'net.practice': '練習場',
+  'net.removed': '你已被移出對戰：伺服器太久沒收到這個瀏覽器的訊息，可隨時重新加入。',
+  'net.lost': '與對戰伺服器的連線中斷。',
 
   'bench.title': '效能檢測', 'bench.met': '此裝置達到 60 fps 目標', 'bench.notMet': '此裝置未達 60 fps 目標',
   'bench.about': '暖機後進行 {n} 秒的腳本戰鬥。瀏覽器的幀率上限為螢幕更新率，因此 120 Hz 螢幕可能超過 60。「達到」代表平均至少 58 fps，且 95% 的影格在 18.2 ms 內完成。',

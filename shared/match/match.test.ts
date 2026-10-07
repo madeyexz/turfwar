@@ -11,7 +11,7 @@ import {
   resetMatch, tickMatch, useAmmoCrate, TICK_RATE,
 } from './sim';
 import { ATTACKERS, ELIMINATION, PRACTICE_CONFIG, SABOTAGE, type MatchConfig, type MatchEvent, type MatchState, type Soldier } from './state';
-import { MOVE_SLACK, sideOf, type SimContext } from './combat';
+import { MOVE_SLACK, killSoldier, sideOf, type SimContext } from './combat';
 import { CASH } from './economy';
 import { decodeFrame, encodeFrame } from './frame';
 
@@ -564,5 +564,45 @@ describe('frame', () => {
     expect(frame.shots[0].to.z).toBeCloseTo(-80.02, 1);
     const other = frame.poses[0], s0 = state.soldiers[0];
     expect(other.weaponId).toBe(s0.weapons[s0.weapon as 0 | 1]);
+  });
+});
+
+describe('idle humans (the server drops a client quiet for over 45 s)', () => {
+  /** Two humans per team, so a death does not end the round; everyone but `a` keeps reporting. */
+  function room() {
+    const { ctx, state } = setup({ ...ELIMINATION, roundTime: 600, roundTimeSingle: 600 });
+    const a = addSoldier(state, ctx, { name: 'A', team: 0, bot: false });
+    const others = [
+      addSoldier(state, ctx, { name: 'B', team: 0, bot: false }),
+      addSoldier(state, ctx, { name: 'C', team: 1, bot: false }),
+      addSoldier(state, ctx, { name: 'D', team: 1, bot: false }),
+    ];
+    goLive(state, ctx);
+    const play = (seconds: number) => {
+      for (let t = 0; t < seconds; t++) {
+        for (const s of others) if (s.alive) reportState(state, ctx, s.id, report(s), 1);
+        tick(state, ctx, 1);
+      }
+    };
+    return { ctx, state, a, play };
+  }
+
+  it('does not count a dead soldier as idle: a spectator stays well under the limit for 60 s', () => {
+    const { ctx, state, a, play } = room();
+    reportState(state, ctx, a.id, report(a), 1 / 20);
+    killSoldier(state, ctx, a, undefined, 'fall', false);
+    const atDeath = a.idle;
+    play(60);
+    expect(state.roundPhase).toBe('live');
+    expect(a.alive).toBe(false);
+    expect(a.idle).toBe(atDeath);
+    expect(a.idle).toBeLessThan(1);
+  });
+
+  it('still counts an alive human who stops reporting past 45 s', () => {
+    const { a, play } = room();
+    play(46);
+    expect(a.alive).toBe(true);
+    expect(a.idle).toBeGreaterThan(45);
   });
 });
