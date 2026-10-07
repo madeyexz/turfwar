@@ -38,12 +38,13 @@ const connect = (name: string) => new Promise<Conn>((resolve, reject) => {
         const wait = () => {
           const mine = conn.db.player.identity.find(conn.identity!);
           if (!mine) { setTimeout(wait, 50); return; }
-          code.value ||= conn.db.match.id.find(mine.room)!.code;
+          // The server keeps codes off the public rows: our own room's comes from `my_room_code`.
+          code.value ||= conn.db.match.id.find(mine.room)!.code || [...conn.db.myRoomCode.iter()].find(r => r.room === mine.room)?.code || '';
           conn.subscriptionBuilder().onApplied(() => resolve(conn))
             .subscribe([`SELECT * FROM roster WHERE room = ${mine.room}`, `SELECT * FROM frame WHERE id = ${mine.room}`, `SELECT * FROM match_event WHERE room = ${mine.room}`]);
         };
         wait();
-      }).subscribe(['SELECT * FROM match', 'SELECT * FROM player']);
+      }).subscribe(['SELECT * FROM match', 'SELECT * FROM player', 'SELECT * FROM my_room_code']);
     })
     .onConnectError((_c, e) => reject(e)).build();
 });

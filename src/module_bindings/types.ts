@@ -272,6 +272,15 @@ export const MatchEvent = __t.object("MatchEvent", {
 });
 export type MatchEvent = __Infer<typeof MatchEvent>;
 
+export const MyRoomCode = __t.object("MyRoomCode", {});
+export type MyRoomCode = __Infer<typeof MyRoomCode>;
+
+export const MyRoomCodeRow = __t.object("MyRoomCodeRow", {
+  room: __t.u8(),
+  code: __t.string(),
+});
+export type MyRoomCodeRow = __Infer<typeof MyRoomCodeRow>;
+
 export const Player = __t.object("Player", {
   identity: __t.identity(),
   soldierId: __t.u32(),
@@ -360,6 +369,11 @@ export const Point = __t.object("Point", {
 });
 export type Point = __Infer<typeof Point>;
 
+export const PrivateRoom = __t.object("PrivateRoom", {
+  room: __t.u8(),
+});
+export type PrivateRoom = __Infer<typeof PrivateRoom>;
+
 export const Profile = __t.object("Profile", {
   identity: __t.identity(),
   name: __t.string(),
@@ -373,6 +387,12 @@ export const Profile = __t.object("Profile", {
   matchesPlayed: __t.u32(),
 });
 export type Profile = __Infer<typeof Profile>;
+
+export const RoomCode = __t.object("RoomCode", {
+  room: __t.u8(),
+  code: __t.string(),
+});
+export type RoomCode = __Infer<typeof RoomCode>;
 
 export const Roster = __t.object("Roster", {
   id: __t.u32(),

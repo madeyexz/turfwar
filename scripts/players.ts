@@ -22,7 +22,11 @@ if (!db) { console.error('usage: bun scripts/players.ts <database> [--server mai
 
 const seen = sql(server, db, 'SELECT * FROM player_seen') as { identity: string; first_seen: bigint; last_seen: bigint; sessions: number; tz: string; lang: string; name: string }[];
 const online = sql(server, db, 'SELECT * FROM player').length;
-const rooms = sql(server, db, 'SELECT * FROM match') as { humans: number; code: string; map_id: string }[];
+const rooms = sql(server, db, 'SELECT * FROM match') as { id: number; humans: number; code: string; map_id: string }[];
+// Private rooms' codes live in `room_code` (owner-only); a database whose module predates it keeps them on `match`.
+let codes: { room: number; code: string }[] = [];
+try { codes = sql(server, db, 'SELECT * FROM room_code') as typeof codes; } catch { codes = []; }
+const codeOf = (r: { id: number; code: string }) => r.code || codes.find(c => Number(c.room) === Number(r.id))?.code || '';
 const profiles = sql(server, db, 'SELECT * FROM profile') as { identity: string; name: string; matches_played: number; matches_won: number; rounds_played: number; kills: number }[];
 // Online play time (seconds credited; `since` > 0 = in a room now). Missing on a database whose module predates it.
 let times: { identity: string; play_seconds: number | bigint; since: number | bigint }[] | undefined;
@@ -46,7 +50,7 @@ console.log(`  Active in the last 7 days ${num(count(s => since(s.last_seen, now
 console.log(`  Sessions (all time)       ${num(seen.reduce((n, s) => n + s.sessions, 0))}`);
 
 console.log(`\nOnline now: ${num(online)} in rooms (${rooms.length} room${rooms.length === 1 ? '' : 's'} open)`);
-for (const r of rooms) console.log(`  ${pad(r.code ? `#${r.code}` : 'public', 8)} ${pad(r.map_id, 12)} ${r.humans} human${r.humans === 1 ? '' : 's'}`);
+for (const r of rooms) console.log(`  ${pad(codeOf(r) ? `#${codeOf(r)}` : 'public', 8)} ${pad(r.map_id, 12)} ${r.humans} human${r.humans === 1 ? '' : 's'}`);
 
 console.log('\nWhere from (time zone → country, estimate):');
 const countries = countByCountry(seen.map(s => s.tz));

@@ -56,7 +56,10 @@ const matchTable = table({ name: 'match', public: true }, {
   lawsJson: t.string(), lawAuthor: t.i32(), lawText: t.string(), lawLeft: t.f64(), rewindLeft: t.u32(),
   nextId: t.u32(), droneTimer: t.f64(), winner: t.i8(), configJson: t.string(),
   historyHead: t.u32(), historyLength: t.u32(), lastTickMicros: t.u64(), humans: t.u32(),
-  /** Private room code ('' = public Quick Play room). The row id is the room id. */
+  /**
+   * Always '' now: a private room's code lives in `room_code` (private) and `private_room` marks it.
+   * Rooms opened before kept their code here until their next tick moved it. The row id is the room id.
+   */
   code: t.string().default(''),
 });
 
@@ -214,6 +217,15 @@ const deviceTable = table({ name: 'player_device' }, {
   identity: t.identity().primaryKey(), device: t.string(), phone: t.u32(), tablet: t.u32(), desktop: t.u32(), lastAt: t.timestamp(),
 });
 
+/**
+ * Private rooms' codes. `match` is public (every lobby lists the rooms), so a code kept on it would
+ * reach every client: rooms opened before this table keep `match.code` until their next tick moves
+ * it here, and new rooms leave it ''. Private.
+ */
+const roomCodeTable = table({ name: 'room_code' }, { room: t.u8().primaryKey(), code: t.string().unique() });
+/** Which rooms are private, without their codes: the lobby lists them as private and asks for the code. Public. */
+const privateRoomTable = table({ name: 'private_room', public: true }, { room: t.u8().primaryKey() });
+
 /** Identities logged in to the admin dashboard with the admin key (see admin.ts). Private. */
 const adminTable = table({ name: 'admin' }, { identity: t.identity().primaryKey(), grantedAt: t.timestamp() });
 /** Failed admin logins per identity in the current 10-minute window (the rate limit). Private. */
@@ -227,7 +239,7 @@ const spacetimedb = schema({
   matchEvent: eventTable, tickSchedule: tickTable, profile: profileTable, counter: counterTable,
   vehicle: vehicleTable, vehicleInbox: vehicleInboxTable, playerSeen: seenTable,
   playerDay: dayTable, admin: adminTable, adminAttempt: adminAttemptTable, playerTime: timeTable, playerDayTime: dayTimeTable,
-  playerNet: netTable, playerDayNet: dayNetTable, playerDevice: deviceTable,
+  playerNet: netTable, playerDayNet: dayNetTable, playerDevice: deviceTable, roomCode: roomCodeTable, privateRoom: privateRoomTable,
 });
 export default spacetimedb;
 
@@ -548,8 +560,11 @@ function openRoom(ctx: Ctx, mapId: string, config: MatchConfig, code: string) {
     id: room, mapId, phase: state.phase, phaseLeft: state.phaseLeft, time: 0, worldTime: 0, tick: 0, score0: 0, score1: 0,
     scoreTimer: 0, lawsJson: '{}', lawAuthor: -1, lawText: '', lawLeft: -1, rewindLeft: 0, nextId: 0,
     droneTimer: 0, winner: -1, configJson: JSON.stringify(config), historyHead: 0, historyLength: 0,
-    lastTickMicros: micros(ctx), humans: 0, code,
+    lastTickMicros: micros(ctx), humans: 0, code: '',
   });
+  // A reused room id: no code from its last life.
+  ctx.db.roomCode.room.delete(room); ctx.db.privateRoom.room.delete(room);
+  if (code) { ctx.db.roomCode.insert({ room, code }); ctx.db.privateRoom.insert({ room }); }
   for (const t of [...ctx.db.tickSchedule.iter()]) if (t.room === room) ctx.db.tickSchedule.scheduledId.delete(t.scheduledId);
   ctx.db.tickSchedule.insert({ scheduledId: 0n, scheduledAt: TICK_EVERY(), room });
   return room;
@@ -568,6 +583,17 @@ function closeRoom(ctx: Ctx, room: number) {
   for (const r of [...ctx.db.roster.room.filter(room)]) ctx.db.roster.id.delete(r.id);
   for (const r of [...ctx.db.body.iter()]) if (r.room === room) ctx.db.body.id.delete(r.id);
   ctx.db.frame.id.delete(room); ctx.db.clock.id.delete(room); ctx.db.match.id.delete(room);
+  ctx.db.roomCode.room.delete(room); ctx.db.privateRoom.room.delete(room);
+}
+
+/** A room's private code ('' = public): `room_code`, or `match.code` for a room opened before it. */
+const codeOf = (ctx: Ctx, row: { id: number; code: string }) => ctx.db.roomCode.room.find(row.id)?.code ?? row.code;
+
+/** Move a room's code off the public `match` row (rooms opened before `room_code`; once per room). */
+function hideCode(ctx: Ctx, row: MatchRow) {
+  if (!ctx.db.roomCode.room.find(row.id)) ctx.db.roomCode.insert({ room: row.id, code: row.code });
+  if (!ctx.db.privateRoom.room.find(row.id)) ctx.db.privateRoom.insert({ room: row.id });
+  ctx.db.match.id.update({ ...row, code: '' });
 }
 
 const humansIn = (ctx: Ctx, room: number) => { let n = 0; for (const r of ctx.db.soldier.iter()) if (r.room === room && !r.bot) n++; return n; };
@@ -655,7 +681,7 @@ function publicRooms(ctx: Ctx, size?: number): RoomView[] {
   const mine = ctx.db.player.identity.find(ctx.sender);
   const rooms: RoomView[] = [];
   for (const row of ctx.db.match.iter()) {
-    if (row.code !== '') continue;
+    if (codeOf(ctx, row) !== '') continue;
     const config = configOf(row);
     if (size !== undefined && config.teamSize !== size) continue;
     const humans = humansIn(ctx, row.id) - (mine?.room === row.id ? 1 : 0);
@@ -677,7 +703,7 @@ function openFor(ctx: Ctx, filter: RoomFilter) {
 /** A fresh private room code (not in use). */
 function freshCode(ctx: Ctx) {
   let code = '';
-  for (let i = 0; i < 20 && (!code || [...ctx.db.match.iter()].some(r => r.code === code)); i++) code = roomCode(() => ctx.random());
+  for (let i = 0; i < 20 && (!code || ctx.db.roomCode.code.find(code) || [...ctx.db.match.iter()].some(r => r.code === code)); i++) code = roomCode(() => ctx.random());
   return code;
 }
 
@@ -748,8 +774,9 @@ function applyInputs(ctx: Ctx, state: MatchState, sim: SimContext) {
 
 export const tick = spacetimedb.reducer({ onSchedule: tickTable }, { arg: tickTable.rowType }, (ctx, { arg }) => {
   const room = arg.room;
-  const row = ctx.db.match.id.find(room);
+  let row = ctx.db.match.id.find(room);
   if (!row) { ctx.db.tickSchedule.scheduledId.delete(arg.scheduledId); return; }
+  if (row.code) { hideCode(ctx, row); row = ctx.db.match.id.find(room)!; }
   const now = micros(ctx);
   const clock = ctx.db.clock.id.find(room);
   const last = clock?.lastTickMicros ?? row.lastTickMicros;
@@ -770,7 +797,7 @@ export const tick = spacetimedb.reducer({ onSchedule: tickTable }, { arg: tickTa
     if (state.phase === 'ended' && state.phaseLeft - dt <= 0) {
       // Public rooms rotate maps and modes between matches, except a map or mode they were opened
       // for (Play Online with a specific choice); private rooms replay the host's choice.
-      if (!row.code) {
+      if (!codeOf(ctx, row)) {
         const next = nextRoomRules(state.mapId, state.config.mode, state.config.teamSize, state.config);
         state.mapId = next.mapId;
         state.config = { ...state.config, mode: next.mode };
@@ -855,7 +882,8 @@ export const startRoom = spacetimedb.reducer({ name: t.string(), size: t.u8(), m
 /** Join a private room by its code. */
 export const joinRoom = spacetimedb.reducer({ name: t.string(), code: t.string(), team: t.i8() }, (ctx, { name, code, team }) => {
   const clean = cleanCode(code);
-  const row = clean ? [...ctx.db.match.iter()].find(r => r.code === clean) : undefined;
+  const byCode = clean ? ctx.db.roomCode.code.find(clean) : undefined;
+  const row = byCode ? ctx.db.match.id.find(byCode.room) : clean ? [...ctx.db.match.iter()].find(r => r.code === clean) : undefined;
   if (!row) throw new SenderError('No room with that code');
   enterRoom(ctx, row.id, name, team);
 });
@@ -863,7 +891,7 @@ export const joinRoom = spacetimedb.reducer({ name: t.string(), code: t.string()
 /** Join a public room picked from the lobby's room list (private rooms need their code). */
 export const joinPublic = spacetimedb.reducer({ name: t.string(), room: t.u8(), team: t.i8() }, (ctx, { name, room, team }) => {
   const row = ctx.db.match.id.find(room);
-  if (!row || row.code !== '') throw new SenderError('That room is gone; try Quick Play');
+  if (!row || codeOf(ctx, row) !== '') throw new SenderError('That room is gone; try Quick Play');
   enterRoom(ctx, room, name, team);
 });
 
@@ -1082,8 +1110,17 @@ export const adminRooms = spacetimedb.view({ name: 'admin_rooms', public: true }
     try { config = JSON.parse(m.configJson); } catch { /* listed with defaults */ }
     let bots = 0;
     for (const r of ctx.db.roster.room.filter(m.id)) if (r.bot) bots++;
-    return { room: m.id, code: m.code, mapId: m.mapId, mode: config.mode ?? 'elimination', size: config.teamSize ?? 6, humans: m.humans, bots, round: m.score0 + m.score1 + 1, phase: m.phase };
+    return { room: m.id, code: ctx.db.roomCode.room.find(m.id)?.code ?? m.code, mapId: m.mapId, mode: config.mode ?? 'elimination', size: config.teamSize ?? 6, humans: m.humans, bots, round: m.score0 + m.score1 + 1, phase: m.phase };
   })));
+
+/** The code of the private room the caller plays in (no row otherwise): the in-game line the host shares it from. */
+export const myRoomCode = spacetimedb.view({ name: 'my_room_code', public: true },
+  t.array(t.row('MyRoomCodeRow', { room: t.u8(), code: t.string() })),
+  ctx => {
+    const me = ctx.db.player.identity.find(ctx.sender);
+    const code = me ? ctx.db.roomCode.room.find(me.room) : undefined;
+    return me && code ? [{ room: me.room, code: code.code }] : [];
+  });
 
 /** Every player seen, by an anonymous short id (never the identity), with career numbers; newest activity first. */
 export const adminPlayers = spacetimedb.view({ name: 'admin_players', public: true },

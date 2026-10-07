@@ -21,7 +21,10 @@ Back to the [README](../README.md) · [Gameplay](GAMEPLAY.md) · [Development](D
   map match, or opens one with those rules; the server checks the size, the mode and that the size (and
   mode) can play the map, and the choice itself is `pickRoom` in `shared/match/rooms.ts`. `quick_join(size)`
   and `join` (6v6) are the same with any mode and map, kept for older clients. `create_room` opens a
-  private room with a 4-letter code and the host's mode, map, size and bots; `join_room(code)` joins it;
+  private room with a 4-letter code and the host's mode, map, size and bots; `join_room(code)` joins it
+  (the code lives in the private `room_code` table, never on the public `match` rows: the public
+  `private_room` marks which rooms are private, and the `my_room_code` view shows a room's code only to
+  its players);
   `join_public(room)` joins a listed public room. Each room has its own `tick_schedule` row while humans
   are in it and closes (rows and schedule deleted) when the last one leaves, so idle rooms cost nothing.
   After each match a public room keeps a map or a mode it was opened for (`fixedMap` / `fixedMode` in
