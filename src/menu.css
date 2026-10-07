@@ -144,7 +144,7 @@
 /* ---- The views ---- */
 #menu .view { display: flex; flex-direction: column; gap: 10px; min-height: 0; }
 #menu .view[hidden] { display: none; }
-#menu #view-join { flex: 1 1 auto; }
+#menu #view-join, #menu #view-quick { flex: 1 1 auto; }
 #menu #view-start .deploy { margin-top: 6px; }
 #menu .quick-card { display: flex; flex-direction: column; gap: 12px; margin-top: 4px; padding: 14px 16px; border: 1px solid var(--line); border-radius: 4px; background: rgba(6, 12, 16, 0.72); backdrop-filter: blur(6px); }
 #menu .quick-card p { margin: 0; color: var(--ink); opacity: 0.85; font-size: 14px; line-height: 1.45; font-weight: 500; }
@@ -215,7 +215,8 @@
 #menu .room:first-child { border-top: none; }
 #menu .room::before { content: ''; position: absolute; left: 0; top: 9px; bottom: 9px; width: 3px; border-radius: 2px; background: var(--swatch, var(--muted)); opacity: 0.85; }
 #menu .room:hover { background: rgba(127, 246, 255, 0.05); }
-/* The room PLAY ONLINE would join. */
+/* The room Quick Play would join (Quick Play's list). */
+#menu .room.target { background: rgba(127, 246, 255, 0.07); box-shadow: inset 0 0 0 1px rgba(127, 246, 255, 0.3); }
 /* A full room stays listed, greyed, with FULL in place of JOIN. */
 #menu .room.full > :not(.join) { opacity: 0.5; }
 #menu .room .srv { display: flex; flex-direction: column; align-items: flex-start; justify-content: center; gap: 2px; min-width: 0; white-space: nowrap; }
