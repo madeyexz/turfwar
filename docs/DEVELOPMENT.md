@@ -164,8 +164,10 @@ whenever what is collected changes. These answer "how many players, and from whe
   posthog-js (slim build, no external scripts) loads lazily once the lobby is up. Autocapture and
   recordings are off; `$pageview` / `$pageleave` stay on; Do Not Track is respected; PostHog derives
   the country from the IP on its side. Events: `lobby_view`, `play_clicked`, `match_joined`,
-  `match_left` (also on tab close, by beacon), `round_ended`, `vehicle_entered`, `store_purchase`,
-  `language_changed`, `error_shown`, `server_woke`, `net_sample`, with super properties `lang`, `app_version` (git SHA),
+  `match_left` (also on tab close, by beacon; `exit` says how: `menu_button`, `end_screen`, `leave_key`,
+  `removed`, `lost` or `close`), `round_ended`, `vehicle_entered`, `store_purchase`,
+  `language_changed`, `error_shown`, `server_woke`, `net_sample`, `client_error` (the page's own failures:
+  uncaught errors, promises nobody caught and a lost WebGL context, at most 5 a page, `src/errors.ts`), with super properties `lang`, `app_version` (git SHA),
   `online_db` and `screen`. Online, the person property `stdb_identity` links a PostHog person to
   a SpacetimeDB profile. Nothing is sent without a key, under `?bench`, `?trailer`, `?capture`,
   `?fixeddt`, in headless browsers (`navigator.webdriver`), or from the dev server unless the URL

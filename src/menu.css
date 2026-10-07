@@ -596,3 +596,17 @@
   .ask-dialog .why { font-size: 12px; }
   .ask-dialog input, .ask-dialog .go { height: 42px; }
 }
+
+/* The dialog's yes/no row (confirmDialog): Keep playing (default) and Leave. */
+.ask-dialog .choices { display: flex; gap: 10px; }
+.ask-dialog .choices button { flex: 1; height: 48px; font: inherit; font-size: 15px; font-weight: 700; letter-spacing: 0.2em; text-transform: uppercase; cursor: pointer; }
+.ask-dialog .choices .stay { color: var(--ink); background: rgba(255, 255, 255, 0.05); border: 1px solid var(--line); }
+.ask-dialog .choices .stay:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.ask-dialog .go.danger { color: #fff; background: rgba(255, 90, 74, 0.85); border: 0; }
+@media (max-height: 500px) { .ask-dialog .choices button { height: 42px; } }
+
+/* The browser lost the graphics context (src/errors.ts): a reload is the way back. */
+.gfx-lost { position: fixed; left: 50%; top: 16px; z-index: 30; transform: translateX(-50%); display: flex; align-items: center; gap: 14px; max-width: calc(100vw - 32px); padding: 12px 16px;
+  background: rgba(7, 13, 18, 0.95); border: 1px solid var(--crimson); color: var(--ink); font-weight: 600; font-size: 14px; }
+.gfx-lost p { margin: 0; }
+.gfx-lost button { flex: none; height: 38px; padding: 0 14px; font: inherit; font-weight: 700; color: #031013; background: var(--accent); border: 0; cursor: pointer; }

@@ -16,6 +16,14 @@ import type { ServerId } from './net/servers';
  */
 export type PlayKind = 'online' | 'start' | 'room' | 'solo' | 'practice' | 'private' | 'code';
 export type Reason = 'menu' | 'disconnect' | 'close';
+/**
+ * How a match ended for us, finer than `reason`: the in-game menu's Leave button, the end screen's
+ * menu button, the leave key (M, after its confirmation), removed by the server (idle), the
+ * connection lost, or the tab closing.
+ */
+export type Exit = 'menu_button' | 'end_screen' | 'leave_key' | 'removed' | 'lost' | 'close';
+/** The page's own failures: an uncaught error, a promise nobody caught, the graphics (WebGL) context lost. */
+export type ClientErrorKind = 'error' | 'rejection' | 'webgl_lost';
 
 /** Every event and its properties (kept small and typed). */
 export interface Events {
@@ -25,12 +33,14 @@ export interface Events {
   /** `device`: our own phone/tablet/desktop (src/game/device.ts), which, unlike PostHog's `$device_type`, counts an iPad posing as a Mac as a tablet. */
   match_joined: { online: boolean; room?: string; map: string; mode: Mode; size: string; team: 'swat' | 'militia'; server_choice?: ServerId; device: DeviceKind };
   /** Online, also the match's connection quality (shared/netstats.ts): ping percentiles over the newest ≤600 samples, totals for the rest. */
-  match_left: { seconds: number; kills: number; deaths: number; rounds_played: number; reason: Reason } & Partial<Omit<NetFields, 'seconds'>>;
+  match_left: { seconds: number; kills: number; deaths: number; rounds_played: number; reason: Reason; exit?: Exit } & Partial<Omit<NetFields, 'seconds'>>;
   round_ended: { won: boolean; mode: Mode; map: string };
   vehicle_entered: { kind: VehicleKind };
   store_purchase: { item: string; price: number };
   language_changed: { to: string };
   error_shown: { where: string; message: string };
+  /** The page's own failures (src/errors.ts: at most 5 a page, each message once); `source`: file:line:column. */
+  client_error: { kind: ClientErrorKind; message: string; source?: string; in_match: boolean };
   /** The lobby found the game server asleep and it came up after `seconds` (`queued`: a play button was waiting). */
   server_woke: { seconds: number; queued: boolean };
   /** Every 5 minutes of a long online match: connection quality over those minutes (`seconds` in a room). */
@@ -166,11 +176,11 @@ export function roundEnded(props: Events['round_ended']) {
   track('round_ended', props);
 }
 
-/** The match is over for us (menu, a dropped connection, or the tab closing); sent once. `net`: online connection quality. */
-export function matchLeft(reason: Reason, score: { kills: number; deaths: number }, net?: Omit<NetFields, 'seconds'>) {
+/** The match is over for us (menu, a dropped connection, or the tab closing); sent once. `net`: online connection quality; `exit`: exactly how. */
+export function matchLeft(reason: Reason, score: { kills: number; deaths: number }, net?: Omit<NetFields, 'seconds'>, exit?: Exit) {
   if (!match) return;
   const seconds = Math.round((performance.now() - match.start) / 1000);
   const rounds = match.rounds;
   match = undefined;
-  track('match_left', { seconds, kills: score.kills, deaths: score.deaths, rounds_played: rounds, reason, ...net }, { beacon: reason === 'close' });
+  track('match_left', { seconds, kills: score.kills, deaths: score.deaths, rounds_played: rounds, reason, ...(exit ? { exit } : {}), ...net }, { beacon: reason === 'close' });
 }

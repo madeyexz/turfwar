@@ -180,7 +180,8 @@ export class Game {
   }
   private running = true;
   private myTeam = 0;
-  onExit?: () => void;
+  /** Leave for the lobby: the menu's Leave button, the end screen's menu button, or the leave key (confirmed). */
+  onExit?: (how: 'menu_button' | 'end_screen' | 'leave_key') => void;
   /** Online servers rotate battlefields; the host page rebuilds the scene for the new map. */
   onMapChange?: (mapId: string) => void;
   readonly mapId: string;
@@ -207,7 +208,7 @@ export class Game {
     // The flashlight attachment lights the world, so it rides on the world camera.
     renderer.camera.add(this.viewmodel.torch, this.viewmodel.torch.target);
     this.hud = new Hud(container, def);
-    this.hud.onMenu = () => this.onExit?.();
+    this.hud.onMenu = () => this.onExit?.('end_screen');
     this.buymenu = new BuyMenu(container, {
       buy: item => { this.requested({ kind: 'item', item }); this.link.buy(item); this.audio.ui(); },
       attach: (weapon, attachment) => { this.requested({ kind: 'attach', weapon, attachment }); this.link.attach(weapon, attachment); this.audio.ui(); },
@@ -216,7 +217,7 @@ export class Game {
     this.buymenu.onClose = () => { this.input.clear(); void this.input.lock(); };
     this.menu = new SettingsMenu(container, {
       resume: () => { this.menu.hide(); this.input.clear(); void this.input.lock(); },
-      leave: () => this.onExit?.(),
+      leave: () => this.onExit?.('menu_button'),
       team: () => this.teamView(),
       switchTeam: () => this.requestTeamSwitch(),
       sensitivity: v => { this.input.sensitivity = v; },

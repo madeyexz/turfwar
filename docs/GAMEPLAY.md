@@ -293,7 +293,7 @@ fullscreen. On touch-only screens the Controls tab is read-only.
 | On a scooter: mouse · LMB · R · 1 · 2 · 3 | Aim (independent of the steering) · fire · reload · one-handed weapons only |
 | In the helicopter: W · S · A · D · Space · C or Ctrl · mouse | Forward · back · strafe · climb · descend · turn |
 | V | Vehicle camera: chase view or the driver's seat |
-| Esc or P · M | Menu: release the mouse (pauses solo; Resume or Esc / P to go back) · from the menu, back to the lobby |
+| Esc or P · M | Menu: release the mouse (pauses solo; Resume or Esc / P to go back) · from the menu, back to the lobby (after "Leave the match?"; at once on the end screen) |
 
 ## Phones, tablets and the installable app
 

@@ -14,7 +14,7 @@ import { onlineAvailable, connectOnline, watchRooms, ConnectError, OnlineLink, t
 import { PING_WINDOW, PingMonitor, hostAnswers, pingAllowed, pingTone, pingUrl, serverHost, serverRegion } from './net/ping';
 import { currentServer, gameServerList, onServer, type GameServer, type ServerId } from './net/servers';
 import { WakeDriver, wakeProgress, wakeSeconds, type WakeState } from './net/wake';
-import { matchJoined, matchLeft, setSuper, startAnalytics, track, type PlayKind, type Reason } from './analytics';
+import { matchJoined, matchLeft, setSuper, startAnalytics, track, type PlayKind, type Exit, type Reason } from './analytics';
 import { LevelView } from './render/level';
 import { THEMES } from './render/materials';
 import { QUALITY, Renderer } from './render/renderer';
@@ -30,7 +30,8 @@ import { currentDeviceKind, defaultQuality } from './game/device';
 import { onTouchLayout, touchActive } from './game/touchlayout';
 import { InstallBanner } from './ui/installhint';
 import { askCallsign, madeUpCallsign } from './ui/callsign';
-import { ask } from './ui/ask';
+import { ask, confirmDialog } from './ui/ask';
+import { watchClientErrors } from './errors';
 import { registerServiceWorker, warmServiceWorker } from './pwa';
 
 inject();
@@ -1122,12 +1123,12 @@ function launch(link: GameLink, map: string) {
   game = new Game(assets, renderer, link, map, audio, app);
   if (benchMode && !bench) startBench(game);
   game.onMapChange = next => { game?.stop(true); launch(link, next); };
-  game.onExit = () => backToLobby('menu');
+  game.onExit = how => backToLobby('menu', '', how);
 }
 /** Leave the match for the lobby: chosen (menu), or because the server removed us or the connection dropped. */
-function backToLobby(reason: 'menu' | 'disconnect', message = '') {
+function backToLobby(reason: 'menu' | 'disconnect', message = '', exit?: Exit) {
   if (!game) return;
-  leftMatch(reason);
+  leftMatch(reason, exit);
   game.stop(); game = undefined;
   track('lobby_view', {});
   document.body.classList.add('menu-open'); menu.hidden = false;
@@ -1148,16 +1149,16 @@ function joined(link: GameLink, map: string, serverChoice: ServerId | undefined)
   });
   // The server removed us (it stopped hearing from this client) or the connection dropped: back to
   // the lobby with a note, rather than playing on against a frozen match the server no longer runs.
-  if (link instanceof OnlineLink) link.onDrop = () => backToLobby('disconnect', t(link.dropReason === 'removed' ? 'net.removed' : 'net.lost'));
+  if (link instanceof OnlineLink) link.onDrop = () => backToLobby('disconnect', t(link.dropReason === 'removed' ? 'net.removed' : 'net.lost'), link.dropReason === 'removed' ? 'removed' : 'lost');
 }
 /** Analytics: the match is over for us (sent once per match). */
-function leftMatch(reason: Reason) {
+function leftMatch(reason: Reason, exit?: Exit) {
   const link = game?.link, me = link?.state()?.soldiers.find(s => s.id === link.myId());
   // Online: the match's connection quality, and its last report to the server.
-  matchLeft(reason, { kills: me?.kills ?? 0, deaths: me?.deaths ?? 0 }, link instanceof OnlineLink ? link.netLeft() : undefined);
+  matchLeft(reason, { kills: me?.kills ?? 0, deaths: me?.deaths ?? 0 }, link instanceof OnlineLink ? link.netLeft() : undefined, exit);
 }
 // Closing the tab mid-match: match_left goes out by beacon.
-addEventListener('pagehide', () => leftMatch('close'));
+addEventListener('pagehide', () => leftMatch('close', 'close'));
 
 /** Fullscreen on or off. Entering it can drop pointer lock, so recapture after. */
 function toggleFullscreen() {
@@ -1171,12 +1172,33 @@ function toggleFullscreen() {
 document.addEventListener('mousedown', e => {
   const code = `Mouse${e.button}`;
   if (matches('fullscreen', code)) toggleFullscreen();
-  else if (matches('leave', code) && game && !game.input.locked) game.onExit?.();
+  else if (matches('leave', code) && game && !game.input.locked) leaveByKey();
 });
+/**
+ * The leave key (M) or mouse button: a match is left only after "Leave the match?" (it was too easy to
+ * press by accident, after Esc or Alt-Tab freed the mouse); on the end screen it leaves at once.
+ */
+function leaveByKey() {
+  if (!game || game.input.locked || document.querySelector('.ask-dialog')) return;
+  if (game.link.state()?.phase === 'ended') { game.onExit?.('leave_key'); return; }
+  confirmDialog({ title: t('leave.title'), why: t('leave.why'), go: t('leave.go'), stay: t('leave.stay'), done: () => game?.onExit?.('leave_key') });
+}
+
+/** The browser took the graphics context away (a black screen): say so and offer a reload. */
+function graphicsLost() {
+  if (document.querySelector('.gfx-lost')) return;
+  const el = document.createElement('div');
+  el.className = 'gfx-lost';
+  el.setAttribute('role', 'alert');
+  el.innerHTML = `<p>${esc(t('gfx.lost'))}</p><button type="button">${esc(t('gfx.reload'))}</button>`;
+  el.querySelector('button')!.addEventListener('click', () => location.reload());
+  document.body.appendChild(el);
+}
+
 const typing = (e: KeyboardEvent) => { const t = e.target as HTMLElement | null; return !!t && (t.tagName === 'INPUT' || t.tagName === 'TEXTAREA' || t.isContentEditable); };
 document.addEventListener('keydown', e => {
   // The leave key (M) from the in-game menu (the mouse is free): back to the lobby.
-  if (matches('leave', e.code) && game && !game.input.locked && e.target === document.body) game.onExit?.();
+  if (matches('leave', e.code) && game && !game.input.locked && e.target === document.body) leaveByKey();
   // Fullscreen (F, BeGone's default key).
   if (matches('fullscreen', e.code) && !e.repeat && !e.ctrlKey && !e.metaKey && !e.altKey && !typing(e)) toggleFullscreen();
   // Esc in the lobby: close the settings dialog, else the open popover.
@@ -1236,6 +1258,8 @@ const startAction = (): Action => benchMode ? 'solo' : params.get('room') ? 'cod
 
 async function boot() {
   renderer = new Renderer(app, QUALITY[quality]);
+  // The page's own failures go to PostHog; a lost graphics context also asks the player to reload.
+  watchClientErrors(renderer.renderer.domElement, () => !!game, graphicsLost);
   // Chinese UI: fetch the CJK face with the assets, so the first screens never show a fallback font.
   const fonts = isZh() ? cjkFontReady('繁體中文') : Promise.resolve();
   assets = await loadAssets(f => { loadFraction = f; renderQuick(); renderStart(); renderOthers(); });
