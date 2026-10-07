@@ -33,7 +33,7 @@ Lobby URL flags: `?tab=quick|start|join` (the open tab), `?mode=offline|online|l
 starts: Solo, Quick Play or Practice), `&game=elimination|sabotage`, `&size=duel|squad|war` and `&map=<id>`
 (the Start a Server form; a 24v24 map picks 24v24 unless `size` says otherwise), `&room=CODE` (opens Join a
 server with the code filled in; with `autostart` joins it), `&team=0|1|auto`, `&skill=0.25…0.75`, `&name=…`,
-`&autostart=1`. Choices are remembered per browser under `lawbreaker.*` in localStorage (`lawbreaker.start.*`
+`&autostart=1`, `&server=sg|us` (the game server for this visit; Settings → Server saves a choice). Choices are remembered per browser under `lawbreaker.*` in localStorage (`lawbreaker.start.*`
 holds the form; `lawbreaker.crosshair` holds the crosshair style the HUD draws).
 
 `bun scripts/roomcheck.ts ws://127.0.0.1:<port> <db>` (local only) checks Play Online with separate
@@ -58,6 +58,10 @@ everything above 6 m to see under roofs),
 `/dev/viewer.html?model=/assets/props.glb` (asset viewer). Dev-only URL flags `debuginput`,
 `fixeddt` and `capture` make automated runs deterministic on software renderers.
 
+The map picker shows a picture of each map (`public/media/maps/<id>.webp`, 480×270, under 40 KB).
+`bun scripts/mapshots.ts [--url <dev server>] [map …]` shoots them from the level preview through the
+agent-browser CLI, with the dev server running; re-shoot a map after changing it.
+
 ## Deploy
 
 Production: https://turfwar.ianhsiao.me (also https://lawbreaker.vercel.app). The GitHub repository
@@ -71,8 +75,14 @@ preview wired to the development database `lawbreaker-dev`. Releases are maintai
 | Use | Server | Database |
 | --- | --- | --- |
 | Production | SpacetimeDB 2.10.2 self-hosted on **InstaCloud, Singapore** (`wss://play.turfwar.ianhsiao.me`) | `turfwar` |
-| Legacy production (still published, read by `/admin`) | Maincloud, US East | `3d-game-c4lhd` |
+| US East (the previous production; still published, a choice in Settings → Server, read by `/admin`) | Maincloud, US East | `3d-game-c4lhd` |
 | Development (`dev` previews) | Maincloud, US East | `lawbreaker-dev` |
+
+Players pick their server in **Settings → Server** (`src/net/servers.ts`; `?server=sg|us` for one
+visit): Singapore, the build's own server and the default, or US East, where players from before the
+move keep their saved identity and career. Each server keeps its own players; the lobby switches at
+once, a match in progress stays on its server, and `play_clicked` / `match_joined` carry `server_choice`.
+A `dev` preview's own server is `lawbreaker-dev`.
 
 The Singapore server (`deploy/instacloud/`, InstaCloud project `5ad5aa00-…`, compute service `stdb`)
 is a slim container with SpacetimeDB's two binaries and a 10 GiB `/data` volume. It **scales to zero**:
@@ -126,7 +136,7 @@ whenever what is collected changes. These answer "how many players, and from whe
   recordings are off; `$pageview` / `$pageleave` stay on; Do Not Track is respected; PostHog derives
   the country from the IP on its side. Events: `lobby_view`, `play_clicked`, `match_joined`,
   `match_left` (also on tab close, by beacon), `round_ended`, `vehicle_entered`, `store_purchase`,
-  `language_changed`, `error_shown`, with super properties `lang`, `app_version` (git SHA),
+  `language_changed`, `error_shown`, `server_woke`, `net_sample`, with super properties `lang`, `app_version` (git SHA),
   `online_db` and `screen`. Online, the person property `stdb_identity` links a PostHog person to
   a SpacetimeDB profile. Nothing is sent without a key, under `?bench`, `?trailer`, `?capture`,
   `?fixeddt`, in headless browsers (`navigator.webdriver`), or from the dev server unless the URL
@@ -150,11 +160,25 @@ whenever what is collected changes. These answer "how many players, and from whe
   time and career totals (read-only, `spacetime sql` as the owner). Local checks:
   `bun scripts/seencheck.ts ws://127.0.0.1:<port> <db>`, and for play time
   `ADMIN_TEST_KEY=<test key> bun scripts/playtimecheck.ts ws://127.0.0.1:<port> <db>` (about two minutes).
+- **Connection quality** (`shared/netstats.ts`): online, the client samples the round trip of its
+  movement reports (at most every 500 ms; the newest 600 are kept) and counts the server's
+  corrections of its soldier. Every 2 minutes in a room and on leaving it calls
+  `net_stats(p50_ms, p95_ms, samples, corrections, seconds)`; the module keeps `player_net` (typical
+  p50/p95 as means weighted by time, worst p95, corrections, measured seconds) and `player_day_net`
+  (per UTC day). Reports are clamped and limited to one per identity per 30 s, only from identities in
+  `player_seen`. PostHog: `match_left` carries `ping_p50`, `ping_p95`, `samples`, `corrections`,
+  `corrections_per_min`, and `net_sample` goes out every 5 minutes of a match. Ping is measured on the
+  page, so a stalled tab inflates it (as it does the HUD's). Local check:
+  `ADMIN_TEST_KEY=<test key> bun scripts/netcheck.ts ws://127.0.0.1:<port> <db>`.
 
 **Admin page** (`/admin`, `admin/index.html`, not linked from the game, `noindex`): live totals,
 online play time (total, average and median per player, today, 7 days), rooms, 30-day charts of new
 and active players and of play time, countries and a sortable player list (play time, rounds,
-matches, kills …), for the database of the build (`VITE_SPACETIMEDB_*`). Play time comes from the
+matches, kills …), for the database of the build (`VITE_SPACETIMEDB_*`). Connection quality adds a
+PING column (typical p50, coloured; hover for p95 and worst p95) and CORR/MIN to the player list,
+median ping cards (24 h, 7 d) and corrections per minute, ping by country and a 30-day ping chart, from
+the views `admin_player_net` and `admin_daily_net` (subscribed separately: a database without them
+shows "—"). Play time comes from the
 views `admin_player_time` and `admin_daily_time`, joined to `admin_players` by the short id: new
 views rather than new columns on the old ones, because changing an existing view's columns makes a
 publish disconnect every client. The owner logs in with the **admin key**; the module
