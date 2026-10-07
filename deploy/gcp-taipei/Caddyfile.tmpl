@@ -1,0 +1,5 @@
+# The Taipei game server's front door: HTTPS for each hostname (certificates from Let's Encrypt),
+# proxied to SpacetimeDB on localhost. WebSocket upgrades pass through reverse_proxy as they are.
+@HOSTS@ {
+	reverse_proxy 127.0.0.1:8080
+}
