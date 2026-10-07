@@ -82,6 +82,24 @@ export async function hostAnswers(url: string, signal: AbortSignal, fetcher: Fet
   }
 }
 
+/** How often a match in progress requests its game server's `/v1/ping` (see `keepAwake`). */
+export const KEEP_AWAKE_MS = 60_000;
+
+/**
+ * Keeps a scale-to-zero game server up under a match: every `every` ms while `active()` (we are in a
+ * room), one `/v1/ping`. The host sleeps once no request has reached it for a few minutes, and a
+ * match's traffic all rides its already-open WebSocket, which does not count: on 2026-10-07 the
+ * platform suspended the Singapore server 5 and 13 minutes into play, dropping everyone in it. Only
+ * while in a room, so a forgotten tab never holds the server awake. Returns the function that stops it.
+ */
+export function keepAwake(url: string, active: () => boolean, fetcher: Fetch = (u, i) => fetch(u, i), every = KEEP_AWAKE_MS): () => void {
+  const timer = setInterval(() => {
+    if (!active()) return;
+    void fetcher(url, { cache: 'no-store' }).then(res => res.arrayBuffer()).catch(() => undefined);
+  }, every);
+  return () => clearInterval(timer);
+}
+
 export function median(xs: readonly number[]): number | undefined {
   if (!xs.length) return undefined;
   const s = [...xs].sort((a, b) => a - b), m = s.length >> 1;

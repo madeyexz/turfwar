@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { setLang } from '../ui/i18n';
-import { PING_INTERVAL_MS, PingMonitor, PingSamples, hostAnswers, median, pingAllowed, pingTone, pingUrl, serverIdentityKey, serverRegion } from './ping';
+import { KEEP_AWAKE_MS, PING_INTERVAL_MS, PingMonitor, PingSamples, hostAnswers, keepAwake, median, pingAllowed, pingTone, pingUrl, serverIdentityKey, serverRegion } from './ping';
 
 afterEach(() => { setLang('en', false); vi.useRealTimers(); });
 
@@ -170,5 +170,40 @@ describe('PingMonitor', () => {
     expect(calls.every(u => u === 'https://maincloud.spacetimedb.com/v1/ping')).toBe(true);
     expect(m.get(sg)).toBeUndefined();
     expect(m.get(us)).toBe(120);
+  });
+});
+
+describe('keepAwake (a match holds the scale-to-zero server up)', () => {
+  afterEach(() => { vi.useRealTimers(); });
+
+  it('requests /v1/ping once a minute while in a room, well inside the host\'s idle window', () => {
+    vi.useFakeTimers();
+    const urls: string[] = [];
+    let inRoom = true;
+    const stop = keepAwake('https://play.example/v1/ping', () => inRoom, async url => { urls.push(url); return new Response('ok'); });
+    // The platform suspended the server 5 minutes after the last request: a minute leaves room for a few misses.
+    expect(KEEP_AWAKE_MS).toBeLessThanOrEqual(60_000);
+    vi.advanceTimersByTime(KEEP_AWAKE_MS * 3);
+    expect(urls).toEqual(Array(3).fill('https://play.example/v1/ping'));
+    // Out of the room (left, or dropped by the server): nothing, so a forgotten tab lets it sleep.
+    inRoom = false;
+    vi.advanceTimersByTime(KEEP_AWAKE_MS * 5);
+    expect(urls).toHaveLength(3);
+    inRoom = true;
+    vi.advanceTimersByTime(KEEP_AWAKE_MS);
+    expect(urls).toHaveLength(4);
+    stop();
+    vi.advanceTimersByTime(KEEP_AWAKE_MS * 5);
+    expect(urls).toHaveLength(4);
+  });
+
+  it('a failed request (the server already asleep, offline) is swallowed', async () => {
+    vi.useFakeTimers();
+    let calls = 0;
+    const stop = keepAwake('https://play.example/v1/ping', () => true, async () => { calls++; throw new TypeError('Failed to fetch'); });
+    vi.advanceTimersByTime(KEEP_AWAKE_MS * 2);
+    await vi.runOnlyPendingTimersAsync();
+    expect(calls).toBeGreaterThanOrEqual(2);
+    stop();
   });
 });
