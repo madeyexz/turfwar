@@ -36,7 +36,11 @@ export function pingUrl(uri: string): string | undefined {
 /** Where each known server host is, as the lobby names it. Any other host is shown by its name. */
 export const SERVER_REGIONS: Record<string, Key> = {
   'maincloud.spacetimedb.com': 'server.region.usEast',
-  // The production server: SpacetimeDB on InstaCloud compute in Singapore (ap-southeast).
+  // Taipei (the default since 2026-10-07): SpacetimeDB on a GCP machine in Taiwan (asia-east1),
+  // under its own name and its IP's sslip.io name.
+  'tw.turfwar.ianhsiao.me': 'server.region.taipei',
+  '34-81-41-144.sslip.io': 'server.region.taipei',
+  // Singapore: SpacetimeDB on InstaCloud compute (ap-southeast).
   'play.turfwar.ianhsiao.me': 'server.region.singapore',
   localhost: 'server.region.local',
   '127.0.0.1': 'server.region.local',
@@ -51,17 +55,23 @@ export function serverRegionKey(uri: string): Key | undefined {
   const host = serverHost(uri).toLowerCase();
   return SERVER_REGIONS[host] ?? SERVER_REGION_SUFFIXES.find(([suffix]) => host.endsWith(suffix))?.[1];
 }
-/** Hostnames that reach the same production server (its custom domain and InstaCloud's own URL). */
-const SINGAPORE_HOSTS = (host: string) => host === 'play.turfwar.ianhsiao.me' || host.endsWith('.compute.instacloud-edge.com');
+/**
+ * Hostnames of the Taipei and Singapore servers. Taipei began as a copy of Singapore, signing keys
+ * included, so both issue and accept the same tokens: a player keeps one identity on either (with
+ * each server's own stats), under any of their names.
+ */
+const PRODUCTION_HOSTS = (host: string) => host.endsWith('.compute.instacloud-edge.com')
+  || SERVER_REGIONS[host] === 'server.region.taipei' || SERVER_REGIONS[host] === 'server.region.singapore';
 /**
  * Which server a URI reaches, for keying a player's saved identity: the same server under another
  * hostname issues and accepts the same tokens, so switching hostnames must not mint new players.
  */
 export function serverIdentityKey(uri: string) {
   const host = serverHost(uri).toLowerCase();
-  return SINGAPORE_HOSTS(host) ? 'instacloud-singapore' : uri;
+  // (The key's name dates from the Singapore server; renaming it would lose every saved identity.)
+  return PRODUCTION_HOSTS(host) ? 'instacloud-singapore' : uri;
 }
-/** "Singapore", "US East", "Local", or the host name. */
+/** "Taipei", "Singapore", "US East", "Local", or the host name. */
 export function serverRegion(uri: string) {
   const key = serverRegionKey(uri);
   return key ? t(key) : serverHost(uri);

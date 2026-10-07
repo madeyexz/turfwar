@@ -43,6 +43,16 @@ describe('serverRegion', () => {
 });
 
 describe('serverIdentityKey', () => {
+  it('puts the Taipei server in Taipei under each of its names', () => {
+    for (const uri of ['wss://tw.turfwar.ianhsiao.me', 'wss://34-81-41-144.sslip.io/']) expect(serverRegion(uri), uri).toBe('Taipei');
+  });
+
+  it('keeps one identity across Taipei and Singapore (Taipei began as a copy, signing keys included)', () => {
+    for (const uri of ['wss://tw.turfwar.ianhsiao.me', 'wss://34-81-41-144.sslip.io/', 'wss://play.turfwar.ianhsiao.me']) {
+      expect(serverIdentityKey(uri), uri).toBe('instacloud-singapore');
+    }
+  });
+
   it('keeps one identity for the Singapore server under either hostname', () => {
     const edge = serverIdentityKey('wss://prod-main-stdb-2b7636-205bvw6d002.compute.instacloud-edge.com');
     expect(edge).toBe(serverIdentityKey('wss://play.turfwar.ianhsiao.me'));

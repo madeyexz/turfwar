@@ -111,7 +111,7 @@ spacetime generate --lang typescript --out-dir src/module_bindings --module-path
 
 - Source of truth: `https://github.com/madeyexz/turfwar` (renamed from `madeyexz/lawbreaker`; private
   until the owner makes it public). Never change its visibility or settings without the owner.
-- Branches: **`main` = production** (Vercel production, game server `turfwar` on InstaCloud Singapore); **`dev` =
+- Branches: **`main` = production** (Vercel production, game servers `turfwar` in Taipei (default) and Singapore); **`dev` =
   development** (every push is a Vercel preview wired to Maincloud `lawbreaker-dev`). Branch features
   off `dev`, commit, and merge back into `dev` with git (no pull requests). A release is merging `dev`
   into `main` and pushing, after publishing the module to the production database (see below); nothing
@@ -123,17 +123,19 @@ spacetime generate --lang typescript --out-dir src/module_bindings --module-path
 - Pushing `main` triggers Vercel production deployment. Do not push or
   publish merely to test; obtain authorization for releases and shared-state changes.
 - Frontend: `https://turfwar.ianhsiao.me` (production; `https://lawbreaker.vercel.app` still works, DNS for ianhsiao.me is on Cloudflare); `dev` previews are listed by `vercel ls`.
-- Production game server: SpacetimeDB self-hosted on **InstaCloud, Singapore** — `wss://play.turfwar.ianhsiao.me`,
-  database **`turfwar`** (`deploy/instacloud/`; it scales to zero and wakes on the next request). Its owner
-  identity is in `~/.config/turfwar/` on the Mac, outside the repo; publish with `bun run publish:prod`.
+- Production game servers, both database **`turfwar`**: **Taipei**, the default — SpacetimeDB on a GCP VM in
+  Taiwan, `wss://tw.turfwar.ianhsiao.me` (`deploy/gcp-taipei/`, always on) — and **Singapore** on InstaCloud,
+  `wss://play.turfwar.ianhsiao.me` (`deploy/instacloud/`; it scales to zero and wakes on the next request).
+  Taipei began as a copy of Singapore (signing keys included). The owner identity is in `~/.config/turfwar/`
+  on the Mac, outside the repo; `bun run publish:prod` publishes to Taipei, Singapore and legacy Maincloud.
   InstaCloud's CLI is driven as `insta --agent …` from `deploy/instacloud/` (the linked directory).
 - Maincloud databases, URI `wss://maincloud.spacetimedb.com`: legacy production **`3d-game-c4lhd`**
   (still published by `publish:prod` and readable in `/admin`), development **`lawbreaker-dev`**
   (publish `dev`'s module there freely; still never reset it while people test). Build-time public
-  variables are `VITE_SPACETIMEDB_URI` and `VITE_SPACETIMEDB_DATABASE` (Vercel: Production → Singapore
+  variables are `VITE_SPACETIMEDB_URI` and `VITE_SPACETIMEDB_DATABASE` (Vercel: Production → Taipei
   `turfwar`; Preview for branch `dev` → Maincloud `lawbreaker-dev`).
 - Updating an existing database does not invoke the `init` lifecycle. Preserve the
   guarded first-join initialization and avoid duplicate tick schedules.
-- Never reset production data (Singapore or Maincloud). Authorized module releases must use `--delete-data=never`
+- Never reset production data (Taipei, Singapore or Maincloud). Authorized module releases must use `--delete-data=never`
   and stop on destructive migration requirements. Follow the release procedure in docs/DEVELOPMENT.md (Deploy),
   keep module and frontend compatible, and verify both after deployment.

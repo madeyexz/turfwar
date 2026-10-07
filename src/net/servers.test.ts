@@ -1,9 +1,9 @@
 import { afterEach, describe, expect, it } from 'vitest';
 import { setLang, t } from '../ui/i18n';
 import { serverIdentityKey } from './ping';
-import { MAINCLOUD, SERVER_KEY, US_EAST, buildServer, chooseServer, gameServers, rememberServer, type KeyValue } from './servers';
+import { MAINCLOUD, SERVER_KEY, SINGAPORE, US_EAST, buildServer, chooseServer, gameServers, rememberServer, type KeyValue } from './servers';
 
-const SINGAPORE = { uri: 'wss://play.turfwar.ianhsiao.me', database: 'turfwar' };
+const TAIPEI = { uri: 'wss://tw.turfwar.ianhsiao.me', database: 'turfwar' };
 const page = (search = '', host = 'turfwar.ianhsiao.me', protocol = 'https:') => ({ search, host, protocol });
 
 function memory(initial: Record<string, string> = {}): KeyValue & { data: Record<string, string> } {
@@ -15,43 +15,50 @@ const blocked: KeyValue = { getItem() { throw new Error('SecurityError'); }, set
 afterEach(() => setLang('en', false));
 
 describe('the server list', () => {
-  it('offers the production build Singapore (the default) and US East', () => {
-    const list = gameServers(SINGAPORE);
+  it('offers the production build Taipei (the default), then Singapore and US East', () => {
+    const list = gameServers(TAIPEI);
     expect(list.map(s => [s.id, t(s.label), s.uri, s.database])).toEqual([
+      ['tw', 'Taipei', TAIPEI.uri, 'turfwar'],
       ['sg', 'Singapore', SINGAPORE.uri, 'turfwar'],
       ['us', 'US East', MAINCLOUD, '3d-game-c4lhd'],
     ]);
-    expect(list.map(s => s.region && t(s.region))).toEqual(['Singapore', 'US East']);
+    expect(list.map(s => s.region && t(s.region))).toEqual(['Taipei', 'Singapore', 'US East']);
     setLang('zh-TW', false);
-    expect(list.map(s => t(s.label))).toEqual(['新加坡', '美東']);
+    expect(list.map(s => t(s.label))).toEqual(['台北', '新加坡', '美東']);
   });
 
-  it('keeps one saved identity per server: US East keeps the key older players have', () => {
-    const [sg, us] = gameServers(SINGAPORE);
+  it('keeps one saved identity for Taipei and Singapore (same keys), and the old key for US East', () => {
+    const [tw, sg, us] = gameServers(TAIPEI);
+    expect(serverIdentityKey(tw.uri)).toBe('instacloud-singapore');
     expect(serverIdentityKey(sg.uri)).toBe('instacloud-singapore');
     // connectOnline saves the token under `lawbreaker.token:<identity key>:<database>`; US East was production as exactly this.
     expect(`lawbreaker.token:${serverIdentityKey(us.uri)}:${us.database}`).toBe('lawbreaker.token:wss://maincloud.spacetimedb.com:3d-game-c4lhd');
   });
 
-  it("puts a dev build's own server first, as the Dev server, and keeps US East", () => {
+  it('offers a build still on Singapore just Singapore and US East', () => {
+    const list = gameServers(SINGAPORE);
+    expect(list.map(s => [s.id, t(s.label)])).toEqual([['sg', 'Singapore'], ['us', 'US East']]);
+  });
+
+  it("puts a dev build's own server first, as the Dev server, and keeps US East (no Singapore)", () => {
     const list = gameServers({ uri: 'wss://maincloud.spacetimedb.com', database: 'lawbreaker-dev' });
-    expect(list.map(s => [s.id, t(s.label), s.database])).toEqual([['sg', 'Dev server', 'lawbreaker-dev'], ['us', 'US East', '3d-game-c4lhd']]);
+    expect(list.map(s => [s.id, t(s.label), s.database])).toEqual([['tw', 'Dev server', 'lawbreaker-dev'], ['us', 'US East', '3d-game-c4lhd']]);
     expect(t(list[0].region!)).toBe('US East');
     const local = gameServers({ uri: 'ws://localhost:5217/stdb/', database: 'lawbreaker' });
-    expect(local.map(s => s.id)).toEqual(['sg', 'us']);
+    expect(local.map(s => s.id)).toEqual(['tw', 'us']);
     expect([t(local[0].label), t(local[0].region!)]).toEqual(['Dev server', 'Local']);
   });
 
   it('offers nothing without a build server, and only US East to a build that is on it', () => {
     expect(gameServers({})).toEqual([]);
-    expect(gameServers({ uri: SINGAPORE.uri })).toEqual([]);
+    expect(gameServers({ uri: TAIPEI.uri })).toEqual([]);
     const list = gameServers({ uri: 'wss://maincloud.spacetimedb.com/', database: US_EAST.database });
     expect(list.map(s => [s.id, s.uri])).toEqual([['us', 'wss://maincloud.spacetimedb.com/']]);
   });
 
   it("reads the build's server from the build variables, ?stdb= / ?db= and same-origin", () => {
-    const env = { VITE_SPACETIMEDB_URI: SINGAPORE.uri, VITE_SPACETIMEDB_DATABASE: 'turfwar' };
-    expect(buildServer(env, page())).toEqual(SINGAPORE);
+    const env = { VITE_SPACETIMEDB_URI: TAIPEI.uri, VITE_SPACETIMEDB_DATABASE: 'turfwar' };
+    expect(buildServer(env, page())).toEqual(TAIPEI);
     expect(buildServer(env, page('?stdb=ws://127.0.0.1:3000&db=lawbreaker'))).toEqual({ uri: 'ws://127.0.0.1:3000', database: 'lawbreaker' });
     expect(buildServer({ VITE_SPACETIMEDB_URI: 'same-origin', VITE_SPACETIMEDB_DATABASE: 'lawbreaker' }, page('', 'localhost:5217', 'http:')))
       .toEqual({ uri: 'ws://localhost:5217/stdb/', database: 'lawbreaker' });
@@ -60,29 +67,32 @@ describe('the server list', () => {
 });
 
 describe('choosing a server', () => {
-  const list = gameServers(SINGAPORE);
+  const list = gameServers(TAIPEI);
 
-  it('defaults to Singapore and remembers a choice', () => {
+  it('defaults to Taipei and remembers a choice', () => {
     const storage = memory();
-    expect(chooseServer(list, '', storage)?.id).toBe('sg');
+    expect(chooseServer(list, '', storage)?.id).toBe('tw');
     rememberServer('us', storage);
     expect(storage.data[SERVER_KEY]).toBe('us');
     expect(chooseServer(list, '', storage)?.id).toBe('us');
     rememberServer('sg', storage);
     expect(chooseServer(list, '', storage)?.id).toBe('sg');
+    rememberServer('tw', storage);
+    expect(chooseServer(list, '', storage)?.id).toBe('tw');
   });
 
-  it('takes ?server=sg|us over the saved choice, without saving it', () => {
+  it('takes ?server=tw|sg|us over the saved choice, without saving it', () => {
     const storage = memory({ [SERVER_KEY]: 'sg' });
     expect(chooseServer(list, '?server=us', storage)?.id).toBe('us');
     expect(chooseServer(list, '?lang=zh-TW&server=US', storage)?.id).toBe('us');
+    expect(chooseServer(list, '?server=tw', storage)?.id).toBe('tw');
     expect(storage.data[SERVER_KEY]).toBe('sg');
     expect(chooseServer(list, '?server=sg', memory({ [SERVER_KEY]: 'us' }))?.id).toBe('sg');
   });
 
-  it('falls back to Singapore when the saved or asked id is unknown', () => {
-    expect(chooseServer(list, '', memory({ [SERVER_KEY]: 'eu' }))?.id).toBe('sg');
-    expect(chooseServer(list, '?server=eu', memory())?.id).toBe('sg');
+  it('falls back to Taipei when the saved or asked id is unknown', () => {
+    expect(chooseServer(list, '', memory({ [SERVER_KEY]: 'eu' }))?.id).toBe('tw');
+    expect(chooseServer(list, '?server=eu', memory())?.id).toBe('tw');
     // An unknown ?server= still leaves the saved choice in force.
     expect(chooseServer(list, '?server=eu', memory({ [SERVER_KEY]: 'us' }))?.id).toBe('us');
     // A dev build's list: the build's own server is the fallback.
@@ -91,8 +101,8 @@ describe('choosing a server', () => {
 
   it('survives blocked or missing storage', () => {
     expect(() => rememberServer('us', blocked)).not.toThrow();
-    expect(chooseServer(list, '', blocked)?.id).toBe('sg');
-    expect(chooseServer(list, '', undefined)?.id).toBe('sg');
+    expect(chooseServer(list, '', blocked)?.id).toBe('tw');
+    expect(chooseServer(list, '', undefined)?.id).toBe('tw');
     expect(chooseServer(list, '?server=us', blocked)?.id).toBe('us');
   });
 

@@ -77,15 +77,30 @@ preview wired to the development database `lawbreaker-dev`. Releases are maintai
 
 | Use | Server | Database |
 | --- | --- | --- |
-| Production | SpacetimeDB 2.10.2 self-hosted on **InstaCloud, Singapore** (`wss://play.turfwar.ianhsiao.me`) | `turfwar` |
+| Production, the default | SpacetimeDB 2.10.2 self-hosted on **GCP, Taiwan** (`asia-east1-b`, `wss://tw.turfwar.ianhsiao.me`) | `turfwar` |
+| Singapore (production before Taipei; a choice in Settings → Server) | SpacetimeDB 2.10.2 self-hosted on **InstaCloud, Singapore** (`wss://play.turfwar.ianhsiao.me`) | `turfwar` |
 | US East (the previous production; still published, a choice in Settings → Server, read by `/admin`) | Maincloud, US East | `3d-game-c4lhd` |
 | Development (`dev` previews) | Maincloud, US East | `lawbreaker-dev` |
 
-Players pick their server in **Settings → Server** (`src/net/servers.ts`; `?server=sg|us` for one
-visit): Singapore, the build's own server and the default, or US East, where players from before the
-move keep their saved identity and career. Each server keeps its own players; the lobby switches at
-once, a match in progress stays on its server, and `play_clicked` / `match_joined` carry `server_choice`.
-A `dev` preview's own server is `lawbreaker-dev`.
+Players pick their server in **Settings → Server** (`src/net/servers.ts`; `?server=tw|sg|us` for one
+visit): Taipei, the build's own server and the default; Singapore; or US East, where players from
+before Singapore keep their saved identity and career. Taipei began on 2026-10-07 as a copy of
+Singapore, signing keys included, so a player has one identity on both (the client keys both
+servers' saved token alike) and kept their career; from then on each server keeps its own stats.
+The lobby switches at once, a match in progress stays on its server, and `play_clicked` /
+`match_joined` carry `server_choice`. A `dev` preview's own server is `lawbreaker-dev` (offered with
+US East, not Singapore).
+
+The Taipei server (`deploy/gcp-taipei/`, GCP project `game-turfwar-ianhsiao-me`, VM `turfwar-tw`, an
+e2-small with 2 GB of swap and a 20 GB disk, static IP 34.81.41.144) runs the same container as
+Singapore (`deploy/instacloud/Dockerfile`, with `start.sh`'s pruning) on `/var/lib/turfwar`, behind
+Caddy (HTTPS from Let's Encrypt for `tw.turfwar.ianhsiao.me`, a Cloudflare DNS-only A record, and
+`34-81-41-144.sslip.io`). It is always on (no scale-to-zero): roughly US$18–20 a month plus
+traffic, under the project's NT$1000 budget alert. Request round trip from Taipei ~12–35 ms
+(Singapore ~125–160 ms). To work on it: `gcloud compute ssh turfwar-tw --zone asia-east1-b
+--project game-turfwar-ianhsiao-me`, then `sudo docker logs turfwar-stdb`; `setup.sh` (re)installs
+Docker, Caddy and the image (`HOSTS="…" sudo bash setup.sh`), `run.sh` (re)starts the container.
+Back up with a disk snapshot (`gcloud compute disks snapshot turfwar-tw --zone asia-east1-b`).
 
 The Singapore server (`deploy/instacloud/`, InstaCloud project `5ad5aa00-…`, compute service `stdb`)
 is a slim container with SpacetimeDB's two binaries and a 10 GiB `/data` volume. It **scales to zero**:
@@ -104,13 +119,15 @@ passes 4 GB and nothing has been written for 2 minutes it restarts the server ar
 launch: 100 headless players in nine 6v6 rooms held 30 ticks/s; reducer round trip from Taipei
 ~112 ms (Maincloud ~206 ms); ~21 KB/s down per player.
 
-Its owner identity lives outside the repo in `~/.config/turfwar/` (made once with
-`deploy/instacloud/owner.sh <server-url>`, in its own CLI profile so the Maincloud login is untouched).
-Back that folder up: the identity that published `turfwar` is the only one that can update it.
+The owner identity lives outside the repo in `~/.config/turfwar/` (made once with
+`deploy/instacloud/owner.sh <server-url>`, in its own CLI profile so the Maincloud login is untouched;
+its servers `taipei` and `instacloud`). Back that folder up: the identity that published `turfwar`
+is the only one that can update it, on Taipei and Singapore alike.
 To rebuild or reconfigure the container: `cd deploy/instacloud && insta --agent deploy . --group stdb --port 8080 --websocket`.
 
-Vercel production build variables are `VITE_SPACETIMEDB_URI=wss://play.turfwar.ianhsiao.me` and
-`VITE_SPACETIMEDB_DATABASE=turfwar` (the custom domain's certificate went live on 2026-10-07; check it with
+Vercel production build variables are `VITE_SPACETIMEDB_URI=wss://tw.turfwar.ianhsiao.me` (Taipei) and
+`VITE_SPACETIMEDB_DATABASE=turfwar`; Singapore's address is in the code (`SINGAPORE` in `src/net/servers.ts`).
+Singapore's custom domain went live on 2026-10-07 (check it with
 `cd deploy/instacloud && insta --agent domain check play.turfwar.ianhsiao.me --group stdb`). The platform's own
 `wss://prod-main-stdb-2b7636-205bvw6d002.compute.instacloud-edge.com` reaches the same server; the client keys
 saved identities by server (`serverIdentityKey` in `src/net/ping.ts`), so either hostname keeps every player.
@@ -119,11 +136,11 @@ running it against production. Do not use `same-origin` on Vercel; that proxy ex
 development server.
 
 For module updates, run tests and module type checks, then publish non-destructively to production
-(it wakes the Singapore server first and publishes there and to the legacy Maincloud database):
+(Taipei, then Singapore, woken first, then the legacy Maincloud database):
 
 ```sh
 bun run test && bun run build && bun run typecheck:module
-bun run publish:prod                 # or: bun run publish:prod -- sg   (Singapore only)
+bun run publish:prod                 # or: bun run publish:prod -- tw   (Taipei only; -- sg: Singapore only)
 ```
 
 The dev database is published by hand:

@@ -2,32 +2,36 @@ import type { Key } from '../ui/i18n';
 import { serverRegionKey } from './ping';
 
 /**
- * The game servers a player can choose (Settings → Server, or `?server=sg|us` for one visit). Each
- * is a SpacetimeDB database running the same module, so this client plays on either:
+ * The game servers a player can choose (Settings → Server, or `?server=tw|sg|us` for one visit). Each
+ * is a SpacetimeDB database running the same module, so this client plays on any of them:
  *
- * - `sg`, the default: this build's own server (VITE_SPACETIMEDB_URI / _DATABASE, which `?stdb=` and
- *   `?db=` override). In production that is the self-hosted server in Singapore; a `dev` preview's is
+ * - `tw`, the default: this build's own server (VITE_SPACETIMEDB_URI / _DATABASE, which `?stdb=` and
+ *   `?db=` override). In production that is the self-hosted server in Taipei; a `dev` preview's is
  *   the Maincloud development database, a local build's the dev server's proxy ("Dev server").
+ * - `sg`: Singapore, production before Taipei (offered by a production build). Taipei began as a copy
+ *   of it with the same signing keys, so a player has the same identity on both.
  * - `us`: US East, the Maincloud database that was production before Singapore. It stays published,
  *   and players from that time find their saved identity and career there.
  *
- * Each server keeps its own players: the saved identity is keyed by server (`serverIdentityKey`) and
- * the career stats live in that server's database. The choice is saved (`lawbreaker.server`); the
+ * Each server keeps its own stats: the saved identity is keyed by server (`serverIdentityKey`; Taipei
+ * and Singapore share one) and the career stats live in that server's database. The choice is saved (`lawbreaker.server`); the
  * lobby switches at once, a match in progress stays on its server and the next one uses the choice.
  */
-export type ServerId = 'sg' | 'us';
+export type ServerId = 'tw' | 'sg' | 'us';
 
 export interface GameServer {
   id: ServerId;
-  /** The choice's name: "Singapore", "US East", or "Dev server" for a development build's own server. */
+  /** The choice's name: "Taipei", "Singapore", "US East", or "Dev server" for a development build's own server. */
   label: Key;
   uri: string;
   database: string;
-  /** Where it runs ("Singapore", "US East", "Local") when its host is a known one. */
+  /** Where it runs ("Taipei", "Singapore", "US East", "Local") when its host is a known one. */
   region?: Key;
 }
 
 export const MAINCLOUD = 'wss://maincloud.spacetimedb.com';
+/** Singapore (InstaCloud), production before Taipei; a production build offers it second. */
+export const SINGAPORE = { uri: 'wss://play.turfwar.ianhsiao.me', database: 'turfwar' } as const;
 /** US East, spelled as production builds had it: a saved identity there is keyed by this URI. */
 export const US_EAST = { uri: MAINCLOUD, database: '3d-game-c4lhd' } as const;
 
@@ -52,17 +56,20 @@ export function buildServer(env: Env, page: { search: string; protocol: string; 
 }
 
 /**
- * The choices: the build's server first (Singapore in production), then US East. A build without a
- * server offers none (online play is off, and local development never lands on production by
- * itself); a build that is itself on US East offers just that.
+ * The choices: the build's server first (Taipei in production), then Singapore (production builds
+ * only), then US East. A build without a server offers none (online play is off, and local
+ * development never lands on production by itself); a build that is itself on US East offers just
+ * that, and one on Singapore offers Singapore and US East.
  */
 export function gameServers(build: BuildServer): GameServer[] {
   if (!build.uri || !build.database) return [];
   const us: GameServer = { id: 'us', label: 'server.region.usEast', uri: US_EAST.uri, database: US_EAST.database, region: 'server.region.usEast' };
   if (sameServer({ uri: build.uri, database: build.database }, US_EAST)) return [{ ...us, uri: build.uri }];
+  const sg: GameServer = { id: 'sg', label: 'server.region.singapore', uri: SINGAPORE.uri, database: SINGAPORE.database, region: 'server.region.singapore' };
+  if (sameServer({ uri: build.uri, database: build.database }, SINGAPORE)) return [{ ...sg, uri: build.uri }, us];
   const region = serverRegionKey(build.uri);
-  const label: Key = region === 'server.region.singapore' ? region : 'server.choice.dev';
-  return [{ id: 'sg', label, uri: build.uri, database: build.database, region }, us];
+  const own: GameServer = { id: 'tw', label: region === 'server.region.taipei' ? region : 'server.choice.dev', uri: build.uri, database: build.database, region };
+  return region === 'server.region.taipei' ? [own, sg, us] : [own, us];
 }
 
 /** Where the choice is saved (localStorage). */
