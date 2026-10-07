@@ -4,6 +4,7 @@
  *
  * Decisions are pure functions of a `DeviceEnv` snapshot so they can be tested without a browser.
  */
+import type { DeviceKind } from '../../shared/devicekind';
 
 export interface DeviceEnv {
   /** `(pointer: coarse)`: the primary pointer is a finger. */
@@ -47,6 +48,33 @@ export const isInAppBrowser = (env: DeviceEnv) => /FBAN|FBAV|Instagram|Line\/|Mi
 export function touchPrimary(env: DeviceEnv) {
   if (env.maxTouchPoints <= 0 && !env.coarse) return false;
   return env.coarse || !env.fine || isIPad(env) || /iPhone|iPod|Android.*Mobile/i.test(env.userAgent);
+}
+
+/** A screen whose shorter side reaches this many CSS px is a tablet's (Android's own phone/tablet line, sw600dp). */
+export const TABLET_MIN_SIDE = 600;
+
+/**
+ * Phone, tablet or computer, for the owner's player counts (the `device` reducer, once per connection;
+ * shared/devicekind.ts). `screen` is the device's screen in CSS px, not the window, so rotating it or
+ * splitting the screen changes nothing.
+ * - Not touch-primary (`touchPrimary`): a computer (`desktop`), touch-screen laptops included.
+ * - The user agent says so: iPhone or iPod, or Android with "Mobile" (Android phones say it, tablets
+ *   don't): a phone; iPad: a tablet.
+ * - Otherwise (iPadOS saying it is a Mac, Android tablets, any other touch device, a phone asking for
+ *   the desktop site): the screen decides, a tablet from a 600 px shorter side, else a phone.
+ */
+export function deviceKind(env: DeviceEnv, screen: { width: number; height: number }): DeviceKind {
+  if (!touchPrimary(env)) return 'desktop';
+  if (/iPhone|iPod/.test(env.userAgent) || /Android.*Mobile/i.test(env.userAgent)) return 'phone';
+  if (/iPad/.test(env.userAgent)) return 'tablet';
+  const side = Math.min(screen.width, screen.height);
+  return side >= TABLET_MIN_SIDE ? 'tablet' : 'phone';
+}
+
+/** This browser's kind (`deviceKind` of the current environment and screen). */
+export function currentDeviceKind(): DeviceKind {
+  const s = typeof screen === 'undefined' ? undefined : screen;
+  return deviceKind(readEnv(), { width: s?.width ?? 0, height: s?.height ?? 0 });
 }
 
 /** Settings → Controls: touch controls follow the device, or are forced on or off. */
