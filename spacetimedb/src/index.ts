@@ -5,7 +5,7 @@ import { cleanCode, filterError, isRoomSize, mapsFor, newRoomRules, nextRoomRule
 import type { SimContext } from '../../shared/match/combat';
 import { encodeFrame } from '../../shared/match/frame';
 import {
-  addSoldier, balanceTeams, buyAttachmentFor, buyItem, createMatch, enterVehicle as getIn, exitVehicle as getOut, fireShot, reload, removeSoldier, reportState,
+  addSoldier, balanceTeams, buyAttachmentFor, buyItem, createMatch, enterVehicle as getIn, exitVehicle as getOut, fireShot, reload, removeSoldier, reportState, switchTeam,
   reportVehicle, resetMatch, switchWeapon, throwGrenade, tickMatch, useAmmoCrate, TICK_RATE,
 } from '../../shared/match/sim';
 import {
@@ -248,7 +248,8 @@ type Command =
   | { kind: 'buy'; item: BuyItem }
   | { kind: 'attach'; weapon: WeaponId; attachment: AttachmentId }
   | { kind: 'crate'; index: number }
-  | { kind: 'vehicle'; enter: boolean; index: number };
+  | { kind: 'vehicle'; enter: boolean; index: number }
+  | { kind: 'team' };
 
 /** Soldier state without a typed column of its own. */
 interface Gear {
@@ -740,6 +741,7 @@ function applyInputs(ctx: Ctx, state: MatchState, sim: SimContext) {
       case 'attach': buyAttachmentFor(state, c.soldierId, cmd.weapon, cmd.attachment); break;
       case 'crate': useAmmoCrate(state, sim, c.soldierId, cmd.index); break;
       case 'vehicle': if (cmd.enter) getIn(state, sim, c.soldierId, cmd.index); else getOut(state, sim, c.soldierId); break;
+      case 'team': switchTeam(state, sim, c.soldierId); break;
     }
   }
 }
@@ -941,6 +943,9 @@ export const grenade = spacetimedb.reducer({ ox: t.f32(), oy: t.f32(), oz: t.f32
 });
 
 export const reloadWeapon = spacetimedb.reducer({}, ctx => { queue(ctx, { kind: 'reload' }); });
+
+/** Change sides (the shared rules decide: only toward the side with fewer humans, between fights). */
+export const changeTeam = spacetimedb.reducer({}, ctx => { queue(ctx, { kind: 'team' }); });
 
 export const switchSlot = spacetimedb.reducer({ slot: t.u8() }, (ctx, { slot }) => { queue(ctx, { kind: 'switch', slot: slotOf(slot) }); });
 

@@ -8,9 +8,9 @@ import { GRENADE, WEAPONS, pelletCone, pelletDirs, weaponStats } from '../weapon
 import { findPath, nearestNode } from './nav';
 import {
   BOMB_REACH, addSoldier, balanceTeams, buyAttachmentFor, buyItem, createContext, createMatch, fireShot, reportState,
-  removeSoldier, resetMatch, tickMatch, useAmmoCrate, TICK_RATE,
+  canSwitchTeam, removeSoldier, resetMatch, switchTeam, tickMatch, useAmmoCrate, TICK_RATE,
 } from './sim';
-import { ATTACKERS, ELIMINATION, PRACTICE_CONFIG, SABOTAGE, type MatchConfig, type MatchEvent, type MatchState, type Soldier } from './state';
+import { ATTACKERS, ELIMINATION, PRACTICE_CONFIG, SABOTAGE, type MatchConfig, type MatchEvent, type MatchState, type Soldier, type Team } from './state';
 import { MOVE_SLACK, killSoldier, sideOf, type SimContext } from './combat';
 import { CASH } from './economy';
 import { decodeFrame, encodeFrame } from './frame';
@@ -621,5 +621,71 @@ describe('join and leave events (clients note humans in the chat)', () => {
       { type: 'leave', id: human.id, name: 'Ian', team: 1, bot: false },
       { type: 'leave', id: bot.id, name: 'Unit-9', team: 0, bot: true },
     ]);
+  });
+});
+
+describe('switching sides (only toward the side with fewer humans, between fights)', () => {
+  /** A 6v6 room with these many humans per side (bots fill the rest), in round 1's buy freeze. */
+  function room(humans: [number, number], config: MatchConfig = ELIMINATION) {
+    const { ctx, state, events } = setup({ ...config, teamSize: 6 });
+    const people = ([0, 1] as Team[]).flatMap(team => Array.from({ length: humans[team] }, (_, i) => addSoldier(state, ctx, { name: `H${team}${i}`, team, bot: false })));
+    balanceTeams(state, ctx);
+    resetMatch(state, ctx);
+    return { ctx, state, events, people };
+  }
+  const count = (state: MatchState, team: Team, bot: boolean) => state.soldiers.filter(s => s.team === team && s.bot === bot).length;
+
+  it('moves a human to the side with fewer humans in the buy freeze, redeploys them there, and evens out the bots', () => {
+    const { ctx, state, events, people } = room([2, 0]);
+    expect([state.phase, state.roundPhase]).toEqual(['live', 'freeze']);
+    const a = people[0];
+    const before = { x: a.m.x, z: a.m.z };
+    expect(canSwitchTeam(state, a)).toBe('ok');
+    expect(switchTeam(state, ctx, a.id)).toBe(true);
+    expect(a.team).toBe(1);
+    expect(a.alive).toBe(true);
+    expect(Math.hypot(a.m.x - before.x, a.m.z - before.z)).toBeGreaterThan(5);
+    expect([count(state, 0, false), count(state, 1, false)]).toEqual([1, 1]);
+    expect([count(state, 0, true), count(state, 1, true)]).toEqual([5, 5]);
+    expect(events.some(e => e.type === 'team' && e.id === a.id && e.team === 1)).toBe(true);
+  });
+
+  it('lets a lone human pick either side', () => {
+    const { ctx, state, people: [a] } = room([1, 0]);
+    expect(switchTeam(state, ctx, a.id)).toBe(true);
+    expect(a.team).toBe(1);
+    expect(switchTeam(state, ctx, a.id)).toBe(true);
+    expect(a.team).toBe(0);
+  });
+
+  it('refuses a switch that would not even things out', () => {
+    const even = room([1, 1]);
+    for (const p of even.people) {
+      expect(canSwitchTeam(even.state, p)).toBe('even');
+      expect(switchTeam(even.state, even.ctx, p.id)).toBe(false);
+    }
+    // 2 v 1: the lone human cannot cross (the other side has more humans); one of the pair may, since
+    // 1 < 2 (that mirrors the split to 1 v 2: never worse).
+    const { ctx, state, people } = room([2, 1]);
+    const lone = people.find(p => p.team === 1)!;
+    expect(canSwitchTeam(state, lone)).toBe('even');
+    expect(switchTeam(state, ctx, lone.id)).toBe(false);
+    expect(canSwitchTeam(state, people[0])).toBe('ok');
+  });
+
+  it('holds a mid-round switch for the next buy freeze', () => {
+    const { ctx, state, people: [a] } = room([2, 0]);
+    tick(state, ctx, state.config.freezeTime + 0.2);
+    expect(state.roundPhase).toBe('live');
+    expect(canSwitchTeam(state, a)).toBe('later');
+    expect(switchTeam(state, ctx, a.id)).toBe(false);
+    expect(a.team).toBe(0);
+  });
+
+  it('never applies to bots or on the practice range', () => {
+    const { state } = room([1, 0]);
+    expect(canSwitchTeam(state, state.soldiers.find(s => s.bot))).toBe('no');
+    const practice = room([2, 0], PRACTICE_CONFIG);
+    expect(canSwitchTeam(practice.state, practice.people[0])).toBe('no');
   });
 });

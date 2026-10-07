@@ -9,7 +9,7 @@ import { seatFor } from '../../shared/match/vehicles';
 import { WEAPONS, pelletCone, pelletDirs, weaponStats, type HitZone, type WeaponId } from '../../shared/weapons';
 import { CASH, CRATE_REACH, canBuyWeapons, inBase } from '../../shared/match/economy';
 import { seatOf, shieldedIds, sideOf } from '../../shared/match/combat';
-import { BOMB_REACH, modeOf, onSite } from '../../shared/match/sim';
+import { BOMB_REACH, canSwitchTeam, modeOf, onSite } from '../../shared/match/sim';
 import type { Assets } from '../assets';
 import { Audio, type EngineVoice } from '../audio';
 import { BodiesView } from '../render/bodies';
@@ -75,6 +75,8 @@ export class Game {
   private fpsFrames = 0;
   private fpsTime = 0;
   private wasAlive = false;
+  /** A switch of sides asked for mid-round: sent when the next round's buy freeze begins. */
+  private teamRequest = false;
   /** We have been deployed in this match (a mid-round joiner waits for the next round, spectating). */
   private deployed = false;
   private hudReady = false;
@@ -133,6 +135,40 @@ export class Game {
     if (shown !== this.shownWeapon) { vm.setWeapon(held, p.attachments[held] ?? {}, true); this.shownWeapon = shown; }
   }
 
+  /**
+   * The in-game menu's switch-sides button: only toward the side with fewer humans (`canSwitchTeam`);
+   * mid-round it is held for the next buy freeze (pressing again cancels). Hidden where it never applies.
+   */
+  private teamView() {
+    const state = this.link.state(), me = state?.soldiers.find(s => s.id === this.link.myId());
+    if (!state || !me || !this.link.switchTeam) return undefined;
+    const can = canSwitchTeam(state, me);
+    if (can === 'no') return undefined;
+    const other = teamName(1 - me.team);
+    if (can === 'even') { this.teamRequest = false; return { label: t('team.switch', { team: other }), note: t('team.even'), enabled: false }; }
+    if (can === 'later') return this.teamRequest
+      ? { label: t('team.cancel'), note: t('team.queued', { team: other }), enabled: true }
+      : { label: t('team.switch', { team: other }), note: t('team.nextRound'), enabled: true };
+    return { label: t('team.switch', { team: other }), note: t('team.now'), enabled: true };
+  }
+
+  private requestTeamSwitch() {
+    const state = this.link.state(), me = state?.soldiers.find(s => s.id === this.link.myId());
+    if (!state) return;
+    const can = canSwitchTeam(state, me);
+    if (can === 'ok') { this.teamRequest = false; this.link.switchTeam?.(); }
+    else if (can === 'later') this.teamRequest = !this.teamRequest;
+  }
+
+  /** We changed sides: our own arms take the new side's uniform (the other view model, if any, is the old side's now). */
+  private changeSides() {
+    const next = this.otherViewmodel ?? this.viewmodelFor(1 - this.myTeam);
+    this.otherViewmodel = this.viewmodel;
+    this.viewmodel = next;
+    this.otherViewmodel.root.visible = false; this.otherViewmodel.torch.intensity = 0;
+    this.shownWeapon = '';
+  }
+
   private viewmodelFor(team: number) {
     if (team === this.myTeam) return this.viewmodel;
     if (!this.otherViewmodel) {
@@ -181,6 +217,8 @@ export class Game {
     this.menu = new SettingsMenu(container, {
       resume: () => { this.menu.hide(); this.input.clear(); void this.input.lock(); },
       leave: () => this.onExit?.(),
+      team: () => this.teamView(),
+      switchTeam: () => this.requestTeamSwitch(),
       sensitivity: v => { this.input.sensitivity = v; },
       crosshair: style => { this.hud.crosshairStyle = style; },
       quality: q => renderer.applyQuality(QUALITY[q]),
@@ -308,6 +346,7 @@ export class Game {
     // Drivers have no crosshair or weapon panel; a scooter rider keeps both.
     this.hud.driving = this.driving.active && !this.driving.armed;
     if (me) {
+      if (me.team !== this.myTeam) this.changeSides();
       this.myTeam = me.team;
       if (me.alive && !this.wasAlive) { this.player.spawnFrom(me); this.spectating = -1; this.shownWeapon = ''; this.deployed = true; }
       else if (me.alive) this.player.syncGear(me);
@@ -510,6 +549,7 @@ export class Game {
     }
     this.hudTimer -= dt; this.mapTimer -= dt;
     if (this.hudTimer <= 0) {
+      if (this.menu.open) this.menu.refreshTeam();
       this.hudTimer = 0.1;
       // Dead: the HUD shows the watched soldier's gun and magazine.
       this.hud.tick(!this.player.alive && this.watched.alive ? this.watched : this.player, state, me);
@@ -928,6 +968,11 @@ export class Game {
       }
       case 'reward': if (e.id === myId) { this.hud.reward(e.amount, e.reason); this.audio.cash(); } break;
       case 'round': {
+        if (e.phase === 'freeze' && this.teamRequest) {
+          // A switch asked for mid-round goes now, if the rule still allows it.
+          this.teamRequest = false;
+          if (canSwitchTeam(state, me) === 'ok') this.link.switchTeam?.();
+        }
         if (e.phase === 'freeze') {
           // Every round deploys everyone fresh in their base: full magazines, health and stamina,
           // survivors included (they keep their gear, the server refills it).
@@ -995,6 +1040,12 @@ export class Game {
       }
       // Humans arriving and leaving (a quit, a dropped connection or the idle kick) are noted in the chat.
       case 'join': if (e.id !== myId && !(e.bot ?? find(e.id)?.bot)) this.hud.chatNotice('chat.joined', e.name, e.team, teamName(e.team)); break;
+      case 'team': {
+        this.hud.chatNotice('chat.switched', e.name, e.team, teamName(e.team));
+        // Our own switch in the buy freeze: the host redeployed us in the new base.
+        if (e.id === myId && me?.alive) { this.player.spawnFrom(me); this.shownWeapon = ''; }
+        break;
+      }
       case 'leave': {
         const was = this.seen.get(e.id);
         this.seen.delete(e.id);

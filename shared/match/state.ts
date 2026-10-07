@@ -215,6 +215,8 @@ export type MatchEvent =
   /** A soldier joined or left the room; `bot` and the leaver's `team` are missing from older servers. */
   | { type: 'join'; id: number; name: string; team: Team; bot?: boolean }
   | { type: 'leave'; id: number; name: string; team?: Team; bot?: boolean }
+  /** A human changed sides (`team` is the new one). */
+  | { type: 'team'; id: number; name: string; team: Team }
   /** A soldier got in or out of vehicle `vehicle` (seat 0 drives), a hit on its body, or its wreck. */
   | { type: 'vehicle'; action: 'enter' | 'exit' | 'hit' | 'wreck'; vehicle: number; id: number; seat?: number; amount?: number };
 
