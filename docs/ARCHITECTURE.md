@@ -88,8 +88,11 @@ Back to the [README](../README.md) · [Gameplay](GAMEPLAY.md) · [Development](D
   inside the car in the server's frames), backs into a parked car (shoved, no corrections), and a
   report inside a parked car is corrected.
 - Client-side: own movement is predicted with the shared controller; remote soldiers and grenades
-  are interpolated ~100 ms behind from the frame; a rejected position snaps the client back; dropped
-  (idle) clients rejoin automatically.
+  are interpolated ~100 ms behind from the frame; a rejected position snaps the client back. The
+  module drops a human who sends no movement report for 45 s while alive (idle counts only while
+  alive: the dead spectate without reporting). A dropped client stops sending inputs at once and
+  rejoins its room automatically while other humans hold it; if it is not back within 8 s, or the
+  connection is lost, it returns to the lobby with a message.
 - Load test (local only): `bun scripts/loadtest.ts --uri ws://127.0.0.1:3100 --db <name> --clients 100`
   runs headless clients that move with the shared controller, fire validated shots and report the
   server tick rate, bytes per client, report round trips and corrections; it refuses non-local URIs.

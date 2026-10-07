@@ -8,6 +8,8 @@ import { ControlsPanel } from './controlspanel';
 import { TouchSettings } from './touchsettings';
 import { LANGS, lang, onLang, setLang, t, type Key, type Lang } from './i18n';
 import { kbd, kbdCode } from './keys';
+import { currentServer, gameServerList, onServer, selectServer, type GameServer, type ServerId } from '../net/servers';
+import { pingTone, serverHost } from '../net/ping';
 import './settingsmenu.css';
 
 /** Saved like the lobby saves it (`lawbreaker.<key>`); storage may be disabled. */
@@ -40,12 +42,16 @@ export interface LobbySettings {
   bench: { label(): string; run(): void };
   /** Asset attribution line (in the current language). */
   credits(): string;
+  /** The ping to a server choice in ms (undefined while measuring); the lobby measures every choice while this dialog is open. */
+  serverPing?(server: GameServer): number | undefined;
   /** After the dialog closes (button, Esc or a click on the backdrop). */
   onClose?(): void;
 }
 
 export interface SettingsOptions { lobby?: LobbySettings }
 export type SettingsTab = 'options' | 'controls';
+/** A control to focus when the dialog opens (the lobby's server chips open it on the Server choice). */
+export type SettingsFocus = 'server';
 
 const CROSSHAIRS: Record<CrosshairStyle, string> = {
   classic: '<path d="M12 2.5v6M12 15.5v6M2.5 12h6M15.5 12h6"/><circle cx="12" cy="12" r="1.3"/>',
@@ -73,12 +79,14 @@ let uid = 0;
 /**
  * In-game menu (Esc or the menu key, P): resume, an Options tab with the settings that matter
  * mid-match (sensitivity, aim sensitivity, field of view, volume, crosshair, scope view, reticle,
- * graphics, language), a Controls tab to rebind every key (`ControlsPanel`), and leave match. Solo
- * pauses while it is open; online the match keeps going.
+ * graphics, language, game server), a Controls tab to rebind every key (`ControlsPanel`), and leave
+ * match. Solo pauses while it is open; online the match keeps going. A server chosen here applies
+ * from the next match (the menu says so): the match in progress keeps its connection.
  *
  * With `options.lobby` it is the lobby's Settings dialog instead: no Resume / Leave, a close button
- * (Esc and a click on the backdrop close it too), menu music, optic detail, the performance check
- * and credits; the lobby's ? button opens it on the Controls tab.
+ * (Esc and a click on the backdrop close it too), menu music, optic detail, each server's ping, the
+ * performance check and credits; the lobby's ? button opens it on the Controls tab. There a new
+ * server applies at once (the lobby follows `onServer`).
  *
  * Its markup is rebuilt when the language changes (listeners sit on the root, so they survive).
  */
@@ -92,6 +100,7 @@ export class SettingsMenu {
   private solo = false;
   private stopLang: () => void;
   private stopKeys: () => void;
+  private stopServer: () => void;
   private readonly controls = new ControlsPanel();
   /** Touch controls on or off, finger look speed and the layout editor, above the key list. */
   private readonly touch = new TouchSettings();
@@ -128,6 +137,7 @@ export class SettingsMenu {
       const d = btn.dataset;
       if (d.tab) return this.tab(d.tab as SettingsTab);
       if (d.lang) return setLang(d.lang as Lang);
+      if (d.server) selectServer(d.server as ServerId);
       if (d.crosshair) { save('crosshair', d.crosshair); this.actions.crosshair(d.crosshair as CrosshairStyle); }
       if (d.scope) { settings.scopeMode = d.scope as ScopeMode; save('scopeMode', d.scope); }
       if (d.rcolor) { settings.reticleColor = d.rcolor as ReticleColor; save('reticleColor', d.rcolor); }
@@ -152,6 +162,8 @@ export class SettingsMenu {
     });
     // New bindings: the header's key hint follows (the Controls tab redraws itself).
     this.stopKeys = onBindings(() => { const hint = this.root.querySelector('[data-k="hint"]'); if (hint) hint.innerHTML = this.hint(); });
+    // A server chosen in the other menu (lobby or in-game) shows here too.
+    this.stopServer = onServer(() => this.refresh());
     // A new language: rebuild the text, keep the open tab and the focused control.
     this.stopLang = onLang(() => {
       const focused = document.activeElement instanceof HTMLElement && this.root.contains(document.activeElement)
@@ -178,6 +190,7 @@ export class SettingsMenu {
       </div>
       <div class="rows">
         <div class="row"><span>${t('set.language')}</span>${choice('lang', LANGS.map(l => l.id), v => `<span lang="${v}">${LANGS.find(l => l.id === v)!.label}</span>`)}</div>
+        ${this.serverRow()}
         <div class="row"><span>${t('set.crosshair')}</span>${choice('crosshair', ['classic', 'dot', 'circle', 't'] as const, v => `${icon(CROSSHAIRS[v])}${t(`set.cross.${v}`)}`)}</div>
         <div class="row"><span>${t('set.scope')}</span>${choice('scope', SCOPE_MODES, v => t(`set.scope.${v}`), v => t(`set.scope.${v}Tip`))}</div>
         <div class="row"><span>${t('set.rcolor')}</span>${choice('rcolor', RETICLE_COLORS, v => `<i class="swatch" style="--c:${RETICLE_CSS[v]}"></i>${t(`set.color.${v}`)}`)}</div>
@@ -219,6 +232,26 @@ export class SettingsMenu {
     this.tab(this.current);
   }
 
+  /**
+   * The game server (when the build offers a choice): each by name, with its region when the name is
+   * not one (a dev build's own server) and, in the lobby, its ping; a note that stats are per server
+   * and, in a match, that the change waits for the next one.
+   */
+  private serverRow() {
+    const servers = gameServerList();
+    if (servers.length < 2) return '';
+    const label = (s: GameServer) => {
+      const region = s.region !== s.label ? `<small>${s.region ? t(s.region) : serverHost(s.uri)}</small>` : '';
+      const ping = this.lobby ? `<small class="ms" data-server-ping="${s.id}">—</small>` : '';
+      return `<span>${t(s.label)}</span>${region}${ping}`;
+    };
+    const ids = servers.map(s => s.id);
+    return `<div class="row server-row"><span>${t('set.server')}</span><div class="server-pick">
+      ${choice('server', ids, id => label(servers.find(s => s.id === id)!), id => { const s = servers.find(x => x.id === id)!; return `${serverHost(s.uri)} · ${s.database}`; })}
+      <p class="row-note">${t('set.serverNote')}</p>${this.lobby ? '' : `<p class="row-note">${t('set.serverNext')}</p>`}
+    </div></div>`;
+  }
+
   /** In-game header: how to resume and go fullscreen, with the current keys. */
   private hint() {
     return `${kbdCode('Escape')} / ${kbd('menu')} ${t('set.hintResume')} · ${kbd('fullscreen')} ${t('set.hintFullscreen')}`;
@@ -228,17 +261,24 @@ export class SettingsMenu {
   private quality: GraphicsQuality = load('quality', defaultQuality(touchActive())) as GraphicsQuality;
   get open() { return !this.root.hidden; }
 
-  /** In-game: `solo` picks the title (it opens on the tab last shown). Lobby: `tab` picks the section to open on. */
-  show(solo = false, tab: SettingsTab = 'options') {
+  /**
+   * In-game: `solo` picks the title (it opens on the tab last shown). Lobby: `tab` picks the section
+   * to open on, and `focus` a control in it (the server chips open it on the Server choice).
+   */
+  show(solo = false, tab: SettingsTab = 'options', focus?: SettingsFocus) {
     if (this.lobby) {
       const now = this.lobby.current();
       this.volume = now.volume; this.music = now.music; this.quality = now.quality;
       this.tab(tab);
-      if (this.open) return;
-      this.returnFocus = document.activeElement as HTMLElement | null;
-      this.root.hidden = false;
-      this.refresh();
-      this.root.querySelector<HTMLElement>(`[data-tab="${tab}"]`)?.focus({ preventScroll: true });
+      const wasOpen = this.open;
+      if (!wasOpen) {
+        this.returnFocus = document.activeElement as HTMLElement | null;
+        this.root.hidden = false;
+        this.refresh();
+      }
+      const server = focus === 'server' ? this.root.querySelector<HTMLElement>('[data-server][aria-pressed="true"]') ?? this.root.querySelector<HTMLElement>('[data-server]') : null;
+      if (server) { server.focus({ preventScroll: true }); server.closest('.row')?.scrollIntoView({ block: 'nearest' }); }
+      else if (!wasOpen) this.root.querySelector<HTMLElement>(`[data-tab="${tab}"]`)?.focus({ preventScroll: true });
       return;
     }
     if (this.open) return;
@@ -296,7 +336,23 @@ export class SettingsMenu {
     pick('crosshair', load('crosshair', 'classic')); pick('scope', settings.scopeMode); pick('rcolor', settings.reticleColor);
     pick('rstyle', settings.reticleStyle); pick('optic', settings.opticDetail);
     pick('quality', this.lobby ? this.quality : load('quality', defaultQuality(touchActive())));
+    pick('server', currentServer()?.id ?? '');
+    this.refreshPings();
   }
 
-  dispose() { this.stopLang(); this.stopKeys(); this.controls.dispose(); this.touch.dispose(); this.root.remove(); }
+  /** The lobby's ping beside each server choice ("—" while measuring); also called as samples arrive. */
+  refreshPings() {
+    const lobby = this.lobby;
+    if (!lobby?.serverPing) return;
+    for (const s of gameServerList()) {
+      const el = this.root.querySelector<HTMLElement>(`[data-server-ping="${s.id}"]`);
+      if (!el) continue;
+      const ms = lobby.serverPing(s);
+      const text = ms === undefined ? '—' : t('server.ms', { n: ms });
+      if (el.textContent !== text) el.textContent = text;
+      el.className = `ms${ms === undefined ? '' : ` ${pingTone(ms)}`}`;
+    }
+  }
+
+  dispose() { this.stopLang(); this.stopKeys(); this.stopServer(); this.controls.dispose(); this.touch.dispose(); this.root.remove(); }
 }

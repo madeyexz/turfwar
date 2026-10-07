@@ -2,8 +2,9 @@ import { describe, expect, it } from 'vitest';
 import { sha256Hex } from '../../shared/sha256';
 import {
   ADMIN_KEY_SHA256, ADMIN_MAX_FAILURES, ADMIN_WINDOW_MICROS, AdminError, adminLogin, adminLogout, adminRevokeAll, dailyRows, DAY_MICROS,
-  dailyTimeRows, forAdmin, keyMatches, playerRows, playTimeRows, shortId, type AdminAttempts, type AdminStore,
+  dailyNetRows, dailyTimeRows, forAdmin, keyMatches, playerNetRows, playerRows, playTimeRows, shortId, type AdminAttempts, type AdminStore,
 } from '../src/admin';
+import { foldNetDay, type NetDay } from '../../shared/netstats';
 
 // A test key and its hash, injected in place of the real one (which only the owner knows).
 const TEST_KEY = 'test-admin-key-for-vitest';
@@ -156,5 +157,34 @@ describe('admin views', () => {
     expect(rows[27]).toMatchObject({ day: 101, playSeconds: 600n });
     expect(rows[28]).toMatchObject({ playSeconds: 0n });
     expect(dailyTimeRows(-1, () => 1n)).toEqual([]);
+  });
+});
+
+describe('admin connection-quality views', () => {
+  it('give each reporting player their typical ping and corrections per minute by the same short id', () => {
+    const rows = playerNetRows([
+      { identity: 'aa11', avgP50: 42.6, avgP95: 88.4, worstP95: 310, corrections: 9, measuredSeconds: 1800, lastAt: 5n },
+      { identity: 'bb22', avgP50: 180, avgP95: 260, worstP95: 260, corrections: 0, measuredSeconds: 125, lastAt: 7n },
+    ]);
+    expect(rows).toEqual([
+      { id: shortId('aa11'), pingP50: 43, pingP95: 88, worstP95: 310, correctionsPerMin: 0.3, measuredMinutes: 30, lastAt: 5n },
+      { id: shortId('bb22'), pingP50: 180, pingP95: 260, worstP95: 260, correctionsPerMin: 0, measuredMinutes: 2.1, lastAt: 7n },
+    ]);
+    // Same ids as admin_players, so the page can join them; players who never reported have no row.
+    expect(rows[0].id).toBe(playerRows([{ identity: 'aa11', firstSeen: 0n, lastSeen: 0n, sessions: 1, tz: '', lang: '' }], [])[0].id);
+    expect(playerNetRows([])).toEqual([]);
+  });
+
+  it('take the median of players\' daily mean ping for the 30 days up to the latest report', () => {
+    const r = (p50: number, p95: number, seconds: number, corrections = 0) => foldNetDay(undefined, { p50, p95, samples: 1, corrections, seconds });
+    // Day 103: three players; one reported twice (a mean of 40 and 100 weighted 3:1 → 55).
+    const twice = foldNetDay(r(40, 80, 180, 2), { p50: 100, p95: 200, samples: 1, corrections: 1, seconds: 60 });
+    const days: Record<number, NetDay[]> = { 101: [r(300, 900, 60, 6)], 103: [r(30, 60, 120), twice, r(150, 400, 120, 3)] };
+    const rows = dailyNetRows(103, d => days[d] ?? []);
+    expect(rows).toHaveLength(30);
+    expect(rows[29]).toEqual({ day: 103, date: '1970-04-14', players: 3, medianP50: 55, medianP95: 110, correctionsPerMin: 0.75 }); // 6 corrections in 8 min
+    expect(rows[27]).toEqual({ day: 101, date: '1970-04-12', players: 1, medianP50: 300, medianP95: 900, correctionsPerMin: 6 });
+    expect(rows[28]).toMatchObject({ players: 0, medianP50: 0, medianP95: 0, correctionsPerMin: 0 });
+    expect(dailyNetRows(-1, () => [])).toEqual([]);
   });
 });

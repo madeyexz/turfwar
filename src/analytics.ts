@@ -1,5 +1,7 @@
 import type { Mode } from '../shared/match/state';
 import type { VehicleKind } from '../shared/vehicles';
+import type { NetFields } from '../shared/netstats';
+import type { ServerId } from './net/servers';
 
 /**
  * Product analytics (PostHog, US cloud): how many players, from where (PostHog derives the country
@@ -17,9 +19,11 @@ export type Reason = 'menu' | 'disconnect' | 'close';
 /** Every event and its properties (kept small and typed). */
 export interface Events {
   lobby_view: Record<string, never>;
-  play_clicked: { kind: PlayKind; size: string; mode: Mode | ''; map: string };
-  match_joined: { online: boolean; room?: string; map: string; mode: Mode; size: string; team: 'swat' | 'militia' };
-  match_left: { seconds: number; kills: number; deaths: number; rounds_played: number; reason: Reason };
+  /** `server_choice`: the server an online play goes to (Settings → Server); offline plays leave it out. */
+  play_clicked: { kind: PlayKind; size: string; mode: Mode | ''; map: string; server_choice?: ServerId };
+  match_joined: { online: boolean; room?: string; map: string; mode: Mode; size: string; team: 'swat' | 'militia'; server_choice?: ServerId };
+  /** Online, also the match's connection quality (shared/netstats.ts): ping percentiles over the newest ≤600 samples, totals for the rest. */
+  match_left: { seconds: number; kills: number; deaths: number; rounds_played: number; reason: Reason } & Partial<Omit<NetFields, 'seconds'>>;
   round_ended: { won: boolean; mode: Mode; map: string };
   vehicle_entered: { kind: VehicleKind };
   store_purchase: { item: string; price: number };
@@ -27,6 +31,8 @@ export interface Events {
   error_shown: { where: string; message: string };
   /** The lobby found the game server asleep and it came up after `seconds` (`queued`: a play button was waiting). */
   server_woke: { seconds: number; queued: boolean };
+  /** Every 5 minutes of a long online match: connection quality over those minutes (`seconds` in a room). */
+  net_sample: NetFields;
 }
 type EventName = keyof Events;
 type Props = Record<string, string | number | boolean>;
@@ -102,10 +108,11 @@ function devTestId() {
 /**
  * Load posthog-js and start sending; call once the lobby has rendered. `base` are the super
  * properties every event carries (the app version is added here): the language, the SpacetimeDB
- * database and its host (`server_host`, e.g. play.turfwar.ianhsiao.me), so events can be told
- * apart by server.
+ * database and its host (`server_host`, e.g. play.turfwar.ianhsiao.me) and the player's choice of
+ * server (`server_choice`: sg or us), so events can be told apart by server. The lobby updates the
+ * three with `setSuper` when the player chooses another server.
  */
-export function startAnalytics(base: { lang: string; online_db: string; server_host: string }) {
+export function startAnalytics(base: { lang: string; online_db: string; server_host: string; server_choice: string }) {
   if (state !== 'waiting') return;
   state = 'loading';
   const version = typeof __APP_VERSION__ === 'undefined' ? 'dev' : __APP_VERSION__;
@@ -132,7 +139,7 @@ export function startAnalytics(base: { lang: string; online_db: string; server_h
       } : {}),
       loaded: ph => {
         ph.register({
-          lang: base.lang, app_version: version, online_db: base.online_db, server_host: base.server_host,
+          lang: base.lang, app_version: version, online_db: base.online_db, server_host: base.server_host, server_choice: base.server_choice,
           screen: screenBucket(screen.width, screen.height), ...(guard.test ? { test: true } : {}),
         });
       },
@@ -157,11 +164,11 @@ export function roundEnded(props: Events['round_ended']) {
   track('round_ended', props);
 }
 
-/** The match is over for us (menu, a dropped connection, or the tab closing); sent once. */
-export function matchLeft(reason: Reason, score: { kills: number; deaths: number }) {
+/** The match is over for us (menu, a dropped connection, or the tab closing); sent once. `net`: online connection quality. */
+export function matchLeft(reason: Reason, score: { kills: number; deaths: number }, net?: Omit<NetFields, 'seconds'>) {
   if (!match) return;
   const seconds = Math.round((performance.now() - match.start) / 1000);
   const rounds = match.rounds;
   match = undefined;
-  track('match_left', { seconds, kills: score.kills, deaths: score.deaths, rounds_played: rounds, reason }, { beacon: reason === 'close' });
+  track('match_left', { seconds, kills: score.kills, deaths: score.deaths, rounds_played: rounds, reason, ...net }, { beacon: reason === 'close' });
 }

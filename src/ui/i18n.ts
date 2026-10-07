@@ -59,9 +59,11 @@ const en = {
   'server.label': 'Server', 'server.region.usEast': 'US East', 'server.region.singapore': 'Singapore', 'server.region.local': 'Local',
   'server.ms': '{n} ms', 'server.ping': 'Ping {ms}', 'server.measuring': 'Measuring ping…',
   'server.pingTitle': 'Ping to the {server} server: round trip, median of the last {n} samples',
+  // Choosing the server (Settings → Server, src/net/servers.ts): a development build's own server, and the chips' tooltip.
+  'server.choice.dev': 'Dev server', 'server.change': 'Change server',
   // Waking the game server (src/net/wake.ts): it sleeps when nobody plays and boots on the next visit.
   'wake.head': 'Waking the server', 'wake.elapsed': '{n} s',
-  'wake.body': "The server is asleep to save costs — waking it up (about 30 s). It isn't down.",
+  'wake.body': 'The server is asleep to save costs — waking it up (about 30 s).',
   'wake.loading': 'Almost there: the server is up and loading the game.',
   'wake.slow': 'Taking a little longer than usual — still trying.',
   'wake.queued': 'Joining as soon as the server is up…', 'wake.cancel': 'Cancel', 'wake.waiting': 'Waiting for the server…',
@@ -104,6 +106,8 @@ const en = {
   'net.disconnected': 'DISCONNECTED', 'net.room': 'ROOM {code} · {size}', 'net.quick': 'PUBLIC ROOM {size}', 'net.online': 'ONLINE',
   'net.players.one': '1 PLAYER', 'net.players.other': '{n} PLAYERS',
   'net.solo': 'SOLO', 'net.practice': 'PRACTICE RANGE',
+  'net.removed': 'You were removed from the match: the server stopped hearing from this browser. Join again any time.',
+  'net.lost': 'Lost the connection to the match server.',
 
   // ---- Performance check ----
   'bench.title': 'Performance check', 'bench.met': '60 fps target met on this device', 'bench.notMet': '60 fps target not met on this device',
@@ -124,6 +128,8 @@ const en = {
   'set.matched': 'matched', 'set.fov': 'Field of view', 'set.horizontal': '{n}° horizontal',
   'set.vol': 'Effects volume', 'set.music': 'Menu music', 'set.off': 'Off',
   'set.language': 'Language',
+  'set.server': 'Server', 'set.serverNote': 'Stats are kept separately on each server.',
+  'set.serverNext': 'Your current match stays on its server; the change applies from your next match.',
   'set.crosshair': 'Crosshair', 'set.cross.classic': 'Classic', 'set.cross.dot': 'Dot', 'set.cross.circle': 'Circle', 'set.cross.t': 'T',
   'set.scope': 'Scope view', 'set.scope.pip': 'Through the lens', 'set.scope.overlay': 'Full-screen',
   'set.scope.pipTip': 'Magnified optics show the zoom through the lens; the view around it stays wide',
@@ -341,8 +347,9 @@ const zhTW: Record<Key, string> = {
   'server.label': '伺服器', 'server.region.usEast': '美東', 'server.region.singapore': '新加坡', 'server.region.local': '本機',
   'server.ms': '{n} ms', 'server.ping': '延遲 {ms}', 'server.measuring': '正在測量延遲…',
   'server.pingTitle': '到{server}伺服器的延遲：往返時間，取最近 {n} 次的中位數',
+  'server.choice.dev': '開發伺服器', 'server.change': '切換伺服器',
   'wake.head': '正在喚醒伺服器', 'wake.elapsed': '{n} 秒',
-  'wake.body': '伺服器休眠中，正在喚醒…（約 30 秒）不是故障，休眠是為了省成本。',
+  'wake.body': '伺服器休眠中，正在喚醒…（約 30 秒）休眠是為了省成本。',
   'wake.loading': '快好了：伺服器已啟動，正在載入遊戲。',
   'wake.slow': '比平常久一點，仍在持續嘗試。',
   'wake.queued': '伺服器一啟動就自動加入…', 'wake.cancel': '取消', 'wake.waiting': '等待伺服器…',
@@ -382,6 +389,8 @@ const zhTW: Record<Key, string> = {
   'net.disconnected': '已斷線', 'net.room': '房間 {code} · {size}', 'net.quick': '公開房間 {size}', 'net.online': '線上',
   'net.players.one': '1 名玩家', 'net.players.other': '{n} 名玩家',
   'net.solo': '單人', 'net.practice': '練習場',
+  'net.removed': '你已被移出對戰：伺服器太久沒收到這個瀏覽器的訊息，可隨時重新加入。',
+  'net.lost': '與對戰伺服器的連線中斷。',
 
   'bench.title': '效能檢測', 'bench.met': '此裝置達到 60 fps 目標', 'bench.notMet': '此裝置未達 60 fps 目標',
   'bench.about': '暖機後進行 {n} 秒的腳本戰鬥。瀏覽器的幀率上限為螢幕更新率，因此 120 Hz 螢幕可能超過 60。「達到」代表平均至少 58 fps，且 95% 的影格在 18.2 ms 內完成。',
@@ -400,6 +409,8 @@ const zhTW: Record<Key, string> = {
   'set.matched': '一致', 'set.fov': '視野', 'set.horizontal': '水平 {n}°',
   'set.vol': '音效音量', 'set.music': '選單音樂', 'set.off': '關閉',
   'set.language': '語言',
+  'set.server': '伺服器', 'set.serverNote': '各伺服器的戰績分開記錄。',
+  'set.serverNext': '目前這場對戰會留在原本的伺服器，變更從下一場對戰開始生效。',
   'set.crosshair': '準星', 'set.cross.classic': '經典', 'set.cross.dot': '圓點', 'set.cross.circle': '圓圈', 'set.cross.t': 'T 字',
   'set.scope': '狙擊鏡顯示', 'set.scope.pip': '鏡內放大', 'set.scope.overlay': '全螢幕',
   'set.scope.pipTip': '倍率瞄具只在鏡片內放大，周圍視野維持寬廣',
@@ -573,26 +584,26 @@ export const DICTIONARIES: Record<Lang, Record<Key, string>> = { en, 'zh-TW': zh
 
 // ---- Names that live in shared/ data (English there; Chinese here) ----
 
-/** Map names and the region line under them ("place / feature"). */
-const MAPS_ZH: Record<MapId, { name: string; region: string }> = {
-  crane: { name: '起重機', region: '山頂倉儲 / 倒塌的起重機' },
-  tower: { name: '塔樓', region: '山坡貨運站' },
-  warehouse: { name: '倉庫', region: '貨運站 / 貨箱大廳' },
-  pipeline: { name: '輸油管', region: '北方森林 / 抽油站' },
-  courtyard: { name: '庭園', region: '圍牆花園 / 藍調時刻' },
-  timbertown: { name: '伐木鎮', region: '廢棄莊園 / 木材場' },
-  cinder: { name: '灰燼盆地', region: '沙漠 / 科技前哨' },
-  frostline: { name: '霜線前哨', region: '凍原 / 中繼站' },
-  verdant: { name: '翠綠分水嶺', region: '叢林 / 通訊陣列' },
-  ochre: { name: '赭石舊城', region: '沙漠 / 舊城區' },
-  citadel: { name: '山城要塞', region: '翠綠高地 / 山頂要塞' },
-  railyard: { name: '鐵道貨場', region: '沙漠終點站 / 貨運場' },
-  skyline: { name: '天際屋頂', region: '北境生態城 / 上城區' },
-  meridian: { name: '子午線街區', region: '沙漠 / 市區' },
-  taipei: { name: '西門町', region: '西門町 / 台北' },
-  xinyi: { name: '台北101・信義', region: '信義區 / 台北' },
-  taipei101: { name: '台北101・88F', region: '高樓辦公層 / 信義區' },
-  memorial: { name: '中正紀念堂', region: '中正區 / 台北' },
+/** Map names. */
+const MAPS_ZH: Record<MapId, { name: string }> = {
+  crane: { name: '起重機' },
+  tower: { name: '塔樓' },
+  warehouse: { name: '倉庫' },
+  pipeline: { name: '輸油管' },
+  courtyard: { name: '庭園' },
+  timbertown: { name: '伐木鎮' },
+  cinder: { name: '灰燼盆地' },
+  frostline: { name: '霜線前哨' },
+  verdant: { name: '翠綠分水嶺' },
+  ochre: { name: '赭石舊城' },
+  citadel: { name: '山城要塞' },
+  railyard: { name: '鐵道貨場' },
+  skyline: { name: '天際屋頂' },
+  meridian: { name: '子午線街區' },
+  taipei: { name: '西門町' },
+  xinyi: { name: '台北101・信義' },
+  taipei101: { name: '台北101・88F' },
+  memorial: { name: '中正紀念堂' },
 };
 
 /** Attachment names: the optics in Taiwan players' words (紅點, 全像, ACOG, 倍鏡). */
@@ -678,7 +689,6 @@ export const teamShort = (team: number) => t(team === 1 ? 'team.short.1' : 'team
 export const modeName = (mode: string) => t(mode === 'sabotage' ? 'mode.sabotage' : 'mode.elimination');
 export const sizeName = (id: 'duel' | 'squad' | 'war') => t(`size.${id}`);
 export const mapName = (id: string, english: string) => (isZh() && MAPS_ZH[id as MapId]?.name) || english;
-export const mapRegion = (id: string, english: string) => (isZh() && MAPS_ZH[id as MapId]?.region) || english;
 export const attachmentName = (id: AttachmentId, english: string) => (isZh() && ATTACHMENTS_ZH[id]) || english;
 export const weaponClass = (c: WeaponClass) => t(`class.${c}`);
 export const roundReason = (r: string | undefined) => (r && `reason.${r}` in en ? t(`reason.${r}` as Key) : '');

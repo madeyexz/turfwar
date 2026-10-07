@@ -4,16 +4,19 @@
  * - `page`: the game's page (`/`, `/index.html`, any lobby URL with flags): network first, so a new
  *   release shows up on the next load; the cached copy only when offline.
  * - `shell`: a file of this build (hashed scripts and styles, the manifest, icons): cache first.
- * - `static`: the game's unhashed assets (models, textures, sounds, fonts): cache first, filled as
+ * - `static`: the game's unhashed assets (models, textures, sounds, fonts, the map pictures): cache first, filled as
  *   they are used, kept until those files change.
  * - `bypass`: everything else goes straight to the network and is never stored: other origins
  *   (SpacetimeDB's websocket and ping, PostHog), `/admin`, the dev server's `/stdb` proxy, Vercel's
- *   own routes, and non-GET requests.
+ *   own routes, the trailer videos in `/media`, and non-GET requests.
  */
 export type Route = 'page' | 'shell' | 'static' | 'bypass';
 
-const NEVER = /^\/(admin|stdb|_vercel|api|ingest|dev|media)(\/|$)/;
-const STATIC = /^\/(assets|fonts|icons)\//;
+const NEVER = /^\/(admin|stdb|_vercel|api|ingest|dev)(\/|$)/;
+/** The trailers in /media: large, fetched in ranges by the video player, never stored. */
+const VIDEO = /^\/media\/.+\.(mp4|webm|mov)$/i;
+/** The map picker's screenshots live in /media/maps and are cached like the other assets. */
+const STATIC = /^\/(assets|fonts|icons|media\/maps)\//;
 
 export function routeOf(req: { url: string; method: string; mode?: string }, origin: string, shell: ReadonlySet<string>): Route {
   if (req.method !== 'GET') return 'bypass';
@@ -21,7 +24,7 @@ export function routeOf(req: { url: string; method: string; mode?: string }, ori
   try { url = new URL(req.url); } catch { return 'bypass'; }
   if (url.origin !== origin || (url.protocol !== 'https:' && url.protocol !== 'http:')) return 'bypass';
   const path = url.pathname;
-  if (NEVER.test(path) || path === '/sw.js') return 'bypass';
+  if (NEVER.test(path) || VIDEO.test(path) || path === '/sw.js') return 'bypass';
   if (req.mode === 'navigate') return path === '/' || path === '/index.html' ? 'page' : 'bypass';
   if (shell.has(path)) return path === '/index.html' ? 'page' : 'shell';
   return STATIC.test(path) ? 'static' : 'bypass';

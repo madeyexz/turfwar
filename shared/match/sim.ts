@@ -449,8 +449,11 @@ export function tickMatch(state: MatchState, ctx: SimContext, dt: number) {
 
 /** Weapon timers and stamina. Health does not regenerate within a round (BeGone). */
 function updateTimers(state: MatchState, ctx: SimContext, s: Soldier, dt: number) {
-  s.idle += dt;
   if (!s.alive) return;
+  // Idle (time since the client last reported) counts only while alive: the dead spectate and send
+  // no movement reports, so counting them would drop a spectator as a vanished client. A client that
+  // vanishes while dead is dropped 45 s after it respawns next round instead.
+  s.idle += dt;
   s.fireCooldown = Math.max(0, s.fireCooldown - dt);
   s.switchLeft = Math.max(0, s.switchLeft - dt);
   s.sinceShot += dt; s.sinceHit += dt;

@@ -120,6 +120,24 @@ section.card h2 small { color: var(--faint); font-weight: 600; letter-spacing: 0
 .countries .bar i { display: block; height: 100%; background: var(--accent); }
 .countries span { color: var(--muted); font-variant-numeric: tabular-nums; }
 
+/* Connection quality: ping under 80 ms green, under 160 ms amber, slower red (src/admin/net.ts). */
+.ping { font-weight: 700; }
+.ping.good { color: var(--cash); }
+.ping.fair { color: var(--amber); }
+.ping.poor { color: var(--crimson); }
+.countries .bar i.ping-good, .legend i.ping-good { background: var(--cash); }
+.countries .bar i.ping-fair, .legend i.ping-fair { background: var(--amber); }
+.countries .bar i.ping-poor, .legend i.ping-poor { background: var(--crimson); }
+.legend i.line { height: 2px; vertical-align: 4px; background: var(--ink); opacity: 0.7; }
+.chart .bar.ping-good { fill: var(--cash-dim); }
+.chart .bar.ping-fair { fill: rgba(255, 180, 90, 0.45); }
+.chart .bar.ping-poor { fill: rgba(255, 85, 68, 0.5); }
+.chart .bar.ping-good:hover { fill: var(--cash); }
+.chart .bar.ping-fair:hover { fill: var(--amber); }
+.chart .bar.ping-poor:hover { fill: var(--crimson); }
+.chart .p95 { fill: none; stroke: var(--ink); stroke-opacity: 0.7; stroke-width: 1.5; }
+.chart .p95dot { fill: var(--ink); fill-opacity: 0.8; }
+
 .scroll { overflow-x: auto; -webkit-overflow-scrolling: touch; }
 table { width: 100%; border-collapse: collapse; font-variant-numeric: tabular-nums; }
 th, td { text-align: left; padding: 7px 10px; border-bottom: 1px solid var(--line); white-space: nowrap; }

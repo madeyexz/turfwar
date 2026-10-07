@@ -6,7 +6,10 @@ import type AdminDailyRow from '../module_bindings/admin_daily_table';
 import type AdminOverviewRow from '../module_bindings/admin_overview_table';
 import type AdminPlayerTimeRow from '../module_bindings/admin_player_time_table';
 import type AdminDailyTimeRow from '../module_bindings/admin_daily_time_table';
+import type AdminPlayerNetRow from '../module_bindings/admin_player_net_table';
+import type AdminDailyNetRow from '../module_bindings/admin_daily_net_table';
 import { countByCountry, countryOf } from '../../shared/tzcountry';
+import { fmtPing, fmtRate, medianCorrections, medianPing, pingByCountry, pingClass, type NetOf } from './net';
 import { formatPlayTime, liveSeconds } from '../../shared/playtime';
 import { hostAnswers, pingUrl, serverIdentityKey } from '../net/ping';
 import { WakeDriver, wakeProgress, wakeSeconds, type WakeLink } from '../net/wake';
@@ -29,8 +32,14 @@ type Day = Infer<typeof AdminDailyRow>;
 type Overview = Infer<typeof AdminOverviewRow>;
 type PlayerTime = Infer<typeof AdminPlayerTimeRow>;
 type DayTime = Infer<typeof AdminDailyTimeRow>;
-/** An `admin_players` row joined (by id) with its `admin_player_time` row: rounds, and play time including a session in progress. */
-type Player = Infer<typeof AdminPlayersRow> & { rounds: number; playTime: number; playing: boolean; openSeconds: number };
+type PlayerNet = Infer<typeof AdminPlayerNetRow>;
+type DayNet = Infer<typeof AdminDailyNetRow>;
+/**
+ * An `admin_players` row joined (by id) with its `admin_player_time` row (rounds, and play time
+ * including a session in progress) and its `admin_player_net` row, if any (connection quality:
+ * `ping` is the typical p50 in ms, `corrPerMin` the corrections per minute).
+ */
+type Player = Infer<typeof AdminPlayersRow> & { rounds: number; playTime: number; playing: boolean; openSeconds: number; net?: NetOf; ping?: number; corrPerMin?: number };
 
 const POSTHOG = 'https://us.posthog.com/project/649207';
 const env = import.meta.env as Record<string, string | undefined>;
@@ -86,6 +95,8 @@ let messageError = true;
 let playerLimit = 100;
 let sortKey: keyof Player | 'country' = 'lastSeen';
 let sortDir: 1 | -1 = -1;
+/** The connection-quality views (`admin_player_net`, `admin_daily_net`): subscribed on their own, since an older module lacks them. */
+let netViews: 'wait' | 'on' | 'missing' = 'wait';
 const setConn = (s: 'wait' | 'live' | 'off', title: string) => { connDot.className = `dot ${s}`; connDot.title = title; };
 
 /** The header: which server, where, which database. */
@@ -151,13 +162,17 @@ function joinedPlayers(): Player[] {
   const db = conn!.db;
   const times = new Map<string, PlayerTime>();
   for (const t of db.adminPlayerTime.iter()) times.set(t.id, t);
+  const nets = new Map<string, PlayerNet>();
+  if (netViews === 'on') for (const n of db.adminPlayerNet.iter()) nets.set(n.id, n);
   const nowMicros = BigInt(Date.now()) * 1000n;
   return [...db.adminPlayers.iter()].map(p => {
     const t = times.get(p.id);
     const since = t?.playingSince.microsSinceUnixEpoch ?? 0n;
     const credited = t?.playSeconds ?? 0n;
     const live = Number(liveSeconds({ seconds: credited, since }, nowMicros));
-    return { ...p, rounds: t?.rounds ?? 0, playTime: live, playing: since > 0n, openSeconds: live - Number(credited) };
+    const n = nets.get(p.id);
+    const net: NetOf | undefined = n && { pingP50: n.pingP50, pingP95: n.pingP95, worstP95: n.worstP95, correctionsPerMin: n.correctionsPerMin, measuredMinutes: n.measuredMinutes, lastAtMs: n.lastAt.toDate().getTime() };
+    return { ...p, rounds: t?.rounds ?? 0, playTime: live, playing: since > 0n, openSeconds: live - Number(credited), net, ping: net?.pingP50, corrPerMin: net?.correctionsPerMin };
   });
 }
 
@@ -193,7 +208,11 @@ function dashboard() {
   const first = (p: Player) => p.firstSeen.toDate().getTime(), last = (p: Player) => p.lastSeen.toDate().getTime();
   const count = (f: (p: Player) => boolean) => players.filter(f).length;
   const play = playTotals(players, dayTimes);
-  const tile = (label: string, value: number | bigint | string, note = '', hero = false) => `<div class="tile${hero ? ' hero' : ''}"><small>${label}</small><b>${typeof value === 'string' ? value : num(value)}</b>${note ? `<span>${note}</span>` : ''}</div>`;
+  const tile = (label: string, value: number | bigint | string, note = '', hero = false, valueClass = '') => `<div class="tile${hero ? ' hero' : ''}"><small>${label}</small><b${valueClass ? ` class="${valueClass}"` : ''}>${typeof value === 'string' ? value : num(value)}</b>${note ? `<span>${note}</span>` : ''}</div>`;
+  // Connection quality: the typical p50 of the players who reported in the window ("—" without data, or on an older module).
+  const ping24 = medianPing(players, now - DAY_MS), ping7 = medianPing(players, now - 7 * DAY_MS), corr7 = medianCorrections(players, now - 7 * DAY_MS);
+  const netNote = (n: number, what: string) => (netViews === 'missing' ? 'not on this server yet' : `${what} · ${num(n)} player${n === 1 ? '' : 's'}`);
+  const pingTone = (ms?: number) => (ms === undefined ? '' : `ping ${pingClass(ms)}`);
   const tiles = [
     tile('Online now', o?.onlineNow ?? 0, `${num(o?.rooms ?? 0)} room${o?.rooms === 1 ? '' : 's'} open`, true),
     tile('Total players', players.length, 'ever seen'),
@@ -207,6 +226,9 @@ function dashboard() {
     tile('Avg / player', hm(play.average), `median ${hm(play.median)} · ${num(play.players)} played`),
     tile('Play time today', hm(play.today), 'UTC day'),
     tile('Play time 7 d', hm(play.week)),
+    tile('Median ping (24 h)', fmtPing(ping24.ms), netNote(ping24.players, 'typical p50'), false, pingTone(ping24.ms)),
+    tile('Median ping (7 d)', fmtPing(ping7.ms), netNote(ping7.players, 'typical p50'), false, pingTone(ping7.ms)),
+    tile('Corrections / min', fmtRate(corr7.perMin), netNote(corr7.players, 'median, 7 d')),
   ].join('');
 
   const roomRows = rooms.map(r => `<tr><td>${r.code ? `<span class="tag">#${esc(r.code)}</span>` : '<span class="tag">public</span>'}</td><td>${esc(titleCase(r.mapId))}</td><td>${esc(titleCase(r.mode))}</td>
@@ -224,6 +246,10 @@ function dashboard() {
         <div class="chart">${chart(days)}</div></section>
       <section class="card"><h2>Where from <small>time zone → country, estimate</small></h2>${countryList}</section>
     </div>
+    <div class="grid2">
+      <section class="card"><h2>Ping <small>median of players' p50 and p95 per UTC day, last 30 days</small></h2>${pingChart([...db.adminDailyNet.iter()])}</section>
+      <section class="card"><h2>Ping by country <small>median typical p50, time zone → country</small></h2>${countryPing(players)}</section>
+    </div>
     <section class="card"><h2>Play time <small>online play time per UTC day, all players, last 30 days</small></h2>
       <div class="chart wide">${playChart(dayTimes, play.open)}</div></section>
     <section class="card"><h2>Live rooms <small>${rooms.length ? `${num(o?.humansInRooms ?? 0)} human${o?.humansInRooms === 1 ? '' : 's'} in ${rooms.length} room${rooms.length === 1 ? '' : 's'}` : 'none open'}</small></h2>
@@ -232,7 +258,9 @@ function dashboard() {
     <section class="card"><h2>Players <small>${num(players.length)} · sorted by ${sortLabel()}</small></h2>${playerTable(players)}</section>
     <footer><p>Updates live. Players are identities that said hello or joined a room; ids are anonymous. Career numbers come from <code>profile</code>:
       matches counts finished first-to-10 matches, rounds every round played. Play time is online play time only: time spent in an online room
-      (lobby time, Solo and Practice are not counted), credited every minute and on leaving.</p>
+      (lobby time, Solo and Practice are not counted), credited every minute and on leaving. Ping is the round trip of a player's movement reports
+      as their browser measured it (typical p50: a mean over their reports, weighted by time in rooms; hover for p95), and corrections are the
+      server's rejections of their reported movement, per minute in rooms; both are reported every 2 minutes in a match and on leaving.</p>
       <button type="button" class="btn revoke" id="revoke">Sign out all admins</button></footer>`;
   body.querySelectorAll<HTMLButtonElement>('th button[data-sort]').forEach(b => b.addEventListener('click', () => {
     const k = b.dataset.sort as typeof sortKey;
@@ -254,16 +282,19 @@ const COLUMNS: { key: keyof Player | 'country'; label: string; num?: boolean }[]
   { key: 'name', label: 'Name' }, { key: 'lastSeen', label: 'Last seen' }, { key: 'firstSeen', label: 'First seen' },
   { key: 'playTime', label: 'Play time', num: true }, { key: 'sessions', label: 'Sessions', num: true }, { key: 'rounds', label: 'Rounds', num: true },
   { key: 'matches', label: 'Matches', num: true }, { key: 'kills', label: 'Kills', num: true },
+  { key: 'ping', label: 'Ping', num: true }, { key: 'corrPerMin', label: 'Corr/min', num: true },
   { key: 'country', label: 'Country' }, { key: 'tz', label: 'Time zone' }, { key: 'lang', label: 'Lang' }, { key: 'id', label: 'Id' },
 ];
 const sortLabel = () => `${COLUMNS.find(c => c.key === sortKey)?.label.toLowerCase()}, ${sortDir === 1 ? 'ascending' : 'descending'}`;
 
 function playerTable(players: Player[]) {
   if (!players.length) return '<div class="empty">No players yet.</div>';
-  const value = (p: Player): string | number => sortKey === 'country' ? countryOf(p.tz)
-    : sortKey === 'lastSeen' || sortKey === 'firstSeen' ? p[sortKey].toDate().getTime() : (p[sortKey] as string | number);
+  const value = (p: Player): string | number | undefined => sortKey === 'country' ? countryOf(p.tz)
+    : sortKey === 'lastSeen' || sortKey === 'firstSeen' ? p[sortKey].toDate().getTime() : (p[sortKey] as string | number | undefined);
   const sorted = [...players].sort((a, b) => {
     const x = value(a), y = value(b);
+    // Without a value (no connection report yet): last, whichever the direction.
+    if (x === undefined || y === undefined) return x === y ? 0 : x === undefined ? 1 : -1;
     return (typeof x === 'number' && typeof y === 'number' ? x - y : String(x).localeCompare(String(y))) * sortDir;
   });
   const head = COLUMNS.map(c => {
@@ -275,10 +306,62 @@ function playerTable(players: Player[]) {
     return `<tr><td>${esc(p.name || '—')}</td><td title="${lastSeen.toISOString()}">${ago(lastSeen)}</td><td title="${firstSeen.toISOString()}">${shortDate(firstSeen)}</td>
       <td class="num"${p.playing ? ' title="In an online room now"' : ''}>${p.playing ? '<i class="dot live" aria-label="In a room now"></i>' : ''}${formatPlayTime(p.playTime)}</td>
       <td class="num">${num(p.sessions)}</td><td class="num">${num(p.rounds)}</td><td class="num">${num(p.matches)}</td><td class="num">${num(p.kills)}</td>
+      ${pingCell(p)}<td class="num">${fmtRate(p.corrPerMin)}</td>
       <td>${esc(countryOf(p.tz))}</td><td class="tz" title="${esc(p.tz)}">${esc(p.tz || '—')}</td><td>${esc(p.lang || '—')}</td><td class="id">${esc(p.id)}</td></tr>`;
   }).join('');
   const more = sorted.length > playerLimit ? `<button type="button" class="btn more" id="more">Show more (${num(sorted.length - playerLimit)} left)</button>` : '';
   return `<div class="scroll"><table><thead><tr>${head}</tr></thead><tbody>${rows}</tbody></table></div>${more}`;
+}
+
+/** A player's typical ping, coloured; the title has p95, the worst p95 and how much was measured. */
+function pingCell(p: Player) {
+  const n = p.net;
+  if (!n) return '<td class="num">—</td>';
+  const title = `p50 ${n.pingP50} ms · p95 ${n.pingP95} ms · worst p95 ${n.worstP95} ms · ${n.measuredMinutes} min measured · last ${ago(new Date(n.lastAtMs))}`;
+  return `<td class="num" title="${esc(title)}"><span class="ping ${pingClass(n.pingP50)}">${fmtPing(n.pingP50)}</span></td>`;
+}
+
+/** What a connection-quality panel says without data: loading, an older module (—), or nothing reported yet. */
+const netEmpty = (none: string) => `<div class="empty">${netViews === 'missing' ? "— This server's module has no connection-quality views yet." : netViews === 'wait' ? 'Loading…' : none}</div>`;
+
+/** Median typical ping per country, most players first; the bar is the ping (full at 250 ms), coloured like the table. */
+function countryPing(players: Player[]) {
+  const rows = pingByCountry(players).slice(0, 10);
+  if (netViews !== 'on' || !rows.length) return netEmpty('No ping reports yet.');
+  return `<ul class="countries">${rows.map(r => `<li>${esc(r.country)}<span><b class="ping ${pingClass(r.ms)}">${fmtPing(r.ms)}</b> · ${num(r.players)} player${r.players === 1 ? '' : 's'}</span><div class="bar"><i class="ping-${pingClass(r.ms)}" style="width:${Math.min(100, (r.ms / 250) * 100)}%"></i></div></li>`).join('')}</ul>`;
+}
+
+/** Median p50 per day as bars (coloured like the table) and median p95 as a line; days without reports are gaps. */
+function pingChart(rows: DayNet[]) {
+  const today = Math.floor(Date.now() / DAY_MS);
+  const byDay = new Map(rows.map(r => [r.day, r]));
+  const data = Array.from({ length: 30 }, (_, i) => today - 29 + i).map(d => ({ day: d, row: byDay.get(d) }));
+  if (netViews !== 'on' || !data.some(d => d.row?.players)) return netEmpty('No ping reports in the last 30 days.');
+  const narrow = innerWidth < 600;
+  const W = narrow ? 360 : 600, H = 220, L = 46, R = 8, T = 10, B = 26;
+  const max = Math.max(80, ...data.map(d => (d.row?.players ? d.row.medianP95 : 0)));
+  const step = max <= 200 ? 50 : max <= 500 ? 100 : 250;
+  const top = Math.ceil(max / step) * step;
+  const col = (W - L - R) / data.length, bw = col * 0.7;
+  const y = (v: number) => T + (H - T - B) * (1 - v / top);
+  const cx = (i: number) => L + col * i + col / 2;
+  let svg = `<svg viewBox="0 0 ${W} ${H}" role="img" aria-label="Median ping per day, last 30 days">`;
+  for (let v = 0; v <= top; v += step) svg += `<line class="grid" x1="${L}" x2="${W - R}" y1="${y(v)}" y2="${y(v)}"/><text x="${L - 6}" y="${y(v) + 4}" text-anchor="end">${v}${v ? ' ms' : ''}</text>`;
+  data.forEach((d, i) => {
+    const date = new Date(d.day * DAY_MS).toISOString().slice(0, 10);
+    const r = d.row;
+    if (r?.players) {
+      svg += `<rect class="bar ping-${pingClass(r.medianP50)}" x="${L + col * i + (col - bw) / 2}" y="${y(r.medianP50)}" width="${bw}" height="${Math.max(0, H - B - y(r.medianP50))}"><title>${date}: median p50 ${r.medianP50} ms, p95 ${r.medianP95} ms · ${r.players} player${r.players === 1 ? '' : 's'} · ${fmtRate(r.correctionsPerMin)} corrections/min</title></rect>`;
+    }
+    if (narrow ? i % 7 === 1 : i % 5 === 4 || i === 0) svg += `<text x="${cx(i)}" y="${H - 8}" text-anchor="middle">${date.slice(5)}</text>`;
+  });
+  // The p95 line breaks over days without reports.
+  let run: string[] = [];
+  const flush = () => { if (run.length > 1) svg += `<polyline class="p95" points="${run.join(' ')}"/>`; run = []; };
+  data.forEach((d, i) => { if (d.row?.players) run.push(`${cx(i)},${y(d.row.medianP95)}`); else flush(); });
+  flush();
+  data.forEach((d, i) => { if (d.row?.players) svg += `<circle class="p95dot" cx="${cx(i)}" cy="${y(d.row.medianP95)}" r="2.5"><title>median p95 ${d.row.medianP95} ms</title></circle>`; });
+  return `<div class="legend"><span><i class="ping-good"></i>p50 &lt; 80 ms</span><span><i class="ping-fair"></i>&lt; 160 ms</span><span><i class="ping-poor"></i>slower</span><span><i class="line"></i>p95</span></div><div class="chart">${svg}</svg></div>`;
 }
 
 /** New and active players per day: bars for active, a line for new; quiet days filled in up to today. */
@@ -379,7 +462,7 @@ function wakeCard() {
           <p role="status">It did not wake up within 3 minutes. Check the server on InstaCloud, or try again.</p>
           <button type="button" class="btn primary" id="wake-retry">Retry</button></section>`
       : `<section class="wake"><h2><i class="dot wait"></i>Waking the server</h2>
-          <p role="status">The server is asleep to save costs — waking it up (about 30 s). It isn't down: opening this page woke it.</p>
+          <p role="status">The server is asleep to save costs — waking it up (about 30 s). Opening this page woke it.</p>
           <p class="note" id="wake-note"></p>
           <div class="wake-meter" aria-hidden="true"><span class="wake-bar"><i id="wake-fill"></i></span><span class="wake-time" id="wake-time"></span></div></section>`;
     body.querySelector('#wake-retry')?.addEventListener('click', () => driver.retry());
@@ -422,9 +505,15 @@ function adminLink(s: AdminServer, lost: () => void): WakeLink {
     .onConnect((cc, _identity, token) => {
       if (stopped) { cc.disconnect(); return; }
       store.set(key, token);
-      for (const t of [cc.db.adminStatus, cc.db.adminOverview, cc.db.adminRooms, cc.db.adminPlayers, cc.db.adminDaily, cc.db.adminPlayerTime, cc.db.adminDailyTime]) {
+      for (const t of [cc.db.adminStatus, cc.db.adminOverview, cc.db.adminRooms, cc.db.adminPlayers, cc.db.adminDaily, cc.db.adminPlayerTime, cc.db.adminDailyTime, cc.db.adminPlayerNet, cc.db.adminDailyNet]) {
         t.onInsert(render); t.onDelete(render);
       }
+      // Connection quality on its own subscription: a server whose module predates these views refuses it, and the page shows "—".
+      netViews = 'wait';
+      cc.subscriptionBuilder()
+        .onApplied(() => { if (!stopped) { netViews = 'on'; render(); } })
+        .onError(() => { if (!stopped) { netViews = 'missing'; render(); } })
+        .subscribe(['SELECT * FROM admin_player_net', 'SELECT * FROM admin_daily_net']);
       cc.subscriptionBuilder()
         .onApplied(() => { if (stopped) return; isLive = true; conn = cc; message = ''; settle.resolve(); render(); })
         .onError(() => {
@@ -456,7 +545,7 @@ let driver = makeDriver();
 function switchServer(next: AdminServer) {
   if (next.id === server.id) return;
   driver.stop();
-  conn = undefined; loggingIn = false; message = ''; messageError = true; playerLimit = 100;
+  conn = undefined; loggingIn = false; message = ''; messageError = true; playerLimit = 100; netViews = 'wait';
   server = next;
   rememberServer(server, storage);
   renderServer();

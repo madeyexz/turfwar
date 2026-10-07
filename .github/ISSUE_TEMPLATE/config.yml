@@ -1,0 +1,8 @@
+blank_issues_enabled: false
+contact_links:
+  - name: Report a security vulnerability
+    url: https://github.com/madeyexz/turfwar/blob/main/SECURITY.md
+    about: Please report security problems privately by email, not as a public issue.
+  - name: Play the game
+    url: https://turfwar.ianhsiao.me
+    about: The live game, free in your browser.

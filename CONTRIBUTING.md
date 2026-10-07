@@ -40,17 +40,17 @@ bun run dev            # Vite dev server: Solo and Practice work right away
 terminal start a local server and publish the module:
 
 ```sh
-bun run dev:spacetime  # local server on :3000, module published as "lawbreaker"
+bun run dev:spacetime  # local server on :3000, module published as "turfwar"
 ```
 
 and in another run the game against it:
 
 ```sh
-VITE_SPACETIMEDB_URI=same-origin VITE_SPACETIMEDB_DATABASE=lawbreaker bun run dev
+VITE_SPACETIMEDB_URI=same-origin VITE_SPACETIMEDB_DATABASE=turfwar bun run dev
 ```
 
 `same-origin` routes the websocket through the Vite dev server (`/stdb` → port 3000); it works only
-there, not with `vite preview` or on Vercel. The local script may reset its own **disposable local**
+there, not with `vite preview` or in production. The local script may reset its own **disposable local**
 data; never point it at a shared database. More flags, dev pages and check scripts are in
 [docs/DEVELOPMENT.md](docs/DEVELOPMENT.md).
 
@@ -122,7 +122,7 @@ The same list is in the pull request template:
 - **Shared simulation stays browser-free**: nothing in `shared/` may touch the DOM, `window`,
   `localStorage` or other browser APIs.
 - **Assets must be CC0, OFL or a compatible licence**, with attribution in the README's
-  [Assets and licenses](README.md#assets-and-licenses) section and licence files kept intact. No
+  [Asset credits](README.md#license) (under License) and licence files kept intact. No
   proprietary game assets.
 - **Every player-facing string** goes through `src/ui/i18n.ts`, in English and Traditional Chinese.
 

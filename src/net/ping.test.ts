@@ -149,4 +149,26 @@ describe('PingMonitor', () => {
     clock += 20_000; await vi.advanceTimersByTimeAsync(20_000);
     expect(calls).toHaveLength(3);
   });
+
+  it('stops pinging a server it no longer tracks (another server was chosen)', async () => {
+    vi.useFakeTimers();
+    let clock = 0;
+    vi.spyOn(performance, 'now').mockImplementation(() => clock);
+    const calls: string[] = [];
+    const fetcher = async (url: string) => { calls.push(url); clock += 120; return { ok: true, arrayBuffer: async () => new ArrayBuffer(0) } as Response; };
+    const m = new PingMonitor(() => undefined, fetcher);
+    const sg = 'wss://play.turfwar.ianhsiao.me', us = 'wss://maincloud.spacetimedb.com';
+    m.track(sg);
+    m.setActive(true);
+    for (let i = 0; i < 20; i++) await vi.advanceTimersByTimeAsync(1);
+    expect(m.get(sg)).toBe(120);
+    m.untrack(sg);
+    m.track(us);
+    calls.length = 0;
+    for (let i = 0; i < 3; i++) { clock += PING_INTERVAL_MS; await vi.advanceTimersByTimeAsync(PING_INTERVAL_MS); }
+    expect(calls.length).toBeGreaterThan(2);
+    expect(calls.every(u => u === 'https://maincloud.spacetimedb.com/v1/ping')).toBe(true);
+    expect(m.get(sg)).toBeUndefined();
+    expect(m.get(us)).toBe(120);
+  });
 });

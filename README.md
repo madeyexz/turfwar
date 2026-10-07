@@ -1,15 +1,79 @@
+<div align="center">
+
+<img src="public/icons/icon-192.png" width="96" alt="Turf War: Taipei logo">
+
 # 角頭械鬥 · Turf War: Taipei
 
-**A round-based SWAT vs Militia shooter in the streets of Taipei, free in your browser.** Fight
-through Ximending, up Taipei 101 and around the Memorial Hall, solo with bots or online, with
-cash, a store and attachments in the spirit of BeGone. Nothing to install.
+**A round-based SWAT vs Militia shooter set in the streets of Taipei — free in your browser, nothing to install.**
 
-### [▶ Play now: turfwar.ianhsiao.me](https://turfwar.ianhsiao.me)
+[![Play now](https://img.shields.io/badge/▶_play_now-turfwar.ianhsiao.me-29d3ff?style=flat-square)](https://turfwar.ianhsiao.me)
+[![CI](https://github.com/madeyexz/turfwar/actions/workflows/ci.yml/badge.svg)](https://github.com/madeyexz/turfwar/actions/workflows/ci.yml)
+[![License: MIT](https://img.shields.io/badge/license-MIT-blue?style=flat-square)](LICENSE)
+[![PRs welcome](https://img.shields.io/badge/PRs-welcome-brightgreen?style=flat-square)](CONTRIBUTING.md)
+<br>
+[![TypeScript](https://img.shields.io/badge/TypeScript-3178C6?style=flat-square&logo=typescript&logoColor=white)](https://www.typescriptlang.org)
+[![Three.js](https://img.shields.io/badge/Three.js-000000?style=flat-square&logo=threedotjs&logoColor=white)](https://threejs.org)
+[![SpacetimeDB](https://img.shields.io/badge/SpacetimeDB-2.10-6e56cf?style=flat-square)](https://spacetimedb.com)
+[![Bun](https://img.shields.io/badge/Bun-1.3-f9f1e1?style=flat-square&logo=bun&logoColor=black)](https://bun.sh)
 
-<!-- The GIF is a short loop from the trailer; the 30-second trailers live in public/media/ and are served by the game's site. -->
-<a href="https://turfwar.ianhsiao.me/media/turfwar-trailer-30s.mp4"><img src="docs/media/trailer-preview.gif" width="720" alt="Turf War: Taipei trailer preview: a helicopter over Ximending, Taipei 101 through binoculars and Cinema Street"></a>
+[**Play**](https://turfwar.ianhsiao.me) · [Trailer](https://turfwar.ianhsiao.me/media/turfwar-trailer-30s.mp4) · [中文預告片](https://turfwar.ianhsiao.me/media/turfwar-trailer-30s.zh-TW.mp4) · [Gameplay guide](docs/GAMEPLAY.md) · [Contributing](CONTRIBUTING.md)
 
-<sub>▶ Click the preview to watch the 30-second trailer · [中文版預告片](https://turfwar.ianhsiao.me/media/turfwar-trailer-30s.zh-TW.mp4) · files in [`public/media/`](public/media/)</sub>
+<a href="https://turfwar.ianhsiao.me/media/turfwar-trailer-30s.mp4"><img src="docs/media/trailer-preview.gif" width="720" alt="Trailer preview: a helicopter over Ximending, Taipei 101 through binoculars and Cinema Street"></a>
+
+<sub>Click the preview to watch the 30-second trailer.</sub>
+
+</div>
+
+## Contents
+
+- [About](#about)
+- [Features](#features)
+- [Screenshots](#screenshots)
+- [Getting started](#getting-started)
+- [Project structure](#project-structure)
+- [How it works](#how-it-works)
+- [Roadmap](#roadmap)
+- [Contributing](#contributing)
+- [Security and privacy](#security-and-privacy)
+- [Support the project](#support-the-project)
+- [Acknowledgements](#acknowledgements)
+- [License](#license)
+
+## About
+
+Turf War: Taipei is an open-source, browser-first team shooter. Two teams of up to 24 fight short,
+one-life rounds across Taipei — Ximending's neon streets, an office floor 383 m up Taipei 101, the
+Chiang Kai-shek Memorial Hall — with cash, a store and weapon attachments in the spirit of the classic
+browser shooter *BeGone*. It runs on TypeScript and Three.js in the browser and a server-authoritative
+[SpacetimeDB](https://spacetimedb.com) module online, with the same simulation powering offline play.
+
+## Features
+
+**Gameplay**
+
+- **Two modes:** *Elimination* and *Sabotage* (Militia arms the bomb at site A or B; SWAT defends or
+  disarms). First to 10 rounds, one life per round, a 4 s freeze and 20 s of buy time.
+- **Twelve maps:** Ximending (西門町), Taipei 101 · Xinyi, Taipei 101 · 88F with its tuned mass damper,
+  Memorial Hall (中正紀念堂), homages to BeGone's maps and original battlefields — see [Maps](docs/GAMEPLAY.md#maps).
+- **Vehicles:** cars and taxis with handbrake drifts, scooters you can shoot from, and a helicopter.
+- **Economy:** cash for kills, headshots, assists and objectives; five primaries, two secondaries,
+  grenades, and optics, suppressors, lasers and more ([weapons](docs/GAMEPLAY.md#weapons)).
+
+**Multiplayer**
+
+- **Rooms of every size:** 1v1, 6v6 and 24v24. *Quick play* joins the fullest open room, *Start a server*
+  opens a public room or a private one with a 4-letter code, and *Join a server* lists every live room with its ping.
+- **Bots fill empty slots,** online and offline, at three difficulties.
+- **Server-authoritative:** damage, cash, purchases, rounds and the bomb run on the server; movement is
+  client-predicted and server-validated.
+
+**Accessibility and platforms**
+
+- **English and 繁體中文**, switchable at any time.
+- **Rebindable controls** for every action, using physical key positions (AZERTY and Dvorak work).
+- **Phones and tablets:** touch controls with an editable layout, hold-to-aim firing, and an
+  installable app (PWA) — see [Phones and tablets](docs/GAMEPLAY.md#phones-tablets-and-the-installable-app).
+- **Solo and practice** need no server at all.
 
 ## Screenshots
 
@@ -32,114 +96,115 @@ cash, a store and attachments in the spirit of BeGone. Nothing to install.
   </tr>
 </table>
 
-## Features
+## Getting started
 
-- **Two modes, short rounds, one life each.** *Elimination* (wipe out the other team) and
-  *Sabotage* (Militia arms the bomb at site A or B, SWAT defends or disarms). First to 10 rounds,
-  4 s freeze, 20 s buy time, no respawns inside a round.
-- **Taipei maps and more.** Ximending (西門町) with its cinema street, night market and arcade; the
-  Xinyi district round Taipei 101; an office floor 383 m up Taipei 101 with its tuned mass damper; the
-  National Chiang Kai-shek Memorial Hall; plus homages to BeGone's maps and original battlefields:
-  twelve maps in rotation. See [Gameplay → Maps](docs/GAMEPLAY.md#maps).
-- **Vehicles.** Cars and taxis (with handbrake drifts), Taiwanese scooters you can shoot from one-handed,
-  and a light helicopter, on the Taipei maps and Meridian District.
-- **Store and attachments.** Cash for kills, headshots, assists and objectives; five primaries, two
-  secondaries, a grenade and optics, suppressors, lasers, extended clips and special ammo, with BeGone's
-  numbers ([weapons](docs/GAMEPLAY.md#weapons), [attachments](docs/GAMEPLAY.md#attachments-one-per-category-per-weapon-kept-for-the-match)).
-- **Rooms of every size.** 1v1, 6v6 and 24v24 (big maps). *Quick play* drops you into the fullest
-  public room; *Start a server* opens a public room or a private one with a 4-letter code; *Join a
-  server* lists every live room with its ping. Bots fill empty slots.
-- **Solo and practice.** Play offline against bots at three difficulties, or roam the practice range
-  with a free store.
-- **Two languages.** English and Traditional Chinese (繁體中文), switchable at any time.
-- **Rebindable controls.** Every action, two keys each, physical key positions so AZERTY and Dvorak work
-  ([Controls](docs/GAMEPLAY.md#controls)).
-- **Phones too.** Touch controls, and the game can be installed to the home screen as an app (PWA).
-- **Server-authoritative online play.** Damage, cash, purchases, rounds and the bomb run on the server
-  with the same simulation as Solo; movement is client-predicted and server-validated.
-
-## Tech stack
-
-- **TypeScript**, **Vite** and **Three.js** in the browser (no engine, no framework).
-- One **shared TypeScript simulation** (movement, collision, weapons, bots, rounds) used by Solo and
-  by the server.
-- **SpacetimeDB 2.10.2** for Online play: a TypeScript module with tables, reducers and a 30 Hz
-  scheduled tick.
-- **Bun 1.3.10** for packages and scripts, **Vitest** for tests, **Vercel** for static hosting.
-- CC0 models, animations, textures and sounds, and OFL fonts (see [Assets and licences](#assets-and-licenses)).
-
-## Quick start
-
-You need [Bun 1.3.10](https://bun.sh). Use `bun` / `bunx`, never npm or npx.
+**Prerequisites:** [Bun 1.3.10](https://bun.sh) (use `bun` / `bunx`, never npm or npx). For local
+online play, also the [SpacetimeDB CLI](https://spacetimedb.com/install) 2.10.2.
 
 ```sh
 git clone https://github.com/madeyexz/turfwar.git
 cd turfwar
 bun install --frozen-lockfile
 bun install --cwd spacetimedb --frozen-lockfile
-bun run dev        # http://localhost:5173 — Solo and Practice work right away
+bun run dev            # http://localhost:5173 — Solo and Practice work right away
 ```
 
-For Online play locally, install the [SpacetimeDB CLI](https://spacetimedb.com/install) (2.10.2), then
-in a second terminal:
+**Online play on your machine** — in a second terminal:
 
 ```sh
-bun run dev:spacetime   # local server on :3000, publishes the module as "lawbreaker"
-VITE_SPACETIMEDB_URI=same-origin VITE_SPACETIMEDB_DATABASE=lawbreaker bun run dev
+bun run dev:spacetime  # local SpacetimeDB on :3000 with the module published as "turfwar"
+VITE_SPACETIMEDB_URI=same-origin VITE_SPACETIMEDB_DATABASE=turfwar bun run dev
 ```
 
-Checks: `bun run test` (Vitest; not `bun test`), `bun run build` and `bun run typecheck:module`.
+**Checks** (the same ones CI runs on every push and pull request):
 
-## Phone and PWA
+```sh
+bun run test             # Vitest (not `bun test`)
+bun run build            # type-check and production build
+bun run typecheck:module # the SpacetimeDB server module
+```
 
-Touch-primary devices (a coarse pointer or touch points with no mouse, iPads included) get on-screen
-controls; **Settings → Controls** switches them Auto / On / Off (`?touch=1|0` for testing) and sets the
-finger look speed (default 1.35×: a swipe across an iPhone SE's width turns about 180°, 230° on an
-iPhone 14; aiming scales it by the zoom like the mouse). The left part of the screen is a floating stick
-(it appears under the thumb; past its ring you sprint; in a vehicle it is throttle, brake and steering),
-the rest is a look pad, and fire also looks while held. **Auto-aim when firing** (on by default,
-`src/game/holdfire.ts`): a tap on fire shoots from the hip at once, holding it past 150 ms raises the
-sights while it keeps firing, and letting go lowers them; the M110 sniper instead raises its scope while
-held and fires one aimed shot on release (a quick tap fires from the hip). The knife, binoculars, a
-grenade throw, a scooter rider and a toggled Aim keep the plain trigger; the Aim button still works on
-its own. Buttons press the same actions as keys (`src/game/touchlayout.ts` →
-`Input.touchHeld` / `touchPress`), and only those that matter are shown: Use appears near a vehicle,
-crate or bomb site (hold it to arm or defuse), vehicle buttons replace the on-foot ones while seated, a
-scooter rider keeps fire and the one-handed guns, and the dead get Next. Quick chat opens the keyboard
-on Type. **Edit touch layout** (Settings → Controls) drags, pinches or slides to resize, hides, sets
-opacity, assigns two custom slots any action, swaps to left-handed and resets; it is saved under
-`lawbreaker.touch` (versioned, only the changes). Phones start on Low graphics, ask for landscape during a
-match, request fullscreen on Android, and keep page scroll, zoom and long-press menus off in play.
+## Project structure
 
-The game installs as a web app: `public/manifest.webmanifest` (fullscreen, landscape, icons from
-`bun tools/make-icons.ts`), iOS home-screen meta tags, and a service worker (`src/pwa/sw.ts`, built to
-`/sw.js` with this build's file list) that fetches the page network-first, serves this build's files and
-the models, textures and sounds from caches versioned by the build and by `public/`'s contents, and
-never touches SpacetimeDB, its ping, PostHog or `/admin`. Phone visitors see an install hint in the
-lobby (Install where the browser offers it, Share → Add to Home Screen on iOS) until they dismiss it.
+```text
+shared/          Simulation shared by the browser and the server: movement, collision,
+  maps/          weapons, vehicles, bots, rounds and the twelve maps
+  match/         Match state, economy, rooms, the packed per-tick frame and the tick itself
+spacetimedb/     The SpacetimeDB server module: tables, reducers, admin views, scheduled tick
+src/             The browser game: rendering, HUD, input, audio, lobby, online client
+  module_bindings/  Generated client bindings for the module
+public/          Models, textures, sounds, fonts, icons and the PWA manifest
+admin/ privacy/  The owner's dashboard and the privacy page
+deploy/          The self-hosted SpacetimeDB container and its release scripts
+tools/           Asset import and conversion tools (their own dependencies)
+docs/            Gameplay, architecture and development guides
+```
 
-## Documentation
+## How it works
 
-- [CONTRIBUTING.md](CONTRIBUTING.md): the branch and pull request workflow, setup, checks and rules.
-- [docs/GAMEPLAY.md](docs/GAMEPLAY.md): every mode, rule, weapon, attachment, map, vehicle and control.
-- [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md): multiplayer architecture and validation, performance,
-  known limitations and the project layout.
-- [docs/DEVELOPMENT.md](docs/DEVELOPMENT.md): running and testing locally, URL flags and check scripts,
-  deploying, analytics and the admin page, and a one-minute demo script.
+- **One simulation, two places.** Movement, collision, weapons, bots and rounds live in `shared/` and
+  run unchanged in the browser (Solo, Practice, client prediction) and in the server module.
+- **The server decides.** Players' reducers only queue input; a 30 Hz scheduled tick applies it with
+  the shared rules and publishes one packed frame per room, which clients interpolate.
+- **Validated movement.** Clients predict their own movement and report it; the server checks every
+  report against speed, collision and vehicle rules and corrects anything out of bounds.
+- **Cheap when idle.** The game server sleeps when nobody is playing and wakes on the first visit
+  (about two seconds); the lobby shows that it is waking rather than offline.
+
+The full design — validation, performance budgets and known trade-offs — is in
+[docs/ARCHITECTURE.md](docs/ARCHITECTURE.md).
+
+## Roadmap
+
+Ideas the project would welcome help with (see [known limitations](docs/ARCHITECTURE.md#known-limitations-and-what-remains)):
+
+- [ ] Lag compensation (server-side rewind) for hit validation
+- [ ] Interest management, so clients receive only nearby soldiers
+- [ ] More Taipei maps, and authored reload animations
+- [ ] Skill-based matchmaking, vote kick and clans
+- [ ] Testing and polish on Safari and Firefox
 
 ## Contributing
 
-Contributions are welcome. Read [CONTRIBUTING.md](CONTRIBUTING.md) first: branch from `dev` and open
-your pull request against `dev` (never `main`). Report bugs and request features through
+Contributions are welcome — bug reports, maps, balance, translations and code alike.
+
+1. Read [CONTRIBUTING.md](CONTRIBUTING.md) for setup, the checks and the rules of the codebase.
+2. Branch from **`dev`** and open your pull request **against `dev`** (never `main`).
+3. Make sure CI is green, and include screenshots for anything visual.
+
+Please follow the [Code of Conduct](CODE_OF_CONDUCT.md). Bugs and ideas go to
 [GitHub issues](https://github.com/madeyexz/turfwar/issues).
 
-## Privacy
+## Security and privacy
 
-No accounts and no ads. The game stores your settings and an anonymous ID in your browser, keeps
-gameplay stats on the game server and uses anonymous analytics. The full statement is the
-[privacy page](https://turfwar.ianhsiao.me/privacy) ([source](privacy/index.html)).
+- **Security:** please report vulnerabilities privately as described in [SECURITY.md](SECURITY.md),
+  not in a public issue.
+- **Privacy:** no accounts and no ads. The game keeps your settings and an anonymous ID in your browser,
+  gameplay stats on the game server, and uses anonymous analytics. The full statement is on the
+  [privacy page](https://turfwar.ianhsiao.me/privacy) ([source](privacy/index.html)).
 
-## Assets and licenses
+## Support the project
+
+If you enjoy the game, ⭐ the repository and share it. Hosting is paid out of pocket — to sponsor the
+servers, email **ian@rippling.computer**.
+
+## Acknowledgements
+
+- [**BeGone**](https://begone.fandom.com) by nPlay — the rules, numbers and maps this game pays homage to.
+- [**臺北狂飆 / TAIPEI RUSH**](https://taipei-gta.vercel.app/) by [@aicodewithme](https://www.threads.com/share/DhdOGqUWh/) — the Ximending and Xinyi layouts.
+- [Quaternius](https://quaternius.com), [Poly Haven](https://polyhaven.com) and the authors of
+  *The Free Firearm Sound Library* — CC0 models, textures and sounds.
+- [Three.js](https://threejs.org), [SpacetimeDB](https://spacetimedb.com), [Vite](https://vite.dev) and [Bun](https://bun.sh).
+- Built largely with [Claude](https://www.anthropic.com/claude) (Claude Opus 5.5).
+
+## License
+
+The code is released under the [MIT License](LICENSE). Third-party assets keep their own licences
+(CC0 and the SIL Open Font License). The names 角頭械鬥 and Turf War: Taipei and the logo are not
+licensed for reuse — forks are welcome under a different name.
+
+<details>
+<summary><b>Asset credits and licences</b></summary>
 
 No proprietary game assets are used: the weapon and mode names follow BeGone, but every model,
 texture, sound and line of code here is original or CC0/OFL.
@@ -178,7 +243,7 @@ texture, sound and line of code here is original or CC0/OFL.
   common characters from `tools/font/edu-standard-4808.txt`, CJK punctuation, Bopomofo and full-width forms):
   `public/fonts/noto-sans-tc.woff2`, about 1.4 MB and 5,084 glyphs, loaded only for Chinese text
   (`unicode-range`). `src/ui/font.test.ts` fails when the source uses a character the font lacks.
-- Taipei map layout: the Ximending quarter of *臺北狂飆 / TAIPEI RUSH* (https://taipei-gta.vercel.app)
+- Taipei map layout: the Ximending quarter of *臺北狂飆 / TAIPEI RUSH*
   — its streets, buildings, signs and landmarks — used with the author's permission and extracted by
   `tools/import-taipei.ts` into `shared/maps/taipei-data.ts`. Its shop names are that game's own parody
   brands. Its district meshes and atlas, street furniture, prop meshes (scooter, YouBike, trees,
@@ -200,22 +265,4 @@ texture, sound and line of code here is original or CC0/OFL.
 The asset tools live in `tools/` with their own `package.json`; the source packs themselves are not
 committed.
 
-## License
-
-The code is released under the [MIT License](LICENSE).
-
-- **Third-party assets** keep their own licences, CC0 and the SIL Open Font License, as listed
-  above.
-- **The name and logo are not covered:** the names 角頭械鬥 and Turf War: Taipei and the logo are
-  not licensed for reuse. Forks are welcome, but please give them a different name.
-
-## History
-
-Formerly *Lawbreaker // Frontline*: the databases (`lawbreaker-dev`, `3d-game-c4lhd`), the Vercel
-project and the `lawbreaker.*` browser storage keys keep the old name. The game lives at
-https://turfwar.ianhsiao.me (https://lawbreaker.vercel.app still works).
-
-## References
-
-[BeGone wiki](https://begone.fandom.com) (rules, numbers and map layouts) · [SpacetimeDB](https://spacetimedb.com/docs/) ·
-[Three.js](https://threejs.org) · [Quaternius](https://quaternius.com) · [Poly Haven](https://polyhaven.com)
+</details>

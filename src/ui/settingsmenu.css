@@ -23,6 +23,17 @@
 .lb-settings .seg button.on { color: var(--accent); border-color: var(--accent); background: rgba(127, 246, 255, 0.12); }
 .lb-settings .seg svg { width: 14px; height: 14px; flex: none; stroke: currentColor; stroke-width: 2; fill: currentColor; }
 .lb-settings .seg .swatch { width: 8px; height: 8px; border-radius: 50%; background: var(--c); box-shadow: 0 0 5px var(--c); }
+/* Server: each choice with its region (a dev build's own server) and, in the lobby, its ping; notes under them. */
+.lb-settings .server-row { align-items: start; }
+.lb-settings .server-row > span { padding-top: 6px; }
+.lb-settings .server-pick { display: flex; flex-direction: column; gap: 5px; min-width: 0; }
+.lb-settings .server-pick .seg button { gap: 7px; }
+.lb-settings .server-pick .seg small { font-size: 11px; font-weight: 600; letter-spacing: 0.04em; color: var(--muted); text-transform: none; }
+.lb-settings .server-pick .seg .ms { font-variant-numeric: tabular-nums; }
+.lb-settings .server-pick .seg .ms.good { color: #5df29a; }
+.lb-settings .server-pick .seg .ms.fair { color: var(--amber); }
+.lb-settings .server-pick .seg .ms.bad { color: var(--crimson); }
+.lb-settings .row-note { margin: 0; font-size: 12px; font-weight: 600; line-height: 1.35; letter-spacing: 0.02em; text-transform: none; color: #7c8e94; }
 .lb-settings footer { display: flex; justify-content: flex-end; }
 .lb-settings .leave { padding: 8px 16px; font-size: 13px; font-weight: 700; background: rgba(255, 90, 74, 0.1); border: 1px solid var(--crimson); color: var(--crimson); }
 .lb-settings :focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }

@@ -81,7 +81,7 @@ bun run typecheck:module
 For local Online play, run `bun run dev:spacetime` in one terminal, then:
 
 ```sh
-VITE_SPACETIMEDB_URI=same-origin VITE_SPACETIMEDB_DATABASE=lawbreaker bun run dev
+VITE_SPACETIMEDB_URI=same-origin VITE_SPACETIMEDB_DATABASE=turfwar bun run dev
 ```
 
 The dev server proxies `/stdb` to port **3000**. `same-origin` works only with this

@@ -1,5 +1,6 @@
 import { DICTIONARIES } from '../ui/i18n';
 import { serverHost, serverRegionKey } from '../net/ping';
+import { MAINCLOUD, US_EAST, sameServer } from '../net/servers';
 
 /**
  * The servers /admin can show. Each SpacetimeDB database has its own `admin` table (and the same
@@ -16,17 +17,15 @@ export interface AdminServer {
   database: string;
 }
 
-export const MAINCLOUD = 'wss://maincloud.spacetimedb.com';
+export { MAINCLOUD };
 export const MAINCLOUD_SERVERS: readonly AdminServer[] = [
-  { id: 'legacy', name: 'Maincloud (legacy)', uri: MAINCLOUD, database: '3d-game-c4lhd' },
+  // The game's "US East" choice (src/net/servers.ts).
+  { id: 'legacy', name: 'Maincloud (legacy)', uri: US_EAST.uri, database: US_EAST.database },
   { id: 'dev', name: 'Maincloud dev', uri: MAINCLOUD, database: 'lawbreaker-dev' },
 ];
 
 /** Where the choice is remembered (localStorage). */
 export const SERVER_KEY = 'lawbreaker.admin.server';
-
-const sameServer = (a: { uri: string; database: string }, b: { uri: string; database: string }) =>
-  a.database === b.database && a.uri.replace(/\/+$/, '').toLowerCase() === b.uri.replace(/\/+$/, '').toLowerCase();
 
 /** "Singapore", "US East", "Local", or the host name (in English: the admin page is English). */
 export function regionName(uri: string) {
