@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { sha256Hex } from '../../shared/sha256';
 import {
   ADMIN_KEY_SHA256, ADMIN_MAX_FAILURES, ADMIN_WINDOW_MICROS, AdminError, adminLogin, adminLogout, adminRevokeAll, dailyRows, DAY_MICROS,
-  dailyNetRows, dailyTimeRows, forAdmin, keyMatches, playerDayRows, playerDeviceRows, playerNetRows, playerRows, playTimeRows, shortId, type AdminAttempts, type AdminStore,
+  dailyNetRows, dailyTimeRows, forAdmin, keyMatches, playerDayNetRows, playerDayRows, playerDayTimeRows, playerDeviceRows, playerNetRows, playerRows, playTimeRows, shortId, type AdminAttempts, type AdminStore,
 } from '../src/admin';
 import { foldNetDay, type NetDay } from '../../shared/netstats';
 import { acceptDevice } from '../../shared/devicekind';
@@ -225,5 +225,21 @@ describe('admin active-days view', () => {
     adminLogin(store, 'owner', TEST_KEY, 0n, TEST_HASH);
     expect(forAdmin(store, 'someone', () => playerDayRows(records))).toEqual([]);
     expect(forAdmin(store, 'owner', () => playerDayRows(records))).toHaveLength(3);
+  });
+});
+
+describe('admin per-day views', () => {
+  it('give play time per player per day by the same short id', () => {
+    const rows = playerDayTimeRows([{ identity: 'aa11', day: 20733, seconds: 600 }, { identity: 'aa11', day: 20734, seconds: 90 }]);
+    expect(rows).toEqual([{ id: shortId('aa11'), day: 20733, seconds: 600 }, { id: shortId('aa11'), day: 20734, seconds: 90 }]);
+    for (const r of rows) expect(JSON.stringify(r)).not.toMatch(/aa11/);
+  });
+
+  it('give each player\'s mean ping per day (weighted by seconds), leaving out days without measured time', () => {
+    let day: NetDay | undefined;
+    day = foldNetDay(day, { p50: 40, p95: 80, samples: 100, corrections: 1, seconds: 60 });
+    day = foldNetDay(day, { p50: 100, p95: 200, samples: 100, corrections: 2, seconds: 120 });
+    const rows = playerDayNetRows([{ identity: 'bb22', day: 20734, ...day }, { identity: 'cc33', day: 20734, reports: 1, seconds: 0, p50Sum: 0, p95Sum: 0, corrections: 0 }]);
+    expect(rows).toEqual([{ id: shortId('bb22'), day: 20734, p50: 80, p95: 160, seconds: 180, corrections: 3 }]);
   });
 });

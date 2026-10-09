@@ -20,7 +20,7 @@ import { beginPlay, endPlay, flushDue, flushPlay, type PlayStore } from '../../s
 import { acceptNetReport, foldNetDay } from '../../shared/netstats';
 import { acceptDevice } from '../../shared/devicekind';
 import * as Admin from './admin';
-import { AdminError, dailyNetRows, dailyRows, dailyTimeRows, dayOf, forAdmin, playerDayRows, playerDeviceRows, playerNetRows, playerRows, playTimeRows, type AdminStore } from './admin';
+import { AdminError, dailyNetRows, dailyRows, dailyTimeRows, dayOf, forAdmin, playerDayNetRows, playerDayRows, playerDayTimeRows, playerDeviceRows, playerNetRows, playerRows, playTimeRows, type AdminStore } from './admin';
 
 /**
  * Authoritative multiplayer: the same shared match simulation the offline client runs, executed
@@ -1236,3 +1236,15 @@ export const adminPlayerDevice = spacetimedb.view({ name: 'admin_player_device',
 export const adminPlayerDay = spacetimedb.view({ name: 'admin_player_day', public: true },
   t.array(t.row('AdminPlayerDayRow', { id: t.string(), day: t.u32() })),
   ctx => forAdmin(viewAdmins(ctx.db), ctx.sender.toHexString(), () => playerDayRows([...ctx.db.playerDay.iter()].map(r => ({ identity: r.identity.toHexString(), day: r.day })))));
+
+// The page splits its daily play time and ping by device, so it needs them per player (views of their own too).
+
+/** Online play time per player per UTC day (from `player_day_time`, same short id as `admin_players`). */
+export const adminPlayerDayTime = spacetimedb.view({ name: 'admin_player_day_time', public: true },
+  t.array(t.row('AdminPlayerDayTimeRow', { id: t.string(), day: t.u32(), seconds: t.u32() })),
+  ctx => forAdmin(viewAdmins(ctx.db), ctx.sender.toHexString(), () => playerDayTimeRows([...ctx.db.playerDayTime.iter()].map(r => ({ identity: r.identity.toHexString(), day: r.day, seconds: r.seconds })))));
+
+/** Connection quality per player per UTC day (from `player_day_net`, same short id as `admin_players`): mean p50 and p95, seconds measured, corrections. */
+export const adminPlayerDayNet = spacetimedb.view({ name: 'admin_player_day_net', public: true },
+  t.array(t.row('AdminPlayerDayNetRow', { id: t.string(), day: t.u32(), p50: t.u16(), p95: t.u16(), seconds: t.u32(), corrections: t.u32() })),
+  ctx => forAdmin(viewAdmins(ctx.db), ctx.sender.toHexString(), () => playerDayNetRows([...ctx.db.playerDayNet.iter()].map(r => ({ ...r, identity: r.identity.toHexString() })))));

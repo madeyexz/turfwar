@@ -73,6 +73,8 @@ import AdminDailyNetRow from "./admin_daily_net_table";
 import AdminDailyTimeRow from "./admin_daily_time_table";
 import AdminOverviewRow from "./admin_overview_table";
 import AdminPlayerDayRow from "./admin_player_day_table";
+import AdminPlayerDayNetRow from "./admin_player_day_net_table";
+import AdminPlayerDayTimeRow from "./admin_player_day_time_table";
 import AdminPlayerDeviceRow from "./admin_player_device_table";
 import AdminPlayerNetRow from "./admin_player_net_table";
 import AdminPlayerTimeRow from "./admin_player_time_table";
@@ -240,6 +242,20 @@ const tablesSchema = __schema({
     constraints: [
     ],
   }, AdminPlayerDayRow),
+  adminPlayerDayNet: __table({
+    name: 'admin_player_day_net',
+    indexes: [
+    ],
+    constraints: [
+    ],
+  }, AdminPlayerDayNetRow),
+  adminPlayerDayTime: __table({
+    name: 'admin_player_day_time',
+    indexes: [
+    ],
+    constraints: [
+    ],
+  }, AdminPlayerDayTimeRow),
   adminPlayerDevice: __table({
     name: 'admin_player_device',
     indexes: [
