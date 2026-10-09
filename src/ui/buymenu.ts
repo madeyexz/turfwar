@@ -457,7 +457,7 @@ export class BuyMenu {
 
   private infoHtml(e: Entry, me: Soldier) {
     if (e.item === 'boba') {
-      const rows: [string, string, string][] = [[t('store.heals'), `+${BOBA.heal}`, 'up'], [t('store.sip'), t('common.seconds', { n: BOBA.drinkTime }), ''], [t('store.carry'), t('store.carryN', { n: BOBA.max }), '']];
+      const rows: [string, string, string][] = [[t('store.heals'), `+${BOBA.heal}`, 'up'], [t('store.sip'), t('common.seconds', { n: BOBA.drinkTime }), ''], [t('store.carry'), t('store.carryCup'), '']];
       return `<div class="stats"><p class="note">${t('store.bobaNote', { key: kbd('drink'), heal: BOBA.heal })}</p><ul class="deltas">${rows.map(([k, v, c]) => `<li class="${c}"><span>${k}</span><b>${v}</b></li>`).join('')}</ul></div>${this.action(e)}`;
     }
     if (e.item === 'smoke') {

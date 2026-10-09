@@ -343,10 +343,10 @@ const en = {
   'chal.won': 'You beat {name}!', 'chal.lost': '{name} wins this time', 'chal.opening': 'Opening your 1v1 room…',
   'chal.room': 'Your 1v1 room {code} is open. Send the link: whoever opens it lands right here.', 'chal.send': 'Send challenge',
   // 珍奶 (shared/weapons.ts BOBA): a drink that heals
-  'item.boba': 'Bubble Tea', 'item.bobaShort': 'Boba', 'tc.drink': 'Boba', 'store.boba': 'Drink: +{heal} health · {key}',
+  'item.boba': 'Bubble Tea', 'item.bobaShort': 'Boba', 'tc.drink': 'Boba', 'store.boba': 'Drink: +{heal} health',
   'store.bobaTitle': 'Drink it when hurt: +{heal} health in {s} s, no shooting while you sip · {key}', 'store.oneBoba': 'You carry one bubble tea at a time; drink it to buy another',
   'hud.healed': '+{n} health', 'hud.fullHealth': 'Already at full health',
-  'store.heals': 'Heals', 'store.sip': 'Sip', 'store.bobaNote': 'Drink with {key} when hurt: +{heal} health. You can’t shoot while you sip.',
+  'store.heals': 'Heals', 'store.sip': 'Sip', 'store.bobaNote': 'Drink one when hurt: +{heal} health. You can’t shoot while you sip. {key}', 'store.carryCup': 'One at a time',
 } as const;
 
 export type Key = keyof typeof en;
@@ -659,10 +659,10 @@ const zhTW: Record<Key, string> = {
   'chal.accept': '接受挑戰', 'chal.later': '先不要', 'chal.double': '{name} 不在房間裡，改打他的分身',
   'chal.won': '你打敗了 {name}！', 'chal.lost': '{name} 這次贏了', 'chal.opening': '單挑房開房中…',
   'chal.room': '單挑房 {code} 開好了。把連結傳出去，對手點開就直接進來。', 'chal.send': '傳戰帖',
-  'item.boba': '珍珠奶茶', 'item.bobaShort': '珍奶', 'tc.drink': '珍奶', 'store.boba': '喝了 +{heal} 血 · {key}',
+  'item.boba': '珍珠奶茶', 'item.bobaShort': '珍奶', 'tc.drink': '珍奶', 'store.boba': '喝了 +{heal} 血',
   'store.bobaTitle': '受傷時喝：{s} 秒回 {heal} 血，喝的時候不能開槍 · {key}', 'store.oneBoba': '一次只能帶一杯珍奶，喝掉才能再買',
   'hud.healed': '+{n} 血', 'hud.fullHealth': '血已經是滿的',
-  'store.heals': '回血', 'store.sip': '喝的時間', 'store.bobaNote': '受傷時按 {key} 喝：+{heal} 血。喝的時候不能開槍。',
+  'store.heals': '回血', 'store.sip': '喝的時間', 'store.bobaNote': '受傷時喝一杯：+{heal} 血，喝的時候不能開槍。{key}', 'store.carryCup': '一次 1 杯',
 };
 
 /**
