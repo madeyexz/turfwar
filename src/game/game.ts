@@ -40,8 +40,7 @@ import { roundEnded, track } from '../analytics';
 import { challengeUrl, shareRef } from './challenge';
 import { MatchTally, type MatchSummary } from './matchstats';
 import { openSharePanel } from '../ui/sharepanel';
-/** The 藍白拖 and 珍奶煙霧彈 skins (on unless `?classic`): the card names knife kills after them. */
-const MEME_SKINS = !(typeof location !== 'undefined' && new URLSearchParams(location.search).has('classic'));
+import { MEME_SKINS } from './memeskins';
 import { TouchControls, type TouchInfo } from '../ui/touchcontrols';
 import { holdAimMode } from './holdfire';
 import { onTouchLayout, touchActive, touchAimAssist, type TouchContext } from './touchlayout';

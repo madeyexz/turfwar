@@ -48,7 +48,7 @@ function fit(ctx: CanvasRenderingContext2D, text: string, weight: number, size: 
 
 /** Breaks `text` into lines of `width`: between words for Latin, between characters for Chinese. */
 function wrap(ctx: CanvasRenderingContext2D, text: string, width: number) {
-  const parts = text.match(/[　-〿㐀-鿿＀-￯]|[^\s　-〿㐀-鿿＀-￯]+|\s+/g) ?? [text];
+  const parts = text.match(/[\u3000-\u303f\u3400-\u9fff\uff00-\uffef]|[^\s\u3000-\u303f\u3400-\u9fff\uff00-\uffef]+|\s+/g) ?? [text];
   const lines: string[] = [];
   let line = '';
   for (const p of parts) {
