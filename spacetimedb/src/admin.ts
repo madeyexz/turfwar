@@ -217,3 +217,23 @@ export function playerDeviceRows(rows: Iterable<DeviceLike>): PlayerDeviceRow[] 
   for (const r of rows) out.push({ id: shortId(r.identity), device: r.device, phone: r.phone, tablet: r.tablet, desktop: r.desktop, lastAt: r.lastAt });
   return out;
 }
+
+// ---- Active days (retention on the admin page; a view of its own, like play time) ---------------
+
+/** A `player_day` row: a player (identity hex) was active on a UTC day. */
+export interface DayLike { identity: string; day: number }
+
+/** Matches `PlayerRow.id`: one UTC day the player was active. */
+export interface PlayerDayRow { id: string; day: number }
+
+/** One row per player per active UTC day, by the same short id as `playerRows` (hashed once per player). */
+export function playerDayRows(rows: Iterable<DayLike>): PlayerDayRow[] {
+  const ids = new Map<string, string>();
+  const out: PlayerDayRow[] = [];
+  for (const r of rows) {
+    let id = ids.get(r.identity);
+    if (id === undefined) { id = shortId(r.identity); ids.set(r.identity, id); }
+    out.push({ id, day: r.day });
+  }
+  return out;
+}

@@ -17,10 +17,10 @@ localOnly(uri);
 const key = process.env.ADMIN_TEST_KEY;
 if (!key) throw new Error('Set ADMIN_TEST_KEY to the test key whose hash the local module was published with');
 const { check, note, finish } = checker();
-const VIEWS = ['SELECT * FROM admin_status', 'SELECT * FROM admin_overview', 'SELECT * FROM admin_rooms', 'SELECT * FROM admin_players', 'SELECT * FROM admin_daily', 'SELECT * FROM admin_player_time', 'SELECT * FROM admin_daily_time'];
+const VIEWS = ['SELECT * FROM admin_status', 'SELECT * FROM admin_overview', 'SELECT * FROM admin_rooms', 'SELECT * FROM admin_players', 'SELECT * FROM admin_daily', 'SELECT * FROM admin_player_time', 'SELECT * FROM admin_daily_time', 'SELECT * FROM admin_player_day'];
 const counts = (c: Conn) => ({
   overview: c.db.adminOverview.count(), rooms: c.db.adminRooms.count(), players: c.db.adminPlayers.count(), daily: c.db.adminDaily.count(),
-  playerTime: c.db.adminPlayerTime.count(), dailyTime: c.db.adminDailyTime.count(),
+  playerTime: c.db.adminPlayerTime.count(), dailyTime: c.db.adminDailyTime.count(), playerDay: c.db.adminPlayerDay.count(),
 });
 const status = (c: Conn) => [...c.db.adminStatus.iter()][0];
 const error = async (p: Promise<unknown>) => { try { await p; return ''; } catch (e) { return String((e as Error).message ?? e); } };
@@ -51,7 +51,7 @@ check('admin_login with the right key succeeds', (await error(admin.conn.reducer
 await wait(300);
 check('the admin is an admin', status(admin.conn)?.admin === true, status(admin.conn));
 const c = counts(admin.conn);
-check('the admin sees the overview, rooms, players, daily rows and play time', c.overview === 1n && c.rooms >= 1n && c.players >= 1n && c.daily === 30n && c.playerTime === c.players && c.dailyTime === 30n, c);
+check('the admin sees the overview, rooms, players, daily rows, play time and active days', c.overview === 1n && c.rooms >= 1n && c.players >= 1n && c.daily === 30n && c.playerTime === c.players && c.dailyTime === 30n && c.playerDay >= 1n, c);
 const overview = [...admin.conn.db.adminOverview.iter()][0];
 check('online now counts the player in a room', (overview?.onlineNow ?? 0) >= 1, overview);
 const p1 = [...admin.conn.db.adminPlayers.iter()].find(p => p.tz === 'Asia/Taipei' && p.lang === 'zh-TW');
