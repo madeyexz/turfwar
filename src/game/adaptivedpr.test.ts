@@ -172,4 +172,32 @@ describe('basePixelRatio', () => {
     expect(run(a, 57, 40)).toBe(0);
     expect(a.multiplier).toBe(1);
   });
+
+  it('on phones, a step for late frames that does not help is undone and late frames stop steering', () => {
+    // The iPhone case: still ~13% late at a smaller size, so the pixels were not the cause.
+    const a = new AdaptiveDpr(PHONE_ADAPTIVE_DPR);
+    start(a, 60);
+    runStutter(a, 4.05);
+    expect(a.multiplier).toBe(0.9);
+    runStutter(a, 4.05);              // no better at 0.9: back to full size
+    expect(a.multiplier).toBe(1);
+    expect(runStutter(a, 60)).toBe(0); // and late frames alone no longer move it
+    expect(a.multiplier).toBe(1);
+  });
+
+  it('on phones, late frames alone never take it under 0.8; a low average still can', () => {
+    const a = new AdaptiveDpr(PHONE_ADAPTIVE_DPR);
+    start(a, 60);
+    runStutter(a, 4.05);              // late: 1 → 0.9
+    run(a, 60, 4.01);                 // that helped (no late frames): keeps 0.9
+    expect(a.multiplier).toBe(0.9);
+    runStutter(a, 4.05);              // late again: 0.9 → 0.8
+    run(a, 60, 4.01);
+    expect(a.multiplier).toBe(0.8);
+    runStutter(a, 20);                // late again, but 0.8 is the floor for late frames
+    expect(a.multiplier).toBe(0.8);
+    run(a, 25, 8.1);                  // a genuinely slow phone (25 fps) still steps down
+    expect(a.multiplier).toBeLessThan(0.8);
+  });
 });
+

@@ -117,7 +117,8 @@ follows the camera and redraws every other frame, no shadows from small meshes (
 dynamic lights, no roughness maps on architecture and no ground normal maps. Every preset scales its
 DPR by frame rate while a match is played (`src/game/adaptivedpr.ts`: 0.6–1 in 0.1 steps per 4 s window
 below 30 or at 60 fps, settling after four reversals; on phones (the low preset) below 58 or when more than 5% of a window's frames are late (over
-1/60 s + 1.5 ms, the benchmark's measure), and a size that ran slow is never tried again that session, so a phone settles at the size that holds 60). The canvas has no MSAA, depth or stencil buffer:
+1/60 s + 1.5 ms, the benchmark's measure), and a size that ran slow is never tried again that session, so a phone settles at the size that holds 60; a step for late frames alone stops at 0.8 and is undone when the next window is not at least a
+third less late, after which late frames no longer steer it). The canvas has no MSAA, depth or stencil buffer:
 everything is drawn into the composer's target. Budgets: merged static geometry per material, one draw
 call set per soldier, at most three dynamic point lights (pooled muzzle/explosion flashes) and one
 flashlight spot light, pooled effects. The light count never changes mid-match (a new light recompiles

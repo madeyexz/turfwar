@@ -12,7 +12,7 @@
  * With `lateShare`, a window in which more than that share of frames was late (`LATE_FRAME_MS`) steps
  * down even when its average is fine, and a step up also needs the late share at or under it.
  */
-export interface AdaptiveDprOptions { min: number; max: number; step: number; slow: number; fast: number; delay: number; window: number; sample: number; maxTurns: number; remember?: boolean; lateShare?: number }
+export interface AdaptiveDprOptions { min: number; max: number; step: number; slow: number; fast: number; delay: number; window: number; sample: number; maxTurns: number; remember?: boolean; lateShare?: number; lateFloor?: number }
 
 /** A late frame: slower than a 60 Hz frame with 1.5 ms of scheduling slack (the benchmark's measure too). */
 export const LATE_FRAME_MS = 1000 / 60 + 1.5;
@@ -24,8 +24,15 @@ export const ADAPTIVE_DPR: AdaptiveDprOptions = { min: 0.6, max: 1, step: 0.1, s
  * its frames late at full size (GPU-bound, CPU at 4 ms), which Messenger's 30 fps floor never acts on.
  * Another averaged 58.4 fps with 13% of its frames late: every window averaged 58 or more, so only
  * the late share (over 5%) catches it.
+ *
+ * Late frames are not always the pixels: the same iPhone dropped all the way to 0.6 (671×378) and still
+ * had 8% of its frames late. So a step taken for late frames alone goes no lower than `lateFloor`, and
+ * one that does not cut the late share by a third is undone and late frames stop steering (see frame).
  */
-export const PHONE_ADAPTIVE_DPR: Partial<AdaptiveDprOptions> = { slow: 58, remember: true, lateShare: 0.05 };
+export const PHONE_ADAPTIVE_DPR: Partial<AdaptiveDprOptions> = { slow: 58, remember: true, lateShare: 0.05, lateFloor: 0.8 };
+
+/** A step for late frames must cut the late share to this fraction of what it was, or it is undone. */
+const LATE_HELPS = 0.67;
 
 /** Sums of frame times drift: a window of exactly 4 s ends on its last frame. */
 const EPS = 1e-6;
@@ -47,6 +54,10 @@ export class AdaptiveDpr {
   private wasActive = false;
   /** The largest multiplier still allowed (`remember`): just under the smallest one that ran slow. */
   private ceiling: number;
+  /** The late share of the window that made the last step for late frames (checked by the next window). */
+  private lateBefore?: number;
+  /** Late frames stopped steering: a smaller size did not help, so they are not the pixels' fault. */
+  private lateOff = false;
 
   constructor(options: Partial<AdaptiveDprOptions> = {}) {
     this.o = { ...ADAPTIVE_DPR, ...options };
@@ -74,14 +85,31 @@ export class AdaptiveDpr {
     if (dt * 1000 > LATE_FRAME_MS) this.windowLate++;
     if (this.windowTime < this.o.window - EPS || !this.samples.length) return false;
     const fps = this.samples.reduce((a, b) => a + b, 0) / this.samples.length;
-    const late = this.o.lateShare === undefined ? false : this.windowLate / this.windowFrames > this.o.lateShare;
+    const share = this.windowFrames ? this.windowLate / this.windowFrames : 0;
+    const late = this.o.lateShare !== undefined && !this.lateOff && share > this.o.lateShare;
     this.samples = []; this.windowTime = 0; this.windowFrames = 0; this.windowLate = 0;
+    // The window after a step for late frames: if the smaller size did not help, take it back.
+    if (this.lateBefore !== undefined) {
+      const before = this.lateBefore;
+      this.lateBefore = undefined;
+      if (share > before * LATE_HELPS) {
+        this.lateOff = true;
+        const back = Math.round(Math.min(this.o.max, this.multiplier + this.o.step) * 1000) / 1000;
+        this.ceiling = Math.max(this.ceiling, back);
+        if (back !== this.multiplier) { this.multiplier = back; return true; }
+        return false;
+      }
+    }
     // Rounded: a vsynced 60 Hz screen averages 59.9, which is 60.
     const rounded = Math.round(fps);
     const want = rounded < this.o.slow || late ? -1 : rounded >= this.o.fast ? 1 : 0;
     if (!want) return false;
-    const next = Math.round(Math.min(this.ceiling, Math.max(this.o.min, this.multiplier + want * this.o.step)) * 1000) / 1000;
+    // A step for late frames alone (the average is fine) stops at lateFloor.
+    const lateOnly = want < 0 && Math.round(fps) >= this.o.slow;
+    const floor = lateOnly ? Math.max(this.o.min, this.o.lateFloor ?? this.o.min) : this.o.min;
+    const next = Math.round(Math.min(this.ceiling, Math.max(floor, this.multiplier + want * this.o.step)) * 1000) / 1000;
     if (next === this.multiplier) return false;
+    if (lateOnly) this.lateBefore = share;
     if (want < 0 && this.o.remember) this.ceiling = next;
     if (this.direction && want !== this.direction && ++this.turns >= this.o.maxTurns) this.settled = true;
     this.direction = want;
