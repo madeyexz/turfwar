@@ -689,6 +689,8 @@ export class Game {
       summary, url, backdrop: this.renderer.snapshot(), meme: MEME_SKINS,
       note: o.room ? t('chal.room', { code: o.room }) : undefined,
       onShared: method => track('share_card_shared', { ref, method, room: !!o.room }),
+      // Closed mid-match (the 1v1 room): back to play, the close tap capturing the mouse again.
+      onClose: () => { if (this.running && this.link.state()?.phase !== 'ended') { this.menu.hide(); this.resume(); } },
     });
   }
 
