@@ -37,5 +37,8 @@
   {"sha":"4397f74","at":1791539237,"title":"phone settings scroll to the end (menus sized by the turned view), no stall after death on phones (no new light, shaders and textures warmed), faster loading (per-file asset versions, immutable caching, ground textures per map)"},
   {"sha":"f4eb789","at":1791546803,"title":"National Day pack: 戰績分享卡 share card, 單挑我 challenge links with a bot-double fallback, 藍白拖 slipper knife, 珍奶 healing drink (M18 smoke stays grey)"},
   {"sha":"8533c53","at":1791553161,"title":"analytics for how phones play (touch, upright, in-app browser, aim assist, sideways) and per-match slipper kills and bubble teas"},
-  {"sha":"d2302dc","at":1791559735,"title":"phone performance (Taipei 413 → 94 draw calls, textures 313 → 37 MB on phones), sharper adaptive resolution, detailed vehicles"}
+  {"sha":"d2302dc","at":1791559735,"title":"phone performance (Taipei 413 → 94 draw calls, textures 313 → 37 MB on phones), sharper adaptive resolution, detailed vehicles"},
+  {"sha":"eb9e7ac","at":1791560053,"title":"admin dashboard retention (came back, day 1/3/7/14/30, cohorts), release flags on the charts, changes vs the prior period, sections with a sticky nav"},
+  {"sha":"0ab9e9e","at":1791560500,"title":"三重 (Sanchong) map — temple square, covered market, ironworks yard, back alleys, Taipei Bridge ramp (module published first)"},
+  {"sha":"816a1e2","at":1791561335,"title":"end-screen button 發起單挑 (was 單挑我)"}
 ]
