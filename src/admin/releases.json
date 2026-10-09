@@ -40,5 +40,9 @@
   {"sha":"d2302dc","at":1791559735,"title":"phone performance (Taipei 413 → 94 draw calls, textures 313 → 37 MB on phones), sharper adaptive resolution, detailed vehicles"},
   {"sha":"eb9e7ac","at":1791560053,"title":"admin dashboard retention (came back, day 1/3/7/14/30, cohorts), release flags on the charts, changes vs the prior period, sections with a sticky nav"},
   {"sha":"0ab9e9e","at":1791560500,"title":"三重 (Sanchong) map — temple square, covered market, ironworks yard, back alleys, Taipei Bridge ramp (module published first)"},
-  {"sha":"816a1e2","at":1791561335,"title":"end-screen button 發起單挑 (was 單挑我)"}
+  {"sha":"816a1e2","at":1791561335,"title":"end-screen button 發起單挑 (was 單挑我)"},
+  {"sha":"f2125b0","at":1791561871,"title":"admin dashboard shows Phone and Computer side by side in every figure, grouped daily charts, cohorts per side, a player-list switch"},
+  {"sha":"25e1d8e","at":1791562326,"title":"phones settle at the resolution that holds 60 fps (adaptive step-down below 58 fps)"},
+  {"sha":"0067ca7","at":1791562612,"title":"phones also step down on late frames (over 5% of a window's frames late), aiming the benchmark's meets60"},
+  {"sha":"b9ba62a","at":1791563104,"title":"fix phones never getting their adaptive-resolution options (late-frame and 58 fps triggers now actually run)"}
 ]

@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import {
-  beginPlay, endPlay, FLUSH_MICROS, flushDue, flushPlay, formatPlayTime, liveSeconds, MAX_STRETCH_MICROS, splitDays,
+  beginPlay, endPlay, FLUSH_MICROS, flushDue, flushPlay, formatPlayTime, liveSeconds, MAX_STRETCH_MICROS, splitDays, splitHours,
   type PlayStore, type PlayTime,
 } from './playtime';
 
@@ -13,13 +13,15 @@ const D0 = Number(T0 / DAY);
 function memoryStore() {
   const rows = new Map<string, PlayTime>();
   const days = new Map<string, number>();
+  const hours = new Map<string, number>();
   let writes = 0;
   const store: PlayStore<string> = {
     get: id => rows.get(id),
     set: (id, t) => { rows.set(id, t); writes++; },
     addDay: (id, day, s) => { days.set(`${id}:${day}`, (days.get(`${id}:${day}`) ?? 0) + s); },
+    addHour: (id, hour, s) => { hours.set(`${id}:${hour}`, (hours.get(`${id}:${hour}`) ?? 0) + s); },
   };
-  return { store, rows, days, writes: () => writes, seconds: (id: string) => rows.get(id)?.seconds ?? 0n, open: (id: string) => (rows.get(id)?.since ?? 0n) > 0n };
+  return { store, rows, days, hours, writes: () => writes, seconds: (id: string) => rows.get(id)?.seconds ?? 0n, open: (id: string) => (rows.get(id)?.since ?? 0n) > 0n };
 }
 
 describe('play time accrual', () => {
@@ -147,6 +149,21 @@ describe('play time accrual', () => {
     expect(m.days.get(`a:${D0 - 1}`)).toBe(30);
     expect(m.days.get(`a:${D0}`)).toBe(45);
     expect(m.seconds('a')).toBe(75n);
+  });
+
+  it('splits credited time per hour as well as per day', () => {
+    const m = memoryStore();
+    const H0 = Number(T0 / (3600n * S));
+    beginPlay(m.store, 'a', T0 - 90n * S);
+    flushPlay(m.store, ['a'], T0 + 30n * S);
+    endPlay(m.store, 'a', T0 + 200n * S);
+    beginPlay(m.store, 'a', T0 + 3500n * S);
+    endPlay(m.store, 'a', T0 + 3620n * S);
+    expect(m.hours.get(`a:${H0 - 1}`)).toBe(90);
+    expect(m.hours.get(`a:${H0}`)).toBe(300);
+    expect(m.hours.get(`a:${H0 + 1}`)).toBe(20);
+    expect([...m.hours.values()].reduce((a, b) => a + b, 0)).toBe(Number(m.seconds('a')));
+    expect(splitHours(T0 - 500_000n, 2n)).toEqual([[H0 - 1, 1], [H0, 1]]);
   });
 
   it('splitDays credits exactly the whole seconds, however the start is aligned', () => {

@@ -30,6 +30,9 @@ describe('admin releases', () => {
     expect([...byDay.keys()]).toEqual([10, 12]);
     expect(byDay.get(10)!.map(r => r.title)).toEqual(['one', 'two']);
     expect(releaseTitle(10, byDay.get(10)!)).toBe('1970-01-11: 2 releases (UTC)\n• 00:01 one\n• 02:00 two');
+    const byHour = releasesByDay(list, 240, 242, 3600);
+    expect([...byHour.keys()]).toEqual([240, 242]);
+    expect(releaseTitle(242, byHour.get(242)!, 3600)).toBe('1970-01-11 02:00: 1 release (UTC)\n• 02:00 two');
   });
 
   it('keeps a well-formed snapshot', () => {

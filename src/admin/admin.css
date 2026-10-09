@@ -26,6 +26,9 @@
   --computer: #ffb45a;
   --computer-dim: rgba(255, 180, 90, 0.42);
   --computer-mid: rgba(255, 180, 90, 0.66);
+  --all: #dbe7ea;
+  --all-dim: rgba(219, 231, 234, 0.34);
+  --all-mid: rgba(219, 231, 234, 0.6);
   color-scheme: dark;
   font-family: var(--font);
   color: var(--ink);
@@ -100,16 +103,27 @@ header.top h1 em { font-style: normal; color: var(--accent); }
 html { scroll-behavior: smooth; }
 @media (prefers-reduced-motion: reduce) { html { scroll-behavior: auto; } }
 nav.sections {
-  position: sticky; top: 0; z-index: 5; display: flex; gap: 4px; overflow-x: auto; scrollbar-width: none;
+  position: sticky; top: 0; z-index: 5; display: flex; flex-wrap: wrap; align-items: center; gap: 6px 4px;
   margin: -6px -16px 10px; padding: 8px 16px; background: rgba(5, 9, 12, 0.92); backdrop-filter: blur(6px); border-bottom: 1px solid var(--line);
 }
-nav.sections::-webkit-scrollbar { display: none; }
+/* The links scroll sideways on a narrow screen; the chart controls wrap to a row of their own. */
+.nav-links { flex: 1 1 320px; min-width: 0; display: flex; gap: 4px; overflow-x: auto; scrollbar-width: none; }
+.nav-links::-webkit-scrollbar { display: none; }
 nav.sections a {
   flex: none; padding: 4px 12px; border-radius: 999px; border: 1px solid transparent; color: var(--muted); text-decoration: none;
   font-weight: 700; font-size: 14px; letter-spacing: 0.06em; text-transform: uppercase;
 }
 nav.sections a:hover { color: var(--ink); border-color: var(--line-strong); }
 nav.sections a:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
+/* The charts' range (30 d, 7 d, 48 h) and Split / Combined, at the right of the nav. */
+.chart-controls { flex: none; display: flex; align-items: center; gap: 8px; margin-left: auto; }
+.chart-controls > span { color: var(--faint); font-weight: 700; font-size: 12px; letter-spacing: 0.08em; text-transform: uppercase; }
+.seg { display: inline-flex; border: 1px solid var(--line-strong); border-radius: 999px; overflow: hidden; }
+.seg button { border: 0; background: none; padding: 3px 11px; font-weight: 700; font-size: 13px; letter-spacing: 0.04em; color: var(--muted); }
+.seg button + button { border-left: 1px solid var(--line-strong); }
+.seg button:hover { color: var(--ink); }
+.seg button[aria-pressed="true"] { background: var(--accent); color: #031014; }
+.seg button:focus-visible { outline: 2px solid var(--accent); outline-offset: -2px; }
 section.group { scroll-margin-top: 56px; padding-top: 18px; }
 section.group + section.group { border-top: 1px solid var(--line); margin-top: 8px; }
 .group-h { display: flex; align-items: baseline; flex-wrap: wrap; gap: 4px 12px; margin: 0 0 12px; font-size: 21px; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; }
@@ -162,6 +176,10 @@ section.card h3 small { color: var(--faint); font-weight: 600; letter-spacing: 0
 .legend i.g-phone { background: var(--phone); }
 .legend i.g-computer { background: var(--computer); }
 .legend i.g-none { background: rgba(255, 255, 255, 0.18); }
+.legend i.g-all { background: var(--all); }
+.chart .g-all .bar.s0 { fill: var(--all-dim); }
+.chart .g-all .bar.s1 { fill: var(--all); }
+.chart .g-all .bar.mid { fill: var(--all-mid); }
 .legend .hint { color: var(--faint); font-weight: 500; }
 .chart .g-phone .bar.s0 { fill: var(--phone-dim); }
 .chart .g-phone .bar.s1 { fill: var(--phone); }
