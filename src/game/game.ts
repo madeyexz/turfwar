@@ -212,6 +212,9 @@ export class Game {
     renderer.viewCamera.add(this.viewmodel.root);
     // The flashlight attachment lights the world, so it rides on the world camera.
     renderer.camera.add(this.viewmodel.torch, this.viewmodel.torch.target);
+    // The other side's arms (watching an enemy after death) are built now: its torch adds a light, and a
+    // new light count recompiles every lit shader in the world, a freeze of seconds on a phone.
+    this.viewmodelFor(1 - this.myTeam);
     this.hud = new Hud(container, def);
     this.hud.onMenu = () => this.onExit?.('end_screen');
     this.buymenu = new BuyMenu(container, {
@@ -250,6 +253,8 @@ export class Game {
     this.stopTouch = onTouchLayout(applyTouch);
     const room = link.roomInfo?.();
     if (room?.code) this.hud.toast(t('hud.privateToast', { code: room.code, size: room.size }), 12000);
+    // Shaders and textures for the whole map, once its dressing (trees, street sets) has loaded.
+    this.level.ready.then(() => { if (this.running) renderer.warm(); });
     if (import.meta.env.DEV) Object.assign(window, { __game: this });
   }
 
