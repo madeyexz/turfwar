@@ -67,6 +67,8 @@ export interface Soldier {
   grenadeHE: boolean;
   /** M18 smoke grenades carried (0 or 1). */
   smokes: number;
+  /** 珍奶 carried (0 or 1): drinking one heals (BOBA in shared/weapons.ts). */
+  bobas: number;
   stamina: number;
   money: number;
   sinceHit: number;
@@ -219,6 +221,8 @@ export type MatchEvent =
   | { type: 'explosion'; x: number; y: number; z: number; owner: number; radius?: number; weapon?: string }
   /** A smoke grenade popped here (its cloud is a `smokeCloud` body from now on). */
   | { type: 'smoke'; x: number; y: number; z: number; owner: number }
+  /** A soldier drank a 珍奶 and is back to `health`. */
+  | { type: 'drink'; id: number; health: number }
   | { type: 'phase'; phase: Phase; winner: -1 | Team }
   | { type: 'round'; phase: RoundPhase; round: number; winner: -1 | Team; reason?: RoundEnd }
   | { type: 'bomb'; action: 'armed' | 'disarmed' | 'exploded'; site: number; by: number }

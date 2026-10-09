@@ -2,7 +2,7 @@ import { isRookie, loadProgress } from './progress';
 import { rng, type Vec3 } from '../../shared/math';
 import {
   addSoldier, balanceTeams, buyAttachmentFor, buyItem, createContext, createMatch, enterVehicle, exitVehicle, fireShot, reload, reportState,
-  reportVehicle, switchTeam, switchWeapon, throwGrenade, throwSmoke, tickMatch, useAmmoCrate, TICK_RATE, type SimContext,
+  reportVehicle, switchTeam, switchWeapon, throwGrenade, drinkBoba, throwSmoke, tickMatch, useAmmoCrate, TICK_RATE, type SimContext,
 } from '../../shared/match/sim';
 import { ELIMINATION, PRACTICE_CONFIG, type ClientReport, type MatchConfig, type MatchEvent, type MatchState, type ShotClaim, type Team, type VehicleReport } from '../../shared/match/state';
 import type { BuyItem } from '../../shared/match/economy';
@@ -25,7 +25,11 @@ export class OfflineLink implements GameLink {
   private sinceVehicleReport = 0;
   private practice: boolean;
 
-  constructor(mapId: string, name: string, team: Team | undefined, config: Partial<MatchConfig> = {}, practice = false) {
+  /**
+   * `rival`: a 單挑我 link with no room to join (src/game/challenge.ts): the other side's bot plays
+   * under the challenger's name.
+   */
+  constructor(mapId: string, name: string, team: Team | undefined, config: Partial<MatchConfig> = {}, practice = false, private rival?: string) {
     const random = rng((Math.random() * 2 ** 31) | 0);
     this.ctx = createContext(mapId, random, e => this.events.push(e));
     this.match = createMatch(mapId, practice ? { ...PRACTICE_CONFIG, ...config } : { ...ELIMINATION, ...config });
@@ -33,6 +37,14 @@ export class OfflineLink implements GameLink {
     // A new player (few rounds on this browser) gets easier bots, as online (progress.ts).
     this.me = addSoldier(this.match, this.ctx, { name, team, bot: false, rookie: !practice && isRookie(loadProgress()) }).id;
     balanceTeams(this.match, this.ctx);
+    this.nameRival();
+  }
+
+  /** The other side's bots carry the challenger's name (bots that join later too). */
+  private nameRival() {
+    if (!this.rival) return;
+    const team = this.match.soldiers.find(s => s.id === this.me)?.team;
+    for (const s of this.match.soldiers) if (s.bot && s.team !== team) s.name = this.rival;
   }
 
   myId() { return this.me; }
@@ -50,6 +62,7 @@ export class OfflineLink implements GameLink {
       this.accumulator -= step;
       this.ticks++;
     }
+    this.nameRival();
   }
 
   report(r: ClientReport) {
@@ -59,6 +72,7 @@ export class OfflineLink implements GameLink {
   fire(claim: ShotClaim) { fireShot(this.match, this.ctx, this.me, claim); }
   grenade(origin: Vec3, dir: Vec3) { throwGrenade(this.match, this.ctx, this.me, origin, dir); }
   smoke(origin: Vec3, dir: Vec3) { throwSmoke(this.match, this.ctx, this.me, origin, dir); }
+  drink() { drinkBoba(this.match, this.ctx, this.me); }
   reload() { reload(this.match, this.me); }
   switchWeapon(slot: Slot) { switchWeapon(this.match, this.me, slot); }
   switchTeam() { switchTeam(this.match, this.ctx, this.me); }

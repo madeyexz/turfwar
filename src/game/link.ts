@@ -23,6 +23,8 @@ export interface GameLink {
   grenade(origin: Vec3, dir: Vec3): void;
   /** Throw the M18 smoke grenade (the host checks we carry one). */
   smoke(origin: Vec3, dir: Vec3): void;
+  /** Drink the carried 珍奶 (the sip has played; the host heals). */
+  drink(): void;
   reload(): void;
   switchWeapon(slot: Slot): void;
   /** Store purchase (validated by the host: buy time in base, cash). */

@@ -58,6 +58,16 @@ Back to the [README](../README.md) · [Architecture](ARCHITECTURE.md) · [Develo
 | Melee (3) | Knife | free | 33 / 33 / 33 | Always carried; 2 swings/s; fastest movement |
 | Tactical (4 / G) | M67 grenade | $1,000 | 70 (falloff) | One carried, not restocked; High Explosive mod $1,500 (+45 body damage, smaller radius) |
 | Tactical (5 / X) | M18 smoke grenade | $300 | — | One carried; a 9 m cloud for 15 s that blocks sight, not bullets (not in BeGone) |
+| Tactical (6 / Y) | 珍奶 bubble tea | $400 | +50 health | One carried; drink when hurt: a 1.4 s sip (no shooting), then +50 health up to 100; the server applies it (`drinkBoba`, not in BeGone) |
+
+**National Day reskin** (`src/game/memeskins.ts`, on by default): the knife is a **藍白拖 / Slipper**
+(the blue-and-white rubber slipper, built in code, swung as a flat slap with a cartoon slap sound and
+its own kill-feed mark). Looks, name and sound only: the weapon id, stats and rules are unchanged.
+`?classic=1` shows the original knife; `DEFAULT = false` in `memeskins.ts` turns it off for everyone.
+
+**珍奶 (bubble tea)** is a real item: bought in the store's tactical tab, drunk with 6 / Y (or the touch
+button beside the knife) when hurt. The cup comes up to the mouth in first person with a slurp that
+players nearby hear; the server heals +50 when the sip ends.
 
 ### Attachments (one per category per weapon; kept for the match)
 
@@ -254,6 +264,17 @@ weapon round. Models are built procedurally (`src/render/vehicles.ts`); engines,
 the rotor chop are synthesized.
 
 
+### Sharing a match and 單挑我
+
+The end screen has **分享戰績 / Share**: a 1080×1920 card (`src/ui/sharecard.ts`) over a frame of the match with
+the result, one brag line picked from the match (`src/game/matchstats.ts`: beating a challenger, slipper kills, a
+multi-kill round, kills on the map, headshots…), the numbers, the callsign and **單挑我 →** with a QR code and link.
+Phones share the picture through the share sheet (IG Stories, LINE, Threads); elsewhere it is saved and the link
+copied. Solo cards say "vs bots". **單挑我** (online) opens a private 1v1 room on the match's map, without bots, and
+shares that room's link from inside it. A friend who opens a challenge link sees 「<name> 向你下戰帖！」 in the lobby and
+is one tap from the room; if it is gone, full or empty they play a Solo 1v1 against a bot carrying the challenger's
+name, and either way the end screen says who won and offers their own card.
+
 ### New players, progress and staying in the match
 
 - **Rookies.** A player with fewer than 10 rounds played (online: the server's career stats; Solo: this
@@ -305,6 +326,7 @@ fullscreen. On touch-only screens the Controls tab is read-only.
 | 1 · 2 · 3 | Primary · secondary · knife |
 | 4 or G | M67 grenade |
 | 5 or X | M18 smoke grenade |
+| 6 or Y | Drink the 珍奶 (heals +50) |
 | Q or wheel | Cycle weapons |
 | R · E | Reload · use (arm or disarm the bomb, ammo crate, get in or out of a vehicle) |
 | On a ladder: toward it · away · Space | Climb up · climb down · let go (walk off its top to climb down) |

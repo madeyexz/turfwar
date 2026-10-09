@@ -1,5 +1,6 @@
 import type { MapId } from '../../shared/maps/index';
 import type { AttachmentId, WeaponClass } from '../../shared/weapons';
+import { MEME_SKINS } from '../game/memeskins';
 
 /**
  * UI language: English or Traditional Chinese (Taiwan). `t(key)` looks a string up in the current
@@ -157,7 +158,7 @@ const en = {
   'act.forward': 'Move forward', 'act.back': 'Move back', 'act.left': 'Strafe left', 'act.right': 'Strafe right',
   'act.jump': 'Jump (stamina)', 'act.crouch': 'Crouch · slide', 'act.sprint': 'Sprint (stamina)',
   'act.fire': 'Fire', 'act.aim': 'Aim (zoom) · next spectated player', 'act.reload': 'Reload', 'act.use': 'Use: bomb, ammo crate, get in',
-  'act.knife': 'Knife', 'act.secondary': 'Secondary', 'act.primary': 'Primary', 'act.grenade': 'Grenade', 'act.smoke': 'Smoke grenade',
+  'act.knife': 'Knife', 'act.secondary': 'Secondary', 'act.primary': 'Primary', 'act.grenade': 'Grenade', 'act.smoke': 'Smoke grenade', 'act.drink': 'Drink bubble tea',
   'act.lastWeapon': 'Last weapon', 'act.nextWeapon': 'Next weapon · scope zoom', 'act.prevWeapon': 'Previous weapon · scope zoom',
   'act.binoculars': 'Binoculars',
   'act.throttle': 'Accelerate · fly forward', 'act.brake': 'Brake, reverse · fly back', 'act.steerLeft': 'Steer left · fly left',
@@ -282,6 +283,7 @@ const en = {
   'store.need': 'Need {money} more',
   'store.returnToBase': 'Return to your base to buy weapons',
   'store.buyOver': 'Buy time is over — weapons are sold at the start of the next round',
+  'item.smoke': 'M18', 'item.smokeShort': 'M18',
   'store.smoke': 'Smoke grenade', 'store.oneM18': 'You carry one M18 at a time — throw it to buy another',
   'store.cloud': 'Cloud', 'store.lasts': 'Lasts',
   'store.m18Note': 'Throw with {key}. A thick cloud nobody sees through — players or bots. Bullets still pass.',
@@ -325,6 +327,26 @@ const en = {
   'err.That room is full': 'That room is full', 'err.Unknown room size': 'Unknown room size', 'err.Unknown mode': 'Unknown mode',
   'err.That map does not host this room': 'That map does not host this room', 'err.No room with that code': 'No room with that code',
   'err.That room is gone; try Quick Play': 'That room is gone; press Play online',
+  // Share card and 單挑我 (src/ui/sharecard.ts, src/ui/sharepanel.ts, src/game/challenge.ts)
+  'share.button': 'Share', 'share.challenge': '1v1 me', 'share.title': 'Share your match', 'share.native': 'Share',
+  'share.download': 'Save image', 'share.copy': 'Copy link', 'share.copied': 'Link copied', 'share.close': 'Close',
+  'share.making': 'Making your card…', 'share.hold': 'Or press and hold the picture to save it.',
+  'share.text': '{brag}. 1v1 me in Turf War: Taipei', 'share.vsBots': 'vs bots', 'share.failed': 'Could not make the card',
+  'card.kills': 'Kills', 'card.deaths': 'Deaths', 'card.hs': 'Headshots', 'card.best': 'Best round', 'card.slipper': 'Slipper kills', 'card.knife': 'Knife kills',
+  'card.challenge': '1v1 me →', 'card.scan': 'Scan or tap the link', 'card.holiday': 'National Day weekend',
+  'brag.beat': 'Beat {name} 1v1', 'brag.lostTo': 'Lost to {name}. Rematch?', 'brag.slipperMulti': 'Slipper kills ×{n}', 'brag.knifeMulti': 'Knife kills ×{n}',
+  'brag.round': '{n} kills in one round', 'brag.holiday': '{n} kills in {map} on National Day weekend', 'brag.kills': '{n} kills in {map}',
+  'brag.slipper': 'Took someone out with a slipper', 'brag.knife': 'Took someone out with a knife', 'brag.heads': '{n} headshots',
+  'brag.someKills': 'Got {n} in {map}', 'brag.win': 'Won it in {map}', 'brag.wrecked': 'Got wrecked. I’ll be back.',
+  'chal.banner': '{name} challenges you!', 'chal.brag': '{n} kills in {map}. Can you take them 1v1?', 'chal.plain': 'A 1v1 in {map}. Can you take them?',
+  'chal.accept': 'Accept', 'chal.later': 'Not now', 'chal.double': '{name} isn’t in the room, so you face their bot double',
+  'chal.won': 'You beat {name}!', 'chal.lost': '{name} wins this time', 'chal.opening': 'Opening your 1v1 room…',
+  'chal.room': 'Your 1v1 room {code} is open. Send the link: whoever opens it lands right here.', 'chal.send': 'Send challenge',
+  // 珍奶 (shared/weapons.ts BOBA): a drink that heals
+  'item.boba': 'Bubble Tea', 'item.bobaShort': 'Boba', 'tc.drink': 'Boba', 'store.boba': 'Drink: +{heal} health',
+  'store.bobaTitle': 'Drink it when hurt: +{heal} health in {s} s, no shooting while you sip · {key}', 'store.oneBoba': 'You carry one bubble tea at a time; drink it to buy another',
+  'hud.healed': '+{n} health', 'hud.fullHealth': 'Already at full health',
+  'store.heals': 'Heals', 'store.sip': 'Sip', 'store.bobaNote': 'Drink one when hurt: +{heal} health. You can’t shoot while you sip. {key}', 'store.carryCup': 'One at a time',
 } as const;
 
 export type Key = keyof typeof en;
@@ -459,7 +481,7 @@ const zhTW: Record<Key, string> = {
   'act.forward': '向前移動', 'act.back': '向後移動', 'act.left': '向左移動', 'act.right': '向右移動',
   'act.jump': '跳躍（消耗體力）', 'act.crouch': '蹲下 · 滑行', 'act.sprint': '衝刺（消耗體力）',
   'act.fire': '射擊', 'act.aim': '瞄準（放大）· 觀戰時切換對象', 'act.reload': '換彈', 'act.use': '互動：炸彈、彈藥箱、上車',
-  'act.knife': '刀', 'act.secondary': '副武器', 'act.primary': '主武器', 'act.grenade': '手榴彈', 'act.smoke': '煙霧彈',
+  'act.knife': '刀', 'act.secondary': '副武器', 'act.primary': '主武器', 'act.grenade': '手榴彈', 'act.smoke': '煙霧彈', 'act.drink': '喝珍奶',
   'act.lastWeapon': '切回上一把武器', 'act.nextWeapon': '下一把武器 · 狙擊鏡倍率', 'act.prevWeapon': '前一把武器 · 狙擊鏡倍率',
   'act.binoculars': '望遠鏡',
   'act.throttle': '加速 · 直升機前進', 'act.brake': '煞車、倒車 · 直升機後退', 'act.steerLeft': '左轉 · 直升機左移',
@@ -581,6 +603,7 @@ const zhTW: Record<Key, string> = {
   'store.need': '還差 {money}',
   'store.returnToBase': '回到己方基地才能購買武器',
   'store.buyOver': '購買時間已過 — 下一回合開始時才能購買武器',
+  'item.smoke': 'M18', 'item.smokeShort': 'M18',
   'store.smoke': '煙霧彈', 'store.oneM18': '一次只能攜帶一顆 M18 — 丟出後才能再買',
   'store.cloud': '煙幕', 'store.lasts': '持續',
   'store.m18Note': '按 {key} 投擲。濃煙擋住所有視線，玩家和機器人都看不穿，但子彈照樣穿過。',
@@ -622,9 +645,45 @@ const zhTW: Record<Key, string> = {
   'err.That room is full': '該房間已滿', 'err.Unknown room size': '未知的房間人數', 'err.Unknown mode': '未知的模式',
   'err.That map does not host this room': '該地圖不支援此房間設定', 'err.No room with that code': '沒有使用此代碼的房間',
   'err.That room is gone; try Quick Play': '該房間已關閉，請改按「線上對戰」',
+  'share.button': '分享戰績', 'share.challenge': '單挑我', 'share.title': '分享戰績', 'share.native': '分享',
+  'share.download': '存圖', 'share.copy': '複製連結', 'share.copied': '已複製連結', 'share.close': '關閉',
+  'share.making': '戰績卡製作中…', 'share.hold': '也可以長按圖片儲存。',
+  'share.text': '{brag}｜來《角頭械鬥》單挑我', 'share.vsBots': '對電腦', 'share.failed': '戰績卡做不出來',
+  'card.kills': '擊殺', 'card.deaths': '陣亡', 'card.hs': '爆頭', 'card.best': '單回合最多', 'card.slipper': '藍白拖擊殺', 'card.knife': '刀殺',
+  'card.challenge': '單挑我 →', 'card.scan': '掃碼或點連結', 'card.holiday': '國慶連假',
+  'brag.beat': '單挑打敗了 {name}', 'brag.lostTo': '輸給 {name}，再來一場', 'brag.slipperMulti': '藍白拖擊殺 ×{n}', 'brag.knifeMulti': '刀殺 ×{n}',
+  'brag.round': '一回合連殺 {n} 人', 'brag.holiday': '國慶連假在{map}幹掉 {n} 人', 'brag.kills': '在{map}幹掉 {n} 人',
+  'brag.slipper': '用藍白拖打死人了', 'brag.knife': '拿刀解決了一個', 'brag.heads': '爆頭 {n} 次',
+  'brag.someKills': '在{map}擊殺 {n} 人', 'brag.win': '在{map}拿下勝利', 'brag.wrecked': '被打爆了，但我會回來',
+  'chal.banner': '{name} 向你下戰帖！', 'chal.brag': '在{map}幹掉 {n} 人，敢單挑嗎？', 'chal.plain': '{map} 1v1，敢單挑嗎？',
+  'chal.accept': '接受挑戰', 'chal.later': '先不要', 'chal.double': '{name} 不在房間裡，改打他的分身',
+  'chal.won': '你打敗了 {name}！', 'chal.lost': '{name} 這次贏了', 'chal.opening': '單挑房開房中…',
+  'chal.room': '單挑房 {code} 開好了。把連結傳出去，對手點開就直接進來。', 'chal.send': '傳戰帖',
+  'item.boba': '珍珠奶茶', 'item.bobaShort': '珍奶', 'tc.drink': '珍奶', 'store.boba': '喝了 +{heal} 血',
+  'store.bobaTitle': '受傷時喝：{s} 秒回 {heal} 血，喝的時候不能開槍 · {key}', 'store.oneBoba': '一次只能帶一杯珍奶，喝掉才能再買',
+  'hud.healed': '+{n} 血', 'hud.fullHealth': '血已經是滿的',
+  'store.heals': '回血', 'store.sip': '喝的時間', 'store.bobaNote': '受傷時喝一杯：+{heal} 血，喝的時候不能開槍。{key}', 'store.carryCup': '一次 1 杯',
 };
 
-export const DICTIONARIES: Record<Lang, Record<Key, string>> = { en, 'zh-TW': zhTW };
+/**
+ * The National Day reskin's names (src/game/memeskins.ts): the knife is a 藍白拖 / Slipper wherever it is
+ * named (store, weapon bar, kill feed, scoreboard, keys).
+ */
+export const MEME_NAMES: Record<Lang, Partial<Record<Key, string>>> = {
+  en: {
+    'act.knife': 'Slipper', 'tc.knife': 'Slipper', 'hud.knife': 'SLIPPER', 'cause.knife': 'Slipper', 'store.knife': 'Slipper',
+  },
+  'zh-TW': {
+    'act.knife': '藍白拖', 'tc.knife': '藍白拖', 'hud.knife': '藍白拖', 'cause.knife': '藍白拖', 'store.knife': '藍白拖',
+  },
+};
+
+/** The dictionaries in use: the reskins' names over the classic ones while they are on. */
+export const withMemeNames = (on: boolean): Record<Lang, Record<Key, string>> => on
+  ? { en: { ...en, ...MEME_NAMES.en }, 'zh-TW': { ...zhTW, ...MEME_NAMES['zh-TW'] } }
+  : { en, 'zh-TW': zhTW };
+
+export const DICTIONARIES: Record<Lang, Record<Key, string>> = withMemeNames(MEME_SKINS);
 
 // ---- Names that live in shared/ data (English there; Chinese here) ----
 
@@ -733,6 +792,8 @@ export const teamShort = (team: number) => t(team === 1 ? 'team.short.1' : 'team
 export const modeName = (mode: string) => t(mode === 'sabotage' ? 'mode.sabotage' : 'mode.elimination');
 export const sizeName = (id: 'duel' | 'squad' | 'war') => t(`size.${id}`);
 export const mapName = (id: string, english: string) => (isZh() && MAPS_ZH[id as MapId]?.name) || english;
+/** A map's Chinese name in any language (the share card shows it beside the English one), or undefined. */
+export const mapNameZh = (id: string): string | undefined => MAPS_ZH[id as MapId]?.name;
 export const attachmentName = (id: AttachmentId, english: string) => (isZh() && ATTACHMENTS_ZH[id]) || english;
 export const weaponClass = (c: WeaponClass) => t(`class.${c}`);
 export const roundReason = (r: string | undefined) => (r && `reason.${r}` in en ? t(`reason.${r}` as Key) : '');

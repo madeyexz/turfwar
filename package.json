@@ -16,6 +16,7 @@
   "dependencies": {
     "@vercel/analytics": "^2.0.1",
     "posthog-js": "^1.438.1",
+    "qrcode-generator": "1.4.4",
     "spacetimedb": "2.10.2",
     "three": "^0.180.0"
   },

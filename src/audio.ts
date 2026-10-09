@@ -1,5 +1,6 @@
 import type { WeaponId } from '../shared/weapons';
 import { Voice, VoicePool, unit } from './voices';
+import { MEME_SKINS } from './game/memeskins';
 import { assetUrl } from './assetUrl';
 
 type V3 = { x: number; y: number; z: number };
@@ -604,11 +605,23 @@ export class Audio {
     const t = this.now();
     this.swish(t, listener, at);
     if (!hit) return;
+    if (MEME_SKINS) return this.slap(t + 0.05, listener, at);
     const out = this.out(listener ? 0.55 : 0.45, listener, at, 0.06);
     this.tone(out, t + 0.06, 'sine', 140, 55, 0.12, 0.8);
     this.noiseBurst(out, t + 0.06, 0.07, 'lowpass', 900, 1, 0.7);
     this.noiseBurst(out, t + 0.07, 0.05, 'bandpass', 2600, 4, 0.25);
     if (this.live) this.noiseBurst(out, t + 0.075, 0.12, 'bandpass', 420, 1.5, 0.35, 0.01);
+  }
+
+  /** The 藍白拖 landing (src/game/memeskins.ts): a bright rubber THWACK with a little cartoon boing after it. */
+  private slap(t: number, listener?: Listener, at?: V3) {
+    const out = this.out(listener ? 0.7 : 0.6, listener, at, 0.12);
+    this.noiseBurst(out, t, 0.045, 'highpass', 1800, 0.7, 1.1);
+    this.noiseBurst(out, t, 0.07, 'bandpass', 1100, 1.4, 0.9);
+    this.tone(out, t, 'sine', 260, 120, 0.06, 0.5);
+    if (!this.live) return;
+    this.tone(out, t + 0.05, 'triangle', 520, 300, 0.16, 0.16, 0.005);
+    this.tone(out, t + 0.09, 'triangle', 380, 520, 0.12, 0.08, 0.005);
   }
 
   /** Mechanical cycling after the shot: pump, bolt or a short action clack. */
@@ -791,6 +804,17 @@ export class Audio {
     this.noiseBurst(out, t, 0.18, 'lowpass', 700, 0.8, 0.9, 0.003);
     this.noiseBurst(out, t + 0.05, 2.6, 'highpass', 2400, 0.5, 0.35, 0.25);
     this.noiseBurst(out, t + 0.05, 2.2, 'bandpass', 900, 0.7, 0.25, 0.3);
+  }
+
+  /** Drinking a 珍奶 (ours, or someone's nearby): the lid's pop, a long slurp through the straw and pearls bubbling up. */
+  drink(listener?: Listener, at?: V3) {
+    const t = this.now(), out = this.out(listener ? 0.5 : 0.75, listener, at, 0.3);
+    this.tone(out, t, 'sine', 420, 1500, 0.06, 0.6);
+    this.noiseBurst(out, t, 0.05, 'bandpass', 2200, 2, 0.45);
+    const slurp = this.noiseBurst(out, t + 0.08, 0.9, 'bandpass', 500, 3, 0.4, 0.08);
+    slurp.frequency.setValueAtTime(380, t + 0.08); slurp.frequency.exponentialRampToValueAtTime(1600, t + 0.9);
+    for (let i = 0; i < 7; i++) this.tone(out, t + 0.2 + i * 0.11 + Math.random() * 0.04, 'sine', 300 + Math.random() * 260, 700 + Math.random() * 400, 0.05, 0.18);
+    this.noiseBurst(out, t + 0.1, 2.2, 'bandpass', 900, 0.7, 0.18, 0.3);
   }
 
   footstep(listener: Listener | undefined, at: V3 | undefined, sprint: boolean) {

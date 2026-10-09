@@ -4,7 +4,7 @@ import { loadMap, loadNav } from '../maps/index';
 import type { MapDef } from '../maps/types';
 import { clamp, dist3, normalize3, segmentPointDistance, type Vec3 } from '../math';
 import { MOVE, createMoveState } from '../movement';
-import { FALL, STAMINA, oneHanded, type AttachmentId, type Slot, type WeaponId } from '../weapons';
+import { BOBA, FALL, HEALTH, STAMINA, oneHanded, type AttachmentId, type Slot, type WeaponId } from '../weapons';
 import { PHYSICS_STEP, stepBodies, type Body } from '../world';
 import { botName, createBrain, updateBot } from './bots';
 import {
@@ -55,7 +55,7 @@ export function addSoldier(state: MatchState, ctx: SimContext, opts: { name: str
     id: state.nextId++, name: opts.name.slice(0, 20), team, bot: opts.bot, ...(opts.rookie && !opts.bot ? { rookie: true } : {}),
     m: createMoveState(0, 0, 0), yaw: 0, pitch: 0, alive: false, health: 0, weapon: 0,
     weapons: ['mp5', 'm9a1'], owned: [], attachments: {}, ammo: [0, 0], reserve: [0, 0],
-    reloadLeft: 0, fireCooldown: 0, switchLeft: 0, grenades: 0, grenadeHE: false, smokes: 0, stamina: STAMINA.max, money: 0,
+    reloadLeft: 0, fireCooldown: 0, switchLeft: 0, grenades: 0, grenadeHE: false, smokes: 0, bobas: 0, stamina: STAMINA.max, money: 0,
     sinceHit: 99, lastAttacker: -1, kills: 0, deaths: 0, assists: 0, score: 0, sprint: false, ads: false, sinceShot: 99, using: false,
     corrections: 0, moveSlack: MOVE_SLACK.max, groundY: 0, idle: 0, round: newRoundStats(), roundsHere: 0,
   };
@@ -319,6 +319,19 @@ export function buyAttachmentFor(state: MatchState, id: number, weapon: WeaponId
 export function useAmmoCrate(state: MatchState, ctx: SimContext, id: number, index: number) {
   const s = state.soldiers.find(x => x.id === id);
   return !!s && Number.isInteger(index) && useCrate(state, ctx.map, s, index);
+}
+
+/**
+ * Drink a 珍奶: +BOBA.heal health up to the maximum. The client has already sipped for BOBA.drinkTime
+ * (like a throw, it asks at the end). Alive, carrying one, hurt, not driving, and the match not over.
+ */
+export function drinkBoba(state: MatchState, ctx: SimContext, id: number) {
+  const s = state.soldiers.find(x => x.id === id);
+  if (!s || !s.alive || s.bobas <= 0 || s.health >= HEALTH.max || state.phase === 'ended' || seatOf(state, id)?.seat === 0) return false;
+  s.bobas--;
+  s.health = Math.min(HEALTH.max, s.health + BOBA.heal);
+  ctx.emit({ type: 'drink', id, health: s.health });
+  return true;
 }
 
 /** Throw the M18 smoke grenade: the same checks as the M67 (alive, live round, not driving, a plausible origin). */
