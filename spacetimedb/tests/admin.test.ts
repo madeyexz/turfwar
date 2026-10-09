@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { sha256Hex } from '../../shared/sha256';
 import {
   ADMIN_KEY_SHA256, ADMIN_MAX_FAILURES, ADMIN_WINDOW_MICROS, AdminError, adminLogin, adminLogout, adminRevokeAll, dailyRows, DAY_MICROS,
-  dailyNetRows, dailyTimeRows, forAdmin, keyMatches, playerDayNetRows, playerDayRows, playerDayTimeRows, playerDeviceRows, playerNetRows, playerRows, playTimeRows, shortId, type AdminAttempts, type AdminStore,
+  dailyNetRows, dailyTimeRows, forAdmin, keyMatches, playerDayNetRows, playerDayRows, playerDayTimeRows, playerHourRows, playerDeviceRows, playerNetRows, playerRows, playTimeRows, shortId, type AdminAttempts, type AdminStore,
 } from '../src/admin';
 import { foldNetDay, type NetDay } from '../../shared/netstats';
 import { acceptDevice } from '../../shared/devicekind';
@@ -241,5 +241,19 @@ describe('admin per-day views', () => {
     day = foldNetDay(day, { p50: 100, p95: 200, samples: 100, corrections: 2, seconds: 120 });
     const rows = playerDayNetRows([{ identity: 'bb22', day: 20734, ...day }, { identity: 'cc33', day: 20734, reports: 1, seconds: 0, p50Sum: 0, p95Sum: 0, corrections: 0 }]);
     expect(rows).toEqual([{ id: shortId('bb22'), day: 20734, p50: 80, p95: 160, seconds: 180, corrections: 3 }]);
+  });
+});
+
+describe('admin hourly view', () => {
+  it('gives each player\'s hours with play time and mean ping by the same short id (0 without reports)', () => {
+    const rows = playerHourRows([
+      { identity: 'aa11', hour: 497_000, seconds: 600, netSeconds: 120, p50Sum: 40 * 60 + 100 * 60, p95Sum: 80 * 60 + 200 * 60, corrections: 3 },
+      { identity: 'aa11', hour: 497_001, seconds: 0, netSeconds: 0, p50Sum: 0, p95Sum: 0, corrections: 0 },
+    ]);
+    expect(rows).toEqual([
+      { id: shortId('aa11'), hour: 497_000, seconds: 600, p50: 70, p95: 140, netSeconds: 120, corrections: 3 },
+      { id: shortId('aa11'), hour: 497_001, seconds: 0, p50: 0, p95: 0, netSeconds: 0, corrections: 0 },
+    ]);
+    for (const r of rows) expect(JSON.stringify(r)).not.toMatch(/aa11/);
   });
 });

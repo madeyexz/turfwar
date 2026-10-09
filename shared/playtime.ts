@@ -10,13 +10,15 @@
  * - A stretch longer than `MAX_STRETCH_MICROS` is not credited at all: with a flush every minute
  *   that only happens when ticks stopped (server down, a stuck row), and it must not add days.
  *
- * Credited seconds also go to `player_day_time` per UTC day (a stretch over midnight is split).
+ * Credited seconds also go to `player_day_time` per UTC day and to `player_hour` per hour (a stretch
+ * over midnight or the hour is split).
  * Whole seconds are credited; a flush carries the remainder by advancing `since` by whole seconds.
  *
  * This file is pure logic over a small store interface, so tests can run it in memory.
  */
 const SECOND = 1_000_000n;
 const DAY_MICROS = 86_400_000_000n;
+const HOUR_MICROS = 3_600_000_000n;
 /** How often a room credits its humans' open stretches. */
 export const FLUSH_MICROS = 60n * SECOND;
 /** Longest stretch credited; anything longer is dropped. */
@@ -30,23 +32,28 @@ export interface PlayStore<K> {
   set(id: K, time: PlayTime): void;
   /** Add credited seconds to `id`'s total for one UTC day. */
   addDay(id: K, day: number, seconds: number): void;
+  /** Add credited seconds to `id`'s total for one hour (hours since the epoch). */
+  addHour?(id: K, hour: number, seconds: number): void;
 }
 
-/** `[day, seconds]` pieces of the `seconds` starting at `from`, split at UTC midnights. */
-export function splitDays(from: bigint, seconds: bigint): [number, number][] {
+/** `[span, seconds]` pieces of the `seconds` starting at `from`, split at multiples of `span` (default: UTC midnights). */
+export function splitDays(from: bigint, seconds: bigint, span = DAY_MICROS): [number, number][] {
   const out: [number, number][] = [];
   let at = from, left = seconds * SECOND;
   while (left > 0n) {
-    const day = at / DAY_MICROS;
-    const piece = (day + 1n) * DAY_MICROS - at < left ? (day + 1n) * DAY_MICROS - at : left;
-    // Credit whole seconds per day; a split second goes to the day it ends in.
+    const n = at / span;
+    const piece = (n + 1n) * span - at < left ? (n + 1n) * span - at : left;
+    // Credit whole seconds per span; a split second goes to the span it ends in.
     const end = at + piece;
     const whole = end / SECOND - at / SECOND;
-    if (whole > 0n) out.push([Number(day), Number(whole)]);
+    if (whole > 0n) out.push([Number(n), Number(whole)]);
     at = end; left -= piece;
   }
   return out;
 }
+
+/** `[hour, seconds]` pieces (hours since the epoch), split on the hour. */
+export const splitHours = (from: bigint, seconds: bigint) => splitDays(from, seconds, HOUR_MICROS);
 
 /**
  * Credit `id`'s open stretch up to `now`. `open` says whether a stretch stays open afterwards (in a
@@ -64,6 +71,7 @@ function credit<K>(store: PlayStore<K>, id: K, now: bigint, open: boolean) {
       if (whole > 0n) {
         seconds += whole;
         for (const [day, s] of splitDays(row.since, whole)) store.addDay(id, day, s);
+        if (store.addHour) for (const [hour, s] of splitHours(row.since, whole)) store.addHour(id, hour, s);
       }
       // Still in the room: the part-second left over is credited next time.
       if (open) since = row.since + whole * SECOND;

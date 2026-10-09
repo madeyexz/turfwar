@@ -118,6 +118,20 @@ export const AdminPlayerDeviceRow = __t.object("AdminPlayerDeviceRow", {
 });
 export type AdminPlayerDeviceRow = __Infer<typeof AdminPlayerDeviceRow>;
 
+export const AdminPlayerHour = __t.object("AdminPlayerHour", {});
+export type AdminPlayerHour = __Infer<typeof AdminPlayerHour>;
+
+export const AdminPlayerHourRow = __t.object("AdminPlayerHourRow", {
+  id: __t.string(),
+  hour: __t.u32(),
+  seconds: __t.u32(),
+  p50: __t.u16(),
+  p95: __t.u16(),
+  netSeconds: __t.u32(),
+  corrections: __t.u32(),
+});
+export type AdminPlayerHourRow = __Infer<typeof AdminPlayerHourRow>;
+
 export const AdminPlayerNet = __t.object("AdminPlayerNet", {});
 export type AdminPlayerNet = __Infer<typeof AdminPlayerNet>;
 
@@ -359,6 +373,19 @@ export const PlayerDevice = __t.object("PlayerDevice", {
   lastAt: __t.timestamp(),
 });
 export type PlayerDevice = __Infer<typeof PlayerDevice>;
+
+export const PlayerHour = __t.object("PlayerHour", {
+  key: __t.string(),
+  hour: __t.u32(),
+  identity: __t.identity(),
+  seconds: __t.u32(),
+  reports: __t.u32(),
+  netSeconds: __t.u32(),
+  p50Sum: __t.f64(),
+  p95Sum: __t.f64(),
+  corrections: __t.u32(),
+});
+export type PlayerHour = __Infer<typeof PlayerHour>;
 
 export const PlayerNet = __t.object("PlayerNet", {
   identity: __t.identity(),
