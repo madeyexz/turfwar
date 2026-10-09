@@ -146,10 +146,16 @@ export class Input {
   /** The mouse was released: no button stays held. */
   private releaseMouse() { for (const c of [...this.keys]) if (c.startsWith('Mouse')) this.keys.delete(c); }
   clear() { this.keys.clear(); this.pressed.clear(); this.forced.clear(); this.touchHeld.clear(); this.touchPressed.clear(); this.lookX = this.lookY = 0; }
-  /** Capture the mouse (touch: resume play). */
-  lock(): Promise<void> | undefined {
-    if (this.touch) { this.touchPaused = false; return Promise.resolve(); }
-    return this.canvas.requestPointerLock?.();
+  /**
+   * Capture the mouse (touch: resume play); resolves to whether it worked. Browsers refuse a capture
+   * just after the player let go of one (Esc) or without a click: that is not an error, the game
+   * asks for a click instead (game.ts resume).
+   */
+  lock(): Promise<boolean> {
+    if (this.touch) { this.touchPaused = false; return Promise.resolve(true); }
+    const asked = this.canvas.requestPointerLock?.() as Promise<void> | undefined;
+    if (!asked) return Promise.resolve(document.pointerLockElement === this.canvas);
+    return asked.then(() => true, () => false);
   }
   /** Free the mouse (touch: pause, which opens the menu like Esc). */
   release() {

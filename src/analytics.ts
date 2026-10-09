@@ -23,7 +23,7 @@ export type Reason = 'menu' | 'disconnect' | 'close';
  */
 export type Exit = 'menu_button' | 'end_screen' | 'leave_key' | 'removed' | 'lost' | 'close';
 /** The page's own failures: an uncaught error, a promise nobody caught, the graphics (WebGL) context lost. */
-export type ClientErrorKind = 'error' | 'rejection' | 'webgl_lost';
+export type ClientErrorKind = 'error' | 'rejection' | 'webgl_lost' | 'webgl_restored';
 
 /** Every event and its properties (kept small and typed). */
 export interface Events {
@@ -31,7 +31,8 @@ export interface Events {
   /** `server_choice`: the server an online play goes to (Settings → Server); offline plays leave it out. */
   play_clicked: { kind: PlayKind; size: string; mode: Mode | ''; map: string; server_choice?: ServerId };
   /** `device`: our own phone/tablet/desktop (src/game/device.ts), which, unlike PostHog's `$device_type`, counts an iPad posing as a Mac as a tablet. */
-  match_joined: { online: boolean; room?: string; map: string; mode: Mode; size: string; team: 'swat' | 'militia'; server_choice?: ServerId; device: DeviceKind };
+  /** `rejoin`: back in the same room after the connection dropped (main.ts rejoinAfterDrop). */
+  match_joined: { online: boolean; room?: string; map: string; mode: Mode; size: string; team: 'swat' | 'militia'; server_choice?: ServerId; device: DeviceKind; rejoin?: boolean };
   /** Online, also the match's connection quality (shared/netstats.ts): ping percentiles over the newest ≤600 samples, totals for the rest. */
   match_left: { seconds: number; kills: number; deaths: number; rounds_played: number; reason: Reason; exit?: Exit } & Partial<Omit<NetFields, 'seconds'>>;
   round_ended: { won: boolean; mode: Mode; map: string };

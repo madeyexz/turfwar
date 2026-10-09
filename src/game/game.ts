@@ -219,9 +219,9 @@ export class Game {
       attach: (weapon, attachment) => { this.requested({ kind: 'attach', weapon, attachment }); this.link.attach(weapon, attachment); this.audio.ui(); },
     }, assets);
     // The key that closed the menu must not reopen it next frame.
-    this.buymenu.onClose = () => { this.input.clear(); void this.input.lock(); };
+    this.buymenu.onClose = () => { this.input.clear(); this.resume(); };
     this.menu = new SettingsMenu(container, {
-      resume: () => { this.menu.hide(); this.input.clear(); void this.input.lock(); },
+      resume: () => { this.menu.hide(); this.input.clear(); this.resume(); },
       leave: () => this.onExit?.('menu_button'),
       team: () => this.teamView(),
       switchTeam: () => this.requestTeamSwitch(),
@@ -304,10 +304,10 @@ export class Game {
     // Esc (the browser frees the mouse) or the menu key (P) opens the in-game menu; Esc / P again (or Resume) closes it.
     const released = !this.input.locked && !this.buymenu.open && !this.hud.chatting && state.phase !== 'ended';
     this.hud.released(false, false);
-    if (this.input.locked) this.menu.hide();
-    else if (released && !this.menu.open) { this.menu.show(link.mode === 'offline'); this.menuAt = performance.now(); }
+    if (this.input.locked) { this.menu.hide(); this.clickToResume(false); }
+    else if (released && !this.menu.open && !this.awaitingClick) { this.menu.show(link.mode === 'offline'); this.menuAt = performance.now(); }
     if (this.menu.open && performance.now() - this.menuAt > 250 && (this.input.takeCode('Escape') || this.input.take('menu'))) {
-      this.menu.hide(); this.input.clear(); void this.input.lock();
+      this.menu.hide(); this.input.clear(); this.resume();
     }
     const side = me ? sideOf(state, this.map.def, me.team) : 0;
     const buyWindow = !!me && state.phase === 'live' && canBuyWeapons(state, this.map.def, me, side);
@@ -612,6 +612,29 @@ export class Game {
       storeHot: !!me && buyWindow && (free || inBase(me, this.map.def, sideOf(state, this.map.def, me.team))), reloading: p.reloading,
       holdAim, shots: this.shotCount,
     });
+  }
+
+  /** Waiting for a click to recapture the mouse (the browser refused a capture right after Esc). */
+  private awaitingClick = false;
+  private resumeLayer?: HTMLButtonElement;
+
+  /** Back to playing: capture the mouse, or, if the browser refuses for now, show "click to resume". */
+  private resume() {
+    void this.input.lock().then(ok => { if (!ok && !this.input.locked && this.running) this.clickToResume(true); });
+  }
+
+  private clickToResume(on: boolean) {
+    if (on === this.awaitingClick) return;
+    this.awaitingClick = on;
+    if (on) {
+      const el = this.resumeLayer ??= document.createElement('button');
+      el.type = 'button';
+      el.className = 'click-resume';
+      el.innerHTML = `<b>${t('hud.clickResume')}</b>`;
+      // The click is the gesture the browser wants: capture now.
+      el.onclick = () => { void this.input.lock().then(ok => { if (ok) this.clickToResume(false); }); };
+      this.hud.root.appendChild(el);
+    } else this.resumeLayer?.remove();
   }
 
   /** XP, the level and the day's goal (progress.ts): a finished goal or a new level is announced. */

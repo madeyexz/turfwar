@@ -33,7 +33,7 @@ const en = {
   'lobby.callsign': 'Callsign', 'lobby.team': 'Team', 'lobby.auto': 'Auto',
   'leave.title': 'Leave the match?', 'leave.why': 'You go back to the lobby; the match carries on without you.',
   'leave.go': 'Leave', 'leave.stay': 'Keep playing',
-  'gfx.lost': 'The graphics stopped: the browser lost the graphics card. Reload to keep playing.', 'gfx.reload': 'Reload',
+  'gfx.lost': 'The graphics stopped: the browser lost the graphics card. Reload to keep playing.', 'gfx.reload': 'Reload', 'gfx.restoring': 'The graphics stopped. Restoring…',
   'cs.title': 'Pick a callsign', 'cs.why': 'Your name on the scoreboard and in the kill feed. You can change it later in the lobby.',
   'cs.placeholder': 'Your nickname', 'cs.play': 'Play', 'cs.close': 'Back to the lobby',
   'cs.empty': 'Type a callsign to play.', 'cs.rude': 'That callsign isn’t allowed. Pick another one.', 'cs.own': 'Pick a name of your own, not the made-up one.',
@@ -116,7 +116,7 @@ const en = {
   'net.players.one': '1 PLAYER', 'net.players.other': '{n} PLAYERS',
   'net.solo': 'SOLO', 'net.practice': 'PRACTICE RANGE',
   'net.removed': 'You were removed from the match: the server stopped hearing from this browser. Join again any time.',
-  'net.lost': 'Lost the connection to the match server.',
+  'net.lost': 'Lost the connection to the match server.', 'net.reconnecting': 'Reconnecting…', 'net.reconnectingSub': 'The connection dropped; getting you back into the same match.',
 
   // ---- Performance check ----
   'bench.title': 'Performance check', 'bench.met': '60 fps target met on this device', 'bench.notMet': '60 fps target not met on this device',
@@ -344,7 +344,7 @@ const zhTW: Record<Key, string> = {
   'lobby.callsign': '呼號', 'lobby.team': '隊伍', 'lobby.auto': '自動',
   'leave.title': '確定離開對戰？', 'leave.why': '你會回到大廳，這場對戰會繼續進行。',
   'leave.go': '離開', 'leave.stay': '繼續遊戲',
-  'gfx.lost': '畫面中斷了：瀏覽器失去了顯示卡。請重新整理以繼續遊戲。', 'gfx.reload': '重新整理',
+  'gfx.lost': '畫面中斷了：瀏覽器失去了顯示卡。請重新整理以繼續遊戲。', 'gfx.reload': '重新整理', 'gfx.restoring': '畫面中斷了，正在恢復…',
   'cs.title': '取個呼號', 'cs.why': '會顯示在計分板與擊殺訊息上，之後可在大廳修改。',
   'cs.placeholder': '你的名字', 'cs.play': '開始', 'cs.close': '返回大廳',
   'cs.empty': '請先輸入呼號。', 'cs.rude': '這個呼號不能用，換一個吧。', 'cs.own': '請取一個自己的名字，不要用系統給的。',
@@ -421,7 +421,7 @@ const zhTW: Record<Key, string> = {
   'net.players.one': '1 名玩家', 'net.players.other': '{n} 名玩家',
   'net.solo': '單人', 'net.practice': '練習場',
   'net.removed': '你已被移出對戰：伺服器太久沒收到這個瀏覽器的訊息，可隨時重新加入。',
-  'net.lost': '與對戰伺服器的連線中斷。',
+  'net.lost': '與對戰伺服器的連線中斷。', 'net.reconnecting': '重新連線中…', 'net.reconnectingSub': '連線中斷了，正在回到同一場對戰。',
 
   'bench.title': '效能檢測', 'bench.met': '此裝置達到 60 fps 目標', 'bench.notMet': '此裝置未達 60 fps 目標',
   'bench.about': '暖機後進行 {n} 秒的腳本戰鬥。瀏覽器的幀率上限為螢幕更新率，因此 120 Hz 螢幕可能超過 60。「達到」代表平均至少 58 fps，且 95% 的影格在 18.2 ms 內完成。',

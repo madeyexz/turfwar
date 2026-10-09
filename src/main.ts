@@ -1130,6 +1130,7 @@ async function start(action: Action, retried = false) {
   const linkMap = link.state()?.mapId ?? rules.mapId;
   launch(link, linkMap);
   joined(link, linkMap, playServer);
+  matchServer = playServer;
   // The map's own files have loaded by now: cache them too on a first visit.
   setTimeout(warmServiceWorker, 15000);
   menu.hidden = true;
@@ -1155,19 +1156,69 @@ function backToLobby(reason: 'menu' | 'disconnect', message = '', exit?: Exit) {
   watchLobbyRooms(); refresh();
   if (message) status.textContent = message;
 }
+/** The server of the online match being played (for a rejoin after a dropped connection). */
+let matchServer: ServerId | undefined;
+
 /** Analytics: we are in a match (once per link; online map rotations keep the same session). */
-function joined(link: GameLink, map: string, serverChoice: ServerId | undefined) {
+function joined(link: GameLink, map: string, serverChoice: ServerId | undefined, rejoin = false) {
   const state = link.state(), me = state?.soldiers.find(s => s.id === link.myId());
   const config = state?.config;
   const info = link.roomInfo?.();
   matchJoined({
     online: link.mode === 'online', ...(info ? { room: info.code || `public-${info.room}` } : {}), map,
     mode: config?.mode ?? 'elimination', size: config?.practice ? 'practice' : sizeLabel(config?.teamSize ?? perTeam()), team: me?.team === 1 ? 'militia' : 'swat',
-    ...(serverChoice ? { server_choice: serverChoice } : {}), device: currentDeviceKind(),
+    ...(serverChoice ? { server_choice: serverChoice } : {}), device: currentDeviceKind(), ...(rejoin ? { rejoin: true } : {}),
   });
   // The server removed us (it stopped hearing from this client) or the connection dropped: back to
   // the lobby with a note, rather than playing on against a frozen match the server no longer runs.
-  if (link instanceof OnlineLink) link.onDrop = () => backToLobby('disconnect', t(link.dropReason === 'removed' ? 'net.removed' : 'net.lost'), link.dropReason === 'removed' ? 'removed' : 'lost');
+  // A dropped connection (a phone that slept, an in-app browser sent to the background, a network
+  // blip) reconnects and rejoins the same room first.
+  if (link instanceof OnlineLink) link.onDrop = () => {
+    if (link.dropReason === 'lost' && !benchMode && link.entry) void rejoinAfterDrop(link);
+    else backToLobby('disconnect', t(link.dropReason === 'removed' ? 'net.removed' : 'net.lost'), link.dropReason === 'removed' ? 'removed' : 'lost');
+  };
+}
+
+/** Tries to reconnect, waiting for the page to be visible first (a backgrounded app cannot connect). */
+const REJOIN_TRIES = 3;
+const visible = () => new Promise<void>(resolve => {
+  if (document.visibilityState === 'visible') { resolve(); return; }
+  const on = () => { if (document.visibilityState === 'visible') { document.removeEventListener('visibilitychange', on); resolve(); } };
+  document.addEventListener('visibilitychange', on);
+});
+
+/**
+ * The connection dropped mid-match: say so over the frozen view, reconnect (same identity) and join the
+ * same room again by its code or number. Only after a few failed tries is the player sent to the lobby.
+ */
+async function rejoinAfterDrop(old: OnlineLink) {
+  const playing = game;
+  if (!playing || !old.entry) return;
+  const info = old.roomInfo();
+  const how: OnlineEntry = info?.code ? { kind: 'code', code: info.code } : info ? { kind: 'room', room: info.room } : old.entry.how;
+  const note = document.createElement('div');
+  note.className = 'reconnecting';
+  note.setAttribute('role', 'status');
+  note.innerHTML = `<b>${esc(t('net.reconnecting'))}</b><small>${esc(t('net.reconnectingSub'))}</small>`;
+  document.body.appendChild(note);
+  try {
+    for (let i = 0; i < REJOIN_TRIES; i++) {
+      await visible();
+      if (game !== playing) return; // left meanwhile
+      try {
+        const team = old.entry.team === 0 || old.entry.team === 1 ? old.entry.team as Team : undefined;
+        const link = await connectOnline(old.entry.name, team, how, () => undefined);
+        if (game !== playing) { link.dispose(); return; }
+        leftMatch('disconnect', 'lost');
+        playing.stop(); game = undefined;
+        const map = link.state()?.mapId ?? playing.mapId;
+        launch(link, map);
+        joined(link, map, matchServer, true);
+        return;
+      } catch { await new Promise(r => setTimeout(r, 1500 * (i + 1))); }
+    }
+    backToLobby('disconnect', t('net.lost'), 'lost');
+  } finally { note.remove(); }
 }
 /** Analytics: the match is over for us (sent once per match). */
 function leftMatch(reason: Reason, exit?: Exit) {
@@ -1202,15 +1253,31 @@ function leaveByKey() {
   confirmDialog({ title: t('leave.title'), why: t('leave.why'), go: t('leave.go'), stay: t('leave.stay'), done: () => game?.onExit?.('leave_key') });
 }
 
-/** The browser took the graphics context away (a black screen): say so and offer a reload. */
+/** How long to wait for the browser to hand the graphics back before offering a reload. */
+const GFX_RESTORE_MS = 6000;
+let gfxTimer = 0;
+/**
+ * The browser took the graphics context away (a black screen; phones do it to apps in the background):
+ * say it is being restored, and offer a reload only if it does not come back.
+ */
 function graphicsLost() {
   if (document.querySelector('.gfx-lost')) return;
   const el = document.createElement('div');
   el.className = 'gfx-lost';
   el.setAttribute('role', 'alert');
-  el.innerHTML = `<p>${esc(t('gfx.lost'))}</p><button type="button">${esc(t('gfx.reload'))}</button>`;
-  el.querySelector('button')!.addEventListener('click', () => location.reload());
+  el.innerHTML = `<p>${esc(t('gfx.restoring'))}</p>`;
   document.body.appendChild(el);
+  clearTimeout(gfxTimer);
+  gfxTimer = window.setTimeout(() => {
+    el.innerHTML = `<p>${esc(t('gfx.lost'))}</p><button type="button">${esc(t('gfx.reload'))}</button>`;
+    el.querySelector('button')!.addEventListener('click', () => location.reload());
+  }, GFX_RESTORE_MS);
+}
+/** The graphics are back (three.js rebuilds its GPU state by itself): carry on. */
+function graphicsRestored() {
+  clearTimeout(gfxTimer);
+  document.querySelector('.gfx-lost')?.remove();
+  renderer.resize();
 }
 
 const typing = (e: KeyboardEvent) => { const t = e.target as HTMLElement | null; return !!t && (t.tagName === 'INPUT' || t.tagName === 'TEXTAREA' || t.isContentEditable); };
@@ -1277,7 +1344,7 @@ const startAction = (): Action => benchMode ? 'solo' : params.get('room') ? 'cod
 async function boot() {
   renderer = new Renderer(app, QUALITY[quality]);
   // The page's own failures go to PostHog; a lost graphics context also asks the player to reload.
-  watchClientErrors(renderer.renderer.domElement, () => !!game, graphicsLost);
+  watchClientErrors(renderer.renderer.domElement, () => !!game, graphicsLost, graphicsRestored);
   // Chinese UI: fetch the CJK face with the assets, so the first screens never show a fallback font.
   const fonts = isZh() ? cjkFontReady('繁體中文') : Promise.resolve();
   assets = await loadAssets(f => { loadFraction = f; renderQuick(); renderStart(); renderOthers(); });
