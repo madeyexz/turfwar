@@ -20,7 +20,7 @@ import { beginPlay, endPlay, flushDue, flushPlay, type PlayStore } from '../../s
 import { acceptNetReport, foldNetDay } from '../../shared/netstats';
 import { acceptDevice } from '../../shared/devicekind';
 import * as Admin from './admin';
-import { AdminError, dailyNetRows, dailyRows, dailyTimeRows, dayOf, forAdmin, playerDayNetRows, playerDayRows, playerDayTimeRows, playerDeviceRows, playerNetRows, playerRows, playTimeRows, type AdminStore } from './admin';
+import { AdminError, dailyNetRows, dailyRows, dailyTimeRows, dayOf, forAdmin, playerDayNetRows, playerDayRows, playerDayTimeRows, playerHourRows, playerDeviceRows, playerNetRows, playerRows, playTimeRows, type AdminStore } from './admin';
 
 /**
  * Authoritative multiplayer: the same shared match simulation the offline client runs, executed
@@ -209,6 +209,21 @@ const dayNetTable = table({ name: 'player_day_net' }, {
 });
 
 /**
+ * Each player's activity per hour (key = identity hex + ':' + hour since the epoch), for the admin
+ * page's hourly charts: a row means they were active that hour (seen, or credited play time), with the
+ * online play time credited in it and their connection reports folded like `player_day_net`
+ * (`netSeconds` measured). Rooms' minute flush deletes rows older than `HOUR_KEEP` hours. Private.
+ */
+const hourTable = table({ name: 'player_hour' }, {
+  key: t.string().primaryKey(), hour: t.u32().index('btree'), identity: t.identity(),
+  seconds: t.u32(), reports: t.u32(), netSeconds: t.u32(), p50Sum: t.f64(), p95Sum: t.f64(), corrections: t.u32(),
+});
+/** Hours of `player_hour` kept (two weeks). */
+const HOUR_KEEP = 14 * 24;
+const HOUR_MICROS = 3_600_000_000n;
+const hourOf = (micros: bigint) => Number(micros / HOUR_MICROS);
+
+/**
  * What each player plays on (shared/devicekind.ts), from `device` reports (one per connection, after
  * `hello`): the latest kind ('phone', 'tablet' or 'desktop'), connections reported per kind and the
  * latest report. Its own table so existing ones keep their columns. Private.
@@ -239,7 +254,7 @@ const spacetimedb = schema({
   matchEvent: eventTable, tickSchedule: tickTable, profile: profileTable, counter: counterTable,
   vehicle: vehicleTable, vehicleInbox: vehicleInboxTable, playerSeen: seenTable,
   playerDay: dayTable, admin: adminTable, adminAttempt: adminAttemptTable, playerTime: timeTable, playerDayTime: dayTimeTable,
-  playerNet: netTable, playerDayNet: dayNetTable, playerDevice: deviceTable, roomCode: roomCodeTable, privateRoom: privateRoomTable,
+  playerNet: netTable, playerDayNet: dayNetTable, playerHour: hourTable, playerDevice: deviceTable, roomCode: roomCodeTable, privateRoom: privateRoomTable,
 });
 export default spacetimedb;
 
@@ -643,7 +658,22 @@ function playStore(ctx: Ctx): PlayStore<Identity> {
       if (r) ctx.db.playerDayTime.key.update({ ...r, seconds: r.seconds + seconds });
       else ctx.db.playerDayTime.insert({ key, day, identity, seconds });
     },
+    addHour: (identity, hour, seconds) => updateHour(ctx, identity, hour, r => ({ ...r, seconds: r.seconds + seconds })),
   };
+}
+
+/** Change (or make) `identity`'s `player_hour` row for `hour`. */
+function updateHour(ctx: Ctx, identity: Identity, hour: number, change: (row: typeof hourTable.rowType.type) => typeof hourTable.rowType.type) {
+  const key = `${identity.toHexString()}:${hour}`;
+  const r = ctx.db.playerHour.key.find(key);
+  if (r) ctx.db.playerHour.key.update(change(r));
+  else ctx.db.playerHour.insert(change({ key, hour, identity, seconds: 0, reports: 0, netSeconds: 0, p50Sum: 0, p95Sum: 0, corrections: 0 }));
+}
+
+/** Delete `player_hour` rows past `HOUR_KEEP` (the two days of hours before the cut, so a quiet spell is caught up). */
+function pruneHours(ctx: Ctx, now: bigint) {
+  const cut = hourOf(now) - HOUR_KEEP;
+  for (let h = cut - 48; h < cut; h++) for (const r of [...ctx.db.playerHour.hour.filter(h)]) ctx.db.playerHour.key.delete(r.key);
 }
 
 /** One `player_day` row per player per UTC day they were active. */
@@ -651,6 +681,8 @@ function markDay(ctx: Ctx) {
   const day = dayOf(micros(ctx));
   const key = `${ctx.sender.toHexString()}:${day}`;
   if (!ctx.db.playerDay.key.find(key)) ctx.db.playerDay.insert({ key, day, identity: ctx.sender });
+  const hour = hourOf(micros(ctx));
+  if (!ctx.db.playerHour.key.find(`${ctx.sender.toHexString()}:${hour}`)) updateHour(ctx, ctx.sender, hour, r => r);
 }
 
 /** Put the caller into `room` (leaving any other room first). Every way in (quick_any, start_room, quick_play, quick_join, join, create_room, join_room, join_public) ends here. */
@@ -807,6 +839,7 @@ export const tick = spacetimedb.reducer({ onSchedule: tickTable }, { arg: tickTa
       const here: Identity[] = [];
       for (const p of ctx.db.player.iter()) if (p.room === room && humans.has(p.soldierId)) here.push(p.identity);
       flushPlay(playStore(ctx), here, now);
+      pruneHours(ctx, now);
     }
     applyInputs(ctx, state, sim);
     if (state.phase === 'ended' && state.phaseLeft - dt <= 0) {
@@ -939,6 +972,10 @@ export const netStats = spacetimedb.reducer({ p50Ms: t.u32(), p95Ms: t.u32(), sa
   const prevDay = ctx.db.playerDayNet.key.find(key);
   const folded = { key, day, identity: ctx.sender, ...foldNetDay(prevDay ?? undefined, accepted.report) };
   if (prevDay) ctx.db.playerDayNet.key.update(folded); else ctx.db.playerDayNet.insert(folded);
+  updateHour(ctx, ctx.sender, hourOf(now), r => {
+    const f = foldNetDay({ reports: r.reports, seconds: r.netSeconds, p50Sum: r.p50Sum, p95Sum: r.p95Sum, corrections: r.corrections }, accepted.report);
+    return { ...r, reports: f.reports, netSeconds: f.seconds, p50Sum: f.p50Sum, p95Sum: f.p95Sum, corrections: f.corrections };
+  });
 });
 
 /**
@@ -1248,3 +1285,20 @@ export const adminPlayerDayTime = spacetimedb.view({ name: 'admin_player_day_tim
 export const adminPlayerDayNet = spacetimedb.view({ name: 'admin_player_day_net', public: true },
   t.array(t.row('AdminPlayerDayNetRow', { id: t.string(), day: t.u32(), p50: t.u16(), p95: t.u16(), seconds: t.u32(), corrections: t.u32() })),
   ctx => forAdmin(viewAdmins(ctx.db), ctx.sender.toHexString(), () => playerDayNetRows([...ctx.db.playerDayNet.iter()].map(r => ({ ...r, identity: r.identity.toHexString() })))));
+
+/**
+ * Each player's activity per hour (from `player_hour`, same short id as `admin_players`) for the 168
+ * hours up to the latest (views cannot read the clock: the latest sighting, or later hours a session
+ * is still being credited in): play time, mean p50 and p95 and the seconds measured, corrections.
+ */
+export const adminPlayerHour = spacetimedb.view({ name: 'admin_player_hour', public: true },
+  t.array(t.row('AdminPlayerHourRow', { id: t.string(), hour: t.u32(), seconds: t.u32(), p50: t.u16(), p95: t.u16(), netSeconds: t.u32(), corrections: t.u32() })),
+  ctx => forAdmin(viewAdmins(ctx.db), ctx.sender.toHexString(), () => {
+    let last = -1;
+    for (const s of ctx.db.playerSeen.iter()) last = Math.max(last, hourOf(s.lastSeen.microsSinceUnixEpoch));
+    if (last < 0) return [];
+    for (let h = last + 1, end = last + 12; h <= end; h++) if ([...ctx.db.playerHour.hour.filter(h)].length) last = h;
+    const rows = [];
+    for (let h = last - 167; h <= last; h++) for (const r of ctx.db.playerHour.hour.filter(h)) rows.push({ ...r, identity: r.identity.toHexString() });
+    return playerHourRows(rows);
+  }));
