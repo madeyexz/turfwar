@@ -26,11 +26,11 @@ export function mergeReleases(...lists: Release[][]): Release[] {
   return [...bySha.values()].sort((a, b) => a.at - b.at);
 }
 
-/** Releases per UTC day number, for the days `from` to `to` (inclusive), each day's in order. */
-export function releasesByDay(releases: readonly Release[], from: number, to: number): Map<number, Release[]> {
+/** Releases per UTC day number (or per hour since the epoch, with `unit` 3600), for `from` to `to` (inclusive), each one's in order. */
+export function releasesByDay(releases: readonly Release[], from: number, to: number, unit = 86_400): Map<number, Release[]> {
   const out = new Map<number, Release[]>();
   for (const r of releases) {
-    const day = Math.floor(r.at / 86_400);
+    const day = Math.floor(r.at / unit);
     if (day < from || day > to) continue;
     let list = out.get(day);
     if (!list) out.set(day, (list = []));
@@ -39,9 +39,9 @@ export function releasesByDay(releases: readonly Release[], from: number, to: nu
   return out;
 }
 
-/** A marker's tooltip: the day, how many releases, and their titles (times in UTC). */
-export function releaseTitle(day: number, releases: readonly Release[]): string {
-  const date = new Date(day * 86_400_000).toISOString().slice(0, 10);
+/** A marker's tooltip: the day (or hour, with `unit` 3600), how many releases, and their titles (times in UTC). */
+export function releaseTitle(day: number, releases: readonly Release[], unit = 86_400): string {
+  const date = new Date(day * unit * 1000).toISOString().slice(0, unit < 86_400 ? 16 : 10).replace('T', ' ');
   const lines = releases.map(r => `• ${new Date(r.at * 1000).toISOString().slice(11, 16)} ${r.title}`);
   return `${date}: ${releases.length} release${releases.length === 1 ? '' : 's'} (UTC)\n${lines.join('\n')}`;
 }

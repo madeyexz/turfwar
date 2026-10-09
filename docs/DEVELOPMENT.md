@@ -201,7 +201,8 @@ whenever what is collected changes. These answer "how many players, and from whe
 - **Vercel Web Analytics** (`inject()` at the top of `src/main.ts`): cookieless page views and visitor
   counts for the game page (not `/privacy` or `/admin`); the dev server only logs them.
 - **SpacetimeDB** keeps the ground truth in the private table `player_seen` (first and last seen,
-  sessions, time zone, language, callsign per identity; `player_day` per active day), filled by the
+  sessions, time zone, language, callsign per identity; `player_day` per active day; `player_hour` per
+  active hour, kept two weeks), filled by the
   join reducers, `hello(tz, lang)` (sent once per connection) and the connect lifecycle.
   **Online play time** (`shared/playtime.ts`) lives in the private tables `player_time` (seconds
   per identity, plus `since`, the start of the stretch not yet credited) and `player_day_time`
@@ -245,7 +246,14 @@ build's own by default). Days are UTC days. **Phone and Computer side by side**
 and a Computer bar each day. A player's side is the device they last played on (`admin_player_device`;
 phones and tablets are Phone; players without a report count only in All), and per-day figures use it
 for every day. The daily play time and ping come per player from the views `admin_player_day_time` and
-`admin_player_day_net` (from `player_day_time` and `player_day_net`), subscribed separately like the rest. **Retention** (`src/admin/retention.ts`) comes from the view `admin_player_day` (every UTC day
+`admin_player_day_net` (from `player_day_time` and `player_day_net`), subscribed separately like the rest.
+**Chart controls** in the sticky nav (remembered per browser): the range, 30 or 7 UTC days or the last
+48 hours (hourly, labelled in the viewer's time zone), and Split (Phone and Computer side by side) or
+Combined (everyone in one bar; the cohorts become one table). Hours come from the private table
+`player_hour` (per identity per hour since the epoch: a row when the player was seen, play time split
+on the hour by shared/playtime.ts, connection reports folded like `player_day_net`), read through the
+view `admin_player_hour` (the 168 hours up to the latest); the rooms' minute flush deletes rows older
+than two weeks. **Retention** (`src/admin/retention.ts`) comes from the view `admin_player_day` (every UTC day
 each player was active, from `player_day`; subscribed separately: a database without it shows "—"):
 the share who came back on any later day, classic day-N retention (back exactly 1, 3, 7, 14 or 30 days
 after their first day) pooled over every cohort whose day N is over, and a table of the last 14 days'
