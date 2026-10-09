@@ -328,7 +328,7 @@ const en = {
   'err.That map does not host this room': 'That map does not host this room', 'err.No room with that code': 'No room with that code',
   'err.That room is gone; try Quick Play': 'That room is gone; press Play online',
   // Share card and 單挑我 (src/ui/sharecard.ts, src/ui/sharepanel.ts, src/game/challenge.ts)
-  'share.button': 'Share', 'share.challenge': '1v1 me', 'share.title': 'Share your match', 'share.native': 'Share',
+  'share.button': 'Share', 'share.challenge': 'Start a 1v1', 'share.title': 'Share your match', 'share.native': 'Share',
   'share.download': 'Save image', 'share.copy': 'Copy link', 'share.copied': 'Link copied', 'share.close': 'Close',
   'share.making': 'Making your card…', 'share.hold': 'Or press and hold the picture to save it.',
   'share.text': '{brag}. 1v1 me in Turf War: Taipei', 'share.vsBots': 'vs bots', 'share.failed': 'Could not make the card',
@@ -645,7 +645,7 @@ const zhTW: Record<Key, string> = {
   'err.That room is full': '該房間已滿', 'err.Unknown room size': '未知的房間人數', 'err.Unknown mode': '未知的模式',
   'err.That map does not host this room': '該地圖不支援此房間設定', 'err.No room with that code': '沒有使用此代碼的房間',
   'err.That room is gone; try Quick Play': '該房間已關閉，請改按「線上對戰」',
-  'share.button': '分享戰績', 'share.challenge': '單挑我', 'share.title': '分享戰績', 'share.native': '分享',
+  'share.button': '分享戰績', 'share.challenge': '發起單挑', 'share.title': '分享戰績', 'share.native': '分享',
   'share.download': '存圖', 'share.copy': '複製連結', 'share.copied': '已複製連結', 'share.close': '關閉',
   'share.making': '戰績卡製作中…', 'share.hold': '也可以長按圖片儲存。',
   'share.text': '{brag}｜來《角頭械鬥》單挑我', 'share.vsBots': '對電腦', 'share.failed': '戰績卡做不出來',
