@@ -82,7 +82,7 @@ players nearby hear; the server heals +50 when the sip ends.
 
 ### Maps
 
-Twelve maps are offered today. Crane, Tower, Courtyard, Cinder Basin, Frostline Reach and Verdant
+Thirteen maps are offered today. Crane, Tower, Courtyard, Cinder Basin, Frostline Reach and Verdant
 Divide are retired (`RETIRED_MAPS` in `shared/maps/index.ts`): still defined and loadable with
 `?map=`, but offered nowhere. All are described below.
 
@@ -215,6 +215,44 @@ ahead of Militia (1.8 s at both), that bots reach every room, floor, terrace, st
 Militia bots arm each site. Because B is above A, a site is armed and disarmed only on its own floor
 (within 2.5 m of the site's height, `onSite` in `shared/match/combat.ts`), and bots plan toward their
 goal's floor.
+
+**Sanchong** (三重, 1v1 and 6v6) is close-quarters city fighting in the old blocks of Sanchong, New
+Taipei, across the Tamsui River from Taipei (`shared/maps/sanchong*.ts`, hand-built; a composite, not a
+survey). Four- and five-storey walk-ups (公寓) with iron window cages (鐵窗), AC units, tin shacks on
+their roofs (頂樓加蓋) and water tanks, shopfronts behind rolling shutters, vertical shop signs, overhead
+wires and rows of parked scooters everywhere. Three lanes run east–west between the bases:
+- **North: the main street** (重新路-like) under its arcades (騎樓, broken here and there by shops built
+  out into them), with a delivery van, a betel-nut kiosk (檳榔攤) and a pilgrims' tour bus (進香團) parked
+  across it. It ends at the **temple square** (廟口): the temple (神農宮, after 先嗇宮) with its portico,
+  stone lions and swallowtail ridge, the incense burner on its axis, the gold furnace, offering tables,
+  lantern strings and the opera stage (戲台, climbable) facing it. The temple is walk-through from the
+  square to the east main street; an arcade passes behind it.
+- **Above and behind it: the Taipei Bridge approach** (台北橋引道): a raised deck at 6.5 m reached by the
+  scooter ramp (機車引道, the 機車瀑布) from the north-west corner and a stair from the east, high ground
+  over the square but exposed, broken by a stalled truck and the road works' site office and shut by a
+  hoarding before the levee. Below it runs the **under-bridge lane** (橋下) with its piers, a kiosk, a
+  scooter repair cage and a recycling pile.
+- **Middle: the covered market** (三重市場): two aisles of stalls round a centre row of island stalls,
+  one door at each end (the west door into the north aisle, the east door into the south aisle) and a
+  stall across each aisle, so a run through the hall weaves from aisle to aisle; open-air market street
+  at both ends.
+- **South: the back alleys** (巷弄): three-to-four-metre lanes that zigzag between old houses, a pocket
+  square with the earth-god shrine (福德祠), its paper furnace and a banyan, and a roof terrace up a ladder.
+
+Lanes centred on the bots' lattice link them north–south (two dog-legs among them). **A** is the temple
+square; **B** is the **ironworks yard** (永興鐵工廠) behind the market: steel plate stacks, a container,
+oil drums, a gas-bottle cage and a forklift under a gantry crane, entered from the market (north gate),
+the alley (south gate), the print shop's passage (east) and through the workshop (west), whose roof is
+up a ladder. Landmarks C–E are the bridge deck, the market's crossing and the shrine pocket. SWAT
+deploys on the levee road (環河北路) at the foot of the river's flood wall (淡水河堤防, the east edge; a
+pump station juts from it), Militia in the night-market car park (west) by a temple-fair neon truck
+(電子花車); stall sheds, containers and a pump truck offset the streets' gaps so no view runs into a base.
+Two drivable scooters wait at each base. Late-afternoon light (`sanchong` theme), Taipei's towers
+across the river. About 152 × 116 m; the bases are about 155 m apart on foot. `shared/maps/sanchong.test.ts`
+checks that no eye-level line between two places a soldier can stand exceeds 60 m (no exemptions), that
+no spawn slot sees the other base, that SWAT reaches each site 1.5–2.5 s ahead of Militia (2.3 s at
+both), that bots reach every lane, deck and roof from both bases, that every standing spot has
+chest-high cover within 8 m, that Militia bots arm both sites, and the bases' slots and crates.
 
 Every map has ammo crates (one more stands in each base) and open team bases. Sabotage lists only the
 maps with bomb sites.

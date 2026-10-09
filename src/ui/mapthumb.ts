@@ -3,7 +3,7 @@ import { loadMap } from '../../shared/maps/index';
 /** Map swatches (also in menu.css as `--swatch`): the theme's dominant colour. */
 export const THEME_SWATCH: Record<string, string> = {
   desert: '#d9a75e', snow: '#cfe8f2', forest: '#7fc56b', dusk: '#f0a560', twilight: '#8aa6c8',
-  steppe: '#d8c9a4', meadow: '#8fc46a', taipei: '#ff5ad8', xinyi: '#5fd0c0', highrise: '#f2c06a', memorial: '#3a6ad0',
+  steppe: '#d8c9a4', meadow: '#8fc46a', taipei: '#ff5ad8', xinyi: '#5fd0c0', highrise: '#f2c06a', memorial: '#3a6ad0', sanchong: '#e8884a',
 };
 
 /**

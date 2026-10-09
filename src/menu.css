@@ -405,6 +405,7 @@
 #menu [data-theme='xinyi'] { --swatch: #5fd0c0; }
 #menu [data-theme='highrise'] { --swatch: #f2c06a; }
 #menu [data-theme='memorial'] { --swatch: #3a6ad0; }
+#menu [data-theme='sanchong'] { --swatch: #e8884a; }
 
 /* ---- Tighter screens ---- */
 @media (max-width: 1180px) {

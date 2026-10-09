@@ -7,9 +7,10 @@ import type { VehicleSpot } from '../vehicles';
  * taipei is a humid city evening over asphalt; xinyi is the same city after dark, lit by its towers;
  * highrise is golden hour seen from an office floor 380 m up Taipei 101.
  * memorial is golden hour over Memorial Hall's white marble and its gardens.
+ * sanchong is a warm, hazy late afternoon over Sanchong's walk-ups and the river.
  */
 export type ThemeId = 'desert' | 'snow' | 'forest' | 'dusk' | 'twilight' | 'steppe' | 'meadow' | 'taipei' | 'xinyi' | 'highrise'
-  | 'memorial';
+  | 'memorial' | 'sanchong';
 
 /** Visual treatment of a solid. Collision is identical regardless of style. */
 export type BlockStyle =

@@ -43,6 +43,13 @@ function parkedVehicles(id: string): Parked[] {
         out.push({ what: `${d.model} at ${x.toFixed(1)}, ${z.toFixed(1)}`, y, points: along(x, z, heading, [-1.9, 0, 1.9]) });
       }
     }
+    // Scooters and bikes placed as model instances by the map itself (Sanchong's parked rows).
+    if (d.kind === 'instances' && TWO_WHEELERS.includes(d.model)) {
+      for (let i = 0; i < d.data.length; i += STRIDE) {
+        const [x, y, z, heading] = d.data.slice(i, i + 4);
+        out.push({ what: `${d.model} at ${x.toFixed(1)}, ${z.toFixed(1)}`, y, points: along(x, z, heading, [-0.75, 0, 0.75]) });
+      }
+    }
     if (d.kind === 'dressing') {
       const models = DRESSING_MODELS[d.set];
       expect(models, `dressing set ${d.set} has no models listed here`).toBeDefined();
@@ -79,6 +86,12 @@ describe('parked vehicles', () => {
       if (loose.length) open.push(`${v.what}: walk-through at ${loose.map(p => `${p.x.toFixed(1)}, ${p.z.toFixed(1)}`).join('; ')}`);
     }
     expect(open).toEqual([]);
+  });
+
+  it('sanchong: its rows of parked scooters are found (the check above is not vacuous)', () => {
+    const { def } = loadMap('sanchong'), b = def.bounds;
+    const reachable = parkedVehicles('sanchong').filter(v => v.points.some(p => p.x > b.minX && p.x < b.maxX && p.z > b.minZ && p.z < b.maxZ));
+    expect(reachable.filter(v => v.what.includes('scooter')).length).toBeGreaterThan(100);
   });
 
   it('taipei: the parked vehicles are found (the check above is not vacuous)', () => {

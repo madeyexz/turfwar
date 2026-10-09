@@ -37,6 +37,7 @@ export const SHOTS: readonly Shot[] = [
   { id: 'xinyi', cam: [140, 70, 160], look: [-60, 200, 6], fov: 60, note: 'Taipei 101 over Xinyi at night' },
   { id: 'taipei101', cam: [8, 6.8, 8], look: [0, 5.4, 0], fov: 65, note: "88F's damper hall from the 89F gallery" },
   { id: 'memorial', cam: [60, 16, 34], look: [-14, 6, 0], note: 'the Memorial Hall and its blue roof' },
+  { id: 'sanchong', cam: [-36, 8, -39], look: [14, 3.5, -45], fov: 50, note: 'down the main street to the temple' },
 ];
 
 const args = process.argv.slice(2);
