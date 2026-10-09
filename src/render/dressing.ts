@@ -8,6 +8,7 @@ import { rng } from '../../shared/math';
 import { assetUrl } from '../assetUrl';
 import { buildSkyline, type SkylineData } from './skyline';
 import { lotDetail, type LotRow } from './lotdetail';
+import { loadTexture } from './textures';
 import { CJK_STACK, cjkFontReady } from '../ui/fonts';
 
 /**
@@ -110,9 +111,8 @@ function cutStreet(s: StreetData, ox: number, oz: number, cut: Cut): StreetData 
 async function districtGroup(d: DistrictData, ox: number, oz: number, cut: Cut) {
   const [gltf, atlas] = await Promise.all([
     new GLTFLoader().setMeshoptDecoder(MeshoptDecoder).loadAsync(assetUrl(`assets/${d.mesh}`)),
-    new THREE.TextureLoader().loadAsync(assetUrl(`assets/${d.atlas}`)),
+    loadTexture(`assets/${d.atlas}`, { srgb: true }).ready,
   ]);
-  atlas.colorSpace = THREE.SRGBColorSpace; atlas.anisotropy = 8;
   const solid = new THREE.MeshStandardMaterial({ map: atlas, vertexColors: true, roughness: 0.8, metalness: 0.05 });
   solid.onBeforeCompile = s => {
     s.vertexShader = s.vertexShader

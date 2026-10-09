@@ -10,6 +10,7 @@ import { separateCoplanar, type DrawnBox } from './coplanar';
 import { addDressing } from './dressing';
 import { CJK_STACK, UI_STACK, cjkFontReady } from '../ui/fonts';
 import { shieldMaterial, surfaceMaterial, terrainMaterial, type Theme } from './materials';
+import { textureBudget } from './textures';
 
 const TEAM_COLORS = [new THREE.Color(0x3aa0ff), new THREE.Color(0xff4a3a)];
 const LADDER_GREY = 0x9aa0a4;
@@ -1123,18 +1124,26 @@ function signMesh(signs: SignDecor[]) {
     faces.push({ s, facing: s.rotY, out: 0, back: false });
     if (s.style === 'billboard' || s.style === 'gate') faces.push({ s, facing: s.rotY + Math.PI, out: 0.04, back: true });
   }
-  // One cell per sign, packed on shelves of a 2048-wide atlas; a small dark cell for the backs.
-  const W = 2048, cells = new Map<SignDecor, { x: number; y: number; w: number; h: number }>();
+  // One cell per sign, packed on shelves of a 2048-wide atlas (wider, then coarser, until it fits the
+  // device's texture budget: 4096² px, 2048×1024 on Low); a small dark cell for the backs.
+  const { width: maxW, height: maxH } = textureBudget().atlas;
   const dark = { x: 0, y: 0, w: 8, h: 8 };
-  let x = 10, y = 0, shelf = 8;
-  for (const s of signs) {
-    const ppm = Math.min(1000 / Math.max(s.w, s.h), Math.max(64, 90 / Math.min(s.w, s.h)));
-    const w = Math.max(8, Math.round(s.w * ppm)), h = Math.max(8, Math.round(s.h * ppm));
-    if (x + w > W) { x = 0; y += shelf + 2; shelf = 0; }
-    cells.set(s, { x, y, w, h });
-    x += w + 2; shelf = Math.max(shelf, h);
+  let W = Math.min(2048, maxW), scale = 1, cells = new Map<SignDecor, { x: number; y: number; w: number; h: number }>(), used = 0;
+  for (;;) {
+    cells = new Map();
+    let x = 10, y = 0, shelf = 8;
+    for (const s of signs) {
+      const ppm = scale * Math.min(1000 / Math.max(s.w, s.h), Math.max(64, 90 / Math.min(s.w, s.h)));
+      const w = Math.min(W, Math.max(8, Math.round(s.w * ppm))), h = Math.max(8, Math.round(s.h * ppm));
+      if (x + w > W) { x = 0; y += shelf + 2; shelf = 0; }
+      cells.set(s, { x, y, w, h });
+      x += w + 2; shelf = Math.max(shelf, h);
+    }
+    used = y + shelf + 2;
+    if (used <= maxH) break;
+    if (W < maxW) W *= 2; else scale *= 0.97 * Math.sqrt(maxH / used);
   }
-  const H = THREE.MathUtils.ceilPowerOfTwo(y + shelf + 2);
+  const H = Math.ceil(used / 4) * 4;
   const canvas = document.createElement('canvas');
   canvas.width = W; canvas.height = H;
   const c = canvas.getContext('2d')!;

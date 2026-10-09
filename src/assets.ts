@@ -6,6 +6,7 @@ import { MEME_SKINS } from './game/memeskins';
 import { slipperModel } from './render/meme';
 import { applyOptics } from './render/optics';
 import { addProceduralGuns } from './render/procguns';
+import { fitModelTextures, initTextures, loadTexture } from './render/textures';
 
 /** Runtime asset registry. All models are CC0 (see public/assets/LICENSE.txt). */
 export interface Assets {
@@ -22,11 +23,14 @@ const SHARED_SETS = ['concrete', 'metalplate', 'container', 'brick', 'planks', '
 const GROUND_SETS = ['sand', 'cliff', 'dirt', 'snow', 'icerock', 'lichen', 'path'];
 const KINDS = ['diff', 'nor', 'rough'] as const;
 
-/** The surface textures (`<set>_<diff|nor|rough>`), each set loaded once, when first wanted. */
+/**
+ * The surface textures (`<set>_<diff|nor|rough>`), each set loaded once, when first wanted: KTX2
+ * (GPU-compressed, half size on Low) or the WebP originals, see src/render/textures.ts.
+ */
 export class TextureSets {
   private textures = new Map<string, THREE.Texture>();
   private sets = new Map<string, Promise<void>>();
-  constructor(private loader: THREE.TextureLoader) {}
+  constructor(private manager?: THREE.LoadingManager) {}
 
   /** Load these sets; resolves once all their textures are in (a set that fails just stays blank). */
   load(sets: readonly string[]) { return Promise.all(sets.map(set => this.loadSet(set).catch(() => undefined))).then(() => undefined); }
@@ -41,13 +45,11 @@ export class TextureSets {
   private loadSet(set: string) {
     let loading = this.sets.get(set);
     if (!loading) {
-      loading = Promise.all(KINDS.map(kind => new Promise<void>((resolve, reject) => {
-        const tex = this.loader.load(assetUrl(`assets/tex/${set}_${kind}.webp`), () => resolve(), undefined, reject);
-        tex.wrapS = tex.wrapT = THREE.RepeatWrapping;
-        tex.anisotropy = 8;
-        if (kind === 'diff') tex.colorSpace = THREE.SRGBColorSpace;
-        this.textures.set(`${set}_${kind}`, tex);
-      }))).then(() => undefined);
+      loading = Promise.all(KINDS.map(kind => {
+        const { texture, ready } = loadTexture(`assets/tex/${set}_${kind}.webp`, { srgb: kind === 'diff', repeat: true, manager: this.manager });
+        this.textures.set(`${set}_${kind}`, texture);
+        return ready;
+      })).then(() => undefined);
       this.sets.set(set, loading);
     }
     return loading;
@@ -57,15 +59,21 @@ export class TextureSets {
 /** The ground sets a map's terrain uses (its theme's ground, rock and dirt). */
 export const groundSets = (theme: { ground: string; rock: string; dirt: string }) => [...new Set([theme.ground, theme.rock, theme.dirt])];
 
-export async function loadAssets(onProgress: (fraction: number) => void): Promise<Assets> {
+/**
+ * Load the models, animations and shared surface textures. `gpu` (the renderer and the quality preset's
+ * name) lets textures come GPU-compressed and sized for the preset; without it they load as WebP.
+ */
+export async function loadAssets(onProgress: (fraction: number) => void, gpu?: { renderer: THREE.WebGLRenderer; quality: string }): Promise<Assets> {
+  initTextures(gpu?.renderer, gpu?.quality ?? 'medium');
   const manager = new THREE.LoadingManager();
   manager.onProgress = (_url, loaded, total) => onProgress(loaded / total);
   const loader = new GLTFLoader(manager).setMeshoptDecoder(MeshoptDecoder);
-  const textures = new TextureSets(new THREE.TextureLoader(manager));
+  const textures = new TextureSets(manager);
   const gltf = (name: string) => loader.loadAsync(assetUrl(`assets/${name}`));
   const [weapons, props, soldier, anims, imported] = await Promise.all([
     gltf('weapons.glb'), gltf('props.glb'), gltf('soldier.glb'), gltf('anims.glb'), gltf('guns.glb'), textures.load(SHARED_SETS),
   ]) as GLTF[];
+  for (const g of [weapons, props, soldier, imported]) fitModelTextures(g.scene);
   const named = (g: GLTF) => {
     const map = new Map<string, THREE.Object3D>();
     for (const child of g.scene.children) {
