@@ -5,6 +5,7 @@ import { mergeGeometries } from 'three/examples/jsm/utils/BufferGeometryUtils.js
 import { cutTest, modelCut, type Cut } from '../../shared/maps/dressing';
 import type { Decor } from '../../shared/maps/types';
 import { rng } from '../../shared/math';
+import { assetUrl } from '../assetUrl';
 import { buildSkyline, type SkylineData } from './skyline';
 import { lotDetail, type LotRow } from './lotdetail';
 import { CJK_STACK, cjkFontReady } from '../ui/fonts';
@@ -107,10 +108,9 @@ function cutStreet(s: StreetData, ox: number, oz: number, cut: Cut): StreetData 
  * the texel itself) is added as emission. The light pools (L) are additive glows on the ground.
  */
 async function districtGroup(d: DistrictData, ox: number, oz: number, cut: Cut) {
-  const base = import.meta.env.BASE_URL + 'assets/';
   const [gltf, atlas] = await Promise.all([
-    new GLTFLoader().setMeshoptDecoder(MeshoptDecoder).loadAsync(base + d.mesh),
-    new THREE.TextureLoader().loadAsync(base + d.atlas),
+    new GLTFLoader().setMeshoptDecoder(MeshoptDecoder).loadAsync(assetUrl(`assets/${d.mesh}`)),
+    new THREE.TextureLoader().loadAsync(assetUrl(`assets/${d.atlas}`)),
   ]);
   atlas.colorSpace = THREE.SRGBColorSpace; atlas.anisotropy = 8;
   const solid = new THREE.MeshStandardMaterial({ map: atlas, vertexColors: true, roughness: 0.8, metalness: 0.05 });
@@ -353,7 +353,7 @@ interface ModelData { position: number[]; normal?: number[]; uv?: number[]; colo
 type Models = Record<string, ModelData>;
 let modelsPromise: Promise<Models | null> | undefined;
 function loadModels() {
-  return modelsPromise ??= fetch(import.meta.env.BASE_URL + 'assets/taipei-props.json')
+  return modelsPromise ??= fetch(assetUrl('assets/taipei-props.json'))
     .then(r => r.json()).then(j => j.models as Models)
     .catch(e => { console.warn('prop models unavailable', e); return null; });
 }

@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { cacheNames, routeOf, staleCaches } from './policy';
+import { cacheNames, routeOf, staleAssets, staleCaches } from './policy';
 
 const ORIGIN = 'https://turfwar.ianhsiao.me';
 const SHELL = new Set(['/index.html', '/assets/main-abc123.js', '/assets/main-def456.css', '/manifest.webmanifest', '/icons/icon-192.png']);
@@ -51,10 +51,16 @@ describe('service worker routes', () => {
     expect(routeOf({ url: 'not a url', method: 'GET' }, ORIGIN, SHELL)).toBe('bypass');
   });
 
-  it('versions caches by build and by asset contents, and cleans up only its own old ones', () => {
-    const now = cacheNames('abc1234-0f0f', '9e9e');
-    expect(now).toEqual({ shell: 'turfwar-shell-abc1234-0f0f', static: 'turfwar-static-9e9e' });
-    const names = ['turfwar-shell-old', now.shell, now.static, 'turfwar-static-old', 'someone-elses-cache'];
-    expect(staleCaches(names, [now.shell, now.static])).toEqual(['turfwar-shell-old', 'turfwar-static-old']);
+  it('versions the shell by build, keeps one asset cache, and cleans up only its own old ones', () => {
+    const now = cacheNames('abc1234-0f0f');
+    expect(now).toEqual({ shell: 'turfwar-shell-abc1234-0f0f', static: 'turfwar-static-files' });
+    const names = ['turfwar-shell-old', now.shell, now.static, 'turfwar-static-9e9e', 'someone-elses-cache'];
+    expect(staleCaches(names, [now.shell, now.static])).toEqual(['turfwar-shell-old', 'turfwar-static-9e9e']);
+  });
+
+  it('drops a stored asset only when its file changed (or it was stored without a version)', () => {
+    const current = new Set(['/assets/props.glb?v=new111', '/assets/tex/brick_diff.webp?v=same22']);
+    const stored = [`${ORIGIN}/assets/props.glb?v=old000`, `${ORIGIN}/assets/tex/brick_diff.webp?v=same22`, `${ORIGIN}/assets/soldier.glb`];
+    expect(staleAssets(stored, current)).toEqual([`${ORIGIN}/assets/props.glb?v=old000`, `${ORIGIN}/assets/soldier.glb`]);
   });
 });

@@ -4,8 +4,8 @@
  * - `page`: the game's page (`/`, `/index.html`, any lobby URL with flags): network first, so a new
  *   release shows up on the next load; the cached copy only when offline.
  * - `shell`: a file of this build (hashed scripts and styles, the manifest, icons): cache first.
- * - `static`: the game's unhashed assets (models, textures, sounds, fonts, the map pictures): cache first, filled as
- *   they are used, kept until those files change.
+ * - `static`: the game's assets (models, textures, sounds, fonts, the map pictures), asked for with their content
+ *   version (`?v=`, src/assetUrl.ts): cache first, filled as they are used, each kept until that file changes.
  * - `bypass`: everything else goes straight to the network and is never stored: other origins
  *   (SpacetimeDB's websocket and ping, PostHog), `/admin`, the dev server's `/stdb` proxy, Vercel's
  *   own routes, the trailer videos in `/media`, and non-GET requests.
@@ -30,8 +30,16 @@ export function routeOf(req: { url: string; method: string; mode?: string }, ori
   return STATIC.test(path) ? 'static' : 'bypass';
 }
 
-/** Cache names: the shell is versioned with the build, the static assets with their own contents. */
-export const cacheNames = (shellVersion: string, staticVersion: string) => ({ shell: `turfwar-shell-${shellVersion}`, static: `turfwar-static-${staticVersion}` });
+/** Cache names: the shell is versioned with the build; the static assets share one cache, versioned file by file. */
+export const cacheNames = (shellVersion: string) => ({ shell: `turfwar-shell-${shellVersion}`, static: 'turfwar-static-files' });
+
+/**
+ * The stored static assets this build no longer asks for (`urls` are full URLs; `current` is the build's
+ * `/path?v=version` list): an old version of a changed file, or one stored without a version.
+ */
+export function staleAssets(urls: readonly string[], current: ReadonlySet<string>) {
+  return urls.filter(u => { try { const url = new URL(u); return !current.has(url.pathname + url.search); } catch { return true; } });
+}
 
 /** Caches this worker owns that belong to another version (deleted when it activates). */
 export const staleCaches = (names: readonly string[], keep: readonly string[]) => names.filter(n => n.startsWith('turfwar-') && !keep.includes(n));

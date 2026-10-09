@@ -1,14 +1,14 @@
 /**
  * The service worker (built to `/sw.js` by the `pwa` plugin in vite.config.ts, which fills in the
  * build's file list and versions). It makes the second load fast and the game installable:
- * the page network first, this build's files precached, the big unhashed assets cached as they
- * load; SpacetimeDB, PostHog and `/admin` are never touched (`policy.ts`). A new build has new
- * version names, so the old caches are deleted when it takes over.
+ * the page network first, this build's files precached, the big assets cached as they load (by
+ * their content version, `?v=`); SpacetimeDB, PostHog and `/admin` are never touched (`policy.ts`).
+ * A new build replaces the shell's cache and drops only the assets whose files changed.
  */
-import { cacheNames, routeOf, staleCaches } from './policy';
+import { cacheNames, routeOf, staleAssets, staleCaches } from './policy';
 
-// Filled in by the build (see vite.config.ts): JSON of { shell: string[], shellVersion, staticVersion }.
-const BUILD = JSON.parse('__TURFWAR_BUILD__') as { shell: string[]; shellVersion: string; staticVersion: string };
+// Filled in by the build (see vite.config.ts): JSON of { shell: string[], shellVersion, assets: string[] } (assets as `/path?v=version`).
+const BUILD = JSON.parse('__TURFWAR_BUILD__') as { shell: string[]; shellVersion: string; assets: string[] };
 
 interface ExtendableEvent extends Event { waitUntil(p: Promise<unknown>): void }
 interface FetchEvent extends ExtendableEvent { request: Request; respondWith(r: Promise<Response> | Response): void }
@@ -20,8 +20,9 @@ interface Worker {
   clients: { claim(): Promise<void> };
 }
 const sw = self as unknown as Worker;
-const CACHES = cacheNames(BUILD.shellVersion, BUILD.staticVersion);
-const SHELL = new Set(BUILD.shell);
+const CACHES = cacheNames(BUILD.shellVersion);
+const SHELL = new Set(BUILD.shell.map(p => p.split('?')[0]));
+const ASSETS = new Set(BUILD.assets);
 
 sw.addEventListener('install', e => {
   // Precache this build's shell; a file that fails to load just loads later.
@@ -30,7 +31,13 @@ sw.addEventListener('install', e => {
 });
 
 sw.addEventListener('activate', e => {
-  e.waitUntil(caches.keys().then(names => Promise.all(staleCaches(names, [CACHES.shell, CACHES.static]).map(n => caches.delete(n)))).then(() => sw.clients.claim()));
+  // The assets stay; only the old versions of files this build changed go.
+  const assets = caches.open(CACHES.static).then(async c => {
+    const keys = await c.keys(), stale = new Set(staleAssets(keys.map(r => r.url), ASSETS));
+    await Promise.all(keys.filter(r => stale.has(r.url)).map(r => c.delete(r)));
+  });
+  e.waitUntil(Promise.all([caches.keys().then(names => Promise.all(staleCaches(names, [CACHES.shell, CACHES.static]).map(n => caches.delete(n)))), assets])
+    .then(() => sw.clients.claim()));
 });
 
 const storable = (r: Response) => r.ok && r.status === 200 && r.type === 'basic';

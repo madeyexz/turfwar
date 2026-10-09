@@ -1,5 +1,6 @@
 import type { WeaponId } from '../shared/weapons';
 import { Voice, VoicePool, unit } from './voices';
+import { assetUrl } from './assetUrl';
 
 type V3 = { x: number; y: number; z: number };
 type Listener = { pos: V3; yaw: number };
@@ -226,7 +227,7 @@ export class Audio {
     ];
     await Promise.all(files.map(async file => {
       try {
-        const res = await fetch(`${import.meta.env.BASE_URL}assets/sfx/${file}.mp3`);
+        const res = await fetch(assetUrl(`assets/sfx/${file}.mp3`));
         if (!res.ok) return;
         const buffer = await ctx.decodeAudioData(await res.arrayBuffer());
         this.samples.set(file, { buffer, onset: onsetOf(buffer) });
