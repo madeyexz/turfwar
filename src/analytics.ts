@@ -32,9 +32,11 @@ export interface Events {
   play_clicked: { kind: PlayKind; size: string; mode: Mode | ''; map: string; server_choice?: ServerId };
   /** `device`: our own phone/tablet/desktop (src/game/device.ts), which, unlike PostHog's `$device_type`, counts an iPad posing as a Mac as a tablet. */
   /** `rejoin`: back in the same room after the connection dropped (main.ts rejoinAfterDrop). */
-  match_joined: { online: boolean; room?: string; map: string; mode: Mode; size: string; team: 'swat' | 'militia'; server_choice?: ServerId; device: DeviceKind; rejoin?: boolean };
+  /** How it is played (phones): `touch` controls, the screen `upright` at the start (a touch match then plays turned sideways), the `in_app` browser's app, touch `aim_assist` on. */
+  match_joined: { online: boolean; room?: string; map: string; mode: Mode; size: string; team: 'swat' | 'militia'; server_choice?: ServerId; device: DeviceKind; rejoin?: boolean; touch?: boolean; upright?: boolean; in_app?: string; aim_assist?: boolean };
   /** Online, also the match's connection quality (shared/netstats.ts): ping percentiles over the newest ≤600 samples, totals for the rest. */
-  match_left: { seconds: number; kills: number; deaths: number; rounds_played: number; reason: Reason; exit?: Exit } & Partial<Omit<NetFields, 'seconds'>>;
+  /** `sideways`: the page was turned at some point (an upright phone); `knife_kills` (the 藍白拖) and `bobas_drunk` (珍奶) over the stay. */
+  match_left: { seconds: number; kills: number; deaths: number; rounds_played: number; reason: Reason; exit?: Exit; sideways?: boolean; knife_kills?: number; bobas_drunk?: number } & Partial<Omit<NetFields, 'seconds'>>;
   round_ended: { won: boolean; mode: Mode; map: string };
   vehicle_entered: { kind: VehicleKind };
   store_purchase: { item: string; price: number };
@@ -173,10 +175,10 @@ export function startAnalytics(base: { lang: string; online_db: string; server_h
 
 // ---- Match sessions: match_joined → round_ended… → match_left (once) ----------------------
 
-let match: { start: number; rounds: number } | undefined;
+let match: { start: number; rounds: number; sideways: boolean; knifeKills: number; bobas: number } | undefined;
 
 export function matchJoined(props: Events['match_joined']) {
-  match = { start: performance.now(), rounds: 0 };
+  match = { start: performance.now(), rounds: 0, sideways: false, knifeKills: 0, bobas: 0 };
   track('match_joined', props, { setOnce: { first_map: props.map } });
 }
 
@@ -189,7 +191,15 @@ export function roundEnded(props: Events['round_ended']) {
 export function matchLeft(reason: Reason, score: { kills: number; deaths: number }, net?: Omit<NetFields, 'seconds'>, exit?: Exit) {
   if (!match) return;
   const seconds = Math.round((performance.now() - match.start) / 1000);
-  const rounds = match.rounds;
+  const { rounds, sideways, knifeKills, bobas } = match;
   match = undefined;
-  track('match_left', { seconds, kills: score.kills, deaths: score.deaths, rounds_played: rounds, reason, ...(exit ? { exit } : {}), ...net }, { beacon: reason === 'close' });
+  track('match_left', { seconds, kills: score.kills, deaths: score.deaths, rounds_played: rounds, reason, ...(exit ? { exit } : {}), sideways, knife_kills: knifeKills, bobas_drunk: bobas, ...net }, { beacon: reason === 'close' });
+}
+
+/** Counted into this stay's match_left: a knife (藍白拖) kill, a 珍奶 drunk, the page turned sideways. */
+export function matchNote(what: 'knife_kill' | 'boba' | 'sideways') {
+  if (!match) return;
+  if (what === 'knife_kill') match.knifeKills++;
+  else if (what === 'boba') match.bobas++;
+  else match.sideways = true;
 }
