@@ -55,8 +55,16 @@ export class Effects {
     this.tracers.push({ mesh, from: from.clone(), dir: to.clone().sub(from).normalize(), total, head: Math.min(total, length * 0.6), speed, length });
   }
 
+  /**
+   * Muzzle flashes light the world (the preset's dynamic lights) or not: the pool is in the scene, or
+   * none of it is. Three point lights cost every lit pixel, lit or dark, so phones go without.
+   */
+  dynamicLights(on: boolean) {
+    for (const l of this.lightPool) { if (on) this.group.add(l); else l.removeFromParent(); }
+  }
+
   flash(at: THREE.Vector3, color = 0xffc070, intensity = 6, life = 0.06, distance = 9) {
-    const light = this.lightPool.find(l => !this.lights.some(x => x.light === l));
+    const light = this.lightPool.find(l => l.parent && !this.lights.some(x => x.light === l));
     if (!light) return;
     light.color.set(color); light.position.copy(at); light.distance = distance;
     this.lights.push({ light, life, maxLife: life, intensity });

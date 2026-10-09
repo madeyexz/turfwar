@@ -69,10 +69,10 @@ const g = (v: [number, number, number]) => toGun(vec(v));
 export class ViewModel {
   readonly root = new THREE.Group();
   /**
-   * Weapon light for a fitted flashlight. It lights the world, so it belongs in the world scene:
-   * the game adds it (and its target) to the world camera once; intensity stays 0 without a flashlight.
+   * How bright a fitted flashlight shines (0 without one). The light itself lights the world, so it
+   * is the renderer's (Renderer.torch, on the world camera), shared by both sides' view models.
    */
-  readonly torch = new THREE.SpotLight(0xfff1dc, 0, 45, 0.36, 0.55, 1.4);
+  torch = 0;
   private rig = new THREE.Group();
   private gun = new THREE.Group();
   private models = new Map<WeaponId, THREE.Object3D>();
@@ -139,8 +139,6 @@ export class ViewModel {
     this.root.add(this.boba);
     this.flash = makeFlash();
     this.gun.add(this.flash);
-    this.torch.position.set(0.12, -0.12, 0);
-    this.torch.target.position.set(0.05, -0.1, -10);
     this.setWeapon('mp5', {}, true);
   }
 
@@ -320,7 +318,7 @@ export class ViewModel {
       }
     }
     if (this.fit.laser) this.fit.laser.visible = sprint < 0.5 && lowered < 0.5;
-    this.torch.intensity = this.fit.torch && p.alive && !p.binoculars ? 70 : 0;
+    this.torch = this.fit.torch && p.alive && !p.binoculars ? 70 : 0;
   }
 }
 

@@ -105,10 +105,20 @@ export const THEMES: Record<ThemeId, Theme> = {
   },
 };
 
+/**
+ * Cheaper level surfaces (the `low` preset, set by the renderer): no roughness maps on architecture
+ * and no normal maps on the ground. Read when a map is built; a change of preset applies from the next map.
+ */
+let cheap = false;
+export function setMaterialQuality(cheapMaterials: boolean) { cheap = cheapMaterials; }
+
 /** Terrain: world-space planar ground with triplanar rock on slopes and dirt along a splat channel. */
 export function terrainMaterial(assets: Assets, theme: Theme) {
+  const flat = cheap;
   const t = (name: string) => assets.textures.get(name)!;
   const material = new THREE.MeshStandardMaterial({ roughness: 0.92, metalness: 0 });
+  // Programs are cached by onBeforeCompile's source, which is the same for both variants.
+  material.customProgramCacheKey = () => (flat ? 'terrain-flat' : 'terrain');
   material.onBeforeCompile = shader => {
     Object.assign(shader.uniforms, {
       tGround: { value: t(`${theme.ground}_diff`) }, tGroundN: { value: t(`${theme.ground}_nor`) },
@@ -151,7 +161,8 @@ float dirt = clamp(vSplat + (macro - 0.5) * 0.6, 0.0, 1.0);
 dirt = smoothstep(0.35, 0.75, dirt);
 vec3 col = mix(mix(groundCol, dirtCol, dirt), rockCol, slope);
 diffuseColor.rgb *= col;`)
-      .replace('#include <normal_fragment_maps>', `
+      // Cheap: the geometric normal (five fewer texture reads a pixel over most of the screen).
+      .replace('#include <normal_fragment_maps>', flat ? '' : `
 {
   vec3 nG = texture2D(tGroundN, guv).xyz * 2.0 - 1.0;
   vec3 nD = texture2D(tDirtN, vWPos.xz / 5.0).xyz * 2.0 - 1.0;
@@ -172,7 +183,7 @@ diffuseColor.rgb *= col;`)
  */
 export function surfaceMaterial(assets: Assets, set: string, opts: { color?: number; roughness?: number; metalness?: number; normalScale?: number; emissive?: number } = {}) {
   const material = new THREE.MeshStandardMaterial({
-    map: assets.textures.get(`${set}_diff`), normalMap: assets.textures.get(`${set}_nor`), roughnessMap: assets.textures.get(`${set}_rough`),
+    map: assets.textures.get(`${set}_diff`), normalMap: assets.textures.get(`${set}_nor`), roughnessMap: cheap ? null : assets.textures.get(`${set}_rough`),
     color: opts.color ?? 0xffffff, roughness: opts.roughness ?? 1, metalness: opts.metalness ?? 0,
     normalScale: new THREE.Vector2(opts.normalScale ?? 1, opts.normalScale ?? 1), vertexColors: true,
   });
