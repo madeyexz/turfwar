@@ -226,14 +226,51 @@ export interface DayLike { identity: string; day: number }
 /** Matches `PlayerRow.id`: one UTC day the player was active. */
 export interface PlayerDayRow { id: string; day: number }
 
+/** `shortId`, hashing each identity once (per-day rows repeat a player). */
+function shortIds() {
+  const ids = new Map<string, string>();
+  return (identity: string) => {
+    let id = ids.get(identity);
+    if (id === undefined) { id = shortId(identity); ids.set(identity, id); }
+    return id;
+  };
+}
+
 /** One row per player per active UTC day, by the same short id as `playerRows` (hashed once per player). */
 export function playerDayRows(rows: Iterable<DayLike>): PlayerDayRow[] {
-  const ids = new Map<string, string>();
+  const idOf = shortIds();
   const out: PlayerDayRow[] = [];
+  for (const r of rows) out.push({ id: idOf(r.identity), day: r.day });
+  return out;
+}
+
+// ---- Per player per day (the admin page splits its daily charts by device; views of their own) --
+
+/** A `player_day_time` row: a player's online play time (seconds) on a UTC day. */
+export interface DayTimeLike { identity: string; day: number; seconds: number }
+/** Matches `PlayerRow.id`: a player's online play time on a UTC day. */
+export interface PlayerDayTimeRow { id: string; day: number; seconds: number }
+
+/** One row per player per UTC day with play time credited, by the same short id as `playerRows`. */
+export function playerDayTimeRows(rows: Iterable<DayTimeLike>): PlayerDayTimeRow[] {
+  const idOf = shortIds();
+  const out: PlayerDayTimeRow[] = [];
+  for (const r of rows) out.push({ id: idOf(r.identity), day: r.day, seconds: r.seconds });
+  return out;
+}
+
+/** A `player_day_net` row (identity hex): a player's connection reports on a UTC day. */
+export interface DayNetLike extends NetDay { identity: string; day: number }
+/** Matches `PlayerRow.id`: a player's mean p50 and p95 (weighted by seconds) on a UTC day, the seconds measured and corrections. */
+export interface PlayerDayNetRow { id: string; day: number; p50: number; p95: number; seconds: number; corrections: number }
+
+/** One row per player per UTC day with connection reports, by the same short id as `playerRows` (days without measured seconds left out). */
+export function playerDayNetRows(rows: Iterable<DayNetLike>): PlayerDayNetRow[] {
+  const idOf = shortIds();
+  const out: PlayerDayNetRow[] = [];
   for (const r of rows) {
-    let id = ids.get(r.identity);
-    if (id === undefined) { id = shortId(r.identity); ids.set(r.identity, id); }
-    out.push({ id, day: r.day });
+    if (r.seconds <= 0) continue;
+    out.push({ id: idOf(r.identity), day: r.day, p50: Math.round(r.p50Sum / r.seconds), p95: Math.round(r.p95Sum / r.seconds), seconds: r.seconds, corrections: r.corrections });
   }
   return out;
 }
