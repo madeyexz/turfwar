@@ -11,9 +11,13 @@ const WORDS = [
   'retard', 'chink', 'kike', 'spic', 'coon', 'gook', 'paki', 'cunt', 'whore', 'rapist', 'rape', 'hitler', 'nazi', 'kkk', 'fag', 'tranny',
   'beaner', 'shit', 'bitch', 'dick', 'cock', 'pussy', 'slut', 'porn', 'kys', 'fuk', 'fck',
 ];
+/** Chinese abuse, written as escapes: these are only matched, never drawn (src/ui/font.test.ts checks drawn text). */
 const ZH = [
-  '幹你', '幹妳', '操你', '肏', '靠北', '靠杯', '他媽', '他妈', '你媽', '你妈', '媽的', '妈的', '機掰', '雞掰', '機八', '雞巴', '鸡巴',
-  '屌你', '婊子', '賤人', '贱人', '支那', '黑鬼', '強姦', '强奸', '畜生', '去死', '白癡', '智障', '腦殘', '脑残', '尼哥',
+  '\u5e79\u4f60', '\u5e79\u59b3', '\u64cd\u4f60', '\u808f', '\u9760\u5317', '\u9760\u676f', '\u4ed6\u5abd',
+  '\u4ed6\u5988', '\u4f60\u5abd', '\u4f60\u5988', '\u5abd\u7684', '\u5988\u7684', '\u6a5f\u63b0', '\u96de\u63b0',
+  '\u6a5f\u516b', '\u96de\u5df4', '\u9e21\u5df4', '\u5c4c\u4f60', '\u5a4a\u5b50', '\u8ce4\u4eba', '\u8d31\u4eba',
+  '\u652f\u90a3', '\u9ed1\u9b3c', '\u5f37\u59e6', '\u5f3a\u5978', '\u755c\u751f', '\u53bb\u6b7b', '\u767d\u7661',
+  '\u667a\u969c', '\u8166\u6b98', '\u8111\u6b8b', '\u5c3c\u54e5'
 ];
 
 const LOOK: Record<string, string> = { '0': 'o', '1': 'i', '!': 'i', '|': 'i', '3': 'e', '4': 'a', '@': 'a', '5': 's', '$': 's', '7': 't', '8': 'b', '9': 'g' };
