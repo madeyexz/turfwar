@@ -36,5 +36,6 @@
   {"sha":"3257722","at":1791537501,"title":"play sideways on upright phones, touch aim assist, rookie-friendly bots, deploy on joining a young round, rejoin after drops, graphics restore, click to resume, level and daily goal, public matches first to 6, app icon"},
   {"sha":"4397f74","at":1791539237,"title":"phone settings scroll to the end (menus sized by the turned view), no stall after death on phones (no new light, shaders and textures warmed), faster loading (per-file asset versions, immutable caching, ground textures per map)"},
   {"sha":"f4eb789","at":1791546803,"title":"National Day pack: 戰績分享卡 share card, 單挑我 challenge links with a bot-double fallback, 藍白拖 slipper knife, 珍奶 healing drink (M18 smoke stays grey)"},
-  {"sha":"8533c53","at":1791553161,"title":"analytics for how phones play (touch, upright, in-app browser, aim assist, sideways) and per-match slipper kills and bubble teas"}
+  {"sha":"8533c53","at":1791553161,"title":"analytics for how phones play (touch, upright, in-app browser, aim assist, sideways) and per-match slipper kills and bubble teas"},
+  {"sha":"d2302dc","at":1791559735,"title":"phone performance (Taipei 413 → 94 draw calls, textures 313 → 37 MB on phones), sharper adaptive resolution, detailed vehicles"}
 ]
