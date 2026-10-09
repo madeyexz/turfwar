@@ -6,6 +6,7 @@ import { LADDER_DIRS, terrainHeight, type Ladder, type Ramp, type Solid } from '
 import { fbm } from '../../shared/maps/builder';
 import type { BlockStyle, Decor, MapDef, RampStyle } from '../../shared/maps/types';
 import { rng } from '../../shared/math';
+import { mergeStatic, shadowProxies, staticMeshes } from './batch';
 import { separateCoplanar, type DrawnBox } from './coplanar';
 import { addDressing } from './dressing';
 import { CJK_STACK, UI_STACK, cjkFontReady } from '../ui/fonts';
@@ -44,8 +45,11 @@ export class LevelView {
   private parts = new Map<string, THREE.BufferGeometry[]>();
   private materials: Record<string, THREE.Material>;
   private animated: { object: THREE.Object3D; update: (t: number) => void }[] = [];
+  /** Self-lit fixtures and rings: the colour (past 1 for the bloom) rides in the vertices, so they batch. */
+  private unlit = new THREE.MeshBasicMaterial({ vertexColors: true });
 
   constructor(private assets: Assets, private map: MapDef, private theme: Theme) {
+    const tStart = performance.now();
     this.materials = {
       steel: surfaceMaterial(assets, 'concrete', { color: 0xb9c2c8, metalness: 0.12, roughness: 0.85, normalScale: 0.6 }),
       steelDark: surfaceMaterial(assets, 'metalplate', { color: 0x6c757c, metalness: 0.35, normalScale: 0.6 }),
@@ -132,14 +136,27 @@ export class LevelView {
     // Maps with a dressing set bring their own skyline in place of the generic mountain ring.
     const dressed = map.decor.some(d => d.kind === 'dressing');
     if (!dressed) this.horizon();
+    // Static batching: props, fixtures and pads that share a material draw as one mesh.
+    const t0 = performance.now(), meshes0 = this.group.children.length;
+    mergeStatic(this.group, staticMeshes(this.group, new Set(this.animated.map(a => a.object))), { name: 'level' });
+    this.buildStats = { buildMs: Math.round(performance.now() - tStart), mergeMs: Math.round((performance.now() - t0) * 10) / 10, children: [meshes0, this.group.children.length] };
     // Signs bake their text into a canvas: wait for the Chinese face so they never keep a fallback font.
     const signsBuilt = signs.length
       ? cjkFontReady(signs.map(s => s.text + (s.sub ?? '')).join('')).then(() => { this.group.add(signMesh(signs)); })
       : Promise.resolve();
     /** Resolves once the map's signs, dressing sets and model instances are built (they load on demand). */
-    this.ready = Promise.all([signsBuilt, addDressing(this.group, map.decor).catch(e => console.warn('dressing failed', e))]).then(() => undefined);
+    this.ready = Promise.all([signsBuilt, addDressing(this.group, map.decor).then(ms => { this.buildStats.dressingMergeMs = Math.round(ms * 10) / 10; }, e => console.warn('dressing failed', e))]).then(() => {
+      // Once everything stands, the big static casters cast from shadow proxies cut into cells.
+      const t1 = performance.now(), casters: THREE.Mesh[] = [];
+      this.group.traverse(o => { if ((o as THREE.Mesh).isMesh) casters.push(o as THREE.Mesh); });
+      this.buildStats.proxies = shadowProxies(this.group, casters, 'level').length;
+      this.buildStats.proxyMs = Math.round((performance.now() - t1) * 10) / 10;
+      this.buildStats.readyMs = Math.round(performance.now() - tStart);
+    });
   }
   readonly ready: Promise<void>;
+  /** Load cost of the static batching (ms) and the level's top-level objects before and after it (dev measurement). */
+  buildStats: { buildMs: number; mergeMs: number; dressingMergeMs?: number; proxyMs?: number; proxies?: number; readyMs?: number; children: [number, number] };
 
   update(time: number) {
     for (const s of this.shields) s.uniforms.time.value = time;
@@ -550,7 +567,7 @@ export class LevelView {
    */
   private light(x: number, y: number, z: number, color: number, intensity: number, distance: number) {
     const c = new THREE.Color(color);
-    const fixture = new THREE.Mesh(new THREE.BoxGeometry(0.5, 0.08, 0.18), new THREE.MeshBasicMaterial({ color: c.clone().multiplyScalar(3) }));
+    const fixture = new THREE.Mesh(vertexColored(new THREE.BoxGeometry(0.5, 0.08, 0.18), c.clone().multiplyScalar(3)), this.unlit);
     fixture.position.set(x, y, z);
     this.group.add(fixture);
     const glow = new THREE.Sprite(new THREE.SpriteMaterial({ map: glowTexture(), color: c, transparent: true, opacity: Math.min(0.5, intensity * 0.06), blending: THREE.AdditiveBlending, depthWrite: false }));
@@ -563,7 +580,7 @@ export class LevelView {
     const pad = new THREE.Mesh(new THREE.CylinderGeometry(4.2, 4.6, 0.25, 48), this.materials.steelDark);
     pad.position.set(x, y + 0.05, z); pad.receiveShadow = true;
     this.group.add(pad);
-    const ring = new THREE.Mesh(new THREE.TorusGeometry(3.8, 0.06, 8, 64), new THREE.MeshBasicMaterial({ color: color.clone().multiplyScalar(2.5) }));
+    const ring = new THREE.Mesh(vertexColored(new THREE.TorusGeometry(3.8, 0.06, 8, 64), color.clone().multiplyScalar(2.5)), this.unlit);
     ring.rotation.x = Math.PI / 2; ring.position.set(x, y + 0.2, z);
     this.group.add(ring);
     const beam = new THREE.Mesh(new THREE.CylinderGeometry(3.6, 3.6, 6, 48, 1, true), new THREE.MeshBasicMaterial({
@@ -920,6 +937,14 @@ function bannerTexture(team: 0 | 1) {
   ctx.fillText(team === 0 ? 'AEGIS' : 'CRIMSON', 128, 290);
   const tex = new THREE.CanvasTexture(canvas); tex.colorSpace = THREE.SRGBColorSpace;
   return tex;
+}
+
+/** One colour in every vertex (components may pass 1, for the bloom). */
+function vertexColored(g: THREE.BufferGeometry, c: THREE.Color) {
+  const n = g.getAttribute('position').count, a = new Float32Array(n * 3);
+  for (let i = 0; i < n; i++) a.set([c.r, c.g, c.b], i * 3);
+  g.setAttribute('color', new THREE.BufferAttribute(a, 3));
+  return g;
 }
 
 /** Polyhedra are already non-indexed; only expand geometries that share vertices. */
