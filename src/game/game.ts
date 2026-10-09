@@ -305,7 +305,7 @@ export class Game {
     const released = !this.input.locked && !this.buymenu.open && !this.hud.chatting && state.phase !== 'ended';
     this.hud.released(false, false);
     if (this.input.locked) { this.menu.hide(); this.clickToResume(false); }
-    else if (released && !this.menu.open && !this.awaitingClick) { this.menu.show(link.mode === 'offline'); this.menuAt = performance.now(); }
+    else if (released && !this.menu.open && !this.awaitingClick && !this.resuming) { this.menu.show(link.mode === 'offline'); this.menuAt = performance.now(); }
     if (this.menu.open && performance.now() - this.menuAt > 250 && (this.input.takeCode('Escape') || this.input.take('menu'))) {
       this.menu.hide(); this.input.clear(); this.resume();
     }
@@ -618,9 +618,16 @@ export class Game {
   private awaitingClick = false;
   private resumeLayer?: HTMLButtonElement;
 
+  /** A capture is being asked for: the menu must not reopen while the browser decides. */
+  private resuming = false;
+
   /** Back to playing: capture the mouse, or, if the browser refuses for now, show "click to resume". */
   private resume() {
-    void this.input.lock().then(ok => { if (!ok && !this.input.locked && this.running) this.clickToResume(true); });
+    this.resuming = true;
+    void this.input.lock().then(ok => {
+      this.resuming = false;
+      if (!ok && !this.input.locked && this.running) this.clickToResume(true);
+    });
   }
 
   private clickToResume(on: boolean) {
