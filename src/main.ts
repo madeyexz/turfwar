@@ -29,6 +29,7 @@ import './ui/lang-zh.css';
 import { currentDeviceKind, defaultQuality } from './game/device';
 import { onTouchLayout, touchActive } from './game/touchlayout';
 import { InstallBanner } from './ui/installhint';
+import { onSideways, watchSideways } from './ui/viewport';
 import { askCallsign, madeUpCallsign } from './ui/callsign';
 import { ask, confirmDialog } from './ui/ask';
 import { watchClientErrors } from './errors';
@@ -224,6 +225,19 @@ const renderRotate = () => {
 };
 renderRotate();
 document.body.appendChild(rotate);
+// A screen that stays upright in a match (in-app browsers, rotation lock) plays sideways: the page turns
+// and a short tip asks the player to turn the phone.
+onSideways(on => {
+  document.getElementById('sideways-tip')?.remove();
+  if (!on) return;
+  const tip = document.createElement('div');
+  tip.id = 'sideways-tip';
+  tip.setAttribute('role', 'status');
+  tip.innerHTML = `<svg viewBox="0 0 48 48" aria-hidden="true"><rect x="15" y="6" width="18" height="36" rx="3"/><path d="M21 37h6"/></svg><span>${esc(t('rot.sideways'))}</span>`;
+  document.body.appendChild(tip);
+  setTimeout(() => tip.remove(), 4600);
+});
+watchSideways();
 // Inside the lobby, so it goes away with it during a match.
 if (!params.has('bench')) new InstallBanner(menu);
 

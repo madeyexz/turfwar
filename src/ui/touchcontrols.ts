@@ -1,3 +1,4 @@
+import { toView, viewHeight, viewRect, viewWidth } from './viewport';
 import { HoldFire, type HoldAim } from '../game/holdfire';
 import type { Input } from '../game/input';
 import type { ActionId } from '../game/keybinds';
@@ -151,8 +152,8 @@ export class TouchControls {
 
   /** Bigger screens get bigger buttons (a tablet's thumb reach is wider), within reason. */
   private measure() {
-    const r = this.root.getBoundingClientRect();
-    const short = Math.min(r.width || innerWidth, r.height || innerHeight);
+    const r = viewRect(this.root.getBoundingClientRect());
+    const short = Math.min(r.width || viewWidth(), r.height || viewHeight());
     this.scale = Math.max(0.85, Math.min(1.5, short / 390));
     this.root.style.setProperty('--tcs', this.scale.toFixed(3));
     this.sheet.style.setProperty('--tcs', this.scale.toFixed(3));
@@ -247,23 +248,24 @@ export class TouchControls {
     const btn = (e.target as HTMLElement).closest<HTMLElement>('[data-c]');
     const id = btn?.dataset.c as ControlId | undefined;
     if (id && !btn!.hidden) return this.press(e, id);
-    const r = this.root.getBoundingClientRect();
-    const fx = (e.clientX - r.left) / r.width, fy = (e.clientY - r.top) / r.height;
+    const r = viewRect(this.root.getBoundingClientRect()), p = toView(e.clientX, e.clientY);
+    const fx = (p.x - r.left) / r.width, fy = (p.y - r.top) / r.height;
     const lefty = touchLayout().leftHanded;
     const inStickHalf = lefty ? fx > 0.55 : fx < 0.45;
     if (stickShown(this.ctx.scope) && inStickHalf && fy > 0.18 && ![...this.fingers.values()].some(f => f.role === 'stick')) {
-      this.fingers.set(e.pointerId, { role: 'stick', ox: e.clientX, oy: e.clientY, x: e.clientX, y: e.clientY });
-      this.placeStick(e.clientX, e.clientY);
+      this.fingers.set(e.pointerId, { role: 'stick', ox: p.x, oy: p.y, x: p.x, y: p.y });
+      this.placeStick(p.x, p.y);
       return;
     }
-    this.fingers.set(e.pointerId, { role: 'look', x: e.clientX, y: e.clientY });
+    this.fingers.set(e.pointerId, { role: 'look', x: p.x, y: p.y });
   }
 
   private press(e: PointerEvent, id: ControlId) {
     const layout = touchLayout();
     const { action, kind } = controlAction(id, layout);
     // Holding fire and dragging aims at the same time (the fire button doubles as a look pad).
-    this.fingers.set(e.pointerId, { role: 'button', id, x: e.clientX, y: e.clientY, look: action === 'fire' || action === 'aim' });
+    const p = toView(e.clientX, e.clientY);
+    this.fingers.set(e.pointerId, { role: 'button', id, x: p.x, y: p.y, look: action === 'fire' || action === 'aim' });
     navigator.vibrate?.(8);
     if (id === 'chat') { this.openSheet(); return; }
     // Hold fire to aim: the hold decides when to shoot and when to raise the sights (a second fire control adds nothing).
@@ -281,14 +283,15 @@ export class TouchControls {
     const f = this.fingers.get(e.pointerId);
     if (!f) return;
     e.preventDefault();
+    const p = toView(e.clientX, e.clientY);
     if (f.role === 'stick') {
-      f.x = e.clientX; f.y = e.clientY;
+      f.x = p.x; f.y = p.y;
       this.dragStick(f);
       return;
     }
     if (f.role === 'button' && !f.look) return;
-    const dx = e.clientX - f.x, dy = e.clientY - f.y;
-    f.x = e.clientX; f.y = e.clientY;
+    const dx = p.x - f.x, dy = p.y - f.y;
+    f.x = p.x; f.y = p.y;
     this.input.touchLook(dx, dy, TOUCH_LOOK_SCALE * touchSensitivity());
   }
 
@@ -313,7 +316,7 @@ export class TouchControls {
 
   /** The stick's ring appears under the thumb (kept fully on screen). */
   private placeStick(x: number, y: number) {
-    const r = this.root.getBoundingClientRect(), rad = this.radius();
+    const r = viewRect(this.root.getBoundingClientRect()), rad = this.radius();
     const cx = Math.max(r.left + rad, Math.min(r.right - rad, x)), cy = Math.max(r.top + rad, Math.min(r.bottom - rad, y));
     const f = [...this.fingers.values()].find(g => g.role === 'stick') as Extract<Finger, { role: 'stick' }> | undefined;
     if (f) { f.ox = cx; f.oy = cy; }

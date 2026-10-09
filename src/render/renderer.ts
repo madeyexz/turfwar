@@ -1,3 +1,4 @@
+import { viewHeight, viewWidth } from '../ui/viewport';
 import * as THREE from 'three';
 import { EffectComposer } from 'three/examples/jsm/postprocessing/EffectComposer.js';
 import { RenderPass } from 'three/examples/jsm/postprocessing/RenderPass.js';
@@ -103,7 +104,7 @@ export class Renderer {
   }
 
   resize() {
-    const w = innerWidth, h = innerHeight;
+    const w = viewWidth(), h = viewHeight();
     const ratio = Math.min(devicePixelRatio, this.quality.pixelRatio);
     this.renderer.setPixelRatio(ratio);
     this.renderer.setSize(w, h);

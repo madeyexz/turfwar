@@ -37,8 +37,21 @@ export function readEnv(): DeviceEnv {
 export const isIPad = (env: DeviceEnv) => /iPad/.test(env.userAgent) || (env.platform === 'MacIntel' && env.maxTouchPoints > 1);
 export const isIOS = (env: DeviceEnv) => /iPhone|iPod/.test(env.userAgent) || isIPad(env);
 export const isAndroid = (env: DeviceEnv) => /Android/i.test(env.userAgent);
-/** In-app browsers (Instagram, Facebook, LINE…) cannot install a web app: open it in the real browser. */
-export const isInAppBrowser = (env: DeviceEnv) => /FBAN|FBAV|Instagram|Line\/|MicroMessenger|; wv\)/i.test(env.userAgent);
+/**
+ * In-app browsers (Threads, whose app calls itself Barcelona; Instagram, Facebook, LINE…) cannot
+ * install a web app or turn to landscape: the game plays sideways there, and the real browser is a tap away.
+ */
+export const isInAppBrowser = (env: DeviceEnv) => /Barcelona|Threads|FBAN|FBAV|Instagram|Line\/|MicroMessenger|; wv\)/i.test(env.userAgent);
+
+/**
+ * A link that opens `url` in Chrome from an Android in-app browser (an intent URL); none elsewhere —
+ * iOS in-app browsers can only be left through their own menu (⋯ → Open in browser).
+ */
+export function openInBrowserUrl(env: DeviceEnv, url: string): string | undefined {
+  if (!isInAppBrowser(env) || !isAndroid(env)) return undefined;
+  const u = new URL(url);
+  return `intent://${u.host}${u.pathname}${u.search}#Intent;scheme=${u.protocol.replace(':', '')};package=com.android.chrome;S.browser_fallback_url=${encodeURIComponent(url)};end`;
+}
 
 /**
  * A touch-primary device: the primary pointer is coarse, or the screen takes touches and nothing
