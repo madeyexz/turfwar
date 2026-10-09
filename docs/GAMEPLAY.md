@@ -272,8 +272,6 @@ the rotor chop are synthesized.
 - **Dropped connections** reconnect and rejoin the same room (Reconnecting… over the match); a lost
   graphics context waits for the browser to hand it back before offering a reload; on a computer, a
   refused mouse capture (just after Esc) shows Click to resume.
-- **Callsigns** that are slurs or abuse are refused in the lobby and replaced on the server
-  (`shared/names.ts`).
 
 ## Controls
 
