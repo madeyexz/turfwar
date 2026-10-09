@@ -325,6 +325,21 @@ const en = {
   'err.That room is full': 'That room is full', 'err.Unknown room size': 'Unknown room size', 'err.Unknown mode': 'Unknown mode',
   'err.That map does not host this room': 'That map does not host this room', 'err.No room with that code': 'No room with that code',
   'err.That room is gone; try Quick Play': 'That room is gone; press Play online',
+  // Share card and 單挑我 (src/ui/sharecard.ts, src/ui/sharepanel.ts, src/game/challenge.ts)
+  'share.button': 'Share', 'share.challenge': '1v1 me', 'share.title': 'Share your match', 'share.native': 'Share',
+  'share.download': 'Save image', 'share.copy': 'Copy link', 'share.copied': 'Link copied', 'share.close': 'Close',
+  'share.making': 'Making your card…', 'share.hold': 'Or press and hold the picture to save it.',
+  'share.text': '{brag}. 1v1 me in Turf War: Taipei', 'share.vsBots': 'vs bots', 'share.failed': 'Could not make the card',
+  'card.kills': 'Kills', 'card.deaths': 'Deaths', 'card.hs': 'Headshots', 'card.best': 'Best round', 'card.slipper': 'Slipper kills', 'card.knife': 'Knife kills',
+  'card.challenge': '1v1 me →', 'card.scan': 'Scan or tap the link', 'card.holiday': 'National Day weekend',
+  'brag.beat': 'Beat {name} 1v1', 'brag.lostTo': 'Lost to {name}. Rematch?', 'brag.slipperMulti': 'Slipper kills ×{n}', 'brag.knifeMulti': 'Knife kills ×{n}',
+  'brag.round': '{n} kills in one round', 'brag.holiday': '{n} kills in {map} on National Day weekend', 'brag.kills': '{n} kills in {map}',
+  'brag.slipper': 'Took someone out with a slipper', 'brag.knife': 'Took someone out with a knife', 'brag.heads': '{n} headshots',
+  'brag.someKills': 'Got {n} in {map}', 'brag.win': 'Won it in {map}', 'brag.wrecked': 'Got wrecked. I’ll be back.',
+  'chal.banner': '{name} challenges you!', 'chal.brag': '{n} kills in {map}. Can you take them 1v1?', 'chal.plain': 'A 1v1 in {map}. Can you take them?',
+  'chal.accept': 'Accept', 'chal.later': 'Not now', 'chal.double': '{name} isn’t in the room, so you face their bot double',
+  'chal.won': 'You beat {name}!', 'chal.lost': '{name} wins this time', 'chal.opening': 'Opening your 1v1 room…',
+  'chal.room': 'Your 1v1 room {code} is open. Send the link: whoever opens it lands right here.', 'chal.send': 'Send challenge',
 } as const;
 
 export type Key = keyof typeof en;
@@ -622,6 +637,20 @@ const zhTW: Record<Key, string> = {
   'err.That room is full': '該房間已滿', 'err.Unknown room size': '未知的房間人數', 'err.Unknown mode': '未知的模式',
   'err.That map does not host this room': '該地圖不支援此房間設定', 'err.No room with that code': '沒有使用此代碼的房間',
   'err.That room is gone; try Quick Play': '該房間已關閉，請改按「線上對戰」',
+  'share.button': '分享戰績', 'share.challenge': '單挑我', 'share.title': '分享戰績', 'share.native': '分享',
+  'share.download': '存圖', 'share.copy': '複製連結', 'share.copied': '已複製連結', 'share.close': '關閉',
+  'share.making': '戰績卡製作中…', 'share.hold': '也可以長按圖片儲存。',
+  'share.text': '{brag}｜來《角頭械鬥》單挑我', 'share.vsBots': '對電腦', 'share.failed': '戰績卡做不出來',
+  'card.kills': '擊殺', 'card.deaths': '陣亡', 'card.hs': '爆頭', 'card.best': '單回合最多', 'card.slipper': '藍白拖擊殺', 'card.knife': '刀殺',
+  'card.challenge': '單挑我 →', 'card.scan': '掃碼或點連結', 'card.holiday': '國慶連假',
+  'brag.beat': '單挑打敗了 {name}', 'brag.lostTo': '輸給 {name}，再來一場', 'brag.slipperMulti': '藍白拖擊殺 ×{n}', 'brag.knifeMulti': '刀殺 ×{n}',
+  'brag.round': '一回合連殺 {n} 人', 'brag.holiday': '國慶連假在{map}幹掉 {n} 人', 'brag.kills': '在{map}幹掉 {n} 人',
+  'brag.slipper': '用藍白拖打死人了', 'brag.knife': '拿刀解決了一個', 'brag.heads': '爆頭 {n} 次',
+  'brag.someKills': '在{map}擊殺 {n} 人', 'brag.win': '在{map}拿下勝利', 'brag.wrecked': '被打爆了，但我會回來',
+  'chal.banner': '{name} 向你下戰帖！', 'chal.brag': '在{map}幹掉 {n} 人，敢單挑嗎？', 'chal.plain': '{map} 1v1，敢單挑嗎？',
+  'chal.accept': '接受挑戰', 'chal.later': '先不要', 'chal.double': '{name} 不在房間裡，改打他的分身',
+  'chal.won': '你打敗了 {name}！', 'chal.lost': '{name} 這次贏了', 'chal.opening': '單挑房開房中…',
+  'chal.room': '單挑房 {code} 開好了。把連結傳出去，對手點開就直接進來。', 'chal.send': '傳戰帖',
 };
 
 export const DICTIONARIES: Record<Lang, Record<Key, string>> = { en, 'zh-TW': zhTW };
@@ -733,6 +762,8 @@ export const teamShort = (team: number) => t(team === 1 ? 'team.short.1' : 'team
 export const modeName = (mode: string) => t(mode === 'sabotage' ? 'mode.sabotage' : 'mode.elimination');
 export const sizeName = (id: 'duel' | 'squad' | 'war') => t(`size.${id}`);
 export const mapName = (id: string, english: string) => (isZh() && MAPS_ZH[id as MapId]?.name) || english;
+/** A map's Chinese name in any language (the share card shows it beside the English one), or undefined. */
+export const mapNameZh = (id: string): string | undefined => MAPS_ZH[id as MapId]?.name;
 export const attachmentName = (id: AttachmentId, english: string) => (isZh() && ATTACHMENTS_ZH[id]) || english;
 export const weaponClass = (c: WeaponClass) => t(`class.${c}`);
 export const roundReason = (r: string | undefined) => (r && `reason.${r}` in en ? t(`reason.${r}` as Key) : '');

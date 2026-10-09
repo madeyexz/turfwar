@@ -50,6 +50,11 @@ export class Hud {
   readonly root: HTMLElement;
   crosshairStyle: CrosshairStyle = savedCrosshair();
   onRestart?: () => void;
+  /** The end screen's 分享戰績 and 單挑我 (share.ts); 單挑我 only where online play is available. */
+  onShare?: () => void;
+  onDuel?: () => void;
+  /** A 單挑我 match: the challenger, for the end screen's "you beat …" line. */
+  rival?: string;
   onMenu?: () => void;
   private el: Record<string, HTMLElement> = {};
   private cache = new Map<string, string>();
@@ -153,6 +158,7 @@ export class Hud {
     this.el.end.addEventListener('click', e => {
       const act = (e.target as HTMLElement).closest<HTMLElement>('[data-act]')?.dataset.act;
       if (act === 'menu') this.onMenu?.(); else if (act === 'restart') this.onRestart?.();
+      else if (act === 'share') this.onShare?.(); else if (act === 'duel') this.onDuel?.();
     });
     // Chat input: Enter sends (blank just closes), Esc cancels; keys never reach the game.
     this.input = this.root.querySelector('.chat-input input')!;
@@ -737,6 +743,8 @@ export class Hud {
     this.set('end', `<small>${w === -1 ? t('hud.matchDrawn') : t('hud.winMatch', { team: teamName(w).toUpperCase() })}</small>
       <h2 style="color:${w === -1 ? 'var(--ink)' : TEAM_CSS[w]}">${t(w === -1 ? 'hud.draw' : w === myTeam ? 'hud.victory' : 'hud.defeat')}</h2>
       <div class="final"><b class="t0">${teamShort(0)} ${state.scores[0]}</b><span>—</span><b class="t1">${state.scores[1]} ${teamShort(1)}</b></div>
+      ${this.rival ? `<p class="rival ${w === myTeam ? 'won' : 'lost'}">${escape(t(w === myTeam ? 'chal.won' : 'chal.lost', { name: this.rival }))}</p>` : ''}
+      ${this.onShare ? `<div class="share-row"><button data-act="share" class="share">${t('share.button')}</button>${this.onDuel ? `<button data-act="duel" class="duel">${t('share.challenge')}</button>` : ''}</div>` : ''}
       <table><tr><th></th><th>${t('hud.player')}</th><th>${t('hud.k')}</th><th>${t('hud.d')}</th><th>${t('hud.a')}</th><th>${t('hud.score')}</th></tr>${top.map((s, i) => `<tr${s.team === myTeam ? ' class="mine"' : ''}><td>${i + 1}</td><td class="t${s.team}">${escape(s.name)}</td><td>${s.kills}</td><td>${s.deaths}</td><td>${s.assists}</td><td>${s.score}</td></tr>`).join('')}</table>
       ${career?.length ? this.careerTable(career) : ''}
       <p>${t('hud.newMatchIn', { n: Math.ceil(state.phaseLeft) })}</p>

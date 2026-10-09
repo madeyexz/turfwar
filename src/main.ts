@@ -4,6 +4,9 @@ import { cleanCode, hasSites, listOrder, mapsFor, pickAnyRoom, ROOM_SIZES, roomF
 import { ELIMINATION, SABOTAGE, type Mode, type Team } from '../shared/match/state';
 import { assetUrl } from './assetUrl';
 import { groundSets, loadAssets, type Assets } from './assets';
+import { challengeMap, parseChallenge, type Challenge } from './game/challenge';
+import type { MatchSummary } from './game/matchstats';
+import './ui/share.css';
 import { Audio } from './audio';
 import { Game } from './game/game';
 import { settings } from './game/settings';
@@ -1023,6 +1026,85 @@ function showBackdrop() {
 /** A player still on the made-up callsign is asked for one before playing (automation and `?name=` skip it). */
 const needsCallsign = () => !benchMode && !params.get('autostart') && !params.has('name') && madeUpCallsign(callsign.value);
 
+// ---- 單挑我 (src/game/challenge.ts) ----------------------------------------------------------------
+
+/**
+ * A start that answers a challenge or opens one: `join` the challenger's room; `fallback` a Solo
+ * 1v1 against their bot double (no room in the link, or it is gone, full or unreachable); `host`
+ * our own private 1v1 room, opened from an end screen with the share dialog.
+ */
+type Duel = { kind: 'join'; c: Challenge; mapId: string }
+  | { kind: 'fallback'; c: Challenge; mapId: string; reason: 'no_room' | 'gone' | 'offline' }
+  | { kind: 'host'; summary: MatchSummary; mapId: string };
+let special: Duel | undefined;
+/** The challenge this page was opened with. */
+const challenge = parseChallenge(location.search);
+if (challenge) track('challenge_link_opened', { ref: challenge.ref ?? '', has_room: !!challenge.room }, { setOnce: { ref_by: challenge.ref ?? '' } });
+
+/** 「<name> 向你下戰帖！」 over the lobby: one tap (with the callsign asked for if needed) and you're in. */
+let challengeBanner: HTMLElement | undefined;
+function showChallenge() {
+  if (!challenge || challengeBanner) return;
+  const c = challenge;
+  const el = document.createElement('div');
+  el.className = 'challenge-banner';
+  el.innerHTML = '<b></b><p></p><div class="acts"><button type="button" class="go"></button><button type="button" class="later"></button></div>';
+  el.querySelector('b')!.textContent = t('chal.banner', { name: c.name });
+  const where = c.map ? localMapName(c.map, maps.find(m => m.id === c.map)?.name ?? '') : '';
+  el.querySelector('p')!.textContent = c.beat !== undefined && where ? t('chal.brag', { n: c.beat, map: where }) : t('chal.plain', { map: where || '1v1' });
+  const go = el.querySelector<HTMLButtonElement>('.go')!;
+  go.onclick = acceptChallenge;
+  el.querySelector<HTMLButtonElement>('.later')!.textContent = t('chal.later');
+  el.querySelector<HTMLButtonElement>('.later')!.onclick = () => { el.remove(); };
+  challengeBanner = el;
+  menu.appendChild(el);
+  renderChallenge();
+}
+function renderChallenge() {
+  const go = challengeBanner?.querySelector<HTMLButtonElement>('.go');
+  if (!go) return;
+  go.disabled = !ready;
+  go.textContent = ready ? t('chal.accept') : loadingText();
+}
+
+function acceptChallenge() {
+  const c = challenge;
+  if (!c || !ready || starting) return;
+  const mapId = challengeMap(c.map, mapsFor(1));
+  challengeBanner?.remove();
+  if (c.room && online.ok) { special = { kind: 'join', c, mapId }; roomCode.value = c.room; run('code'); }
+  else { special = { kind: 'fallback', c, mapId, reason: c.room ? 'offline' : 'no_room' }; run('solo'); }
+}
+
+/** In a challenge's match: the end screen names the challenger; a room nobody else is in falls back to the bot double. */
+function startedDuel(duel: Duel, link: GameLink) {
+  if (duel.kind === 'host') {
+    const code = link.roomInfo?.()?.code;
+    if (code) void game?.share({ summary: duel.summary, room: code });
+    return;
+  }
+  const ref = duel.c.ref ?? '';
+  game?.setChallenge({ name: duel.c.name, ref, via: duel.kind === 'join' ? 'room' : 'fallback' });
+  track('challenge_started', { ref, via: duel.kind === 'join' ? 'room' : 'fallback', ...(duel.kind === 'fallback' ? { reason: duel.reason } : {}) });
+  if (duel.kind === 'fallback') { if (duel.reason !== 'no_room') game?.notice(t('chal.double', { name: duel.c.name }), 8000); return; }
+  // The room was there but the challenger has left it: play their double rather than wait alone.
+  const playing = game;
+  setTimeout(() => {
+    const state = link.state();
+    if (game !== playing || !state || state.soldiers.some(s => !s.bot && s.id !== link.myId())) return;
+    backToLobby('menu');
+    special = { kind: 'fallback', c: duel.c, mapId: duel.mapId, reason: 'gone' };
+    run('solo');
+  }, 6000);
+}
+
+/** 單挑我 from an end screen: leave the match, open a private 1v1 room on its map and share its link. */
+function openDuelRoom(summary: MatchSummary) {
+  backToLobby('menu', t('chal.opening'), 'end_screen');
+  special = { kind: 'host', summary, mapId: challengeMap(summary.mapId, mapsFor(1)) };
+  run('start');
+}
+
 /**
  * Run one way in. An online one pressed while the server is still waking is queued: it runs by
  * itself once the server is up (`retried`: it already failed to reach the server once).
@@ -1074,9 +1156,12 @@ async function start(action: Action, retried = false) {
   if (!benchMode) fullscreenForTouch();
   const name = callsign.value.trim().slice(0, 16) || t('lobby.fallbackName');
   const via = modeOf(action);
+  // A 單挑我 start (the challenger's room, their bot double, or our own 1v1 room) leaves the form as it was.
+  const duel = special;
+  special = undefined;
   if (!benchMode) {
-    store.set('name', name); store.set('mode', via); store.set('team', team); store.set('skill', skill);
-    saveForm();
+    store.set('name', name);
+    if (!duel) { store.set('mode', via); store.set('team', team); store.set('skill', skill); saveForm(); }
   }
   const kinds: Record<Action, PlayKind> = { quick: 'online', start: isPublic ? 'start' : 'private', room: 'room', code: 'code', solo: 'solo', range: 'practice' };
   // Quick Play, a listed room and a code choose no rules; Start, Solo and Practice send the form's.
@@ -1096,7 +1181,9 @@ async function start(action: Action, retried = false) {
   const teamChoice = team === 'auto' ? undefined : (Number(team) as Team);
   const botSkill = Math.max(0.1, Math.min(0.95, Number(skill) || 0.45));
   const rules = offlineRules();
-  const how: OnlineEntry = action === 'code' ? { kind: 'code', code: cleanCode(roomCode.value) }
+  const how: OnlineEntry = duel?.kind === 'host' ? { kind: 'start', size: 1, mode: 'elimination', mapId: duel.mapId, bots: false, isPublic: false }
+    : duel?.kind === 'join' ? { kind: 'code', code: duel.c.room! }
+    : action === 'code' ? { kind: 'code', code: cleanCode(roomCode.value) }
     : action === 'room' ? { kind: 'room', room: joiningRoom }
     : action === 'start' ? { kind: 'start', size: perTeam(), mode, mapId: map, bots, isPublic }
     : { kind: 'any' };
@@ -1104,10 +1191,19 @@ async function start(action: Action, retried = false) {
   try {
     link = via === 'online'
       ? await connectOnline(name, teamChoice, how, s => { status.textContent = s; })
+      : duel?.kind === 'fallback'
+        ? new OfflineLink(duel.mapId, name, undefined, { ...ELIMINATION, teamSize: 1, botSkill }, false, duel.c.name)
       : via === 'lab'
         ? new OfflineLink(rules.mapId, name, teamChoice, {}, true)
         : new OfflineLink(rules.mapId, name, teamChoice, { ...(rules.mode === 'sabotage' ? SABOTAGE : ELIMINATION), teamSize: perTeam(), botSkill, freeBuy: params.has('freebuy') });
   } catch (error) {
+    // The challenger's room is gone, full or unreachable: their bot double instead, on the same map.
+    if (duel?.kind === 'join') {
+      starting = undefined; joiningRoom = -1;
+      special = { kind: 'fallback', c: duel.c, mapId: duel.mapId, reason: 'gone' };
+      void start('solo');
+      return;
+    }
     const room = joiningRoom;
     starting = undefined; joiningRoom = -1;
     inMenu = !benchMode; menuMusic();
@@ -1124,7 +1220,7 @@ async function start(action: Action, retried = false) {
     watchLobbyRooms(); refresh();
     return;
   }
-  const linkMap = link.state()?.mapId ?? rules.mapId;
+  const linkMap = link.state()?.mapId ?? (duel?.kind === 'fallback' ? duel.mapId : rules.mapId);
   // The map's ground textures (the shared ones came with the lobby): from the cache after the first time.
   await assets.textures.load(groundSets(THEMES[loadMap(linkMap).def.theme]));
   starting = undefined; joiningRoom = -1;
@@ -1133,15 +1229,19 @@ async function start(action: Action, retried = false) {
   launch(link, linkMap);
   joined(link, linkMap, playServer);
   matchServer = playServer;
+  if (duel) startedDuel(duel, link);
   // The map's own files have loaded by now: cache them too on a first visit.
   setTimeout(warmServiceWorker, 15000);
   menu.hidden = true;
   document.body.classList.remove('menu-open');
+  // Our own 1v1 room opens with the share dialog (the pointer stays free for it).
+  if (duel?.kind === 'host') return;
   await game?.input.lock()?.catch?.(() => undefined);
 }
 
 function launch(link: GameLink, map: string) {
   game = new Game(assets, renderer, link, map, audio, app);
+  if (online.ok && !benchMode) game.onDuel(openDuelRoom);
   if (benchMode && !bench) startBench(game);
   game.onMapChange = next => { game?.stop(true); launch(link, next); };
   game.onExit = how => backToLobby('menu', '', how);
@@ -1349,12 +1449,14 @@ async function boot() {
   watchClientErrors(renderer.renderer.domElement, () => !!game, graphicsLost, graphicsRestored);
   // Chinese UI: fetch the CJK face with the assets, so the first screens never show a fallback font.
   const fonts = isZh() ? cjkFontReady('繁體中文') : Promise.resolve();
-  assets = await loadAssets(f => { loadFraction = f; renderQuick(); renderStart(); renderOthers(); });
+  showChallenge();
+  assets = await loadAssets(f => { loadFraction = f; renderQuick(); renderStart(); renderOthers(); renderChallenge(); });
   await fonts;
   ready = true;
   warmServiceWorker();
   refresh();
-  if (params.get('room') && !params.get('autostart')) roomCode.focus({ preventScroll: true });
+  renderChallenge();
+  if (params.get('room') && !params.get('autostart') && !challenge) roomCode.focus({ preventScroll: true });
   if (!benchMode) {
     theme = renderTheme();
     theme.then(menuMusic, error => console.warn('Menu theme unavailable', error));

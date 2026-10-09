@@ -37,6 +37,11 @@ import { LocalPlayer } from './player';
 import { isMagnified, settings } from './settings';
 import { ownedOf, purchaseOf, type BuyRequest, type Owned } from './purchases';
 import { roundEnded, track } from '../analytics';
+import { challengeUrl, shareRef } from './challenge';
+import { MatchTally, type MatchSummary } from './matchstats';
+import { openSharePanel } from '../ui/sharepanel';
+/** The 藍白拖 and 珍奶煙霧彈 skins (on unless `?classic`): the card names knife kills after them. */
+const MEME_SKINS = !(typeof location !== 'undefined' && new URLSearchParams(location.search).has('classic'));
 import { TouchControls, type TouchInfo } from '../ui/touchcontrols';
 import { holdAimMode } from './holdfire';
 import { onTouchLayout, touchActive, touchAimAssist, type TouchContext } from './touchlayout';
@@ -189,6 +194,11 @@ export class Game {
   onExit?: (how: 'menu_button' | 'end_screen' | 'leave_key') => void;
   /** Online servers rotate battlefields; the host page rebuilds the scene for the new map. */
   onMapChange?: (mapId: string) => void;
+  /** The player's own tally this match, and the finished match's summary (the share card's numbers). */
+  private tally = new MatchTally();
+  private summary?: MatchSummary;
+  /** A 單挑我 match (main.ts): the challenger, the sharer's code and how it is played. */
+  private challenge?: { name: string; ref: string; via: 'room' | 'fallback' };
   readonly mapId: string;
 
   constructor(private assets: Assets, private renderer: Renderer, readonly link: GameLink, mapId: string, readonly audio: Audio, container: HTMLElement) {
@@ -217,6 +227,7 @@ export class Game {
     this.viewmodelFor(1 - this.myTeam);
     this.hud = new Hud(container, def);
     this.hud.onMenu = () => this.onExit?.('end_screen');
+    if (!link.state()?.config.practice) this.hud.onShare = () => void this.share();
     this.buymenu = new BuyMenu(container, {
       buy: item => { this.requested({ kind: 'item', item }); this.link.buy(item); this.audio.ui(); },
       attach: (weapon, attachment) => { this.requested({ kind: 'attach', weapon, attachment }); this.link.attach(weapon, attachment); this.audio.ui(); },
@@ -649,6 +660,53 @@ export class Game {
     } else this.resumeLayer?.remove();
   }
 
+  /** The finished match as the share card tells it (undefined without our soldier). */
+  private summarize(state: MatchState): MatchSummary | undefined {
+    const me = state.soldiers.find(s => s.id === this.link.myId());
+    if (!me) return undefined;
+    const w = state.winner, team = me.team;
+    return {
+      name: me.name, mapId: this.mapId, mode: modeOf(state, this.map.def), teamSize: state.config.teamSize, solo: this.link.mode !== 'online',
+      result: w === -1 ? 'draw' : w === team ? 'win' : 'loss', score: [state.scores[team], state.scores[1 - team]],
+      kills: me.kills, deaths: me.deaths, headshots: this.tally.headshots, knifeKills: this.tally.knifeKills, bestRound: this.tally.bestRound,
+      ...(this.challenge ? { rival: { name: this.challenge.name, beaten: w === team } } : {}),
+    };
+  }
+
+  /**
+   * 分享戰績: the card over a frame of this view, carrying the 單挑我 link. `summary`: an earlier
+   * match's (the 1v1 room opened from its end screen); `room`: the code of the room we wait in.
+   */
+  async share(o: { summary?: MatchSummary; room?: string } = {}) {
+    const summary = o.summary ?? this.summary;
+    if (!summary) return;
+    let storage: Storage | undefined;
+    try { storage = localStorage; } catch { /* storage disabled: a fresh code */ }
+    const ref = shareRef(storage);
+    const url = challengeUrl(location.origin, { name: summary.name, room: o.room, map: summary.mapId, beat: summary.kills, ref });
+    this.input.release();
+    track('share_card_opened', { ref, solo: summary.solo, result: summary.result, room: !!o.room });
+    await openSharePanel({
+      summary, url, backdrop: this.renderer.snapshot(), meme: MEME_SKINS,
+      note: o.room ? t('chal.room', { code: o.room }) : undefined,
+      onShared: method => track('share_card_shared', { ref, method, room: !!o.room }),
+    });
+  }
+
+  /** 單挑我 from the end screen (main.ts opens the 1v1 room); only where online play is available. */
+  onDuel(open: (summary: MatchSummary) => void) {
+    this.hud.onDuel = () => { if (this.summary) open(this.summary); };
+  }
+
+  /** A short line over the match (main.ts: the challenge's notes). */
+  notice(text: string, ms = 6000) { this.hud.toast(text, ms); }
+
+  /** This match answers a 單挑我 link: the end screen and the card name the challenger. */
+  setChallenge(c: { name: string; ref: string; via: 'room' | 'fallback' }) {
+    this.challenge = c;
+    this.hud.rival = c.name;
+  }
+
   /** XP, the level and the day's goal (progress.ts): a finished goal or a new level is announced. */
   private progress(e: ProgressEvent) {
     const before = levelOf(loadProgress().xp).level;
@@ -1042,6 +1100,7 @@ export class Game {
       }
       case 'kill': {
         const killer = find(e.killer), victim = find(e.victim);
+        this.tally.kill(e, myId);
         this.hud.killfeed(killer, victim, e.weapon, e.head, e.killer === myId || e.victim === myId);
         if (e.killer === myId && e.victim !== myId) { this.hud.hit('kill'); this.audio.hitmarker(e.head, true); this.progress({ type: 'kill', head: e.head }); }
         if (e.victim === myId) this.hud.announce(t('hud.youDied'), killer && killer.id !== myId ? `${killer.name} · ${weaponLabel(e.weapon)}` : '', 'var(--crimson)');
@@ -1055,6 +1114,7 @@ export class Game {
           if (canSwitchTeam(state, me) === 'ok') this.link.switchTeam?.();
         }
         if (e.phase === 'freeze') {
+          this.tally.round();
           // Every round deploys everyone fresh in their base: full magazines, health and stamina,
           // survivors included (they keep their gear, the server refills it).
           if (me?.alive) { this.player.spawnFrom(me); this.shownWeapon = ''; }
@@ -1109,10 +1169,13 @@ export class Game {
       }
       case 'phase': {
         if (e.phase === 'ended') {
+          this.summary = this.summarize(state);
+          if (this.challenge && this.summary) track('challenge_completed', { ref: this.challenge.ref, via: this.challenge.via, won: this.summary.result === 'win' });
           const won = e.winner === this.myTeam;
           if (!state.config.practice) this.progress({ type: 'match', won });
           this.hud.announce(t(won ? 'hud.victory' : 'hud.defeat'), t('hud.winsMatch', { team: teamName(e.winner === -1 ? 0 : e.winner) }), won ? 'var(--accent)' : 'var(--crimson)');
         }
+        if (e.phase === 'warmup') { this.tally = new MatchTally(); this.summary = undefined; }
         if (e.phase === 'warmup') this.hud.announce(t('hud.newMatch'), mapName(this.map.def.id, this.map.def.name));
         break;
       }

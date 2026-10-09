@@ -46,6 +46,14 @@ export interface Events {
   server_woke: { seconds: number; queued: boolean };
   /** Every 5 minutes of a long online match: connection quality over those minutes (`seconds` in a room). */
   net_sample: NetFields;
+  /** The share card (src/ui/sharepanel.ts). `ref`: this browser's random share code (src/game/challenge.ts); `room`: the link names a live 1v1 room. */
+  share_card_opened: { ref: string; solo: boolean; result: 'win' | 'loss' | 'draw'; room: boolean };
+  share_card_shared: { ref: string; method: 'native' | 'download' | 'copy'; room: boolean };
+  /** A 單挑我 link opened (`ref`: the sharer's code, `has_room`: it names their room). */
+  challenge_link_opened: { ref: string; has_room: boolean };
+  /** The challenge began: in the sharer's room, or against their bot double (`fallback`) and why. */
+  challenge_started: { ref: string; via: 'room' | 'fallback'; reason?: 'no_room' | 'gone' | 'offline' };
+  challenge_completed: { ref: string; via: 'room' | 'fallback'; won: boolean };
 }
 type EventName = keyof Events;
 type Props = Record<string, string | number | boolean>;

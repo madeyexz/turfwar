@@ -140,7 +140,23 @@ export class Renderer {
     requestAnimationFrame(upload);
   }
 
+  /**
+   * The current view as a picture (the share card's backdrop): rendered again and copied at once,
+   * while the drawing buffer still holds the frame.
+   */
+  snapshot(maxWidth = 1280) {
+    this.render(this.lastTime);
+    const src = this.renderer.domElement;
+    const scale = Math.min(1, maxWidth / src.width);
+    const out = document.createElement('canvas');
+    out.width = Math.max(1, Math.round(src.width * scale)); out.height = Math.max(1, Math.round(src.height * scale));
+    out.getContext('2d')!.drawImage(src, 0, 0, out.width, out.height);
+    return out;
+  }
+  private lastTime = 0;
+
   render(time: number) {
+    this.lastTime = time;
     this.renderer.info.reset();
     // Keep the shadow frustum centered on the player, snapped to texels to avoid shimmering.
     const target = this.camera.position;
