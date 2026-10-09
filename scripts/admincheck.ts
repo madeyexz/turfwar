@@ -17,10 +17,10 @@ localOnly(uri);
 const key = process.env.ADMIN_TEST_KEY;
 if (!key) throw new Error('Set ADMIN_TEST_KEY to the test key whose hash the local module was published with');
 const { check, note, finish } = checker();
-const VIEWS = ['SELECT * FROM admin_status', 'SELECT * FROM admin_overview', 'SELECT * FROM admin_rooms', 'SELECT * FROM admin_players', 'SELECT * FROM admin_daily', 'SELECT * FROM admin_player_time', 'SELECT * FROM admin_daily_time', 'SELECT * FROM admin_player_day'];
+const VIEWS = ['SELECT * FROM admin_status', 'SELECT * FROM admin_overview', 'SELECT * FROM admin_rooms', 'SELECT * FROM admin_players', 'SELECT * FROM admin_daily', 'SELECT * FROM admin_player_time', 'SELECT * FROM admin_daily_time', 'SELECT * FROM admin_player_day', 'SELECT * FROM admin_player_day_time', 'SELECT * FROM admin_player_day_net'];
 const counts = (c: Conn) => ({
   overview: c.db.adminOverview.count(), rooms: c.db.adminRooms.count(), players: c.db.adminPlayers.count(), daily: c.db.adminDaily.count(),
-  playerTime: c.db.adminPlayerTime.count(), dailyTime: c.db.adminDailyTime.count(), playerDay: c.db.adminPlayerDay.count(),
+  playerTime: c.db.adminPlayerTime.count(), dailyTime: c.db.adminDailyTime.count(), playerDay: c.db.adminPlayerDay.count(), playerDayTime: c.db.adminPlayerDayTime.count(), playerDayNet: c.db.adminPlayerDayNet.count(),
 });
 const status = (c: Conn) => [...c.db.adminStatus.iter()][0];
 const error = async (p: Promise<unknown>) => { try { await p; return ''; } catch (e) { return String((e as Error).message ?? e); } };

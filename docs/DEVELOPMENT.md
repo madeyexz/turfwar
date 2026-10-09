@@ -239,8 +239,13 @@ question, linked from a sticky nav: **Now** (online, rooms, live rooms), **Growt
 active with the change from the period before, a 30-day chart of returning and new players per day,
 countries), **Retention**, **Play time** (total, average and median per player, today, 7 days, a
 30-day chart), **Connection & devices** and **Players** (a sortable list: play time, active days,
-rounds, matches, kills …), for the server picked at the top (the build's own by default). Days are UTC
-days. **Retention** (`src/admin/retention.ts`) comes from the view `admin_player_day` (every UTC day
+rounds, matches, kills …, with an All / Phone / Computer switch), for the server picked at the top (the
+build's own by default). Days are UTC days. **Phone and Computer side by side**
+(`src/admin/groups.ts`): every figure shows All, Phone and Computer, and the 30-day charts draw a Phone
+and a Computer bar each day. A player's side is the device they last played on (`admin_player_device`;
+phones and tablets are Phone; players without a report count only in All), and per-day figures use it
+for every day. The daily play time and ping come per player from the views `admin_player_day_time` and
+`admin_player_day_net` (from `player_day_time` and `player_day_net`), subscribed separately like the rest. **Retention** (`src/admin/retention.ts`) comes from the view `admin_player_day` (every UTC day
 each player was active, from `player_day`; subscribed separately: a database without it shows "—"):
 the share who came back on any later day, classic day-N retention (back exactly 1, 3, 7, 14 or 30 days
 after their first day) pooled over every cohort whose day N is over, and a table of the last 14 days'

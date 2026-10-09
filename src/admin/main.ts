@@ -2,12 +2,10 @@ import type { Infer } from 'spacetimedb';
 import { DbConnection } from '../module_bindings';
 import type AdminPlayersRow from '../module_bindings/admin_players_table';
 import type AdminRoomsRow from '../module_bindings/admin_rooms_table';
-import type AdminDailyRow from '../module_bindings/admin_daily_table';
 import type AdminOverviewRow from '../module_bindings/admin_overview_table';
 import type AdminPlayerTimeRow from '../module_bindings/admin_player_time_table';
 import type AdminDailyTimeRow from '../module_bindings/admin_daily_time_table';
 import type AdminPlayerNetRow from '../module_bindings/admin_player_net_table';
-import type AdminDailyNetRow from '../module_bindings/admin_daily_net_table';
 import type AdminPlayerDeviceRow from '../module_bindings/admin_player_device_table';
 import type AdminPlayerDayRow from '../module_bindings/admin_player_day_table';
 import { countByCountry, countryOf } from '../../shared/tzcountry';
@@ -15,6 +13,7 @@ import { fmtPing, fmtRate, medianCorrections, medianPing, pingByCountry, pingCla
 import { deviceCounts, deviceLabel, deviceShare, fmtShare, type DeviceOf } from './devices';
 import { activeBetween, cameBack, change, cohorts, daysById, firstDayOf, fmtRetention, newBetween, RETENTION_DAYS, type Cell } from './retention';
 import { releasesByDay, releaseTitle, type Release } from './releases';
+import { activeByDay, GROUPS, niceStep, pingByDay, sideOf, SIDES, splitBySide, sumByDay, type DayNet as DayNetOf, type GroupId, type Side } from './groups';
 import { formatPlayTime, liveSeconds } from '../../shared/playtime';
 import { hostAnswers, pingUrl, serverIdentityKey } from '../net/ping';
 import { WakeDriver, wakeProgress, wakeSeconds, type WakeLink } from '../net/wake';
@@ -33,12 +32,10 @@ import './admin.css';
  * server sleeps when idle: opening this page wakes it, shown as "waking" (src/net/wake.ts).
  */
 type Room = Infer<typeof AdminRoomsRow>;
-type Day = Infer<typeof AdminDailyRow>;
 type Overview = Infer<typeof AdminOverviewRow>;
 type PlayerTime = Infer<typeof AdminPlayerTimeRow>;
 type DayTime = Infer<typeof AdminDailyTimeRow>;
 type PlayerNet = Infer<typeof AdminPlayerNetRow>;
-type DayNet = Infer<typeof AdminDailyNetRow>;
 type PlayerDevice = Infer<typeof AdminPlayerDeviceRow>;
 type PlayerDay = Infer<typeof AdminPlayerDayRow>;
 /**
@@ -52,6 +49,10 @@ type PlayerDay = Infer<typeof AdminPlayerDayRow>;
 type Player = Infer<typeof AdminPlayersRow> & {
   rounds: number; playTime: number; playing: boolean; openSeconds: number; net?: NetOf; ping?: number; corrPerMin?: number; device?: DeviceOf; deviceName?: string;
   firstDay: number; days: Set<number>; activeDays?: number;
+  /** Phone or Computer, by the device last played on (none without a report). */
+  side?: Side;
+  /** Play time and connection quality per UTC day (`admin_player_day_time`, `admin_player_day_net`). */
+  daySeconds?: Map<number, number>; dayNet?: Map<number, DayNetOf>;
 };
 
 /** Releases marked on the charts (vite.config.ts: git history of `main` and src/admin/releases.json). */
@@ -112,12 +113,22 @@ let messageError = true;
 let playerLimit = 100;
 let sortKey: keyof Player | 'country' = 'lastSeen';
 let sortDir: 1 | -1 = -1;
-/** The connection-quality views (`admin_player_net`, `admin_daily_net`): subscribed on their own, since an older module lacks them. */
-let netViews: 'wait' | 'on' | 'missing' = 'wait';
-/** The device view (`admin_player_device`): subscribed on its own too, for the same reason. */
-let deviceViews: 'wait' | 'on' | 'missing' = 'wait';
-/** The active-days view (`admin_player_day`, retention): subscribed on its own too. */
-let dayViews: 'wait' | 'on' | 'missing' = 'wait';
+/**
+ * Views added after the first admin page, each subscribed on its own: a server whose module predates
+ * one refuses only that subscription, and the page shows "—" where it would be used.
+ */
+const OPTIONAL = {
+  net: ['SELECT * FROM admin_player_net'],
+  device: ['SELECT * FROM admin_player_device'],
+  days: ['SELECT * FROM admin_player_day'],
+  dayTime: ['SELECT * FROM admin_player_day_time'],
+  dayNet: ['SELECT * FROM admin_player_day_net'],
+};
+type ViewState = 'wait' | 'on' | 'missing';
+const freshViews = (): Record<keyof typeof OPTIONAL, ViewState> => ({ net: 'wait', device: 'wait', days: 'wait', dayTime: 'wait', dayNet: 'wait' });
+let views = freshViews();
+/** Which players the list shows. */
+let playerGroup: GroupId = 'all';
 const setConn = (s: 'wait' | 'live' | 'off', title: string) => { connDot.className = `dot ${s}`; connDot.title = title; };
 
 /** The header: which server, where, which database. */
@@ -178,16 +189,28 @@ function renderLogin() {
 
 // ---- Dashboard ---------------------------------------------------------------------------
 
-/** Players with their play time: credited seconds plus the open stretch of anyone in a room right now. */
+/** Players with their play time (credited seconds plus the open stretch of anyone in a room right now) and every optional view's data. */
 function joinedPlayers(): Player[] {
   const db = conn!.db;
   const times = new Map<string, PlayerTime>();
   for (const t of db.adminPlayerTime.iter()) times.set(t.id, t);
   const nets = new Map<string, PlayerNet>();
-  if (netViews === 'on') for (const n of db.adminPlayerNet.iter()) nets.set(n.id, n);
+  if (views.net === 'on') for (const n of db.adminPlayerNet.iter()) nets.set(n.id, n);
   const devices = new Map<string, PlayerDevice>();
-  if (deviceViews === 'on') for (const d of db.adminPlayerDevice.iter()) devices.set(d.id, d);
-  const days = dayViews === 'on' ? daysById(db.adminPlayerDay.iter() as Iterable<PlayerDay>) : new Map<string, Set<number>>();
+  if (views.device === 'on') for (const d of db.adminPlayerDevice.iter()) devices.set(d.id, d);
+  const days = views.days === 'on' ? daysById(db.adminPlayerDay.iter() as Iterable<PlayerDay>) : new Map<string, Set<number>>();
+  const dayTime = new Map<string, Map<number, number>>();
+  if (views.dayTime === 'on') for (const r of db.adminPlayerDayTime.iter()) {
+    let m = dayTime.get(r.id);
+    if (!m) dayTime.set(r.id, (m = new Map()));
+    m.set(r.day, r.seconds);
+  }
+  const dayNet = new Map<string, Map<number, DayNetOf>>();
+  if (views.dayNet === 'on') for (const r of db.adminPlayerDayNet.iter()) {
+    let m = dayNet.get(r.id);
+    if (!m) dayNet.set(r.id, (m = new Map()));
+    m.set(r.day, { p50: r.p50, p95: r.p95, seconds: r.seconds, corrections: r.corrections });
+  }
   const nowMicros = BigInt(Date.now()) * 1000n;
   return [...db.adminPlayers.iter()].map(p => {
     const t = times.get(p.id);
@@ -201,38 +224,48 @@ function joinedPlayers(): Player[] {
     const active = days.get(p.id);
     return {
       ...p, rounds: t?.rounds ?? 0, playTime: live, playing: since > 0n, openSeconds: live - Number(credited), net, ping: net?.pingP50, corrPerMin: net?.correctionsPerMin,
-      device, deviceName: deviceLabel(device),
+      device, deviceName: deviceLabel(device), side: sideOf(device?.device),
       firstDay: firstDayOf(Math.floor(p.firstSeen.toDate().getTime() / DAY_MS), active), days: active ?? new Set(), activeDays: active?.size,
+      daySeconds: dayTime.get(p.id), dayNet: dayNet.get(p.id),
     };
   });
 }
 
 /** Play time for the tiles: a zero reads "0 m" there (the table shows "—"). */
 const hm = (seconds: number) => (seconds >= 1 ? formatPlayTime(seconds) : '0 m');
+/** Play time as a tile figure: whole hours from 10 h on, so three fit side by side (the exact time in the tooltip). */
+const hmFig = (seconds: number): NonNullable<Fig> => (seconds >= 36_000 ? { v: `${num(Math.round(seconds / 3600))} h`, title: hm(seconds) } : { v: hm(seconds) });
 
 /**
- * Totals over every player's play time, and today's and the last 7 UTC days' (credited per day,
- * plus the sessions in progress, which belong to today).
+ * A group's play time: totals over its players, and per UTC day (credited per day plus the sessions
+ * in progress, which belong to today). `byDay` is undefined without the per-day view, except for
+ * everyone, which falls back to the server's daily totals.
  */
-function playTotals(players: Player[], dayTimes: DayTime[]) {
-  const played = players.map(p => p.playTime).filter(s => s > 0).sort((a, b) => a - b);
+function playStats(ps: Player[], today: number, fallback?: DayTime[]) {
+  const played = ps.map(p => p.playTime).filter(s => s > 0).sort((a, b) => a - b);
   const total = played.reduce((n, s) => n + s, 0);
   const mid = played.length >> 1;
   const median = !played.length ? 0 : played.length % 2 ? played[mid] : (played[mid - 1] + played[mid]) / 2;
-  const open = players.reduce((n, p) => n + p.openSeconds, 0);
-  const byDay = new Map(dayTimes.map(d => [d.day, Number(d.playSeconds)]));
-  const today = Math.floor(Date.now() / DAY_MS);
-  let week = open, prevWeek = 0;
-  for (let d = today - 6; d <= today; d++) week += byDay.get(d) ?? 0;
-  for (let d = today - 13; d <= today - 7; d++) prevWeek += byDay.get(d) ?? 0;
-  return { total, players: played.length, average: played.length ? total / played.length : 0, median, open, today: (byDay.get(today) ?? 0) + open, week, prevWeek };
+  const open = ps.reduce((n, p) => n + p.openSeconds, 0);
+  let byDay: Map<number, number> | undefined;
+  if (views.dayTime === 'on') byDay = sumByDay(ps.map(p => p.daySeconds));
+  else if (fallback) byDay = new Map(fallback.map(d => [d.day, Number(d.playSeconds)]));
+  if (byDay) byDay.set(today, (byDay.get(today) ?? 0) + open);
+  const span = (from: number, to: number) => { let n = 0; for (let d = from; d <= to; d++) n += byDay?.get(d) ?? 0; return n; };
+  return { total, players: played.length, average: played.length ? total / played.length : 0, median, byDay, today: span(today, today), week: span(today - 6, today), prevWeek: span(today - 13, today - 7) };
 }
 
-/** A figure on the dashboard: label, value, a note under it, and optionally the change from the period before. */
-function tile(label: string, value: number | bigint | string, note = '', opts: { hero?: boolean; valueClass?: string; delta?: [number, number, string] } = {}) {
-  const d = opts.delta && change(opts.delta[0], opts.delta[1]);
-  const delta = d ? `<em class="delta ${d.dir}" title="${esc(`${num(opts.delta![0])} vs ${num(opts.delta![1])} ${opts.delta![2]}`)}">${d.text}</em> ${opts.delta![2]}` : '';
-  return `<div class="tile${opts.hero ? ' hero' : ''}"><small>${label}</small><b${opts.valueClass ? ` class="${opts.valueClass}"` : ''}>${typeof value === 'string' ? value : num(value)}</b>${note || delta ? `<span>${[note, delta].filter(Boolean).join(' · ')}</span>` : ''}</div>`;
+/** One group's figure in a tile: the value, a line under it, a change from the period before (`delta`: now, before). */
+type Fig = { v: string; sub?: string; cls?: string; title?: string; delta?: [number, number] } | undefined;
+
+/** A figure for All, Phone and Computer side by side (`figs` in GROUPS order); the note under them is shared. */
+function tile(label: string, figs: Fig[], note = '', hero = false) {
+  const cols = GROUPS.map((g, i) => {
+    const f = figs[i], d = f?.delta && change(f.delta[0], f.delta[1]);
+    const delta = d ? `<em class="delta ${d.dir}" title="${esc(`${num(f!.delta![0])} vs ${num(f!.delta![1])}`)}">${d.text}</em>` : '';
+    return `<div class="col ${g.id}"><i>${g.label}</i><b${f?.cls ? ` class="${f.cls}"` : ''}${f?.title ? ` title="${esc(f.title)}"` : ''}>${f ? f.v : '—'}</b>${delta || f?.sub ? `<span>${[delta, f?.sub ?? ''].filter(Boolean).join(' ')}</span>` : ''}</div>`;
+  }).join('');
+  return `<div class="tile${hero ? ' hero' : ''}"><small>${label}</small><div class="cols">${cols}</div>${note ? `<span class="note">${note}</span>` : ''}</div>`;
 }
 
 /** One section of the dashboard: a heading the nav links to, its figures, then its cards. */
@@ -241,26 +274,27 @@ const group = (id: string, title: string, sub: string, tiles: string[], cards: s
     ${tiles.length ? `<div class="tiles">${tiles.join('')}</div>` : ''}${cards}</section>`;
 const card = (title: string, sub: string, content: string, cls = '') => `<section class="card${cls ? ` ${cls}` : ''}"><h3>${title} <small>${sub}</small></h3>${content}</section>`;
 const SECTIONS: [string, string][] = [['now', 'Now'], ['growth', 'Growth'], ['retention', 'Retention'], ['play', 'Play time'], ['connection', 'Connection'], ['players', 'Players']];
+const SIDE_LABEL: Record<Side, string> = { phone: 'Phone', computer: 'Computer' };
+const dateOf = (day: number) => new Date(day * DAY_MS).toISOString().slice(0, 10);
 
 function dashboard() {
   const db = conn!.db;
   const o: Overview | undefined = [...db.adminOverview.iter()][0];
   const players = joinedPlayers();
+  const G = splitBySide(players);
+  /** A figure per group, in GROUPS order. */
+  const per = (f: (ps: Player[], g: GroupId) => Fig) => GROUPS.map(g => f(G[g.id], g.id));
   const rooms = [...db.adminRooms.iter()].sort((a, b) => b.humans - a.humans || a.room - b.room);
-  const days = [...db.adminDaily.iter()].sort((a, b) => a.day - b.day);
-  const dayTimes = [...db.adminDailyTime.iter()];
   const now = Date.now();
   const today = Math.floor(now / DAY_MS);
   const last = (p: Player) => p.lastSeen.toDate().getTime();
-  const count = (f: (p: Player) => boolean) => players.filter(f).length;
-  const play = playTotals(players, dayTimes);
-  const hasDays = dayViews === 'on';
+  const hasDays = views.days === 'on';
+  const sideNote = views.device === 'missing' ? 'Phone and Computer need the device view, which this server lacks' : '';
 
   // Now: who is playing at this moment.
   const nowTiles = [
-    tile('Online now', o?.onlineNow ?? 0, 'players in rooms', { hero: true }),
-    tile('Rooms open', o?.rooms ?? 0, `${num(o?.humansInRooms ?? 0)} human${o?.humansInRooms === 1 ? '' : 's'} in them`),
-    tile('Active 24 h', count(p => last(p) >= now - DAY_MS), 'seen in the last 24 hours'),
+    tile('Online now', per((ps, g) => ({ v: num(g === 'all' ? o?.onlineNow ?? 0 : ps.filter(p => p.playing).length) })), 'players in rooms', true),
+    tile('Active 24 h', per(ps => ({ v: num(ps.filter(p => last(p) >= now - DAY_MS).length) })), 'seen in the last 24 hours'),
   ];
   const roomRows = rooms.map(r => `<tr><td>${r.code ? `<span class="tag">#${esc(r.code)}</span>` : '<span class="tag">public</span>'}</td><td>${esc(titleCase(r.mapId))}</td><td>${esc(titleCase(r.mode))}</td>
     <td>${r.size}v${r.size}</td><td class="num">${r.humans}</td><td class="num">${r.bots}</td><td class="num">${r.round}</td><td><span class="tag${r.phase === 'live' ? ' live' : ''}">${esc(r.phase)}</span></td></tr>`).join('');
@@ -268,67 +302,75 @@ function dashboard() {
     rooms.length ? `<div class="scroll"><table><thead><tr><th>Room</th><th>Map</th><th>Mode</th><th>Size</th><th class="num">Humans</th><th class="num">Bots</th><th class="num">Round</th><th>Phase</th></tr></thead><tbody>${roomRows}</tbody></table></div>` : '<div class="empty">No rooms open: nobody is playing online right now.</div>');
 
   // Growth: new and active players, each against the period before it (UTC days, today included).
-  const new7 = newBetween(players, today - 6, today), new30 = newBetween(players, today - 29, today);
   const growthTiles = [
-    tile('Total players', players.length, 'ever seen'),
-    tile('New today', newBetween(players, today, today), `UTC day · yesterday ${num(newBetween(players, today - 1, today - 1))}`),
-    tile('New 7 d', new7, '', { delta: [new7, newBetween(players, today - 13, today - 7), 'vs prior 7 d'] }),
-    tile('New 30 d', new30, '', { delta: [new30, newBetween(players, today - 59, today - 30), 'vs prior 30 d'] }),
-    hasDays
-      ? tile('Active 7 d', activeBetween(players, today - 6, today), '', { delta: [activeBetween(players, today - 6, today), activeBetween(players, today - 13, today - 7), 'vs prior 7 d'] })
-      : tile('Active 7 d', count(p => last(p) >= now - 7 * DAY_MS)),
+    tile('Total players', per(ps => ({ v: num(ps.length) })), 'ever seen'),
+    tile('New today', per(ps => ({ v: num(newBetween(ps, today, today)), sub: `yesterday ${num(newBetween(ps, today - 1, today - 1))}` })), 'UTC day'),
+    tile('New 7 d', per(ps => { const n = newBetween(ps, today - 6, today); return { v: num(n), delta: [n, newBetween(ps, today - 13, today - 7)] }; }), 'vs the 7 days before'),
+    tile('New 30 d', per(ps => { const n = newBetween(ps, today - 29, today); return { v: num(n), delta: [n, newBetween(ps, today - 59, today - 30)] }; }), 'vs the 30 days before'),
+    tile('Active 7 d', per(ps => {
+      if (!hasDays) return { v: num(ps.filter(p => last(p) >= now - 7 * DAY_MS).length) };
+      const n = activeBetween(ps, today - 6, today);
+      return { v: num(n), delta: [n, activeBetween(ps, today - 13, today - 7)] };
+    }), hasDays ? 'vs the 7 days before' : ''),
   ];
-  const countries = countByCountry(players.map(p => p.tz));
-  const top = countries.slice(0, 10), max = Math.max(1, ...top.map(([, n]) => n));
-  const countryList = top.length ? `<ul class="countries">${top.map(([c, n]) => `<li>${esc(c)}<span>${num(n)} · ${Math.round((n / players.length) * 100)}%</span><div class="bar"><i style="width:${(n / max) * 100}%"></i></div></li>`).join('')}</ul>` : '<div class="empty">No players yet.</div>';
-  const growthCards = `<div class="grid2">${card('New and returning', 'players per UTC day, last 30 days', chart(days))}${card('Where from', 'time zone → country, estimate', countryList)}</div>`;
+  const growthCards = `<div class="grid2">${card('New and returning', 'players active per UTC day, last 30 days', playersChart(today, G))}${card('Where from', 'time zone → country, estimate', countryList(G))}</div>`;
 
   // Retention: who came back (needs the active-days view).
-  const ret = hasDays ? cohorts(players, today) : undefined;
-  const back = hasDays ? cameBack(players, today) : undefined;
-  const retNote = (c: Cell | undefined, what: string) => (dayViews === 'missing' ? 'not on this server yet' : !hasDays ? 'loading…' : c ? `${num(c.back)} of ${num(c.players)} ${what}` : 'no complete day yet');
+  const ret = hasDays ? { phone: cohorts(G.phone, today), computer: cohorts(G.computer, today), all: cohorts(G.all, today) } : undefined;
+  const retFig = (c: Cell | undefined): Fig => (!hasDays ? undefined : { v: fmtRetention(c), sub: c ? `${num(c.back)} of ${num(c.players)}` : 'not yet' });
   const retTiles = [
-    tile('Came back', fmtRetention(back), retNote(back, 'played again on a later day'), { hero: true }),
-    ...([1, 7, 30] as const).map(n => { const c = ret?.overall[RETENTION_DAYS.indexOf(n)]; return tile(`Day ${n}`, fmtRetention(c), retNote(c, `back on day ${n}`)); }),
+    tile('Came back', per(ps => retFig(hasDays ? cameBack(ps, today) : undefined)), 'played again on a later day', true),
+    ...([1, 7, 30] as const).map(n => tile(`Day ${n}`, per((_ps, g) => retFig(ret?.[g].overall[RETENTION_DAYS.indexOf(n)])), `back exactly ${n} day${n === 1 ? '' : 's'} after their first`)),
   ];
+  const retCards = `<div class="grid2 even">${SIDES.map(s => card(`${SIDE_LABEL[s]} cohorts`, 'share of each UTC day\'s new players back exactly N days later', retentionTable(ret?.[s], G[s].length))).join('')}</div>`;
 
   // Play time.
+  const play = { all: playStats(G.all, today, [...db.adminDailyTime.iter()]), phone: playStats(G.phone, today), computer: playStats(G.computer, today) };
+  const perDay = (g: GroupId, v: (s: ReturnType<typeof playStats>) => number, delta?: (s: ReturnType<typeof playStats>) => [number, number]): Fig =>
+    play[g].byDay ? { ...hmFig(v(play[g])), delta: delta?.(play[g]) } : undefined;
   const playTiles = [
-    tile('Total play time', hm(play.total), 'online, all players'),
-    tile('Avg / player', hm(play.average), `median ${hm(play.median)} · ${num(play.players)} played`),
-    tile('Today', hm(play.today), 'UTC day'),
-    tile('7 d', hm(play.week), '', { delta: [Math.round(play.week / 60), Math.round(play.prevWeek / 60), 'vs prior 7 d'] }),
-    tile('Matches played', o?.playerMatches ?? 0, 'player-matches finished'),
+    tile('Total play time', per((_ps, g) => hmFig(play[g].total)), 'online, all time'),
+    tile('Avg / player', per((_ps, g) => ({ ...hmFig(play[g].average), sub: `median ${hm(play[g].median)}` })), 'over players who played online'),
+    tile('Today', per((_ps, g) => perDay(g, s => s.today)), 'UTC day'),
+    tile('7 d', per((_ps, g) => perDay(g, s => s.week, s => [Math.round(s.week / 60), Math.round(s.prevWeek / 60)])), 'vs the 7 days before'),
+    tile('Matches played', per(ps => ({ v: num(ps.reduce((n, p) => n + p.matches, 0)) })), 'player-matches finished'),
   ];
 
   // Connection quality: the typical p50 of the players who reported in the window ("—" without data, or on an older module).
-  const ping24 = medianPing(players, now - DAY_MS), ping7 = medianPing(players, now - 7 * DAY_MS), corr7 = medianCorrections(players, now - 7 * DAY_MS);
-  const netNote = (n: number, what: string) => (netViews === 'missing' ? 'not on this server yet' : `${what} · ${num(n)} player${n === 1 ? '' : 's'}`);
-  const pingTone = (ms?: number) => (ms === undefined ? '' : `ping ${pingClass(ms)}`);
+  const pingFig = (ps: Player[], since: number): Fig => {
+    if (views.net !== 'on') return undefined;
+    const m = medianPing(ps, since);
+    return { v: fmtPing(m.ms), cls: m.ms === undefined ? '' : `ping ${pingClass(m.ms)}`, sub: `${num(m.players)} player${m.players === 1 ? '' : 's'}` };
+  };
   const netTiles = [
-    tile('Median ping 24 h', fmtPing(ping24.ms), netNote(ping24.players, 'typical p50'), { valueClass: pingTone(ping24.ms) }),
-    tile('Median ping 7 d', fmtPing(ping7.ms), netNote(ping7.players, 'typical p50'), { valueClass: pingTone(ping7.ms) }),
-    tile('Corrections / min', fmtRate(corr7.perMin), netNote(corr7.players, 'median, 7 d')),
+    tile('Median ping 24 h', per(ps => pingFig(ps, now - DAY_MS)), 'typical p50'),
+    tile('Median ping 7 d', per(ps => pingFig(ps, now - 7 * DAY_MS)), 'typical p50'),
+    tile('Corrections / min', per(ps => { if (views.net !== 'on') return undefined; const c = medianCorrections(ps, now - 7 * DAY_MS); return { v: fmtRate(c.perMin), sub: `${num(c.players)} player${c.players === 1 ? '' : 's'}` }; }), 'median, 7 d'),
   ];
+
+  const shown = playerGroup === 'all' ? players : G[playerGroup];
+  const chips = `<div class="chips" role="group" aria-label="Show players">${GROUPS.map(g => `<button type="button" class="chip${g.id === playerGroup ? ' on' : ''}" data-group="${g.id}" aria-pressed="${g.id === playerGroup}">${g.label} <span>${num(G[g.id].length)}</span></button>`).join('')}</div>`;
 
   body.innerHTML = `
     <nav class="sections" aria-label="Sections">${SECTIONS.map(([id, label]) => `<a href="#${id}">${label}</a>`).join('')}</nav>
+    ${sideNote ? `<p class="notice">${sideNote}.</p>` : ''}
     ${group('now', 'Now', 'live', nowTiles, roomCard)}
     ${group('growth', 'Growth', 'new and active players', growthTiles, growthCards)}
-    ${group('retention', 'Retention', 'do players come back?', retTiles, card('Cohorts', 'share of each UTC day\'s new players who played again exactly N days later', retentionTable(ret, players.length)))}
-    ${group('play', 'Play time', 'online rooms only', playTiles, card('Per day', 'online play time, all players, last 30 days', `<div class="chart wide">${playChart(dayTimes, play.open)}</div>`))}
+    ${group('retention', 'Retention', 'do players come back?', retTiles, retCards)}
+    ${group('play', 'Play time', 'online rooms only', playTiles, card('Per day', 'online play time, last 30 days', playChart(today, play)))}
     ${group('connection', 'Connection & devices', 'ping, corrections, what players play on', netTiles, `
-      <div class="grid2">${card('Ping', 'median of players\' p50 and p95 per UTC day, last 30 days', pingChart([...db.adminDailyNet.iter()]))}${card('Ping by country', 'median typical p50, time zone → country', countryPing(players))}</div>
+      <div class="grid2">${card('Ping', 'median of players\' p50 per UTC day (tick: p95), last 30 days', pingChart(today, G))}${card('Ping by country', 'median typical p50, time zone → country', countryPing(G))}</div>
       ${card('Devices', 'players by the device they last played on online, last 7 days', devicePanel(players, now))}`)}
-    ${group('players', 'Players', `${num(players.length)} · sorted by ${sortLabel()}`, [], `<section class="card">${playerTable(players)}</section>`)}
-    <footer><p>Updates live. Players are identities that said hello or joined a room; ids are anonymous. Days are UTC days; "prior" compares with the
-      same number of days just before (today counts in both the 7 and 30 days, so early in a UTC day they read low). Career numbers come from <code>profile</code>:
+    ${group('players', 'Players', `${num(shown.length)} · sorted by ${sortLabel()}`, [], `<section class="card">${chips}${playerTable(shown)}</section>`)}
+    <footer><p>Updates live. Players are identities that said hello or joined a room; ids are anonymous. <b>Phone</b> and <b>Computer</b> group players by
+      the device they last played on online (phones and tablets are Phone); players who never reported a device count only in All, and per-day figures
+      use that latest device for every day. Days are UTC days; "the days before" compares with the same number of days just before (today counts in
+      the 7 and 30 days, so early in a UTC day they read low). Career numbers come from <code>profile</code>:
       matches counts finished first-to-10 matches, rounds every round played. Play time is online play time only: time spent in an online room
       (lobby time, Solo and Practice are not counted), credited every minute and on leaving. Retention counts the UTC days each player was seen on this
       server; a player who moved to another server counts as gone. Ping is the round trip of a player's movement reports
       as their browser measured it (typical p50: a mean over their reports, weighted by time in rooms; hover for p95), and corrections are the
       server's rejections of their reported movement, per minute in rooms; both are reported every 2 minutes in a match and on leaving.
-      Device is what the game classified the player's browser as (phone, tablet or computer), reported once per online connection.
       Purple flags on the charts are releases to production (hover for what shipped).</p>
       <button type="button" class="btn revoke" id="revoke">Sign out all admins</button></footer>`;
   body.querySelectorAll<HTMLButtonElement>('th button[data-sort]').forEach(b => b.addEventListener('click', () => {
@@ -336,6 +378,11 @@ function dashboard() {
     if (sortKey === k) sortDir = sortDir === 1 ? -1 : 1; else { sortKey = k; sortDir = k === 'name' || k === 'country' || k === 'tz' || k === 'deviceName' ? 1 : -1; }
     render();
     body.querySelector<HTMLButtonElement>(`th button[data-sort="${k}"]`)?.focus();
+  }));
+  body.querySelectorAll<HTMLButtonElement>('.chip[data-group]').forEach(b => b.addEventListener('click', () => {
+    playerGroup = b.dataset.group as GroupId; playerLimit = 100;
+    render();
+    requestAnimationFrame(() => body.querySelector<HTMLButtonElement>(`.chip[data-group="${playerGroup}"]`)?.focus());
   }));
   body.querySelector('#more')?.addEventListener('click', () => { playerLimit += 200; render(); });
   body.querySelector('#revoke')?.addEventListener('click', () => {
@@ -348,19 +395,19 @@ function dashboard() {
 }
 
 /**
- * The cohort table: the pooled figure over every cohort whose day N is over, then the last 14 UTC
- * days' cohorts, newest first. A cell's shade grows with its rate; a day in progress is in italics.
+ * A side's cohort table: the pooled figure over every cohort whose day N is over, then the last 14
+ * UTC days' cohorts, newest first. A cell's shade grows with its rate; a day in progress is in italics.
  */
 function retentionTable(ret: ReturnType<typeof cohorts> | undefined, everyone: number) {
-  if (!ret) return `<div class="empty">${dayViews === 'missing' ? "— This server's module has no active-days view yet." : 'Loading…'}</div>`;
+  if (!ret) return `<div class="empty">${views.days === 'missing' ? "— This server's module has no active-days view yet." : 'Loading…'}</div>`;
   if (!ret.rows.length && ret.overall.every(c => !c)) return '<div class="empty">No new players in the last 14 days.</div>';
   const cellOf = (c: Cell | undefined, n: number) => !c ? '<td class="num ret none">·</td>'
     : `<td class="num ret${c.open ? ' open' : ''}" style="--r:${Math.sqrt(c.rate).toFixed(3)}" title="${esc(`${num(c.back)} of ${num(c.players)} back on day ${n}${c.open ? ' so far (that day is today)' : ''}`)}">${fmtRetention(c)}</td>`;
-  const head = `<tr><th>First day</th><th class="num">New</th>${RETENTION_DAYS.map(n => `<th class="num">Day ${n}</th>`).join('')}</tr>`;
-  const all = `<tr class="all"><td>All cohorts</td><td class="num">${num(everyone)}</td>${ret.overall.map((c, i) => cellOf(c, RETENTION_DAYS[i])).join('')}</tr>`;
-  const rows = ret.rows.map(r => `<tr><td>${new Date(r.day * DAY_MS).toISOString().slice(0, 10)}</td><td class="num">${num(r.size)}</td>${r.cells.map((c, i) => cellOf(c, RETENTION_DAYS[i])).join('')}</tr>`).join('');
+  const head = `<tr><th>First day</th><th class="num">New</th>${RETENTION_DAYS.map(n => `<th class="num">D${n}</th>`).join('')}</tr>`;
+  const all = `<tr class="all"><td>All</td><td class="num">${num(everyone)}</td>${ret.overall.map((c, i) => cellOf(c, RETENTION_DAYS[i])).join('')}</tr>`;
+  const rows = ret.rows.map(r => `<tr><td>${dateOf(r.day).slice(5)}</td><td class="num">${num(r.size)}</td>${r.cells.map((c, i) => cellOf(c, RETENTION_DAYS[i])).join('')}</tr>`).join('');
   return `<div class="scroll"><table class="cohorts"><thead>${head}</thead><tbody>${all}${rows}</tbody></table></div>
-    <p class="table-note">Day N: played again exactly N UTC days after their first. "All cohorts" pools every day whose day N is over; · not reached yet; <i>italics</i>: today, so far.</p>`;
+    <p class="table-note">D<i>N</i>: played again exactly N UTC days after their first. "All" pools every cohort whose day N is over; · not reached yet; <i>italics</i>: today, so far.</p>`;
 }
 
 const COLUMNS: { key: keyof Player | 'country'; label: string; num?: boolean }[] = [
@@ -409,7 +456,7 @@ function pingCell(p: Player) {
 /** A player's device (Phone, Tablet or Computer); the title has the connections per kind and the latest report. */
 function deviceCell(p: Player) {
   const d = p.device;
-  if (!d || !p.deviceName) return `<td${deviceViews === 'missing' ? ' title="Not on this server yet"' : ''}>—</td>`;
+  if (!d || !p.deviceName) return `<td${views.device === 'missing' ? ' title="Not on this server yet"' : ''}>—</td>`;
   return `<td title="${esc(`connections: ${deviceCounts(d)} · last ${ago(new Date(d.lastAtMs))}`)}">${esc(p.deviceName)}</td>`;
 }
 
@@ -418,7 +465,7 @@ function deviceCell(p: Player) {
  * and all time, one block per kind; loading, an older module (—) or no reports yet otherwise.
  */
 function devicePanel(players: Player[], now: number) {
-  if (deviceViews !== 'on') return `<div class="empty">${deviceViews === 'missing' ? "— This server's module has no device view yet." : 'Loading…'}</div>`;
+  if (views.device !== 'on') return `<div class="empty">${views.device === 'missing' ? "— This server's module has no device view yet." : 'Loading…'}</div>`;
   const since = now - 7 * DAY_MS;
   const week = deviceShare(players, since), ever = deviceShare(players);
   if (!ever.total) return '<div class="empty">No device reports yet.</div>';
@@ -433,13 +480,35 @@ function devicePanel(players: Player[], now: number) {
 }
 
 /** What a connection-quality panel says without data: loading, an older module (—), or nothing reported yet. */
-const netEmpty = (none: string) => `<div class="empty">${netViews === 'missing' ? "— This server's module has no connection-quality views yet." : netViews === 'wait' ? 'Loading…' : none}</div>`;
+const netEmpty = (none: string, view: 'net' | 'dayNet' = 'net') => `<div class="empty">${views[view] === 'missing' ? "— This server's module has no view for this yet." : views[view] === 'wait' ? 'Loading…' : none}</div>`;
 
-/** Median typical ping per country, most players first; the bar is the ping (full at 250 ms), coloured like the table. */
-function countryPing(players: Player[]) {
-  const rows = pingByCountry(players).slice(0, 10);
-  if (netViews !== 'on' || !rows.length) return netEmpty('No ping reports yet.');
-  return `<ul class="countries">${rows.map(r => `<li>${esc(r.country)}<span><b class="ping ${pingClass(r.ms)}">${fmtPing(r.ms)}</b> · ${num(r.players)} player${r.players === 1 ? '' : 's'}</span><div class="bar"><i class="ping-${pingClass(r.ms)}" style="width:${Math.min(100, (r.ms / 250) * 100)}%"></i></div></li>`).join('')}</ul>`;
+/** The top countries (time zone → country) by players: everyone's count, and the bar split into Phone and Computer. */
+function countryList(G: Record<GroupId, Player[]>) {
+  const top = countByCountry(G.all.map(p => p.tz)).slice(0, 10);
+  if (!top.length) return '<div class="empty">No players yet.</div>';
+  const max = Math.max(1, ...top.map(([, n]) => n));
+  const of = (s: Side) => new Map(countByCountry(G[s].map(p => p.tz)));
+  const phone = of('phone'), computer = of('computer');
+  return `<ul class="countries">${top.map(([c, n]) => {
+    const p = phone.get(c) ?? 0, k = computer.get(c) ?? 0;
+    return `<li>${esc(c)}<span>${num(n)} · ${Math.round((n / G.all.length) * 100)}%</span>
+      <div class="bar split" title="${esc(`Phone ${p} · Computer ${k}${n - p - k ? ` · no device ${n - p - k}` : ''}`)}"><i class="g-phone" style="width:${(p / max) * 100}%"></i><i class="g-computer" style="width:${(k / max) * 100}%"></i><i class="g-none" style="width:${((n - p - k) / max) * 100}%"></i></div>
+      <small class="sides"><b class="g-phone">Phone ${num(p)}</b><b class="g-computer">Computer ${num(k)}</b></small></li>`;
+  }).join('')}</ul><div class="legend"><span><i class="g-phone"></i>Phone</span><span><i class="g-computer"></i>Computer</span><span><i class="g-none"></i>No device report</span></div>`;
+}
+
+/** Median typical ping per country for Phone and Computer side by side, countries with the most reporting players first. */
+function countryPing(G: Record<GroupId, Player[]>) {
+  const rows = pingByCountry(G.all).slice(0, 10);
+  if (views.net !== 'on' || !rows.length) return netEmpty('No ping reports yet.');
+  const of = (s: Side) => new Map(pingByCountry(G[s]).map(r => [r.country, r]));
+  const sides = { phone: of('phone'), computer: of('computer') };
+  const cell = (s: Side, country: string) => {
+    const r = sides[s].get(country);
+    return `<b class="g-${s}">${SIDE_LABEL[s]}</b> ${r ? `<span class="ping ${pingClass(r.ms)}" title="${num(r.players)} player${r.players === 1 ? '' : 's'}">${fmtPing(r.ms)}</span>` : '—'}`;
+  };
+  return `<ul class="countries">${rows.map(r => `<li>${esc(r.country)}<span>${num(r.players)} player${r.players === 1 ? '' : 's'}</span>
+    <small class="sides ping-sides">${SIDES.map(s => `<span>${cell(s, r.country)}</span>`).join('')}</small></li>`).join('')}</ul>`;
 }
 
 /**
@@ -457,100 +526,91 @@ function releaseMarks(firstDay: number, columns: number, cx: (i: number) => numb
 }
 /** The legend entry for release flags, when the chart has any. */
 const releaseLegend = (firstDay: number, columns: number) => (releasesByDay(RELEASES, firstDay, firstDay + columns - 1).size ? '<span><i class="release"></i>Release</span>' : '');
+const sideLegend = (extra = '') => `<span><i class="g-phone"></i>Phone</span><span><i class="g-computer"></i>Computer</span>${extra}`;
 
-/** Median p50 per day as bars (coloured like the table) and median p95 as a line; days without reports are gaps. */
-function pingChart(rows: DayNet[]) {
-  const today = Math.floor(Date.now() / DAY_MS);
-  const byDay = new Map(rows.map(r => [r.day, r]));
-  const data = Array.from({ length: 30 }, (_, i) => today - 29 + i).map(d => ({ day: d, row: byDay.get(d) }));
-  if (netViews !== 'on' || !data.some(d => d.row?.players)) return netEmpty('No ping reports in the last 30 days.');
-  const narrow = innerWidth < 600;
-  const W = narrow ? 360 : 600, H = 230, L = 46, R = 8, T = 20, B = 26;
-  const max = Math.max(80, ...data.map(d => (d.row?.players ? d.row.medianP95 : 0)));
-  const step = max <= 200 ? 50 : max <= 500 ? 100 : 250;
-  const top = Math.ceil(max / step) * step;
-  const col = (W - L - R) / data.length, bw = col * 0.7;
-  const y = (v: number) => T + (H - T - B) * (1 - v / top);
-  const cx = (i: number) => L + col * i + col / 2;
-  let svg = `<svg viewBox="0 0 ${W} ${H}" role="img" aria-label="Median ping per day, last 30 days">`;
-  for (let v = 0; v <= top; v += step) svg += `<line class="grid" x1="${L}" x2="${W - R}" y1="${y(v)}" y2="${y(v)}"/><text x="${L - 6}" y="${y(v) + 4}" text-anchor="end">${v}${v ? ' ms' : ''}</text>`;
-  data.forEach((d, i) => {
-    const date = new Date(d.day * DAY_MS).toISOString().slice(0, 10);
-    const r = d.row;
-    if (r?.players) {
-      svg += `<rect class="bar ping-${pingClass(r.medianP50)}" x="${L + col * i + (col - bw) / 2}" y="${y(r.medianP50)}" width="${bw}" height="${Math.max(0, H - B - y(r.medianP50))}"><title>${date}: median p50 ${r.medianP50} ms, p95 ${r.medianP95} ms · ${r.players} player${r.players === 1 ? '' : 's'} · ${fmtRate(r.correctionsPerMin)} corrections/min</title></rect>`;
-    }
-    if (narrow ? i % 7 === 1 : i % 5 === 4 || i === 0) svg += `<text x="${cx(i)}" y="${H - 8}" text-anchor="middle">${date.slice(5)}</text>`;
-  });
-  // The p95 line breaks over days without reports.
-  let run: string[] = [];
-  const flush = () => { if (run.length > 1) svg += `<polyline class="p95" points="${run.join(' ')}"/>`; run = []; };
-  data.forEach((d, i) => { if (d.row?.players) run.push(`${cx(i)},${y(d.row.medianP95)}`); else flush(); });
-  flush();
-  data.forEach((d, i) => { if (d.row?.players) svg += `<circle class="p95dot" cx="${cx(i)}" cy="${y(d.row.medianP95)}" r="2.5"><title>median p95 ${d.row.medianP95} ms</title></circle>`; });
-  svg += releaseMarks(today - 29, 30, cx, T, H - B);
-  return `<div class="legend"><span><i class="ping-good"></i>p50 &lt; 80 ms</span><span><i class="ping-fair"></i>&lt; 160 ms</span><span><i class="ping-poor"></i>slower</span><span><i class="line"></i>p95</span>${releaseLegend(today - 29, 30)}</div><div class="chart">${svg}</svg></div>`;
-}
+/** One side's bar on one day: stacked segments from the bottom (shaded `shades` in order), an optional tick (p95), and its tooltip. */
+interface Bar { stack: number[]; tick?: number; title: string }
 
-/** Active players per day, stacked: returning (seen before that day) under new; quiet days filled in up to today. */
-function chart(rows: Day[]) {
-  const today = Math.floor(Date.now() / DAY_MS);
-  const byDay = new Map(rows.map(r => [r.day, r]));
-  const data = Array.from({ length: 30 }, (_, i) => today - 29 + i).map(d => {
-    const active = byDay.get(d)?.activePlayers ?? 0, fresh = byDay.get(d)?.newPlayers ?? 0;
-    return { day: d, active: Math.max(active, fresh), fresh, returning: Math.max(0, active - fresh) };
-  });
+/**
+ * The last 30 UTC days as grouped bars: Phone and Computer side by side each day, on one scale,
+ * with release flags. `value` gives a side's bar for a day (undefined: no bar).
+ */
+function groupedChart(o: { today: number; aria: string; value: (day: number, side: Side) => Bar | undefined; axis: (v: number) => string; counts?: boolean; minMax?: number; shades?: string[]; legend: string; wide?: boolean }) {
+  const first = o.today - 29;
+  const data = Array.from({ length: 30 }, (_, i) => SIDES.map(s => o.value(first + i, s)));
   // Narrow screens draw a narrower chart, so its labels keep a readable size.
   const narrow = innerWidth < 600;
-  const W = narrow ? 360 : 600, H = 230, L = 34, R = 8, T = 20, B = 26;
-  const max = Math.max(1, ...data.map(d => d.active));
-  const step = max <= 5 ? 1 : Math.ceil(max / 4 / 5) * 5;
-  const top = Math.ceil(max / step) * step;
-  const col = (W - L - R) / data.length, bw = col * 0.7;
+  const W = narrow ? 360 : o.wide ? 1100 : 600, H = narrow || !o.wide ? 230 : 200, L = 46, R = 8, T = 20, B = 26;
+  const max = Math.max(o.minMax ?? 1, ...data.flat().map(b => (b ? Math.max(b.stack.reduce((n, v) => n + v, 0), b.tick ?? 0) : 0)));
+  const step = niceStep(max, o.counts), top = Math.ceil(max / step - 1e-9) * step;
+  const col = (W - L - R) / data.length, bw = (col * 0.84) / 2;
   const y = (v: number) => T + (H - T - B) * (1 - v / top);
   const cx = (i: number) => L + col * i + col / 2;
-  let svg = `<svg viewBox="0 0 ${W} ${H}" role="img" aria-label="Returning and new players per day, last 30 days">`;
-  for (let v = 0; v <= top; v += step) svg += `<line class="grid" x1="${L}" x2="${W - R}" y1="${y(v)}" y2="${y(v)}"/><text x="${L - 6}" y="${y(v) + 4}" text-anchor="end">${v}</text>`;
-  data.forEach((d, i) => {
-    const date = new Date(d.day * DAY_MS).toISOString().slice(0, 10);
-    const x = L + col * i + (col - bw) / 2;
-    svg += `<g class="day"><rect class="bar" x="${x}" y="${y(d.returning)}" width="${bw}" height="${Math.max(0, H - B - y(d.returning))}"/>`
-      + `<rect class="bar fresh" x="${x}" y="${y(d.active)}" width="${bw}" height="${Math.max(0, y(d.returning) - y(d.active))}"/>`
-      + `<title>${date}: ${d.active} active · ${d.returning} returning, ${d.fresh} new</title></g>`;
+  const shades = o.shades ?? ['s0', 's1'];
+  let svg = `<svg viewBox="0 0 ${W} ${H}" role="img" aria-label="${esc(o.aria)}">`;
+  for (let v = 0; v <= top + 1e-9; v += step) svg += `<line class="grid" x1="${L}" x2="${W - R}" y1="${y(v)}" y2="${y(v)}"/><text x="${L - 6}" y="${y(v) + 4}" text-anchor="end">${o.axis(v)}</text>`;
+  data.forEach((bars, i) => {
+    bars.forEach((b, j) => {
+      if (!b) return;
+      const x = L + col * i + col * 0.08 + j * bw, side = SIDES[j];
+      let base = 0, g = `<g class="day g-${side}">`;
+      b.stack.forEach((v, k) => { g += `<rect class="bar ${shades[k] ?? 's1'}" x="${x}" y="${y(base + v)}" width="${bw}" height="${Math.max(0, y(base) - y(base + v))}"/>`; base += v; });
+      if (b.tick !== undefined) g += `<line class="tick" x1="${x - 1}" x2="${x + bw + 1}" y1="${y(b.tick)}" y2="${y(b.tick)}"/>`;
+      svg += `${g}<title>${esc(b.title)}</title></g>`;
+    });
+    const date = dateOf(first + i);
     if (narrow ? i % 7 === 1 : i % 5 === 4 || i === 0) svg += `<text x="${cx(i)}" y="${H - 8}" text-anchor="middle">${date.slice(5)}</text>`;
   });
-  svg += releaseMarks(today - 29, 30, cx, T, H - B);
-  return `<div class="legend"><span><i style="background:var(--accent-dim)"></i>Returning</span><span><i class="fresh"></i>New</span>${releaseLegend(today - 29, 30)}</div><div class="chart">${svg}</svg></div>`;
+  svg += releaseMarks(first, 30, cx, T, H - B);
+  return `<div class="legend">${o.legend}${releaseLegend(first, 30)}</div><div class="chart">${svg}</svg></div>`;
 }
 
-/** Online play time per day (bars, minutes or hours); today includes the sessions in progress (`open` seconds). */
-function playChart(rows: DayTime[], open: number) {
-  const today = Math.floor(Date.now() / DAY_MS);
-  const byDay = new Map(rows.map(r => [r.day, Number(r.playSeconds)]));
-  const data = Array.from({ length: 30 }, (_, i) => today - 29 + i).map(d => ({ day: d, seconds: (byDay.get(d) ?? 0) + (d === today ? open : 0) }));
-  const total = data.reduce((n, d) => n + d.seconds, 0);
-  if (!total) return '<div class="empty">No online play time in the last 30 days.</div>';
-  const narrow = innerWidth < 600;
-  const W = narrow ? 360 : 1100, H = narrow ? 210 : 190, L = 38, R = 8, T = 20, B = 26;
-  const maxSeconds = Math.max(...data.map(d => d.seconds));
-  // Hours once a day reaches two hours, minutes below that.
-  const unit = maxSeconds >= 7200 ? 3600 : 60, suffix = unit === 3600 ? 'h' : 'm';
-  const max = Math.max(1, maxSeconds / unit);
-  const step = max <= 5 ? 1 : max <= 10 ? 2 : Math.ceil(max / 4 / 5) * 5;
-  const top = Math.ceil(max / step) * step;
-  const col = (W - L - R) / data.length, bw = col * 0.7;
-  const y = (v: number) => T + (H - T - B) * (1 - v / top);
-  let svg = `<svg viewBox="0 0 ${W} ${H}" role="img" aria-label="Online play time per day, last 30 days: ${formatPlayTime(total)} in all">`;
-  for (let v = 0; v <= top; v += step) svg += `<line class="grid" x1="${L}" x2="${W - R}" y1="${y(v)}" y2="${y(v)}"/><text x="${L - 6}" y="${y(v) + 4}" text-anchor="end">${v}${v ? suffix : ''}</text>`;
-  data.forEach((d, i) => {
-    const date = new Date(d.day * DAY_MS).toISOString().slice(0, 10);
-    const v = d.seconds / unit;
-    svg += `<rect class="bar play" x="${L + col * i + (col - bw) / 2}" y="${y(v)}" width="${bw}" height="${Math.max(0, H - B - y(v))}"><title>${date}: ${hm(d.seconds)}${d.day === today && open ? ' (incl. sessions in progress)' : ''}</title></rect>`;
-    if (narrow ? i % 7 === 1 : i % 5 === 4 || i === 0) svg += `<text x="${L + col * i + col / 2}" y="${H - 8}" text-anchor="middle">${date.slice(5)}</text>`;
+/** Players active per day for each side: returning (seen before that day) under new. */
+function playersChart(today: number, G: Record<GroupId, Player[]>) {
+  if (views.days !== 'on') return `<div class="empty">${views.days === 'missing' ? "— This server's module has no active-days view yet." : 'Loading…'}</div>`;
+  const by = { phone: activeByDay(G.phone, today - 29, today), computer: activeByDay(G.computer, today - 29, today) };
+  return groupedChart({
+    today, aria: 'Returning and new players per day, Phone and Computer, last 30 days', counts: true,
+    value: (day, s) => {
+      const r = by[s].get(day);
+      return r && r.active ? { stack: [r.active - r.fresh, r.fresh], title: `${dateOf(day)} · ${SIDE_LABEL[s]}: ${r.active} active (${r.active - r.fresh} returning, ${r.fresh} new)` } : undefined;
+    },
+    axis: v => String(v), legend: sideLegend('<span class="hint">dim: returning · bright: new</span>'),
   });
-  svg += releaseMarks(today - 29, 30, i => L + col * i + col / 2, T, H - B);
-  const legend = releaseLegend(today - 29, 30);
-  return `${legend ? `<div class="legend">${legend}</div>` : ''}${svg}</svg>`;
+}
+
+/** Online play time per day for each side (hours, or minutes when no day reaches two); today includes sessions in progress. */
+function playChart(today: number, play: Record<GroupId, ReturnType<typeof playStats>>) {
+  if (views.dayTime !== 'on') return `<div class="empty">${views.dayTime === 'missing' ? "— This server's module has no per-player play-time view yet." : 'Loading…'}</div>`;
+  let maxSeconds = 0;
+  for (const s of SIDES) for (let d = today - 29; d <= today; d++) maxSeconds = Math.max(maxSeconds, play[s].byDay?.get(d) ?? 0);
+  if (!maxSeconds) return '<div class="empty">No online play time in the last 30 days.</div>';
+  const unit = maxSeconds >= 7200 ? 3600 : 60, suffix = unit === 3600 ? 'h' : 'm';
+  return groupedChart({
+    today, aria: 'Online play time per day, Phone and Computer, last 30 days', wide: true, shades: ['mid'],
+    value: (day, s) => {
+      const sec = play[s].byDay?.get(day) ?? 0;
+      return sec ? { stack: [sec / unit], title: `${dateOf(day)} · ${SIDE_LABEL[s]}: ${hm(sec)}${day === today ? ' (incl. sessions in progress)' : ''}` } : undefined;
+    },
+    axis: v => (v ? `${Math.round(v * 10) / 10}${suffix}` : '0'), legend: sideLegend(),
+  });
+}
+
+/** Median p50 per day for each side (bars, a tick at the median p95); days without reports are gaps. */
+function pingChart(today: number, G: Record<GroupId, Player[]>) {
+  if (views.dayNet !== 'on') return netEmpty('', 'dayNet');
+  const by = { phone: pingByDay(G.phone.map(p => p.dayNet)), computer: pingByDay(G.computer.map(p => p.dayNet)) };
+  let any = false;
+  for (const s of SIDES) for (const d of by[s].keys()) if (d > today - 30) any = true;
+  if (!any) return netEmpty('No ping reports in the last 30 days.', 'dayNet');
+  return groupedChart({
+    today, aria: 'Median ping per day, Phone and Computer, last 30 days', minMax: 80, shades: ['mid'],
+    value: (day, s) => {
+      const r = by[s].get(day);
+      return r ? { stack: [r.p50], tick: r.p95, title: `${dateOf(day)} · ${SIDE_LABEL[s]}: median p50 ${r.p50} ms, p95 ${r.p95} ms · ${r.players} player${r.players === 1 ? '' : 's'} · ${fmtRate(r.correctionsPerMin)} corrections/min` } : undefined;
+    },
+    axis: v => (v ? `${v} ms` : '0'), legend: sideLegend('<span><i class="line"></i>p95</span>'),
+  });
 }
 
 // ---- Wiring ------------------------------------------------------------------------------
@@ -639,29 +699,19 @@ function adminLink(s: AdminServer, lost: () => void): WakeLink {
       if (stopped) { cc.disconnect(); return; }
       store.set(key, token);
       for (const t of [
-        cc.db.adminStatus, cc.db.adminOverview, cc.db.adminRooms, cc.db.adminPlayers, cc.db.adminDaily, cc.db.adminPlayerTime, cc.db.adminDailyTime, cc.db.adminPlayerNet, cc.db.adminDailyNet,
-        cc.db.adminPlayerDevice, cc.db.adminPlayerDay,
+        cc.db.adminStatus, cc.db.adminOverview, cc.db.adminRooms, cc.db.adminPlayers, cc.db.adminPlayerTime, cc.db.adminDailyTime, cc.db.adminPlayerNet,
+        cc.db.adminPlayerDevice, cc.db.adminPlayerDay, cc.db.adminPlayerDayTime, cc.db.adminPlayerDayNet,
       ]) {
         t.onInsert(render); t.onDelete(render);
       }
-      // Connection quality on its own subscription: a server whose module predates these views refuses it, and the page shows "—".
-      netViews = 'wait';
-      cc.subscriptionBuilder()
-        .onApplied(() => { if (!stopped) { netViews = 'on'; render(); } })
-        .onError(() => { if (!stopped) { netViews = 'missing'; render(); } })
-        .subscribe(['SELECT * FROM admin_player_net', 'SELECT * FROM admin_daily_net']);
-      // Devices too: a module without `admin_player_device` refuses only this subscription.
-      deviceViews = 'wait';
-      cc.subscriptionBuilder()
-        .onApplied(() => { if (!stopped) { deviceViews = 'on'; render(); } })
-        .onError(() => { if (!stopped) { deviceViews = 'missing'; render(); } })
-        .subscribe(['SELECT * FROM admin_player_device']);
-      // Active days (retention) too: a module without `admin_player_day` refuses only this subscription.
-      dayViews = 'wait';
-      cc.subscriptionBuilder()
-        .onApplied(() => { if (!stopped) { dayViews = 'on'; render(); } })
-        .onError(() => { if (!stopped) { dayViews = 'missing'; render(); } })
-        .subscribe(['SELECT * FROM admin_player_day']);
+      // The newer views on their own subscriptions (see OPTIONAL).
+      views = freshViews();
+      for (const [name, queries] of Object.entries(OPTIONAL) as [keyof typeof OPTIONAL, string[]][]) {
+        cc.subscriptionBuilder()
+          .onApplied(() => { if (!stopped) { views[name] = 'on'; render(); } })
+          .onError(() => { if (!stopped) { views[name] = 'missing'; render(); } })
+          .subscribe(queries);
+      }
       cc.subscriptionBuilder()
         .onApplied(() => { if (stopped) return; isLive = true; conn = cc; message = ''; settle.resolve(); render(); })
         .onError(() => {
@@ -669,7 +719,7 @@ function adminLink(s: AdminServer, lost: () => void): WakeLink {
           isLive = true; messageError = true; message = 'This database has no admin views yet (publish the module first).';
           settle.resolve(); render();
         })
-        .subscribe(['SELECT * FROM admin_status', 'SELECT * FROM admin_overview', 'SELECT * FROM admin_rooms', 'SELECT * FROM admin_players', 'SELECT * FROM admin_daily',
+        .subscribe(['SELECT * FROM admin_status', 'SELECT * FROM admin_overview', 'SELECT * FROM admin_rooms', 'SELECT * FROM admin_players',
           'SELECT * FROM admin_player_time', 'SELECT * FROM admin_daily_time']);
     })
     // A socket that fails before the handshake reports an error and then a close: `end` keeps the first.
@@ -693,7 +743,7 @@ let driver = makeDriver();
 function switchServer(next: AdminServer) {
   if (next.id === server.id) return;
   driver.stop();
-  conn = undefined; loggingIn = false; message = ''; messageError = true; playerLimit = 100; netViews = 'wait'; deviceViews = 'wait'; dayViews = 'wait';
+  conn = undefined; loggingIn = false; message = ''; messageError = true; playerLimit = 100; views = freshViews();
   server = next;
   rememberServer(server, storage);
   renderServer();

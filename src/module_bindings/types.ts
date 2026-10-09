@@ -76,11 +76,34 @@ export type AdminOverviewRow = __Infer<typeof AdminOverviewRow>;
 export const AdminPlayerDay = __t.object("AdminPlayerDay", {});
 export type AdminPlayerDay = __Infer<typeof AdminPlayerDay>;
 
+export const AdminPlayerDayNet = __t.object("AdminPlayerDayNet", {});
+export type AdminPlayerDayNet = __Infer<typeof AdminPlayerDayNet>;
+
+export const AdminPlayerDayNetRow = __t.object("AdminPlayerDayNetRow", {
+  id: __t.string(),
+  day: __t.u32(),
+  p50: __t.u16(),
+  p95: __t.u16(),
+  seconds: __t.u32(),
+  corrections: __t.u32(),
+});
+export type AdminPlayerDayNetRow = __Infer<typeof AdminPlayerDayNetRow>;
+
 export const AdminPlayerDayRow = __t.object("AdminPlayerDayRow", {
   id: __t.string(),
   day: __t.u32(),
 });
 export type AdminPlayerDayRow = __Infer<typeof AdminPlayerDayRow>;
+
+export const AdminPlayerDayTime = __t.object("AdminPlayerDayTime", {});
+export type AdminPlayerDayTime = __Infer<typeof AdminPlayerDayTime>;
+
+export const AdminPlayerDayTimeRow = __t.object("AdminPlayerDayTimeRow", {
+  id: __t.string(),
+  day: __t.u32(),
+  seconds: __t.u32(),
+});
+export type AdminPlayerDayTimeRow = __Infer<typeof AdminPlayerDayTimeRow>;
 
 export const AdminPlayerDevice = __t.object("AdminPlayerDevice", {});
 export type AdminPlayerDevice = __Infer<typeof AdminPlayerDevice>;
