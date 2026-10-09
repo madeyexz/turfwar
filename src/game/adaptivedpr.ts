@@ -9,16 +9,23 @@
  * so a device on the edge does not flicker between two sizes. A step that turns counts and is
  * still taken. With `remember`, a size that once ran slow is never tried again this session: a phone
  * at 57 fps steps down, reaches 60 and stays there instead of climbing back into the size that dropped.
+ * With `lateShare`, a window in which more than that share of frames was late (`LATE_FRAME_MS`) steps
+ * down even when its average is fine, and a step up also needs the late share at or under it.
  */
-export interface AdaptiveDprOptions { min: number; max: number; step: number; slow: number; fast: number; delay: number; window: number; sample: number; maxTurns: number; remember?: boolean }
+export interface AdaptiveDprOptions { min: number; max: number; step: number; slow: number; fast: number; delay: number; window: number; sample: number; maxTurns: number; remember?: boolean; lateShare?: number }
+
+/** A late frame: slower than a 60 Hz frame with 1.5 ms of scheduling slack (the benchmark's measure too). */
+export const LATE_FRAME_MS = 1000 / 60 + 1.5;
 
 export const ADAPTIVE_DPR: AdaptiveDprOptions = { min: 0.6, max: 1, step: 0.1, slow: 30, fast: 60, delay: 2, window: 4, sample: 0.5, maxTurns: 4 };
 
 /**
  * Phones (the low preset): aim for a steady 60. An iPhone measured 57 fps on average with a fifth of
  * its frames late at full size (GPU-bound, CPU at 4 ms), which Messenger's 30 fps floor never acts on.
+ * Another averaged 58.4 fps with 13% of its frames late: every window averaged 58 or more, so only
+ * the late share (over 5%) catches it.
  */
-export const PHONE_ADAPTIVE_DPR: Partial<AdaptiveDprOptions> = { slow: 58, remember: true };
+export const PHONE_ADAPTIVE_DPR: Partial<AdaptiveDprOptions> = { slow: 58, remember: true, lateShare: 0.05 };
 
 /** Sums of frame times drift: a window of exactly 4 s ends on its last frame. */
 const EPS = 1e-6;
@@ -33,6 +40,8 @@ export class AdaptiveDpr {
   private sliceFrames = 0;
   private samples: number[] = [];
   private windowTime = 0;
+  private windowFrames = 0;
+  private windowLate = 0;
   private direction = 0;
   private turns = 0;
   private wasActive = false;
@@ -61,13 +70,15 @@ export class AdaptiveDpr {
       this.samples.push(this.sliceFrames / this.sliceTime);
       this.sliceTime = 0; this.sliceFrames = 0;
     }
-    this.windowTime += dt;
+    this.windowTime += dt; this.windowFrames++;
+    if (dt * 1000 > LATE_FRAME_MS) this.windowLate++;
     if (this.windowTime < this.o.window - EPS || !this.samples.length) return false;
     const fps = this.samples.reduce((a, b) => a + b, 0) / this.samples.length;
-    this.samples = []; this.windowTime = 0;
+    const late = this.o.lateShare === undefined ? false : this.windowLate / this.windowFrames > this.o.lateShare;
+    this.samples = []; this.windowTime = 0; this.windowFrames = 0; this.windowLate = 0;
     // Rounded: a vsynced 60 Hz screen averages 59.9, which is 60.
     const rounded = Math.round(fps);
-    const want = rounded < this.o.slow ? -1 : rounded >= this.o.fast ? 1 : 0;
+    const want = rounded < this.o.slow || late ? -1 : rounded >= this.o.fast ? 1 : 0;
     if (!want) return false;
     const next = Math.round(Math.min(this.ceiling, Math.max(this.o.min, this.multiplier + want * this.o.step)) * 1000) / 1000;
     if (next === this.multiplier) return false;
@@ -80,7 +91,7 @@ export class AdaptiveDpr {
 
   private reset() {
     this.wait = this.o.delay;
-    this.sliceTime = 0; this.sliceFrames = 0; this.samples = []; this.windowTime = 0;
+    this.sliceTime = 0; this.sliceFrames = 0; this.samples = []; this.windowTime = 0; this.windowFrames = 0; this.windowLate = 0;
   }
 }
 

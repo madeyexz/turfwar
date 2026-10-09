@@ -9,6 +9,19 @@ function run(a: AdaptiveDpr, fps: number, seconds: number, active = true) {
 }
 /** The first active frame and the 2 s grace after it. */
 const start = (a: AdaptiveDpr, fps: number) => run(a, fps, 2 + 1 / fps);
+/**
+ * Run `seconds` of a GPU-bound phone: 13 frames in every 100 take 22 ms (late), the rest 16.2 ms,
+ * so the frame rate averages about 59 fps. Returns how many times the multiplier changed.
+ */
+function runStutter(a: AdaptiveDpr, seconds: number) {
+  let changes = 0;
+  for (let i = 0, t = 0; t < seconds; i++) {
+    const dt = (i * 13) % 100 < 13 ? 0.022 : 0.0162;
+    t += dt;
+    if (a.frame(dt, true)) changes++;
+  }
+  return changes;
+}
 
 describe('AdaptiveDpr', () => {
   it('starts at full size and waits 2 s before judging', () => {
@@ -128,6 +141,29 @@ describe('basePixelRatio', () => {
     expect(a.multiplier).toBe(0.7);
     run(a, 60, 60);     // smooth again: nothing above 0.7 is proven, so it stays
     expect(a.multiplier).toBe(0.7);
+  });
+
+  it('on phones, 13% late frames step down once even at a 59 fps average, then hold at 60', () => {
+    const a = new AdaptiveDpr(PHONE_ADAPTIVE_DPR);
+    start(a, 60);
+    expect(runStutter(a, 4)).toBe(1);
+    expect(a.multiplier).toBe(0.9);
+    // Clean at the smaller size: it stays there (the full size ran late).
+    expect(run(a, 60, 60)).toBe(0);
+    expect(a.multiplier).toBe(0.9);
+  });
+
+  it('on phones, a clean vsynced 59.9 fps with no late frames never steps', () => {
+    const a = new AdaptiveDpr(PHONE_ADAPTIVE_DPR);
+    expect(start(a, 59.9) + run(a, 59.9, 60)).toBe(0);
+    expect(a.multiplier).toBe(1);
+  });
+
+  it('desktops ignore late frames: the same 13%-late pattern does not step', () => {
+    const a = new AdaptiveDpr();
+    start(a, 60);
+    expect(runStutter(a, 40)).toBe(0);
+    expect(a.multiplier).toBe(1);
   });
 
   it('desktops keep the 30 fps floor: 57 fps is fine', () => {

@@ -5,6 +5,7 @@ import { HEALTH } from '../../shared/weapons';
 import type { Renderer } from '../render/renderer';
 import type { Game } from './game';
 import type { Key } from '../ui/i18n';
+import { LATE_FRAME_MS } from './adaptivedpr';
 
 export const BENCH_WARMUP = 4;
 export const BENCH_SECONDS = 30;
@@ -191,7 +192,7 @@ export class Bench {
       p95Ms: round(p95, 2),
       p99Ms: round(at(sorted, 0.99), 2),
       maxMs: round(sorted[n - 1], 2),
-      slowFrames: round(this.frames.filter(f => f > 1000 / 60 + 1.5).length / n * 100),
+      slowFrames: round(this.frames.filter(f => f > LATE_FRAME_MS).length / n * 100),
       cpuMedianMs: round(at(cpu, 0.5), 2),
       cpuP95Ms: round(at(cpu, 0.95), 2),
       drawCalls: Math.round(this.calls / n),
@@ -199,7 +200,7 @@ export class Bench {
       shaderCompiles: (this.renderer.renderer.info.programs?.length ?? 0) - this.programs,
       hitchCount: this.hitches.length,
       hitches: this.hitches.slice(0, 12),
-      meets60: avgFps >= 58 && p95 <= 1000 / 60 + 1.5,
+      meets60: avgFps >= 58 && p95 <= LATE_FRAME_MS,
     };
     const input = this.game.input;
     input.driven = false; input.clear();
