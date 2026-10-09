@@ -274,3 +274,22 @@ export function playerDayNetRows(rows: Iterable<DayNetLike>): PlayerDayNetRow[] 
   }
   return out;
 }
+
+/** A `player_hour` row (identity hex): activity, play time and connection reports in one hour. */
+export interface HourLike { identity: string; hour: number; seconds: number; netSeconds: number; p50Sum: number; p95Sum: number; corrections: number }
+/** Matches `PlayerRow.id`: a player's hour (hours since the epoch) with play time, mean p50 and p95 (0 without reports), seconds measured, corrections. */
+export interface PlayerHourRow { id: string; hour: number; seconds: number; p50: number; p95: number; netSeconds: number; corrections: number }
+
+/** One row per player per active hour, by the same short id as `playerRows`. */
+export function playerHourRows(rows: Iterable<HourLike>): PlayerHourRow[] {
+  const idOf = shortIds();
+  const out: PlayerHourRow[] = [];
+  for (const r of rows) {
+    const measured = r.netSeconds > 0;
+    out.push({
+      id: idOf(r.identity), hour: r.hour, seconds: r.seconds, p50: measured ? Math.round(r.p50Sum / r.netSeconds) : 0, p95: measured ? Math.round(r.p95Sum / r.netSeconds) : 0,
+      netSeconds: r.netSeconds, corrections: r.corrections,
+    });
+  }
+  return out;
+}
