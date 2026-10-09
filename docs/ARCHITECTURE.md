@@ -175,7 +175,7 @@ shared/        Pure TypeScript shared by browser, tests and the SpacetimeDB modu
                  Timbertown) and eight originals (Cinder, Frostline, Verdant, Ochre, Citadel,
                  Railyard, Skyline, Meridian), plus Taipei and Taipei 101 · Xinyi (taipei-data.ts and
                  xinyi-data.ts, generated from 臺北狂飆), Taipei 101 · 88F (taipei101.ts)
-                 and Memorial Hall (memorial*.ts),
+                 Memorial Hall (memorial*.ts) and Sanchong (sanchong*.ts),
                  with ladders, bomb sites and ammo crates
   match/         State, rounds and bomb, combat validation, economy, bots, navigation, packed frame
 src/           Browser client: lobby, game loop, prediction, rendering, view model, soldiers, HUD, store, audio, net

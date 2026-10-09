@@ -32,7 +32,7 @@ describe('taipei: the compact Ximending', () => {
     const lines = longSightlines(world, nav, 60, onRing, 1);
     const show = lines.slice(0, 5).map(l => `${l.length.toFixed(1)} m: ${[l.a[0] + OX, l.a[1], l.a[2] + OZ].map(v => v.toFixed(1))} -> ${[l.b[0] + OX, l.b[1], l.b[2] + OZ].map(v => v.toFixed(1))}`);
     expect(show).toEqual([]);
-  });
+  }, 30_000); // every nav pair: seconds of work, slower while other tests run
 
   it('screens both bases: no line over 60 m reaches into them, not even from the ring road', () => {
     const { world } = loadMap('taipei'); const nav = loadNav('taipei');

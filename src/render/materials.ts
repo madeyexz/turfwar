@@ -103,6 +103,15 @@ export const THEMES: Record<ThemeId, Theme> = {
     sunColor: new THREE.Color(0xffd4a4), sunIntensity: 3.0, hemiSky: new THREE.Color(0xc4d4ec), hemiGround: new THREE.Color(0x9a8a72), hemiIntensity: 1.6,
     planet: null, exposure: 1.0, urban: true,
   },
+  // Sanchong (三重) late in the afternoon: a hazy amber sun low over the walk-ups, warm light down
+  // the lanes, a soft blue-grey sky; asphalt streets with tiled sidewalks along every wall.
+  sanchong: {
+    id: 'sanchong', ground: 'asphalt', rock: 'concrete', dirt: 'sidewalk',
+    groundTint: new THREE.Color(1.25, 1.22, 1.18), rockTint: new THREE.Color(0.85, 0.84, 0.8), dirtTint: new THREE.Color(1.55, 1.48, 1.4),
+    skyTop: new THREE.Color(0x4a6c9c), skyHorizon: new THREE.Color(0xf0b47e), fog: new THREE.Color(0xc8a88c), fogDensity: 0.0032,
+    sunColor: new THREE.Color(0xffc68e), sunIntensity: 3.0, hemiSky: new THREE.Color(0xb8c4dc), hemiGround: new THREE.Color(0x8a7a68), hemiIntensity: 1.55,
+    planet: null, exposure: 1.0, urban: true,
+  },
 };
 
 /**

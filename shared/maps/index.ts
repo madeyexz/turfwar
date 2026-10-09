@@ -15,14 +15,15 @@ import { taipei } from './taipei';
 import { taipei101 } from './taipei101';
 import { xinyi } from './xinyi';
 import { memorialHall } from './memorial';
+import { sanchong } from './sanchong';
 import { timbertown } from './timbertown';
 import { tower } from './tower';
 import { verdantDivide } from './verdant';
 import { warehouse } from './warehouse';
 import type { MapDef } from './types';
 
-/** BeGone's six maps first (in their release order), then the original battlefields, then Taipei's Ximending and Xinyi (from 臺北狂飆), then the office floor high up Taipei 101, then Memorial Hall (中正紀念堂). */
-export const MAP_IDS = ['crane', 'tower', 'warehouse', 'pipeline', 'courtyard', 'timbertown', 'cinder', 'frostline', 'verdant', 'ochre', 'citadel', 'railyard', 'skyline', 'meridian', 'taipei', 'xinyi', 'taipei101', 'memorial'] as const;
+/** BeGone's six maps first (in their release order), then the original battlefields, then Taipei's Ximending and Xinyi (from 臺北狂飆), then the office floor high up Taipei 101, then Memorial Hall (中正紀念堂), then Sanchong (三重) across the river. */
+export const MAP_IDS = ['crane', 'tower', 'warehouse', 'pipeline', 'courtyard', 'timbertown', 'cinder', 'frostline', 'verdant', 'ochre', 'citadel', 'railyard', 'skyline', 'meridian', 'taipei', 'xinyi', 'taipei101', 'memorial', 'sanchong'] as const;
 export type MapId = (typeof MAP_IDS)[number];
 /**
  * Retired maps (soft delete): still defined and loadable (`?map=`, rooms already on them, tests),
@@ -34,7 +35,7 @@ export const PLAYABLE_MAP_IDS: readonly MapId[] = MAP_IDS.filter(id => !RETIRED_
 const factories: Record<string, () => MapDef> = {
   cinder: cinderBasin, frostline: frostlineReach, verdant: verdantDivide, ochre: ochreQuarter, citadel: citadelKeep, railyard, skyline: skylineRooftops, meridian: meridianDistrict,
   crane, tower, warehouse, pipeline, courtyard, timbertown, taipei, xinyi, taipei101,
-  memorial: memorialHall,
+  memorial: memorialHall, sanchong,
 };
 
 export interface LoadedMap { def: MapDef; world: CollisionWorld; nav?: NavGraph }

@@ -53,8 +53,9 @@ browser shooter *BeGone*. It runs on TypeScript and Three.js in the browser and 
 
 - **Two modes:** *Elimination* and *Sabotage* (Militia arms the bomb at site A or B; SWAT defends or
   disarms). First to 10 rounds, one life per round, a 4 s freeze and 20 s of buy time.
-- **Twelve maps:** Ximending (西門町), Taipei 101 · Xinyi, Taipei 101 · 88F with its tuned mass damper,
-  Memorial Hall (中正紀念堂), homages to BeGone's maps and original battlefields — see [Maps](docs/GAMEPLAY.md#maps).
+- **Thirteen maps:** Ximending (西門町), Taipei 101 · Xinyi, Taipei 101 · 88F with its tuned mass damper,
+  Memorial Hall (中正紀念堂), Sanchong (三重) across the river, homages to BeGone's maps and original
+  battlefields — see [Maps](docs/GAMEPLAY.md#maps).
 - **Vehicles:** cars and taxis with handbrake drifts, scooters you can shoot from, and a helicopter.
 - **Economy:** cash for kills, headshots, assists and objectives; five primaries, two secondaries,
   grenades, and optics, suppressors, lasers and more ([weapons](docs/GAMEPLAY.md#weapons)).
@@ -128,7 +129,7 @@ bun run typecheck:module # the SpacetimeDB server module
 
 ```text
 shared/          Simulation shared by the browser and the server: movement, collision,
-  maps/          weapons, vehicles, bots, rounds and the twelve maps
+  maps/          weapons, vehicles, bots, rounds and the thirteen maps
   match/         Match state, economy, rooms, the packed per-tick frame and the tick itself
 spacetimedb/     The SpacetimeDB server module: tables, reducers, admin views, scheduled tick
 src/             The browser game: rendering, HUD, input, audio, lobby, online client
