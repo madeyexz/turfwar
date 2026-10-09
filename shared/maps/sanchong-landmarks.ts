@@ -1,4 +1,4 @@
-import { van } from './sanchong-blocks';
+import { kiosk, van } from './sanchong-blocks';
 import { C, Town, type R } from './sanchong-kit';
 import { DECK, DECK_SOFFIT, DECK_STAIR, DECK_X0, HALL, LEVEE_X, RAMP_X0, SHED_ROOF, SQUARE, STAGE, STAGE_Y, TEMPLE, WORKSHOP, YARD } from './sanchong-plan';
 
@@ -79,10 +79,7 @@ function under(t: Town) {
   // The lane's concrete floor.
   t.shape([-62, -64, 71, -53], -0.02, 0.012, 'slab', 0xa8a49c);
   // A betel-nut and drinks kiosk beside the ramp's wall.
-  t.box([-44, -56.2, -40, -53], 0, 2.6, 'painted', 0xe8e4dc);
-  t.shape([-44.05, -56.25, -39.95, -56.2], 0.9, 2.3, 'neon', 0x4affa0);
-  t.box([-44.2, -56.5, -39.8, -53], 2.6, 2.85, 'roof', 0x60e090);
-  t.sign('board', -42, 3.25, -56.52, 0, 4, 0.7, '檳榔 香菸 飲料', '#18a050', '#ffffff');
+  kiosk(t, [-44, -56.2, -40, -53], '檳榔 香菸', '#18a050');
   // A parked mini truck (發財車) by the deck's west end.
   van(t, [-23, -56, -18.5, -53.8], 0x3a6ab0, true);
   // A scooter repair shop's cage under the deck (機車行): mesh walls, tyres, a work stand.
@@ -282,7 +279,7 @@ export function market(t: Town) {
   });
   // The open-air ends: stall sheds that close half the street in front of each door (west on the
   // north side, east on the south), umbrellas and parked carts.
-  shed(t, [-46, -6.5, -42, 0.5], C.tinBlue, '水果', true);
+  shed(t, [-46, -6.5, -42, 1.5], C.tinBlue, '水果', true);
   shed(t, [42, -0.5, 46, 6.5], C.tinRust, '涼麵', false);
   for (const [x, z] of [[-37, -4.5], [-50, 4.5], [37, 4.5], [50, -4.5]]) {
     t.box([x - 0.9, z - 0.6, x + 0.9, z + 0.6], 0, 0.95, 'wood', C.wood);
@@ -412,29 +409,37 @@ export function bases(t: Town) {
   // Militia: the night-market car park (west), round a temple-fair neon truck (電子花車).
   t.shape([-76, -12, -54, 12], -0.02, 0.016, 'asphalt', 0x7a7a7a);
   for (let z = -10.5; z < 12; z += 2.6) t.raw({ kind: 'marking', x: -74, y: 0.03, z, w: 3.6, d: 0.12, color: 0xf0f0e8 });
-  t.box([-60.5, -4, -58, 4], 0.35, 2.4, 'painted', 0x2a3a8a);
-  t.block([-60.2, -3.7, -58.3, 3.7], 0, 0.35, 'metal');
-  t.box([-60.5, -4, -58, -2.2], 2.4, 3.2, 'painted', 0xe8e8f0);
-  t.shape([-60.4, -2.1, -58.1, 3.9], 2.4, 2.48, 'painted', 0xd8d0e8);
-  t.shape([-60.55, -2, -60.5, 3.8], 1.2, 2.3, 'neon', 0xff3ad8);
-  t.shape([-58.0, -2, -57.95, 3.8], 1.2, 2.3, 'neon', 0x3affd8);
-  for (let i = 0; i < 6; i++) t.raw({ kind: 'cylinder', x: -59.25, y: 2.48, z: -1.6 + i * 1.0, radius: 0.12, height: 1.4 + (i % 3) * 0.3, axis: 'y', style: 'neon', color: [0xff3ad8, 0xffd040, 0x3affd8][i % 3], sides: 6 });
-  t.sign('marquee', -57.93, 3.0, 0.9, Math.PI / 2, 5.6, 0.6, '', '#2a1a4a', '#ffe060');
-  t.sign('board', -57.93, 1.7, 0.9, Math.PI / 2, 5.0, 0.8, '電子花車', '#ff3ad8', '#ffffff');
-  for (const z of [-11, 10]) t.box([-66, z - 0.6, -64.6, z + 0.6], 0, 1.2, 'painted', 0xd8302a);
+  // The truck is parked along the car park's south edge, its stage side toward the slots.
+  t.box([-71.5, 9.3, -63.5, 11.8], 0.35, 2.4, 'painted', 0x2a3a8a);
+  t.block([-71.2, 9.6, -63.8, 11.5], 0, 0.35, 'metal');
+  t.box([-65.3, 9.3, -63.5, 11.8], 2.4, 3.2, 'painted', 0xe8e8f0);
+  t.shape([-71.4, 9.4, -65.4, 11.7], 2.4, 2.48, 'painted', 0xd8d0e8);
+  t.shape([-71.3, 9.25, -65.5, 9.3], 1.2, 2.3, 'neon', 0xff3ad8);
+  t.shape([-71.3, 11.8, -65.5, 11.85], 1.2, 2.3, 'neon', 0x3affd8);
+  for (let i = 0; i < 6; i++) t.raw({ kind: 'cylinder', x: -70.9 + i * 1.0, y: 2.48, z: 10.55, radius: 0.12, height: 1.4 + (i % 3) * 0.3, axis: 'y', style: 'neon', color: [0xff3ad8, 0xffd040, 0x3affd8][i % 3], sides: 6 });
+  t.sign('marquee', -68.4, 3.0, 9.23, 0, 5.6, 0.6, '', '#2a1a4a', '#ffe060');
+  t.sign('board', -68.4, 1.7, 9.23, 0, 5.0, 0.8, '電子花車', '#ff3ad8', '#ffffff');
+  t.box([-66.7, -11.6, -65.3, -10.4], 0, 1.2, 'painted', 0xd8302a);
+  // Stacks of drinks crates in the middle of the car park and of the levee road's base (low cover).
+  for (const [x, c] of [[-64, 0xd8302a], [60, 0x2a6ab8]] as [number, number][]) {
+    t.box([x - 0.6, -0.6, x + 0.6, 0.6], 0, 1.2, 'painted', c);
+    t.box([x - 0.55, -1.75, x + 0.55, -0.65], 0, 0.8, 'painted', 0xf0c020);
+  }
   t.sign('gate', -54.5, 7.2, 0, Math.PI / 2, 9, 1.6, '三重夜市', '#c8141e', '#ffe060', 'NIGHT MARKET · 停車場');
   t.shape([-54.6, -6.6, -54.4, -6.2], 0, 8, 'steel', C.iron); t.shape([-54.6, 6.2, -54.4, 6.6], 0, 8, 'steel', C.iron);
   // Sheds of night-market carts screen the car park from the west street, north and south (the
   // gaps alternate sides, so no view runs down the street into the base).
   cartShed(t, [-62, -14.5, -57, -12], C.tinBlue, '攤車');
   cartShed(t, [-59, 12, -54, 14.5], C.tinRust, '夜市');
-  // SWAT: the levee road (east), round a police bus, by the flood wall.
+  // SWAT: the levee road (east), by the flood wall, a police bus parked along the base's north
+  // edge (the slots look west, down the open market street).
   t.shape([56, -12, LEVEE_X, 12], -0.02, 0.016, 'asphalt', 0x7a7a7a);
-  van(t, [57.5, -4.5, 60, 4.5], 0x2a4a8a, false);
-  t.shape([57.45, -4.55, 60.05, 4.55], 1.3, 1.6, 'painted', 0xf0f0f0);
-  t.shape([58.2, -1, 59.3, 0.4], 2.45, 2.65, 'neon', 0x3a7aff);
-  t.shape([58.2, 0.4, 59.3, 1.0], 2.45, 2.65, 'neon', 0xff3a3a);
-  for (const z of [-11, 10.5]) t.box([60.8, z - 0.4, 63.2, z + 0.4], 0, 0.85, 'concrete', 0xd8d4cc);
+  van(t, [57.5, -11.9, 66.5, -9.4], 0x2a4a8a, true);
+  t.shape([57.45, -11.95, 66.55, -9.35], 1.3, 1.6, 'painted', 0xf0f0f0);
+  t.shape([61, -11.2, 62.4, -10.1], 2.45, 2.65, 'neon', 0x3a7aff);
+  t.shape([62.4, -11.2, 63.8, -10.1], 2.45, 2.65, 'neon', 0xff3a3a);
+  t.sign('board', 62, 1.9, -9.33, Math.PI, 3.2, 0.5, '警察 POLICE', '#1d3f8a', '#ffffff');
+  t.box([60.8, 10.1, 63.2, 10.9], 0, 0.85, 'concrete', 0xd8d4cc);
   t.sign('board', 70.9, 3.6, 0, -Math.PI / 2, 3.6, 0.9, '環河北路', '#1b5aa6', '#ffffff', 'Huanhe N. Rd.');
   // Containers of the flood-control depot screen the base up and down the road (gaps on opposite
   // sides), and a pump truck parked between the north one and the pump station makes a chicane.
