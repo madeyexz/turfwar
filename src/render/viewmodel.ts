@@ -1,6 +1,6 @@
 import * as THREE from 'three';
 import type { Assets } from '../assets';
-import { ATTACHMENT_SLOTS, WEAPONS, WEAPON_IDS, type Attachments, type WeaponId } from '../../shared/weapons';
+import { ATTACHMENT_SLOTS, BOBA, WEAPONS, WEAPON_IDS, type Attachments, type WeaponId } from '../../shared/weapons';
 import type { LocalPlayer } from '../game/player';
 import { curlFingers, orientHand, restorePose, solveArm, type Bones } from './rig';
 import { GUN_FIT, fitAttachments, overlayFor, vec, type Fitted, type Overlay } from './optics';
@@ -83,8 +83,8 @@ export class ViewModel {
   private attachments: Attachments = {};
   private arms: { root: THREE.Object3D; bones: Bones; bindPose: Map<string, THREE.Quaternion> };
   private grenade: THREE.Object3D;
-  /** The 珍奶 cup in the throwing hand while the reskins are on (the M18's throw). */
-  private boba?: THREE.Object3D;
+  /** The 珍奶 cup, in the left hand while drinking. */
+  private boba: THREE.Object3D;
   private flash: THREE.Group;
   private flashLeft = 0;
   private kickBack = new Spring(260, 20);
@@ -133,12 +133,10 @@ export class ViewModel {
     this.grenade = assets.weapons.get('Prop_Grenade')!.clone();
     this.grenade.visible = false;
     this.root.add(this.grenade);
-    if (MEME_SKINS) {
-      this.boba = bobaCupModel();
-      this.boba.traverse(o => { const m = o as THREE.Mesh; if (m.isMesh) { m.castShadow = false; m.frustumCulled = false; } });
-      this.boba.visible = false;
-      this.root.add(this.boba);
-    }
+    this.boba = bobaCupModel();
+    this.boba.traverse(o => { const m = o as THREE.Mesh; if (m.isMesh) { m.castShadow = false; m.frustumCulled = false; } });
+    this.boba.visible = false;
+    this.root.add(this.boba);
     this.flash = makeFlash();
     this.gun.add(this.flash);
     this.torch.position.set(0.12, -0.12, 0);
@@ -255,6 +253,10 @@ export class ViewModel {
     rx -= (1 - e) * 1.1; pos.y -= (1 - e) * 0.18;
     let throwing = 0;
     if (p.throwLeft > 0) { throwing = 1 - p.throwLeft / 0.32; pos.y -= Math.sin(throwing * Math.PI) * 0.14; rx -= Math.sin(throwing * Math.PI) * 0.5; }
+    // ---- 珍奶: the gun dips while the left hand brings the cup up to the mouth and tips it ----
+    const sip = p.drinkLeft > 0 ? 1 - p.drinkLeft / BOBA.drinkTime : 0;
+    const raised = p.drinkLeft > 0 ? ease(Math.min(1, sip / 0.22, (1 - sip) / 0.18)) : 0;
+    pos.y -= raised * 0.16; rx -= raised * 0.55;
 
     this.rig.position.set(pos.x + bx + sx * 0.02, pos.y + by + breathe + sy * 0.015, pos.z + back * 0.05);
     this.rig.rotation.set(rx + kick * 0.06 + sy * 0.05, ry + sx * 0.06, rz + roll * 0.04 + sx * 0.05, 'YXZ');
@@ -274,12 +276,14 @@ export class ViewModel {
     // The knife leaves the support hand free: it hangs low, out of the way.
     if (knife) foreW = new THREE.Vector3(-0.24, -0.52 + Math.sin(this.time * 1.6) * 0.004, -0.16);
     if (p.throwLeft > 0) foreW = new THREE.Vector3(-0.2, -0.08 + Math.sin(throwing * Math.PI) * 0.25, -0.3 - throwing * 0.25);
+    else if (raised > 0) foreW = new THREE.Vector3(-0.1 + raised * 0.06, -0.42 + raised * 0.3 + Math.sin(sip * 18) * 0.004 * raised, -0.34 + raised * 0.06);
     if (knife) solveArm(bones, 'r', gripW.clone().addScaledVector(gunFwd, -0.07).addScaledVector(gunUp, -0.02).addScaledVector(gunRight, 0.02), new THREE.Vector3(0.6, -0.7, 0.2));
     else solveArm(bones, 'r', gripW.clone().addScaledVector(gunRight, 0.03).addScaledVector(gunUp, -0.02), new THREE.Vector3(0.6, -0.7, 0.2));
     solveArm(bones, 'l', foreW.clone().addScaledVector(gunFwd, -0.05).addScaledVector(gunUp, -0.07).addScaledVector(gunRight, -0.025), new THREE.Vector3(-0.7, -0.6, -0.1));
     // A knife is held in a fist, wrist behind the handle; guns with the wrist under the grip.
     orientHand(bones, 'r', gunFwd.clone().addScaledVector(gunUp, knife ? -0.3 : -1.1).normalize(), gunRight.clone().negate());
     if (p.throwLeft > 0) orientHand(bones, 'l', new THREE.Vector3(0.2, 0.6, -1).normalize(), new THREE.Vector3(0.6, 0, -0.4));
+    else if (raised > 0) orientHand(bones, 'l', new THREE.Vector3(0.5, 0.15 + raised * 0.5, -0.8).normalize(), new THREE.Vector3(0.3, 0, 1));
     else if (knife) orientHand(bones, 'l', new THREE.Vector3(0.2, -0.6, -0.8).normalize(), new THREE.Vector3(1, 0, 0));
     else if (pistol && !leftTarget) orientHand(bones, 'l', gunFwd.clone().addScaledVector(gunUp, -0.9).normalize(), gunRight);
     else orientHand(bones, 'l', gunFwd.clone().addScaledVector(gunRight, 0.5).addScaledVector(gunUp, 0.3).normalize(), gunUp.clone().add(gunRight).normalize());
@@ -292,11 +296,13 @@ export class ViewModel {
       const t = 1 - p.reloadLeft / p.reloadTotal;
       if (t > 0.2 && t < 0.76) { mag.visible = true; lh.getWorldPosition(mag.position).add(new THREE.Vector3(0.02, -0.05, -0.04)); mag.quaternion.copy(this.gun.getWorldQuaternion(new THREE.Quaternion())); mag.rotateY(-Math.PI / 2); }
     }
-    const cup = !!this.boba && p.throwingSmoke;
-    this.grenade.visible = p.throwLeft > 0 && !cup;
-    if (this.boba) this.boba.visible = p.throwLeft > 0 && cup;
+    this.grenade.visible = p.throwLeft > 0;
+    this.boba.visible = raised > 0;
     if (this.grenade.visible) lh.getWorldPosition(this.grenade.position).add(new THREE.Vector3(0.02, 0.03, -0.06));
-    if (this.boba?.visible) lh.getWorldPosition(this.boba.position).add(new THREE.Vector3(0.02, 0.06, -0.06));
+    if (this.boba.visible) {
+      lh.getWorldPosition(this.boba.position).add(new THREE.Vector3(0.05, 0.02, -0.03));
+      this.boba.rotation.set(raised * 0.95, 0, -0.15 * raised);
+    }
 
     this.flashLeft -= dt;
     this.flash.visible = this.flashLeft > 0 && !(this.overlay && p.ads > 0.95);

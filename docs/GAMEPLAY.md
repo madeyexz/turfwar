@@ -58,15 +58,16 @@ Back to the [README](../README.md) · [Architecture](ARCHITECTURE.md) · [Develo
 | Melee (3) | Knife | free | 33 / 33 / 33 | Always carried; 2 swings/s; fastest movement |
 | Tactical (4 / G) | M67 grenade | $1,000 | 70 (falloff) | One carried, not restocked; High Explosive mod $1,500 (+45 body damage, smaller radius) |
 | Tactical (5 / X) | M18 smoke grenade | $300 | — | One carried; a 9 m cloud for 15 s that blocks sight, not bullets (not in BeGone) |
+| Tactical (6 / Y) | 珍奶 bubble tea | $400 | +50 health | One carried; drink when hurt: a 1.4 s sip (no shooting), then +50 health up to 100; the server applies it (`drinkBoba`, not in BeGone) |
 
-**National Day reskins** (`src/game/memeskins.ts`, on by default): the knife is a **藍白拖 / Slipper**
+**National Day reskin** (`src/game/memeskins.ts`, on by default): the knife is a **藍白拖 / Slipper**
 (the blue-and-white rubber slipper, built in code, swung as a flat slap with a cartoon slap sound and
-its own kill-feed mark) and the M18 is a **珍奶煙霧彈 / Boba Smoke** (a bubble-tea cup in hand, in the
-air and in the store; the cloud is milk tea with tapioca pearls drifting in it, the minimap disc and
-the in-smoke screen are milk-tea brown, and it pops with a slurp). They are looks, names and sounds
-only: weapon ids, stats and the rules are unchanged, and the cloud hides exactly what the grey one
-did (`smokeBlocks` in `shared/match/combat.ts`). `?classic=1` shows the original knife and M18;
-`DEFAULT = false` in `memeskins.ts` turns the reskins off for everyone.
+its own kill-feed mark). Looks, name and sound only: the weapon id, stats and rules are unchanged.
+`?classic=1` shows the original knife; `DEFAULT = false` in `memeskins.ts` turns it off for everyone.
+
+**珍奶 (bubble tea)** is a real item: bought in the store's tactical tab, drunk with 6 / Y (or the touch
+button beside the knife) when hurt. The cup comes up to the mouth in first person with a slurp that
+players nearby hear; the server heals +50 when the sip ends.
 
 ### Attachments (one per category per weapon; kept for the match)
 
@@ -325,6 +326,7 @@ fullscreen. On touch-only screens the Controls tab is read-only.
 | 1 · 2 · 3 | Primary · secondary · knife |
 | 4 or G | M67 grenade |
 | 5 or X | M18 smoke grenade |
+| 6 or Y | Drink the 珍奶 (heals +50) |
 | Q or wheel | Cycle weapons |
 | R · E | Reload · use (arm or disarm the bomb, ammo crate, get in or out of a vehicle) |
 | On a ladder: toward it · away · Space | Climb up · climb down · let go (walk off its top to climb down) |

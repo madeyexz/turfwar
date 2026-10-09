@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { GRENADE, SMOKE, WEAPONS } from '../../shared/weapons';
 import { purchaseOf, type Owned } from './purchases';
 
-const base: Owned = { owned: ['mp5', 'm9a1'], grenades: 0, grenadeHE: false, smokes: 0, attachments: {} };
+const base: Owned = { owned: ['mp5', 'm9a1'], grenades: 0, grenadeHE: false, smokes: 0, bobas: 0, attachments: {} };
 
 describe('store purchases for analytics', () => {
   it('counts a gun once the host owns it for us, at its price', () => {

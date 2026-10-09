@@ -392,8 +392,8 @@ export class Hud {
     const ammo = p.ammo[p.slot as 0 | 1] ?? 0;
     // Without a counter the panel is a plain list of what you carry (key, weapon), the one in hand lit.
     const carried = [['primary', WEAPONS[p.weapons[0]].name, p.slot === 0], ['secondary', WEAPONS[p.weapons[1]].name, p.slot === 1], ['knife', t('cause.knife'), p.slot === 2],
-      ['grenade', `M67 ×${p.grenades}${me?.grenadeHE ? ' HE' : ''}`, false], ['smoke', `${t('item.smokeShort')} ×${p.smokes}`, false]] as [ActionId, string, boolean][];
-    const list = `<ul class="carried">${carried.map(([k, name, on]) => `<li class="${on ? 'on' : ''}${(k === 'grenade' && !p.grenades) || (k === 'smoke' && !p.smokes) ? ' none' : ''}">${kbd(k)}${name}</li>`).join('')}</ul>`;
+      ['grenade', `M67 ×${p.grenades}${me?.grenadeHE ? ' HE' : ''}`, false], ['smoke', `${t('item.smokeShort')} ×${p.smokes}`, false], ['drink', `${t('item.bobaShort')} ×${p.bobas}`, p.drinkLeft > 0]] as [ActionId, string, boolean][];
+    const list = `<ul class="carried">${carried.map(([k, name, on]) => `<li class="${on ? 'on' : ''}${(k === 'grenade' && !p.grenades) || (k === 'smoke' && !p.smokes) || (k === 'drink' && !p.bobas && p.drinkLeft <= 0) ? ' none' : ''}">${kbd(k)}${name}</li>`).join('')}</ul>`;
     this.set('ammo', counter && !melee ? `${ammo}<small>/ ${p.reserve[p.slot as 0 | 1]}</small>` : list, 'html');
     this.el.arms.classList.toggle('listed', !counter || melee);
     this.el.ammo.classList.toggle('low', counter && !melee && ammo > 0 && ammo <= Math.max(3, w.magazine * 0.25));
@@ -402,7 +402,8 @@ export class Hud {
     const slot = (key: ActionId, name: string, on: boolean, extra = '') => `<span class="${on ? 'on' : ''}">${kbd(key)}${name}${extra}</span>`;
     this.set('slots', slot('primary', WEAPONS[p.weapons[0]].name, p.slot === 0) + slot('secondary', WEAPONS[p.weapons[1]].name, p.slot === 1) + slot('knife', t('hud.knife'), p.slot === 2)
       + `<span class="nade${p.grenades > 0 ? '' : ' none'}">${kbd('grenade')}M67 ×${p.grenades}${me?.grenadeHE ? '<em>HE</em>' : ''}</span>`
-      + `<span class="nade${p.smokes > 0 ? '' : ' none'}">${kbd('smoke')}${t('item.smokeShort')} ×${p.smokes}</span>`, 'html');
+      + `<span class="nade${p.smokes > 0 ? '' : ' none'}">${kbd('smoke')}${t('item.smokeShort')} ×${p.smokes}</span>`
+      + `<span class="nade${p.bobas > 0 ? '' : ' none'}">${kbd('drink')}${t('item.bobaShort')} ×${p.bobas}</span>`, 'html');
   }
 
   /** BeGone's score bar: one avatar per soldier, most kills nearest the clock. */
@@ -701,10 +702,10 @@ export class Hud {
         });
       });
     }
-    // Smoke clouds: soft grey discs (milk tea with the reskins), drawn under everyone (they hide nobody on the map).
+    // Smoke clouds: soft grey discs, drawn under everyone (they hide nobody on the map).
     for (const b of state.bodies) {
       if (b.kind !== 'smokeCloud') continue;
-      ctx.fillStyle = MEME_SKINS ? 'rgba(214,176,128,0.5)' : 'rgba(205,210,214,0.45)';
+      ctx.fillStyle = 'rgba(205,210,214,0.45)';
       ctx.beginPath(); ctx.arc(b.x * scale, b.z * scale, SMOKE.radius * scale, 0, Math.PI * 2); ctx.fill();
     }
     // Vehicles: white when free, team-coloured when crewed (enemy crews only show while near).

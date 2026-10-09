@@ -800,16 +800,15 @@ export class Audio {
   /** An M18 popping: a dull pop, then the canister's long hiss. */
   smoke(listener: Listener, at: V3) {
     if (!this.ready) return;
-    if (MEME_SKINS) return this.boba(listener, at);
     const t = this.now(), out = this.out(0.7, listener, at, 0.3);
     this.noiseBurst(out, t, 0.18, 'lowpass', 700, 0.8, 0.9, 0.003);
     this.noiseBurst(out, t + 0.05, 2.6, 'highpass', 2400, 0.5, 0.35, 0.25);
     this.noiseBurst(out, t + 0.05, 2.2, 'bandpass', 900, 0.7, 0.25, 0.3);
   }
 
-  /** A 珍奶 bursting (the M18 reskin): the lid's pop, a long slurp through the straw and pearls bubbling up. */
-  private boba(listener: Listener, at: V3) {
-    const t = this.now(), out = this.out(0.75, listener, at, 0.3);
+  /** Drinking a 珍奶 (ours, or someone's nearby): the lid's pop, a long slurp through the straw and pearls bubbling up. */
+  drink(listener?: Listener, at?: V3) {
+    const t = this.now(), out = this.out(listener ? 0.5 : 0.75, listener, at, 0.3);
     this.tone(out, t, 'sine', 420, 1500, 0.06, 0.6);
     this.noiseBurst(out, t, 0.05, 'bandpass', 2200, 2, 0.45);
     const slurp = this.noiseBurst(out, t + 0.08, 0.9, 'bandpass', 500, 3, 0.4, 0.08);

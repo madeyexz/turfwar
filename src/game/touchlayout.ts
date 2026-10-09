@@ -13,7 +13,7 @@ import { readEnv, touchEnabled, type TouchPref } from './device';
 
 export type ControlId =
   | 'fire' | 'aim' | 'jump' | 'crouch' | 'reload' | 'use' | 'zoom' | 'binoculars'
-  | 'knife' | 'secondary' | 'primary' | 'grenade' | 'smoke'
+  | 'knife' | 'secondary' | 'primary' | 'grenade' | 'smoke' | 'drink'
   | 'handbrake' | 'climb' | 'descend' | 'view' | 'exit'
   | 'spectate' | 'menu' | 'scoreboard' | 'chat' | 'store'
   | 'custom1' | 'custom2';
@@ -52,6 +52,7 @@ export const CONTROLS: Record<ControlId, ControlDef> = {
   primary: { action: 'primary', kind: 'tap', x: 0.515, y: 0.91, size: 46 },
   grenade: { action: 'grenade', kind: 'tap', x: 0.595, y: 0.91, size: 46 },
   smoke: { action: 'smoke', kind: 'tap', x: 0.685, y: 0.91, size: 46 },
+  drink: { action: 'drink', kind: 'tap', x: 0.275, y: 0.91, size: 46 },
   handbrake: { action: 'handbrake', kind: 'hold', x: 0.745, y: 0.8, size: 68 },
   climb: { action: 'climb', kind: 'hold', x: 0.875, y: 0.45, size: 68 },
   descend: { action: 'descend', kind: 'hold', x: 0.875, y: 0.8, size: 68 },
@@ -77,7 +78,7 @@ export const DEAD_ZONE = 0.14;
 
 /** Actions a custom slot may take: everything a finger can sensibly press (the stick moves; chat and fullscreen have their own buttons). */
 export const CUSTOM_ACTIONS: readonly ActionId[] = [
-  'fire', 'aim', 'reload', 'use', 'jump', 'crouch', 'sprint', 'knife', 'secondary', 'primary', 'grenade', 'smoke', 'lastWeapon',
+  'fire', 'aim', 'reload', 'use', 'jump', 'crouch', 'sprint', 'knife', 'secondary', 'primary', 'grenade', 'smoke', 'drink', 'lastWeapon',
   'nextWeapon', 'prevWeapon', 'binoculars', 'handbrake', 'climb', 'descend', 'vehicleView', 'exitVehicle', 'scoreboard', 'store',
 ];
 
@@ -144,7 +145,7 @@ export function contextControls(ctx: TouchContext): Set<ControlId> {
   const weapons = () => { add('fire', 'secondary', 'primary'); if (!ctx.melee) add('reload'); };
   switch (ctx.scope) {
     case 'foot':
-      weapons(); add('jump', 'crouch', 'knife', 'grenade', 'smoke', 'binoculars');
+      weapons(); add('jump', 'crouch', 'knife', 'grenade', 'smoke', 'drink', 'binoculars');
       if (!ctx.melee) add('aim');
       if (ctx.use) add('use');
       if (ctx.scoped) add('zoom');
@@ -156,7 +157,7 @@ export function contextControls(ctx: TouchContext): Set<ControlId> {
       break;
     case 'heli': add('climb', 'descend', 'view', 'exit'); break;
     case 'passenger':
-      weapons(); add('knife', 'grenade', 'smoke', 'binoculars', 'exit');
+      weapons(); add('knife', 'grenade', 'smoke', 'drink', 'binoculars', 'exit');
       if (!ctx.melee) add('aim');
       if (ctx.scoped) add('zoom');
       break;

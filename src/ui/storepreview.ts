@@ -12,9 +12,10 @@ import { applyI18n, t } from './i18n';
 export type PreviewItem =
   | { kind: 'weapon'; id: WeaponId; attachments: Attachments; focus?: AttachmentCategory; label?: string }
   | { kind: 'grenade'; he: boolean }
-  | { kind: 'smoke' };
+  | { kind: 'smoke' }
+  | { kind: 'boba' };
 
-const key = (item: PreviewItem) => item.kind === 'smoke' ? 'smoke' : item.kind === 'grenade' ? `grenade|${item.he}` : `${item.id}|${ATTACHMENT_SLOTS.map(c => item.attachments[c] ?? '').join('|')}`;
+const key = (item: PreviewItem) => item.kind === 'smoke' || item.kind === 'boba' ? item.kind : item.kind === 'grenade' ? `grenade|${item.he}` : `${item.id}|${ATTACHMENT_SLOTS.map(c => item.attachments[c] ?? '').join('|')}`;
 
 /** The M18 (no model in the packs): an olive canister, a pale band, the fuse and its spoon. */
 function smokeCanister() {
@@ -235,7 +236,7 @@ export class StorePreview {
   private build(item: PreviewItem): Built {
     const weapons = this.assets!.weapons;
     const object = new THREE.Group();
-    const model = item.kind === 'smoke' ? (MEME_SKINS ? bobaCupModel() : smokeCanister()) : weapons.get(item.kind === 'grenade' ? 'Prop_Grenade' : WEAPONS[item.id].model)!.clone();
+    const model = item.kind === 'boba' ? bobaCupModel() : item.kind === 'smoke' ? smokeCanister() : weapons.get(item.kind === 'grenade' ? 'Prop_Grenade' : WEAPONS[item.id].model)!.clone();
     model.position.set(0, 0, 0);
     model.updateMatrixWorld(true);
     // Frame by the bare item so trying attachments on never rescales the view.

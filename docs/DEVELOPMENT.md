@@ -37,8 +37,8 @@ server with the code filled in; with `autostart` joins it), `&team=0|1|auto`, `&
 單挑我 challenge links (`src/game/challenge.ts`): `?c=1&ch=<callsign>&map=<id>&beat=<kills>&ref=<share code>`
 and `&room=CODE` when the challenger opened a private 1v1 room. The lobby shows 「<callsign> 向你下戰帖！」; accepting joins
 the room, or plays a Solo 1v1 on that map against a bot named after the challenger when there is no room or it is
-gone, full or empty. `?classic=1` turns off the 藍白拖 / 珍奶煙霧彈 reskins (`src/game/memeskins.ts`, `DEFAULT` there
-turns them off for everyone).
+gone, full or empty. `?classic=1` turns off the 藍白拖 knife reskin (`src/game/memeskins.ts`, `DEFAULT` there
+turns it off for everyone).
 A player still on the lobby's made-up callsign (`Player-123` / `玩家123`) is asked for one before playing
 (`src/ui/callsign.ts`), so the scoreboard and the server's player list carry chosen names; `&name=`,
 `&autostart` and `?bench` skip the question. Choices are remembered per browser under `lawbreaker.*` in localStorage (`lawbreaker.start.*`

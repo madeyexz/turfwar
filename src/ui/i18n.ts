@@ -158,7 +158,7 @@ const en = {
   'act.forward': 'Move forward', 'act.back': 'Move back', 'act.left': 'Strafe left', 'act.right': 'Strafe right',
   'act.jump': 'Jump (stamina)', 'act.crouch': 'Crouch · slide', 'act.sprint': 'Sprint (stamina)',
   'act.fire': 'Fire', 'act.aim': 'Aim (zoom) · next spectated player', 'act.reload': 'Reload', 'act.use': 'Use: bomb, ammo crate, get in',
-  'act.knife': 'Knife', 'act.secondary': 'Secondary', 'act.primary': 'Primary', 'act.grenade': 'Grenade', 'act.smoke': 'Smoke grenade',
+  'act.knife': 'Knife', 'act.secondary': 'Secondary', 'act.primary': 'Primary', 'act.grenade': 'Grenade', 'act.smoke': 'Smoke grenade', 'act.drink': 'Drink bubble tea',
   'act.lastWeapon': 'Last weapon', 'act.nextWeapon': 'Next weapon · scope zoom', 'act.prevWeapon': 'Previous weapon · scope zoom',
   'act.binoculars': 'Binoculars',
   'act.throttle': 'Accelerate · fly forward', 'act.brake': 'Brake, reverse · fly back', 'act.steerLeft': 'Steer left · fly left',
@@ -342,6 +342,11 @@ const en = {
   'chal.accept': 'Accept', 'chal.later': 'Not now', 'chal.double': '{name} isn’t in the room, so you face their bot double',
   'chal.won': 'You beat {name}!', 'chal.lost': '{name} wins this time', 'chal.opening': 'Opening your 1v1 room…',
   'chal.room': 'Your 1v1 room {code} is open. Send the link: whoever opens it lands right here.', 'chal.send': 'Send challenge',
+  // 珍奶 (shared/weapons.ts BOBA): a drink that heals
+  'item.boba': 'Bubble Tea', 'item.bobaShort': 'Boba', 'tc.drink': 'Boba', 'store.boba': 'Drink: +{heal} health · {key}',
+  'store.bobaTitle': 'Drink it when hurt: +{heal} health in {s} s, no shooting while you sip · {key}', 'store.oneBoba': 'You carry one bubble tea at a time; drink it to buy another',
+  'hud.healed': '+{n} health', 'hud.fullHealth': 'Already at full health',
+  'store.heals': 'Heals', 'store.sip': 'Sip', 'store.bobaNote': 'Drink with {key} when hurt: +{heal} health. You can’t shoot while you sip.',
 } as const;
 
 export type Key = keyof typeof en;
@@ -476,7 +481,7 @@ const zhTW: Record<Key, string> = {
   'act.forward': '向前移動', 'act.back': '向後移動', 'act.left': '向左移動', 'act.right': '向右移動',
   'act.jump': '跳躍（消耗體力）', 'act.crouch': '蹲下 · 滑行', 'act.sprint': '衝刺（消耗體力）',
   'act.fire': '射擊', 'act.aim': '瞄準（放大）· 觀戰時切換對象', 'act.reload': '換彈', 'act.use': '互動：炸彈、彈藥箱、上車',
-  'act.knife': '刀', 'act.secondary': '副武器', 'act.primary': '主武器', 'act.grenade': '手榴彈', 'act.smoke': '煙霧彈',
+  'act.knife': '刀', 'act.secondary': '副武器', 'act.primary': '主武器', 'act.grenade': '手榴彈', 'act.smoke': '煙霧彈', 'act.drink': '喝珍奶',
   'act.lastWeapon': '切回上一把武器', 'act.nextWeapon': '下一把武器 · 狙擊鏡倍率', 'act.prevWeapon': '前一把武器 · 狙擊鏡倍率',
   'act.binoculars': '望遠鏡',
   'act.throttle': '加速 · 直升機前進', 'act.brake': '煞車、倒車 · 直升機後退', 'act.steerLeft': '左轉 · 直升機左移',
@@ -654,22 +659,22 @@ const zhTW: Record<Key, string> = {
   'chal.accept': '接受挑戰', 'chal.later': '先不要', 'chal.double': '{name} 不在房間裡，改打他的分身',
   'chal.won': '你打敗了 {name}！', 'chal.lost': '{name} 這次贏了', 'chal.opening': '單挑房開房中…',
   'chal.room': '單挑房 {code} 開好了。把連結傳出去，對手點開就直接進來。', 'chal.send': '傳戰帖',
+  'item.boba': '珍珠奶茶', 'item.bobaShort': '珍奶', 'tc.drink': '珍奶', 'store.boba': '喝了 +{heal} 血 · {key}',
+  'store.bobaTitle': '受傷時喝：{s} 秒回 {heal} 血，喝的時候不能開槍 · {key}', 'store.oneBoba': '一次只能帶一杯珍奶，喝掉才能再買',
+  'hud.healed': '+{n} 血', 'hud.fullHealth': '血已經是滿的',
+  'store.heals': '回血', 'store.sip': '喝的時間', 'store.bobaNote': '受傷時按 {key} 喝：+{heal} 血。喝的時候不能開槍。',
 };
 
 /**
- * The National Day reskins' names (src/game/memeskins.ts): the knife is a 藍白拖 / Slipper and the M18
- * a 珍奶煙霧彈 / Boba Smoke wherever they are named (store, weapon bar, kill feed, scoreboard, keys).
+ * The National Day reskin's names (src/game/memeskins.ts): the knife is a 藍白拖 / Slipper wherever it is
+ * named (store, weapon bar, kill feed, scoreboard, keys).
  */
 export const MEME_NAMES: Record<Lang, Partial<Record<Key, string>>> = {
   en: {
     'act.knife': 'Slipper', 'tc.knife': 'Slipper', 'hud.knife': 'SLIPPER', 'cause.knife': 'Slipper', 'store.knife': 'Slipper',
-    'act.smoke': 'Boba smoke', 'tc.smoke': 'Boba', 'item.smoke': 'Boba Smoke', 'item.smokeShort': 'Boba',
-    'store.oneM18': 'You carry one boba smoke at a time — throw it to buy another',
   },
   'zh-TW': {
     'act.knife': '藍白拖', 'tc.knife': '藍白拖', 'hud.knife': '藍白拖', 'cause.knife': '藍白拖', 'store.knife': '藍白拖',
-    'act.smoke': '珍奶煙霧彈', 'tc.smoke': '珍奶', 'item.smoke': '珍奶煙霧彈', 'item.smokeShort': '珍奶',
-    'store.oneM18': '一次只能帶一杯珍奶 — 丟出去才能再買',
   },
 };
 

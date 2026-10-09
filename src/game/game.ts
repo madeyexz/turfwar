@@ -6,7 +6,7 @@ import { eyeHeight } from '../../shared/movement';
 import { ATTACKERS, vehicleTarget, type MatchEvent, type MatchState, type Soldier, type Team } from '../../shared/match/state';
 import { VEHICLES, obstaclesOf, raycastVehicle, seatPosition, speedOf, type Vehicle } from '../../shared/vehicles';
 import { seatFor } from '../../shared/match/vehicles';
-import { WEAPONS, pelletCone, pelletDirs, weaponStats, type HitZone, type WeaponId } from '../../shared/weapons';
+import { BOBA, WEAPONS, pelletCone, pelletDirs, weaponStats, type HitZone, type WeaponId } from '../../shared/weapons';
 import { CASH, CRATE_REACH, canBuyWeapons, inBase } from '../../shared/match/economy';
 import { seatOf, shieldedIds, sideOf } from '../../shared/match/combat';
 import { BOMB_REACH, canSwitchTeam, modeOf, onSite } from '../../shared/match/sim';
@@ -435,6 +435,9 @@ export class Game {
     if (result.zoomed) this.player.binoculars ? this.audio.binoculars() : this.audio.ui();
     if (result.grenade) link.grenade(result.grenade.origin, result.grenade.dir);
     if (result.smoke) link.smoke(result.smoke.origin, result.smoke.dir);
+    if (result.drinkStarted) this.audio.drink();
+    if (result.drink) link.drink();
+    if (result.drinkRefused) this.hud.toast(t('hud.fullHealth'), 1500);
     this.shotCount += result.shots.length + (result.dryFire ? 1 : 0);
     for (const shot of result.shots) this.shoot(shot.origin, shot.dir, shot.weapon.range, state);
 
@@ -623,7 +626,7 @@ export class Game {
       scope: ctx.scope, melee: p.slot === 2, sniper: p.weapon.class === 'sniper', rider: p.rider, binoculars: p.binoculars, throwing: p.throwLeft > 0,
     });
     this.touch!.update(ctx, {
-      slot: p.slot, weapons: [WEAPONS[p.weapons[0]].name, WEAPONS[p.weapons[1]].name], grenades: p.grenades, smokes: p.smokes, use,
+      slot: p.slot, weapons: [WEAPONS[p.weapons[0]].name, WEAPONS[p.weapons[1]].name], grenades: p.grenades, smokes: p.smokes, bobas: p.bobas, use,
       storeHot: !!me && buyWindow && (free || inBase(me, this.map.def, sideOf(state, this.map.def, me.team))), reloading: p.reloading,
       holdAim, shots: this.shotCount,
     });
@@ -1166,6 +1169,12 @@ export class Game {
       }
       case 'smoke': {
         this.audio.smoke(this.listener(), new THREE.Vector3(e.x, e.y, e.z));
+        break;
+      }
+      case 'drink': {
+        if (e.id === myId) { this.hud.toast(t('hud.healed', { n: BOBA.heal }), 1800); break; }
+        const r = this.remotes.get(e.id);
+        if (r) this.audio.drink(this.listener(), new THREE.Vector3(r.pos.x, r.pos.y + 1.4, r.pos.z));
         break;
       }
       case 'phase': {
