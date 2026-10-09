@@ -19,6 +19,13 @@
   --cash-dim: rgba(156, 240, 138, 0.34);
   --amber-dim: rgba(255, 180, 90, 0.6);
   --release: #c9a2ff;
+  /* Phone and Computer side by side (src/admin/groups.ts). */
+  --phone: #7ff6ff;
+  --phone-dim: rgba(127, 246, 255, 0.42);
+  --phone-mid: rgba(127, 246, 255, 0.62);
+  --computer: #ffb45a;
+  --computer-dim: rgba(255, 180, 90, 0.42);
+  --computer-mid: rgba(255, 180, 90, 0.66);
   color-scheme: dark;
   font-family: var(--font);
   color: var(--ink);
@@ -109,19 +116,32 @@ section.group + section.group { border-top: 1px solid var(--line); margin-top: 8
 .group-h::before { content: ''; align-self: center; width: 4px; height: 18px; border-radius: 2px; background: var(--accent); }
 .group-h small { color: var(--faint); font-size: 14px; font-weight: 600; letter-spacing: 0.02em; text-transform: none; }
 
-.tiles { display: grid; grid-template-columns: repeat(auto-fit, minmax(160px, 1fr)); gap: 10px; margin-bottom: 14px; }
+.tiles { display: grid; grid-template-columns: repeat(auto-fill, minmax(300px, 1fr)); gap: 10px; margin-bottom: 14px; }
 .tile { background: var(--panel); border: 1px solid var(--line); border-radius: 8px; padding: 12px 14px; }
 .tile small { display: block; color: var(--muted); font-weight: 600; font-size: 13px; text-transform: uppercase; letter-spacing: 0.06em; }
 .tile b { display: block; font-size: 32px; font-weight: 700; line-height: 1.1; margin-top: 2px; font-variant-numeric: tabular-nums; }
 .tile.hero b { color: var(--accent); }
 .tile span { color: var(--faint); font-size: 13px; }
+/* A tile's figure for All, Phone and Computer side by side; the shared note under them. */
+.tile .cols { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 0; margin-top: 6px; }
+.tile .col { min-width: 0; padding: 0 10px; border-left: 1px solid var(--line); }
+.tile .col:first-child { padding-left: 0; border-left: 0; }
+.tile .col i { display: block; font-style: normal; font-weight: 700; font-size: 11px; letter-spacing: 0.08em; text-transform: uppercase; color: var(--faint); }
+.tile .col.phone i { color: var(--phone); }
+.tile .col.computer i { color: var(--computer); }
+.tile .col b { font-size: 26px; margin-top: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.tile .col span { display: block; font-size: 12px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.tile.hero .col b { color: var(--ink); }
+.tile.hero .col.all b { color: var(--accent); }
+.tile .note { display: block; margin-top: 6px; }
 .delta { font-style: normal; font-weight: 700; font-variant-numeric: tabular-nums; }
 .delta.up { color: var(--cash); }
 .delta.down { color: var(--crimson); }
 .delta.flat { color: var(--muted); }
 
 .grid2 { display: grid; grid-template-columns: minmax(0, 2fr) minmax(0, 1fr); gap: 14px; margin-bottom: 14px; }
-@media (max-width: 860px) { .grid2 { grid-template-columns: minmax(0, 1fr); } }
+.grid2.even { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); }
+@media (max-width: 860px) { .grid2, .grid2.even { grid-template-columns: minmax(0, 1fr); } }
 section.card { background: var(--panel); border: 1px solid var(--line); border-radius: 8px; padding: 14px; min-width: 0; margin-bottom: 14px; }
 .grid2 section.card { margin-bottom: 0; }
 section.card h3 { margin: 0 0 10px; font-size: 15px; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; color: var(--muted); display: flex; align-items: baseline; gap: 10px; flex-wrap: wrap; }
@@ -139,6 +159,18 @@ section.card h3 small { color: var(--faint); font-weight: 600; letter-spacing: 0
 .chart .day:hover .bar { fill: var(--accent); }
 .chart .day:hover .bar.fresh { fill: var(--amber); }
 .legend i.fresh { background: var(--amber-dim); }
+.legend i.g-phone { background: var(--phone); }
+.legend i.g-computer { background: var(--computer); }
+.legend i.g-none { background: rgba(255, 255, 255, 0.18); }
+.legend .hint { color: var(--faint); font-weight: 500; }
+.chart .g-phone .bar.s0 { fill: var(--phone-dim); }
+.chart .g-phone .bar.s1 { fill: var(--phone); }
+.chart .g-phone .bar.mid { fill: var(--phone-mid); }
+.chart .g-computer .bar.s0 { fill: var(--computer-dim); }
+.chart .g-computer .bar.s1 { fill: var(--computer); }
+.chart .g-computer .bar.mid { fill: var(--computer-mid); }
+.chart .day:hover .bar { filter: brightness(1.35); }
+.chart .tick { stroke: var(--ink); stroke-opacity: 0.85; stroke-width: 1.5; }
 /* Releases (src/admin/releases.ts): a dashed line down the day, a flag on top to hover. */
 .chart .release line { stroke: var(--release); stroke-width: 1; stroke-dasharray: 3 3; opacity: 0.6; pointer-events: none; }
 .chart .release path { fill: var(--release); }
@@ -154,6 +186,17 @@ section.card h3 small { color: var(--faint); font-weight: 600; letter-spacing: 0
 .countries .bar { grid-column: 1 / -1; height: 5px; border-radius: 3px; background: rgba(255, 255, 255, 0.06); overflow: hidden; }
 .countries .bar i { display: block; height: 100%; background: var(--accent); }
 .countries span { color: var(--muted); font-variant-numeric: tabular-nums; }
+.countries .bar.split { display: flex; }
+.countries .bar.split i { flex: none; }
+.countries .bar i.g-phone { background: var(--phone); }
+.countries .bar i.g-computer { background: var(--computer); }
+.countries .bar i.g-none { background: rgba(255, 255, 255, 0.18); }
+.countries .sides { grid-column: 1 / -1; display: flex; flex-wrap: wrap; gap: 2px 14px; font-size: 12px; color: var(--muted); }
+.countries .sides b { font-weight: 700; }
+.sides .g-phone { color: var(--phone); }
+.sides .g-computer { color: var(--computer); }
+.countries .ping-sides { font-size: 13px; }
+.countries .ping-sides > span { min-width: 9em; color: var(--muted); }
 
 /* Devices: one block per kind, the last 7 days' share (number and bar) and all time (src/admin/devices.ts). */
 .devices { display: grid; grid-template-columns: repeat(auto-fit, minmax(170px, 1fr)); gap: 10px; }
@@ -214,14 +257,25 @@ td.id { color: var(--faint); font-size: 13px; }
 td.tz { max-width: 220px; overflow: hidden; text-overflow: ellipsis; }
 td .dot { display: inline-block; margin-right: 6px; vertical-align: 1px; }
 @media (max-width: 520px) {
-  .tiles { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; }
+  .tiles { grid-template-columns: minmax(0, 1fr); gap: 8px; }
   .tile { padding: 10px 12px; }
   .tile b { font-size: 26px; }
+  .tile .col b { font-size: 22px; }
+  .tile .col { padding: 0 8px; }
   header.top h1 { font-size: 22px; }
 }
 td .tag { display: inline-block; padding: 0 6px; border-radius: 4px; border: 1px solid var(--line-strong); font-size: 12px; font-weight: 700; color: var(--muted); }
 td .tag.live { color: var(--cash); border-color: rgba(156, 240, 138, 0.4); }
 .more { margin-top: 10px; }
+/* The player list's All / Phone / Computer switch. */
+.chips { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 10px; }
+.chip { border: 1px solid var(--line-strong); background: rgba(255, 255, 255, 0.03); border-radius: 999px; padding: 3px 12px; font-weight: 700; font-size: 13px; letter-spacing: 0.05em; text-transform: uppercase; color: var(--muted); }
+.chip span { color: var(--faint); font-variant-numeric: tabular-nums; }
+.chip:hover { border-color: var(--accent); color: var(--ink); }
+.chip.on { background: var(--accent); border-color: var(--accent); color: #031014; }
+.chip.on span { color: #031014; opacity: 0.7; }
+.chip:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.notice { margin: 8px 0 0; padding: 8px 12px; border: 1px solid rgba(255, 180, 90, 0.4); border-radius: 6px; color: var(--amber); font-weight: 600; }
 /* The note is one paragraph (inline code flows with its text); the button sits beside it, or below on a phone. */
 footer { color: var(--faint); font-size: 13px; margin-top: 8px; display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 10px 24px; }
 footer p { margin: 0; flex: 1 1 360px; max-width: 80ch; line-height: 1.45; }
