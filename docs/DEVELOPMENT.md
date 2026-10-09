@@ -63,12 +63,32 @@ free-buy Solo match; for a **local** Online database, set `"freeBuy":true` in th
 Development pages (dev server only): `/dev/level.html?map=verdant` (map preview; `&cut=6` clips
 everything above 6 m to see under roofs),
 `/dev/soldier.html` (animation/IK pose sheet), `/dev/viewmodel.html?ads=1` (first-person weapon),
-`/dev/viewer.html?model=/assets/props.glb` (asset viewer). Dev-only URL flags `debuginput`,
+`/dev/viewer.html?model=/assets/props.glb` (asset viewer), `/dev/vehicles.html?show=car:0,scooter:1,heli:2&focus=0&angle=front`
+(drivable vehicles in a studio, with `&wrecked=1`, `&rotor=1`, `&seats=1`, `&boxes=1`; `?map=taipei&focus=3` at their map
+spots; `window.__stats` gives each one's draw calls and triangles). Dev-only URL flags `debuginput`,
 `fixeddt` and `capture` make automated runs deterministic on software renderers.
 
 The map picker shows a picture of each map (`public/media/maps/<id>.webp`, 480×270, under 40 KB).
 `bun scripts/mapshots.ts [--url <dev server>] [map …]` shoots them from the level preview through the
 agent-browser CLI, with the dev server running; re-shoot a map after changing it.
+
+GPU-compressed textures: the surface sets (`public/assets/tex/*.webp`) and the Taipei district atlas
+ship as KTX2 copies that the game transcodes to the GPU's own format (ASTC, ETC2, BC7…) in a worker
+(`src/render/textures.ts`, three's `KTX2Loader`); the `.webp` files are the source and the fallback
+(no WebAssembly, a file that fails, or `?ktx2=0`). Medium and High load `tex/<set>_<kind>.ktx2`
+(1024², ETC1S; normals ETC1S tuned for normals) and `taipei-atlas.ktx2` (4096×2048); Low, the
+phones' default, loads the `low/` copies (512², normals UASTC + Zstandard; atlas 2048×1024), shrinks
+the models' own textures to 512 px, caps the sign atlas at 2048×1024 and anisotropic filtering at 4×.
+After changing a source `.webp`, or updating three, rebuild them (about three minutes) with
+[Basis Universal](https://github.com/BinomialLLC/basis_universal) installed
+(`brew install basis_universal`; tested with basisu 2.50):
+
+```sh
+bun install --cwd tools --frozen-lockfile
+bun tools/make-ktx2.ts            # everything; or name sets / `atlas`: bun tools/make-ktx2.ts brick atlas
+```
+
+It also copies three's Basis transcoder into `public/assets/basis/`, so it is versioned like any asset.
 
 ## Deploy
 

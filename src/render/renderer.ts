@@ -4,18 +4,75 @@ import { EffectComposer } from 'three/examples/jsm/postprocessing/EffectComposer
 import { RenderPass } from 'three/examples/jsm/postprocessing/RenderPass.js';
 import { UnrealBloomPass } from 'three/examples/jsm/postprocessing/UnrealBloomPass.js';
 import { OutputPass } from 'three/examples/jsm/postprocessing/OutputPass.js';
-import type { Theme } from './materials';
+import { AdaptiveDpr, basePixelRatio } from '../game/adaptivedpr';
+import { setMaterialQuality, type Theme } from './materials';
 import { ScopePass } from './sights';
 import { SkyView } from './sky';
 
-export interface Quality { pixelRatio: number; shadows: number; bloom: boolean }
+/**
+ * A graphics preset. Phones default to `low`, which follows messenger.abeto.co's budget: a sharp
+ * but adaptive resolution, one plain-PCF shadow over a small area around the player, no bloom and
+ * no extra lights.
+ */
+export interface Quality {
+  /** Pixel ratio cap: a number, or 'phone' (Messenger's: up to 1.15 on screens of ratio 2 or less, 1.5 above). */
+  pixelRatio: number | 'phone';
+  /** Scale the pixel ratio by frame rate while a match is played (game/adaptivedpr.ts). */
+  adaptive: boolean;
+  /** Sun shadow map size; 0 = no shadows. */
+  shadows: number;
+  /** Half the side of the square the sun's shadow covers (m); its centre is `shadowAhead` m in front of the camera. */
+  shadowRange: number;
+  shadowAhead: number;
+  /** PCF soft shadows (wider filter) or plain PCF. */
+  softShadows: boolean;
+  /** Draw the shadow map every other frame. */
+  halfRateShadows: boolean;
+  /** Meshes smaller than this (bounding radius, m) cast no shadow. */
+  minCaster: number;
+  /** Also no shadows from the big merged clutter (hedges, lot detail, street props). */
+  leanCasters: boolean;
+  bloom: boolean;
+  /** Muzzle-flash point lights and the flashlight attachment's spot light. */
+  dynamicLights: boolean;
+  /** Level surfaces without roughness maps, ground without normal maps (render/materials.ts). */
+  cheapMaterials: boolean;
+}
+const SHARP: Omit<Quality, 'pixelRatio'> = { adaptive: true, shadows: 2048, shadowRange: 40, shadowAhead: 15, softShadows: true, halfRateShadows: false, minCaster: 0.2, leanCasters: false, bloom: true, dynamicLights: true, cheapMaterials: false };
 /** 'test' exists for software-rendered automation (no GPU); it is not a player-facing preset. */
 export const QUALITY: Record<'low' | 'medium' | 'high' | 'test', Quality> = {
-  low: { pixelRatio: 0.85, shadows: 1024, bloom: false },
-  medium: { pixelRatio: 1, shadows: 2048, bloom: true },
-  high: { pixelRatio: 1.5, shadows: 2048, bloom: true },
-  test: { pixelRatio: 0.5, shadows: 0, bloom: false },
+  low: { pixelRatio: 'phone', adaptive: true, shadows: 1024, shadowRange: 22, shadowAhead: 10, softShadows: false, halfRateShadows: true, minCaster: 1.2, leanCasters: true, bloom: false, dynamicLights: false, cheapMaterials: true },
+  medium: { ...SHARP, pixelRatio: 1 },
+  high: { ...SHARP, pixelRatio: 1.5 },
+  test: { ...SHARP, pixelRatio: 0.5, adaptive: false, shadows: 0, bloom: false, dynamicLights: false },
 };
+
+/** Merged clutter that casts no shadow on lean presets (mesh names from level.ts, dressing.ts and lotdetail.ts). */
+const LEAN_CASTERS = /^(level:hedge|lots:|street:props)/;
+const sphere = new THREE.Sphere();
+
+/**
+ * Which meshes under `root` cast sun shadows on preset `q`: those built to cast one, less the small
+ * ones (bounding radius under `q.minCaster`; for instanced props, one instance's) and, on lean
+ * presets, the merged clutter. It works on whatever the level builders made, and again after a
+ * change of preset (the builder's choice is kept in `userData.shadowWanted`). Skinned soldiers are
+ * left alone: their level of detail owns their shadows.
+ */
+export function limitShadowCasters(root: THREE.Object3D, q: Pick<Quality, 'minCaster' | 'leanCasters'>) {
+  root.updateWorldMatrix(true, true);
+  root.traverse(o => {
+    const mesh = o as THREE.Mesh;
+    if (!mesh.isMesh || (mesh as THREE.SkinnedMesh).isSkinnedMesh) return;
+    const data = mesh.userData;
+    if (data.shadowWanted === undefined) data.shadowWanted = mesh.castShadow;
+    if (!data.shadowWanted) return;
+    const geometry = mesh.geometry;
+    if (!geometry.boundingSphere) geometry.computeBoundingSphere();
+    // A batch of small parts (src/render/batch.ts) counts by its parts' size, not the whole batch's.
+    const radius = (data.casterRadius as number | undefined) ?? sphere.copy(geometry.boundingSphere!).applyMatrix4(mesh.matrixWorld).radius;
+    mesh.castShadow = radius >= q.minCaster && !(q.leanCasters && LEAN_CASTERS.test(mesh.name));
+  });
+}
 
 /** Owns the WebGL renderer, world scene, first-person overlay scene and post-processing. */
 export class Renderer {
@@ -28,28 +85,45 @@ export class Renderer {
   readonly viewCamera = new THREE.PerspectiveCamera(58, 1, 0.01, 10);
   readonly sun = new THREE.DirectionalLight(0xffffff, 3);
   readonly hemi = new THREE.HemisphereLight(0xffffff, 0x444444, 1);
+  /**
+   * The flashlight attachment's light, on the world camera: one for every view model (only one is
+   * shown at a time). It is in the scene only on presets with dynamic lights, so the light count,
+   * and with it every lit shader, stays the same all match.
+   */
+  readonly torch = new THREE.SpotLight(0xfff1dc, 0, 45, 0.36, 0.55, 1.4);
+  /** Resolution scale by frame rate, while a match is played. */
+  adaptive = new AdaptiveDpr();
   sky?: SkyView;
   private composer: EffectComposer;
   private bloom: UnrealBloomPass;
   private sunOffset = new THREE.Vector3(-50, 70, 40);
   /** Picture-in-picture scope view, rendered only while the view model asks for it (a magnified optic raised). */
   private scope = new ScopePass();
+  /** Groups whose shadow casters follow the preset (limitShadowCasters), looked at again now and then for new meshes. */
+  private shadowRoots = new Set<THREE.Object3D>();
+  private qualityListeners = new Set<(q: Quality) => void>();
+  private frames = 0;
+  private lastFrameAt = 0;
   quality: Quality;
 
   constructor(container: HTMLElement, quality: Quality) {
     this.quality = quality;
-    this.renderer = new THREE.WebGLRenderer({ antialias: true, powerPreference: 'high-performance', stencil: false });
+    // Everything is drawn into the composer's own target first, so the canvas needs no multisampling,
+    // depth or stencil buffer of its own (the scope view and the shadow map have their own targets too).
+    this.renderer = new THREE.WebGLRenderer({ antialias: false, depth: false, stencil: false, powerPreference: 'high-performance' });
     this.renderer.toneMapping = THREE.ACESFilmicToneMapping;
     this.renderer.shadowMap.enabled = quality.shadows > 0;
     this.renderer.info.autoReset = false;
-    this.renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+    this.renderer.shadowMap.type = quality.softShadows ? THREE.PCFSoftShadowMap : THREE.PCFShadowMap;
     container.prepend(this.renderer.domElement);
     this.camera.rotation.order = 'YXZ';
     this.scene.add(this.camera, this.sun, this.sun.target, this.hemi);
     this.sun.castShadow = true;
     const sc = this.sun.shadow.camera;
-    sc.left = -55; sc.right = 55; sc.top = 55; sc.bottom = -55; sc.near = 1; sc.far = 260;
+    sc.near = 1; sc.far = 260;
     this.sun.shadow.bias = -0.0004; this.sun.shadow.normalBias = 0.04;
+    this.torch.position.set(0.12, -0.12, 0);
+    this.torch.target.position.set(0.05, -0.1, -10);
     // View-model lighting mirrors the world sun.
     const vmSun = new THREE.DirectionalLight(0xffffff, 2.2), vmHemi = new THREE.HemisphereLight(0xffffff, 0x444444, 1.1);
     vmSun.name = 'vmSun'; vmHemi.name = 'vmHemi';
@@ -69,12 +143,46 @@ export class Renderer {
   }
 
   applyQuality(q: Quality) {
+    if (q !== this.quality) this.adaptive = new AdaptiveDpr();
     this.quality = q;
+    setMaterialQuality(q.cheapMaterials);
     this.sun.castShadow = q.shadows > 0;
     this.sun.shadow.mapSize.set(Math.max(256, q.shadows), Math.max(256, q.shadows));
     this.sun.shadow.map?.dispose(); this.sun.shadow.map = null;
+    const sc = this.sun.shadow.camera;
+    sc.left = sc.bottom = -q.shadowRange; sc.right = sc.top = q.shadowRange;
+    sc.updateProjectionMatrix();
+    const sm = this.renderer.shadowMap;
+    sm.autoUpdate = true;
+    const type = q.softShadows ? THREE.PCFSoftShadowMap : THREE.PCFShadowMap;
+    if (sm.type !== type) {
+      // The filter is compiled into every lit shader, and three.js does not notice the change by itself.
+      sm.type = type;
+      for (const scene of [this.scene, this.viewScene]) scene.traverse(o => {
+        const material = (o as THREE.Mesh).material;
+        if (material) for (const m of Array.isArray(material) ? material : [material]) m.needsUpdate = true;
+      });
+    }
+    if (q.dynamicLights) this.camera.add(this.torch, this.torch.target);
+    else { this.torch.removeFromParent(); this.torch.target.removeFromParent(); }
     this.bloom.enabled = q.bloom;
+    for (const root of this.shadowRoots) limitShadowCasters(root, q);
+    for (const f of this.qualityListeners) f(q);
     this.resize();
+  }
+
+  /** Follow the preset, now and on every change (returns the unsubscribe). */
+  onQuality(f: (q: Quality) => void) {
+    this.qualityListeners.add(f);
+    f(this.quality);
+    return () => { this.qualityListeners.delete(f); };
+  }
+
+  /** Let `root`'s shadow casters follow the preset (limitShadowCasters), meshes added to it later included. */
+  limitShadows(root: THREE.Object3D) {
+    this.shadowRoots.add(root);
+    limitShadowCasters(root, this.quality);
+    return () => { this.shadowRoots.delete(root); };
   }
 
   setTheme(theme: Theme, sunDir: { x: number; y: number; z: number }) {
@@ -103,9 +211,16 @@ export class Renderer {
     vmHemi.color.copy(theme.hemiSky); vmHemi.groundColor.copy(theme.hemiGround); vmHemi.intensity = theme.hemiIntensity;
   }
 
+  /** The pixel ratio drawn at: the preset's cap for this screen, times the adaptive scale. */
+  pixelRatio() {
+    const q = this.quality;
+    return Math.round(basePixelRatio(q.pixelRatio, devicePixelRatio) * (q.adaptive ? this.adaptive.multiplier : 1) * 100) / 100;
+  }
+
   resize() {
+    // Sideways play: the game's own width and height (ui/viewport.ts), not the upright window's.
     const w = viewWidth(), h = viewHeight();
-    const ratio = Math.min(devicePixelRatio, this.quality.pixelRatio);
+    const ratio = this.pixelRatio();
     this.renderer.setPixelRatio(ratio);
     this.renderer.setSize(w, h);
     this.composer.setPixelRatio(ratio);
@@ -145,7 +260,7 @@ export class Renderer {
    * while the drawing buffer still holds the frame.
    */
   snapshot(maxWidth = 1280) {
-    this.render(this.lastTime);
+    this.draw(this.lastTime);
     const src = this.renderer.domElement;
     const scale = Math.min(1, maxWidth / src.width);
     const out = document.createElement('canvas');
@@ -155,17 +270,51 @@ export class Renderer {
   }
   private lastTime = 0;
 
-  render(time: number) {
+  /**
+   * One frame. `playing`: a match is under way (not loading, not a menu): only those frames tune the
+   * adaptive resolution.
+   */
+  render(time: number, playing = false) {
+    const now = performance.now(), dt = this.lastFrameAt ? (now - this.lastFrameAt) / 1000 : 0;
+    this.lastFrameAt = now;
+    if (this.quality.adaptive && this.adaptive.frame(dt, playing)) this.resize();
+    // New meshes (a vehicle, a crate) follow the preset's shadow casters within a second.
+    if (++this.frames % 60 === 0) for (const root of this.shadowRoots) limitShadowCasters(root, this.quality);
+    this.draw(time);
+  }
+
+  private shadowCentre = new THREE.Vector3();
+  private lightX = new THREE.Vector3();
+  private lightY = new THREE.Vector3();
+  private lightZ = new THREE.Vector3();
+
+  private draw(time: number) {
     this.lastTime = time;
     this.renderer.info.reset();
-    // Keep the shadow frustum centered on the player, snapped to texels to avoid shimmering.
-    const target = this.camera.position;
-    const texel = 110 / this.sun.shadow.mapSize.x;
-    const sx = Math.round(target.x / texel) * texel, sz = Math.round(target.z / texel) * texel;
-    this.sun.target.position.set(sx, 0, sz);
-    this.sun.position.set(sx + this.sunOffset.x, this.sunOffset.y, sz + this.sunOffset.z);
+    this.placeShadow();
+    const sm = this.renderer.shadowMap;
+    if (this.quality.halfRateShadows) { sm.autoUpdate = false; sm.needsUpdate = this.frames % 2 === 0; }
     this.sky?.update(time, this.camera);
     this.scope.render(this.renderer, this.scene, this.camera, this.viewCamera);
     this.composer.render();
+  }
+
+  /**
+   * Centre the sun's shadow a little ahead of the camera (most of what is seen is in front), snapped
+   * to whole shadow-map texels across the light's view so its edges never shimmer as the player moves.
+   */
+  private placeShadow() {
+    const q = this.quality, c = this.shadowCentre;
+    this.camera.getWorldDirection(c);
+    const flat = Math.hypot(c.x, c.z) || 1;
+    c.set(c.x / flat * q.shadowAhead, 0, c.z / flat * q.shadowAhead).add(this.camera.getWorldPosition(this.lightX));
+    // The light camera's axes (Object3D.lookAt from sun towards target, up +Y).
+    const z = this.lightZ.copy(this.sunOffset).normalize();
+    const x = this.lightX.set(0, 1, 0).cross(z).normalize(), y = this.lightY.copy(z).cross(x);
+    const texel = 2 * q.shadowRange / this.sun.shadow.mapSize.x;
+    const u = Math.round(c.dot(x) / texel) * texel, v = Math.round(c.dot(y) / texel) * texel, w = c.dot(z);
+    c.copy(x).multiplyScalar(u).addScaledVector(y, v).addScaledVector(z, w);
+    this.sun.target.position.copy(c);
+    this.sun.position.copy(c).add(this.sunOffset);
   }
 }

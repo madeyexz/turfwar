@@ -51,7 +51,6 @@ const reload = Number(params.get('reload') ?? 0);
 if (reload) { p.reloadTotal = 2; p.reloadLeft = 2 * (1 - reload); }
 const vm = new ViewModel(assets, Number(params.get('team') ?? 0));
 vm.setWeapon(weapon, att, true);
-if (!params.has('inspect')) r.camera.add(vm.torch, vm.torch.target);
 // ?inspect: a close 3/4 product shot of the gun with its attachments (as soldiers show it).
 let inspect: THREE.Object3D | undefined;
 if (params.has('inspect')) {
@@ -102,6 +101,7 @@ r.renderer.setAnimationLoop(() => {
   // The world camera zooms like the game's (settings FOV towards the weapon's aim FOV).
   if (!inspect) { r.camera.fov = settings.fov + (p.aimFov - settings.fov) * p.ads; r.camera.updateProjectionMatrix(); }
   vm.update(dt, p, { x: 0, y: 0 });
+  if (!inspect) r.torch.intensity = vm.torch;
   r.render(frames / 60);
   if (++frames === 40) (window as any).__ready = 1;
 });

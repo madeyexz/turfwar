@@ -136,6 +136,9 @@ export class Game {
   /** On-screen controls on phones and tablets (or when switched on in Settings → Controls). */
   private touch?: TouchControls;
   private stopTouch: () => void;
+  private stopRendering: (() => void)[] = [];
+  /** The map's dressing has loaded: frames from now on count for the adaptive resolution. */
+  private levelReady = false;
 
   /** Rebuild a view model only when the weapon or its attachments change. */
   private showWeapon(vm: ViewModel, p: LocalPlayer) {
@@ -174,7 +177,7 @@ export class Game {
     const next = this.otherViewmodel ?? this.viewmodelFor(1 - this.myTeam);
     this.otherViewmodel = this.viewmodel;
     this.viewmodel = next;
-    this.otherViewmodel.root.visible = false; this.otherViewmodel.torch.intensity = 0;
+    this.otherViewmodel.root.visible = false; this.otherViewmodel.torch = 0;
     this.shownWeapon = '';
   }
 
@@ -183,7 +186,6 @@ export class Game {
     if (!this.otherViewmodel) {
       this.otherViewmodel = new ViewModel(this.assets, team);
       this.renderer.viewCamera.add(this.otherViewmodel.root);
-      this.renderer.camera.add(this.otherViewmodel.torch, this.otherViewmodel.torch.target);
     }
     return this.otherViewmodel;
   }
@@ -219,10 +221,9 @@ export class Game {
     this.myTeam = me?.team ?? 0;
     this.viewmodel = new ViewModel(assets, this.myTeam);
     renderer.viewCamera.add(this.viewmodel.root);
-    // The flashlight attachment lights the world, so it rides on the world camera.
-    renderer.camera.add(this.viewmodel.torch, this.viewmodel.torch.target);
-    // The other side's arms (watching an enemy after death) are built now: its torch adds a light, and a
-    // new light count recompiles every lit shader in the world, a freeze of seconds on a phone.
+    // The other side's arms (watching an enemy after death) are built now, not at the first death. Both
+    // share the renderer's one flashlight light (Renderer.torch), which is in the scene all match or not
+    // at all: a new light count recompiles every lit shader in the world, a freeze of seconds on a phone.
     this.viewmodelFor(1 - this.myTeam);
     this.hud = new Hud(container, def);
     this.hud.onMenu = () => this.onExit?.('end_screen');
@@ -263,8 +264,18 @@ export class Game {
     this.stopTouch = onTouchLayout(applyTouch);
     const room = link.roomInfo?.();
     if (room?.code) this.hud.toast(t('hud.privateToast', { code: room.code, size: room.size }), 12000);
+    // The preset's shadow casters (small props cast none on phones) and muzzle-flash lights.
+    this.stopRendering = [
+      ...[this.level.group, this.crates.group, this.sites.group, this.vehicles.group].map(g => renderer.limitShadows(g)),
+      renderer.onQuality(q => this.effects.dynamicLights(q.dynamicLights)),
+    ];
     // Shaders and textures for the whole map, once its dressing (trees, street sets) has loaded.
-    this.level.ready.then(() => { if (this.running) renderer.warm(); });
+    this.level.ready.then(() => {
+      if (!this.running) return;
+      this.levelReady = true;
+      renderer.limitShadows(this.level.group);
+      renderer.warm();
+    });
     if (import.meta.env.DEV) Object.assign(window, { __game: this });
   }
 
@@ -284,8 +295,9 @@ export class Game {
     if (this.selfView) { this.selfView.dispose(); this.selfView.root.removeFromParent(); this.selfView.gun.removeFromParent(); }
     for (const r of this.remotes.values()) { r.view.dispose(); r.view.gun.removeFromParent(); }
     this.viewmodel.root.removeFromParent();
-    this.viewmodel.torch.removeFromParent(); this.viewmodel.torch.target.removeFromParent();
-    for (const vm of [this.otherViewmodel]) if (vm) { vm.root.removeFromParent(); vm.torch.removeFromParent(); vm.torch.target.removeFromParent(); }
+    this.otherViewmodel?.root.removeFromParent();
+    this.renderer.torch.intensity = 0;
+    for (const f of this.stopRendering) f();
     this.stopTouch();
     this.touch?.dispose(); this.touch = undefined;
     this.input.dispose();
@@ -532,8 +544,8 @@ export class Game {
       cam.updateProjectionMatrix();
       // A scooter rider in first person holds the weapon in view; otherwise no weapon in view.
       if (this.driving.armed && this.driving.firstPerson) this.viewmodel.update(dt, this.player, look);
-      else { this.viewmodel.root.visible = false; this.viewmodel.torch.intensity = 0; }
-      if (this.otherViewmodel) { this.otherViewmodel.root.visible = false; this.otherViewmodel.torch.intensity = 0; }
+      else { this.viewmodel.root.visible = false; this.viewmodel.torch = 0; }
+      if (this.otherViewmodel) { this.otherViewmodel.root.visible = false; this.otherViewmodel.torch = 0; }
       this.hud.spectate(undefined, 0);
     } else if (this.player.alive) {
       const eye = this.player.eye();
@@ -553,7 +565,7 @@ export class Game {
       this.renderer.viewCamera.updateProjectionMatrix();
       // update() also decides visibility: a full-zoom scope or binoculars hide the weapon.
       this.viewmodel.update(dt, this.player, look);
-      if (this.otherViewmodel) { this.otherViewmodel.root.visible = false; this.otherViewmodel.torch.intensity = 0; }
+      if (this.otherViewmodel) { this.otherViewmodel.root.visible = false; this.otherViewmodel.torch = 0; }
       this.hud.spectate(undefined, 0);
     } else this.spectate(state, me, positions, dt, active);
     const mag = this.player.magnification;
@@ -565,7 +577,9 @@ export class Game {
     this.updateEngines(state);
     // Smoke after the camera is placed: standing in a cloud greys the whole screen.
     this.hud.smokeFog(this.smoke.update(performance.now() / 1000, cam.position));
-    if (render) this.renderer.render(this.time);
+    // One flashlight light for whichever view model is shown.
+    this.renderer.torch.intensity = Math.max(this.viewmodel.torch, this.otherViewmodel?.torch ?? 0);
+    if (render) this.renderer.render(this.time, this.levelReady && !this.menu.open);
 
     // ---- HUD ----
     this.hud.frame(dt, this.player, state, me, cam, positions);
@@ -913,7 +927,7 @@ export class Game {
     // The watched soldier died: follow a teammate, then anyone.
     if (!target && living.length) { target = living.find(s => s.team === me?.team) ?? living[0]; this.spectating = target.id; }
     const r = target ? this.remotes.get(target.id) : undefined;
-    for (const vm of [this.viewmodel, this.otherViewmodel]) if (vm) { vm.root.visible = false; vm.torch.intensity = 0; }
+    for (const vm of [this.viewmodel, this.otherViewmodel]) if (vm) { vm.root.visible = false; vm.torch = 0; }
     this.watched.alive = false;
     if (target && r) {
       // First person through their eyes: their gun, attachments, aim, sprint, reload and shots.
