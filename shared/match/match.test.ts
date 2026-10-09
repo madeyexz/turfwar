@@ -8,11 +8,11 @@ import { GRENADE, SMOKE, WEAPONS, pelletCone, pelletDirs, weaponStats } from '..
 import { findPath, nearestNode } from './nav';
 import {
   BOMB_REACH, addSoldier, balanceTeams, buyAttachmentFor, buyItem, createContext, createMatch, fireShot, reportState,
-  canSwitchTeam, removeSoldier, resetMatch, switchTeam, throwSmoke, tickMatch, useAmmoCrate, TICK_RATE,
+  canSwitchTeam, removeSoldier, resetMatch, switchTeam, throwSmoke, tickMatch, useAmmoCrate, LATE_JOIN_SECONDS, TICK_RATE,
 } from './sim';
 import { ATTACKERS, ELIMINATION, PRACTICE_CONFIG, SABOTAGE, type MatchConfig, type MatchEvent, type MatchState, type Soldier, type Team } from './state';
 import { MOVE_SLACK, killSoldier, sideOf, smokeBlocks, type SimContext } from './combat';
-import { updateBot } from './bots';
+import { ROOKIE_EASE, updateBot } from './bots';
 import { CASH } from './economy';
 import { decodeFrame, encodeFrame } from './frame';
 
@@ -610,6 +610,38 @@ describe('M18 smoke grenade', () => {
     expect(look()).toBe(foe.id);
     state.bodies.push(cloudAt(0, bot.m.y, 22));
     expect(look()).toBe(-1);
+  });
+});
+
+describe('new players (first rounds are winnable)', () => {
+  it("a human joining in a round's first seconds deploys at once; later, they wait for the next round", () => {
+    const { state, ctx } = setup({ ...ELIMINATION, warmup: 0 });
+    addSoldier(state, ctx, { name: 'Host', team: 0, bot: false });
+    goLive(state, ctx);
+    state.roundClock = LATE_JOIN_SECONDS - 5;
+    const early = addSoldier(state, ctx, { name: 'Early', team: 1, bot: false });
+    expect(early.alive).toBe(true);
+    state.roundClock = LATE_JOIN_SECONDS + 5;
+    const late = addSoldier(state, ctx, { name: 'Late', team: 1, bot: false });
+    expect(late.alive).toBe(false);
+    // Bots never jump in mid-round.
+    state.roundClock = 1;
+    expect(addSoldier(state, ctx, { name: 'Bot', team: 1, bot: true }).alive).toBe(false);
+  });
+
+  it('bots take longer to react to a rookie', () => {
+    const reactionTo = (rookie: boolean) => {
+      const { state, ctx } = setup({ ...ELIMINATION, warmup: 0 }, 7);
+      const bot = addSoldier(state, ctx, { name: 'Bot', team: 0, bot: true });
+      const foe = addSoldier(state, ctx, { name: 'New', team: 1, bot: false, rookie });
+      goLive(state, ctx);
+      place(bot, -6, 22, ctx); place(foe, 6, 22, ctx); bot.yaw = -Math.PI / 2;
+      bot.brain!.target = -1; bot.brain!.think = 0;
+      updateBot(state, ctx, bot, 1 / TICK_RATE);
+      expect(bot.brain!.target).toBe(foe.id);
+      return bot.brain!.reaction;
+    };
+    expect(reactionTo(true) - reactionTo(false)).toBeCloseTo(ROOKIE_EASE.reaction, 5);
   });
 });
 

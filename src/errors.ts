@@ -29,9 +29,10 @@ export function errorSource(filename: string | undefined, line?: number, column?
 /**
  * The page's own failures go to PostHog as `client_error`, so a crash a player reports leaves a trace:
  * uncaught errors, promises nobody caught, and the browser taking the graphics (WebGL) context away
- * (a black screen), which also calls `onGraphicsLost` so the player is told to reload.
+ * (a black screen), which calls `onGraphicsLost`; browsers usually hand the context back (a phone app
+ * returning from the background), which calls `onGraphicsRestored` and the game carries on.
  */
-export function watchClientErrors(canvas: HTMLCanvasElement, inMatch: () => boolean, onGraphicsLost: () => void) {
+export function watchClientErrors(canvas: HTMLCanvasElement, inMatch: () => boolean, onGraphicsLost: () => void, onGraphicsRestored: () => void = () => undefined) {
   const report = errorReporter((kind, message, source) => track('client_error', { kind, message, ...(source ? { source } : {}), in_match: inMatch() }));
   // Script errors only: a failed image or font load is an `error` event on its element, which does not reach here.
   addEventListener('error', e => {
@@ -47,4 +48,5 @@ export function watchClientErrors(canvas: HTMLCanvasElement, inMatch: () => bool
     report('webgl_lost', 'WebGL context lost');
     onGraphicsLost();
   });
+  canvas.addEventListener('webglcontextrestored', () => { track('client_error', { kind: 'webgl_restored', message: 'WebGL context restored', in_match: inMatch() }); onGraphicsRestored(); });
 }

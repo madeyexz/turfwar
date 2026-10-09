@@ -15,6 +15,7 @@ import { RETICLE_CSS } from '../render/sights';
 import { UI_STACK } from './fonts';
 import { L, applyI18n, causeName, mapName, modeName, onLang, rewardReason, t, teamName, teamShort } from './i18n';
 import { scoreBarFit, scoreBarRoom } from './scorebarfit';
+import { viewHeight, viewRect, viewWidth } from './viewport';
 
 const TEAM_CSS = ['var(--aegis)', 'var(--crimson)'];
 const TEAM_HEX = ['#4aa8ff', '#ff5544'];
@@ -202,8 +203,8 @@ export class Hud {
     if (!cross.hidden) {
       if (cross.dataset.style !== this.crosshairStyle) cross.dataset.style = this.crosshairStyle;
       const spread = p.currentSpread();
-      const px = Math.tan(Math.min(80, spread) * Math.PI / 180) / Math.tan(camera.fov * Math.PI / 360) * innerHeight / 2;
-      const gap = Math.min(innerHeight * 0.3, Math.max(3, px + (p.sprinting ? 10 : 0)));
+      const px = Math.tan(Math.min(80, spread) * Math.PI / 180) / Math.tan(camera.fov * Math.PI / 360) * viewHeight() / 2;
+      const gap = Math.min(viewHeight() * 0.3, Math.max(3, px + (p.sprinting ? 10 : 0)));
       cross.style.setProperty('--gap', `${gap.toFixed(1)}px`);
       cross.classList.toggle('busy', p.reloading);
     }
@@ -272,10 +273,10 @@ export class Hud {
   private project(camera: THREE.PerspectiveCamera, x: number, y: number, z: number) {
     const v = this.v.set(x, y, z).project(camera);
     const behind = v.z > 1;
-    let sx = (v.x * 0.5 + 0.5) * innerWidth, sy = (-v.y * 0.5 + 0.5) * innerHeight;
-    if (behind) { sx = innerWidth - sx; sy = innerHeight * 0.68; }
+    let sx = (v.x * 0.5 + 0.5) * viewWidth(), sy = (-v.y * 0.5 + 0.5) * viewHeight();
+    if (behind) { sx = viewWidth() - sx; sy = viewHeight() * 0.68; }
     // Off-screen markers ride the screen edge, clear of the score bar and the bottom panels.
-    const cx = Math.max(40, Math.min(innerWidth - 40, sx)), cy = Math.max(130, Math.min(innerHeight * 0.68, sy));
+    const cx = Math.max(40, Math.min(viewWidth() - 40, sx)), cy = Math.max(130, Math.min(viewHeight() * 0.68, sy));
     return { x: cx, y: cy, off: behind || cx !== sx || cy !== sy };
   }
 
@@ -314,7 +315,7 @@ export class Hud {
         let tag = this.nametags.get(s.id);
         if (!tag) { tag = document.createElement('div'); layer.appendChild(tag); this.nametags.set(s.id, tag); }
         tag.className = `nametag t${s.team}${s.health < HEALTH.critical ? ' low' : ''}`;
-        tag.style.left = `${(v.x * 0.5 + 0.5) * innerWidth}px`; tag.style.top = `${(-v.y * 0.5 + 0.5) * innerHeight}px`;
+        tag.style.left = `${(v.x * 0.5 + 0.5) * viewWidth()}px`; tag.style.top = `${(-v.y * 0.5 + 0.5) * viewHeight()}px`;
         tag.style.opacity = String(Math.max(0.35, 1 - d / 90));
         const key = s.name + Math.ceil(s.health);
         if (tag.dataset.t !== key) { tag.dataset.t = key; tag.innerHTML = `${escape(s.name)}<i class="hp"><i style="width:${Math.max(0, Math.min(100, s.health))}%"></i></i>`; }
@@ -447,8 +448,8 @@ export class Hud {
     this.fitAt = now;
     const sb = this.el.sb;
     if (!document.body.classList.contains('touch')) { sb.classList.remove('sb-tight'); sb.style.removeProperty('--sbs'); return; }
-    const buttons = Array.from(document.querySelectorAll<HTMLElement>('#touch .tc-btn:not([hidden])'), b => b.getBoundingClientRect());
-    const room = scoreBarRoom(innerWidth, buttons);
+    const buttons = Array.from(document.querySelectorAll<HTMLElement>('#touch .tc-btn:not([hidden])'), b => viewRect(b.getBoundingClientRect()));
+    const room = scoreBarRoom(viewWidth(), buttons);
     sb.classList.remove('sb-tight');
     const fit = scoreBarFit(room, sb.offsetWidth, () => { sb.classList.add('sb-tight'); return sb.offsetWidth; });
     sb.style.setProperty('--sbs', fit.scale.toFixed(3));

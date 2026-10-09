@@ -1,3 +1,4 @@
+import { toView, viewHeight, viewRect, viewWidth } from './viewport';
 import {
   CONTROLS, CUSTOM_ACTIONS, OPACITY_RANGE, SIZE_RANGE, contextControls, defaultLayout, edit, moveTo, placeOf, setTouchLayout, touchLayout, withOptions,
   type ControlId, type PlaceId, type TouchLayout,
@@ -77,7 +78,7 @@ class TouchEditor {
 
   private render() {
     const shown = placesIn(this.ctx);
-    const scale = Math.max(0.85, Math.min(1.5, Math.min(innerWidth, innerHeight) / 390));
+    const scale = Math.max(0.85, Math.min(1.5, Math.min(viewWidth(), viewHeight()) / 390));
     this.stage.style.setProperty('--op', String(this.layout.opacity));
     this.stage.style.setProperty('--tcs', scale.toFixed(3));
     this.stage.innerHTML = shown.map(id => controlHtml(id, this.layout, `${this.layout.controls[id].hidden ? 'hid' : ''}${id === this.sel ? ' sel' : ''}`)).join('');
@@ -163,7 +164,8 @@ class TouchEditor {
   private down(e: PointerEvent) {
     e.preventDefault();
     try { this.stage.setPointerCapture(e.pointerId); } catch { /* synthetic events */ }
-    this.pointers.set(e.pointerId, { x: e.clientX, y: e.clientY });
+    const v = toView(e.clientX, e.clientY);
+    this.pointers.set(e.pointerId, { x: v.x, y: v.y });
     if (this.pointers.size === 2 && this.sel) {
       // A second finger: pinch the selected control.
       const [a, b] = [...this.pointers.values()];
@@ -173,15 +175,16 @@ class TouchEditor {
     }
     const id = (e.target as HTMLElement).closest<HTMLElement>('[data-c]')?.dataset.c as PlaceId | undefined;
     if (!id) { this.clearOnUp = this.pointers.size === 1; return; }
-    const r = this.stage.getBoundingClientRect(), p = placeOf(this.layout, id);
-    this.drag = { pointer: e.pointerId, id, dx: r.left + p.x * r.width - e.clientX, dy: r.top + p.y * r.height - e.clientY, moved: false };
+    const r = viewRect(this.stage.getBoundingClientRect()), p = placeOf(this.layout, id);
+    this.drag = { pointer: e.pointerId, id, dx: r.left + p.x * r.width - v.x, dy: r.top + p.y * r.height - v.y, moved: false };
     if (id !== this.sel) this.select(id);
   }
 
   private move(e: PointerEvent) {
     const pt = this.pointers.get(e.pointerId);
     if (!pt) return;
-    pt.x = e.clientX; pt.y = e.clientY;
+    const v = toView(e.clientX, e.clientY);
+    pt.x = v.x; pt.y = v.y;
     if (this.pinch && this.sel && this.pointers.size >= 2) {
       const [a, b] = [...this.pointers.values()];
       const size = this.pinch.size * Math.hypot(a.x - b.x, a.y - b.y) / this.pinch.dist;
@@ -193,9 +196,9 @@ class TouchEditor {
     }
     const d = this.drag;
     if (!d || d.pointer !== e.pointerId) return;
-    const r = this.stage.getBoundingClientRect();
+    const r = viewRect(this.stage.getBoundingClientRect());
     d.moved = true;
-    this.layout = moveTo(this.layout, d.id, (e.clientX + d.dx - r.left) / r.width, (e.clientY + d.dy - r.top) / r.height);
+    this.layout = moveTo(this.layout, d.id, (v.x + d.dx - r.left) / r.width, (v.y + d.dy - r.top) / r.height);
     this.restyle(d.id);
   }
 

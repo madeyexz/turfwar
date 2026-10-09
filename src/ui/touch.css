@@ -113,6 +113,21 @@ body.menu-open .touch-layer { display: none; }
 @media (orientation: portrait) {
   body.touch:not(.menu-open) #rotate, body.touch.tc-editing #rotate { display: flex; }
 }
+/*
+ * Sideways play (src/ui/viewport.ts): an upright touch screen that cannot turn (in-app browsers,
+ * rotation lock) shows the match turned a quarter clockwise, and the player turns the phone. The body
+ * is sized to the landscape view in JS; fixed-position layers turn with it (a transform makes the body
+ * their containing block).
+ */
+body.touch.sideways { position: fixed; inset: auto; top: 0; left: 0; overflow: hidden; transform-origin: 0 0; transform: rotate(90deg) translateY(-100%); }
+body.sideways #rotate { display: none !important; }
+#sideways-tip {
+  position: fixed; z-index: 41; left: 50%; top: 18%; transform: translateX(-50%); display: flex; align-items: center; gap: 12px;
+  padding: 12px 18px; background: rgba(5, 9, 12, 0.88); border: 1px solid var(--accent); color: var(--ink);
+  font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; pointer-events: none; animation: sidewaysTip 4.5s ease forwards;
+}
+#sideways-tip svg { width: 34px; height: 34px; stroke: var(--accent); stroke-width: 1.6; fill: none; stroke-linecap: round; stroke-linejoin: round; animation: tcTurn 2.4s ease-in-out infinite; }
+@keyframes sidewaysTip { 0%, 80% { opacity: 1; } 100% { opacity: 0; } }
 
 /* ---------- Install hint (lobby, phones and tablets) ---------- */
 .install-hint {
@@ -127,6 +142,7 @@ body.menu-open .touch-layer { display: none; }
 .install-hint p.tip { grid-column: 1 / -1; padding-top: 6px; border-top: 1px solid var(--line); font-size: 12px; }
 .install-hint .share { display: inline-block; width: 15px; height: 15px; vertical-align: -2px; stroke: var(--accent); fill: none; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
 .install-hint .acts { grid-column: 3; grid-row: 1 / span 2; display: flex; align-items: center; gap: 6px; }
+.install-hint a.inst-go { display: inline-flex; align-items: center; text-decoration: none; }
 .install-hint .inst-go { min-height: 44px; padding: 0 16px; border: 1px solid var(--accent); background: rgba(127, 246, 255, 0.16); color: var(--accent); font-weight: 700; letter-spacing: 0.1em; text-transform: uppercase; }
 .install-hint .x { min-width: 44px; min-height: 44px; border: 1px solid var(--line); background: none; color: var(--muted); font-size: 16px; }
 .install-hint.tip-only { grid-template-columns: 1fr auto; }

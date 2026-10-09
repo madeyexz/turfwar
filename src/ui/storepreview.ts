@@ -1,3 +1,4 @@
+import { toView } from './viewport';
 import * as THREE from 'three';
 import { RoomEnvironment } from 'three/examples/jsm/environments/RoomEnvironment.js';
 import type { Assets } from '../assets';
@@ -119,15 +120,16 @@ export class StorePreview {
     this.scene.add(key, rim, fill, new THREE.HemisphereLight(0xe8f4ff, 0x20282c, 0.55));
     this.el.addEventListener('pointerdown', e => {
       if (!this.renderer) return;
-      this.drag = { x: e.clientX, y: e.clientY };
+      this.drag = toView(e.clientX, e.clientY);
       this.el.setPointerCapture(e.pointerId);
       this.el.classList.add('dragging');
     });
     this.el.addEventListener('pointermove', e => {
       if (!this.drag) return;
-      this.yaw += (e.clientX - this.drag.x) * 0.012;
-      this.tilt = Math.max(-0.45, Math.min(0.6, this.tilt + (e.clientY - this.drag.y) * 0.006));
-      this.drag = { x: e.clientX, y: e.clientY };
+      const p = toView(e.clientX, e.clientY);
+      this.yaw += (p.x - this.drag.x) * 0.012;
+      this.tilt = Math.max(-0.45, Math.min(0.6, this.tilt + (p.y - this.drag.y) * 0.006));
+      this.drag = p;
       this.idle = 0;
     });
     const end = () => { this.drag = undefined; this.idle = 0; this.el.classList.remove('dragging'); };
