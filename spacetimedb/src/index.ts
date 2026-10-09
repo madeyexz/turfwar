@@ -1,4 +1,3 @@
-import { offensiveName } from '../../shared/names';
 import { Identity, ScheduleAt, Timestamp } from 'spacetimedb';
 import { schema, table, t, SenderError, type ReducerCtx, type InferSchema } from 'spacetimedb/server';
 import { loadMap, loadNav } from '../../shared/maps/index';
@@ -652,9 +651,7 @@ function markDay(ctx: Ctx) {
 
 /** Put the caller into `room` (leaving any other room first). Every way in (quick_any, start_room, quick_play, quick_join, join, create_room, join_room, join_public) ends here. */
 function enterRoom(ctx: Ctx, room: number, name: string, team: number) {
-  const typed = name.replace(/[^\p{L}\p{N} _\-.]/gu, '').trim().slice(0, 16) || 'Operator';
-  // Slurs and abuse are not shown to other players (shared/names.ts): such a name plays as an Operator.
-  const clean = offensiveName(typed) ? `Operator-${ctx.sender.toHexString().slice(-4)}` : typed;
+  const clean = name.replace(/[^\p{L}\p{N} _\-.]/gu, '').trim().slice(0, 16) || 'Operator';
   markSeen(ctx, { name: clean });
   const existing = ctx.db.player.identity.find(ctx.sender);
   if (existing && existing.room === room && ctx.db.soldier.id.find(existing.soldierId)) return;

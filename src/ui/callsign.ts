@@ -1,4 +1,3 @@
-import { offensiveName } from '../../shared/names';
 import { ask } from './ask';
 import { t } from './i18n';
 
@@ -38,7 +37,6 @@ export function askCallsign(current: string, play: (name: string) => void) {
     value: madeUpCallsign(current) ? '' : current, attrs: 'autocomplete="nickname" autocapitalize="words"',
     check: raw => {
       const name = cleanCallsign(raw);
-      if (offensiveName(name)) return { error: t('cs.rude') };
       return madeUpCallsign(name) ? { error: t(name ? 'cs.own' : 'cs.empty') } : { ok: name };
     },
     done: play,

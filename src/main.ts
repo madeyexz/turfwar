@@ -32,7 +32,6 @@ import { InstallBanner } from './ui/installhint';
 import { onSideways, watchSideways } from './ui/viewport';
 import { mountProgressBadge } from './ui/progressbadge';
 import { askCallsign, madeUpCallsign } from './ui/callsign';
-import { offensiveName } from '../shared/names';
 import { ask, confirmDialog } from './ui/ask';
 import { watchClientErrors } from './errors';
 import { registerServiceWorker, warmServiceWorker } from './pwa';
@@ -1021,7 +1020,7 @@ function showBackdrop() {
 }
 
 /** A player still on the made-up callsign is asked for one before playing (automation and `?name=` skip it). */
-const needsCallsign = () => !benchMode && !params.get('autostart') && !params.has('name') && (madeUpCallsign(callsign.value) || offensiveName(callsign.value));
+const needsCallsign = () => !benchMode && !params.get('autostart') && !params.has('name') && madeUpCallsign(callsign.value);
 
 /**
  * Run one way in. An online one pressed while the server is still waking is queued: it runs by
