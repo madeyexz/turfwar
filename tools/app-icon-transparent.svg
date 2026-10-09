@@ -1,0 +1,14 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1254" height="1254" viewBox="0 0 1254 1254" role="img" aria-labelledby="title desc">
+  <title id="title">Turf War: Taipei</title>
+  <desc id="desc">Cyan T and white W inside an angular teal shield crowned with Taipei 101, with a transparent background. Hand-traced vector version of the approved app icon.</desc>
+  <g id="shield" fill="#3c6570">
+    <path d="M278 277 549 171 537 222 323 307 323 313 278 313Z"/>
+    <path d="M704 171 973 276 973 377 988 387 929 438 929 307 716 223Z"/>
+    <path d="M235 442 315 517 315 765 379 827 379 895 269 787 269 553 235 520Z"/>
+    <path d="M999 558 1025 534 1025 786 999 818Z"/>
+    <path d="M447 913 620 1045 832 859 832 928 620 1115 416 942Z"/>
+  </g>
+  <path id="taipei-101" fill="#3c6570" d="M624 66H629V90L636 94V115L649 120 645 151 651 155H661L655 194H665L659 234H668L661 274H670L668 313H585L583 274H592L586 234H594L588 194H598L592 155H602L608 151 604 120 617 116V95L624 91Z"/>
+  <path id="letter-t" fill="#7ff6ff" d="M159 330H759L863 449H534V810L407 917V449H275Z"/>
+  <path id="letter-w" fill="#f5f5f5" d="M559 471H658V696L765 582 874 696V510L1093 330 1063 470 973 549 974 975 759 743 540 958 463 900 559 814Z"/>
+</svg>
