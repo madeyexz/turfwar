@@ -4,7 +4,7 @@ import { EffectComposer } from 'three/examples/jsm/postprocessing/EffectComposer
 import { RenderPass } from 'three/examples/jsm/postprocessing/RenderPass.js';
 import { UnrealBloomPass } from 'three/examples/jsm/postprocessing/UnrealBloomPass.js';
 import { OutputPass } from 'three/examples/jsm/postprocessing/OutputPass.js';
-import { AdaptiveDpr, PHONE_ADAPTIVE_DPR, basePixelRatio } from '../game/adaptivedpr';
+import { AdaptiveDpr, PHONE_ADAPTIVE_DPR, basePixelRatio, type AdaptiveDprOptions } from '../game/adaptivedpr';
 import { setMaterialQuality, type Theme } from './materials';
 import { ScopePass } from './sights';
 import { SkyView } from './sky';
@@ -58,6 +58,9 @@ const sphere = new THREE.Sphere();
  * change of preset (the builder's choice is kept in `userData.shadowWanted`). Skinned soldiers are
  * left alone: their level of detail owns their shadows.
  */
+/** The adaptive resolution's options for a preset: phones aim for a steady 60 (PHONE_ADAPTIVE_DPR). */
+export const adaptiveOptions = (q: Pick<Quality, 'pixelRatio'>): Partial<AdaptiveDprOptions> => (q.pixelRatio === 'phone' ? PHONE_ADAPTIVE_DPR : {});
+
 export function limitShadowCasters(root: THREE.Object3D, q: Pick<Quality, 'minCaster' | 'leanCasters'>) {
   root.updateWorldMatrix(true, true);
   root.traverse(o => {
@@ -91,8 +94,8 @@ export class Renderer {
    * and with it every lit shader, stays the same all match.
    */
   readonly torch = new THREE.SpotLight(0xfff1dc, 0, 45, 0.36, 0.55, 1.4);
-  /** Resolution scale by frame rate, while a match is played. */
-  adaptive = new AdaptiveDpr();
+  /** Resolution scale by frame rate, while a match is played (with the preset's options: see adaptiveOptions). */
+  adaptive: AdaptiveDpr;
   sky?: SkyView;
   private composer: EffectComposer;
   private bloom: UnrealBloomPass;
@@ -108,6 +111,8 @@ export class Renderer {
 
   constructor(container: HTMLElement, quality: Quality) {
     this.quality = quality;
+    // Built here with the preset's options: applyQuality below sees the same preset and keeps it.
+    this.adaptive = new AdaptiveDpr(adaptiveOptions(quality));
     // Everything is drawn into the composer's own target first, so the canvas needs no multisampling,
     // depth or stencil buffer of its own (the scope view and the shadow map have their own targets too).
     this.renderer = new THREE.WebGLRenderer({ antialias: false, depth: false, stencil: false, powerPreference: 'high-performance' });
@@ -143,7 +148,7 @@ export class Renderer {
   }
 
   applyQuality(q: Quality) {
-    if (q !== this.quality) this.adaptive = new AdaptiveDpr(q.pixelRatio === 'phone' ? PHONE_ADAPTIVE_DPR : {});
+    if (q !== this.quality) this.adaptive = new AdaptiveDpr(adaptiveOptions(q));
     this.quality = q;
     setMaterialQuality(q.cheapMaterials);
     this.sun.castShadow = q.shadows > 0;
