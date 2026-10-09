@@ -66,6 +66,8 @@ export const ACTIONS = {
   grenade: { group: 'equipment', scopes: ARMED, keys: ['Digit4', 'KeyG'] },
   /** The M18 smoke grenade. */
   smoke: { group: 'equipment', scopes: ARMED, keys: ['Digit5', 'KeyX'] },
+  /** Drink the 珍奶 (heals). */
+  drink: { group: 'equipment', scopes: ARMED, keys: ['Digit6', 'KeyY'] },
   lastWeapon: { group: 'equipment', scopes: ARMED, keys: ['KeyQ'] },
   /** Also steps a sniper scope's zoom while scoped. */
   nextWeapon: { group: 'equipment', scopes: ARMED, keys: ['WheelDown'] },

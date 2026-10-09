@@ -1,6 +1,6 @@
 import type { MapDef } from '../maps/types';
 import {
-  ATTACHMENTS, DEFAULT_WEAPONS, GRENADE, HIGH_EXPLOSIVE, SMOKE, WEAPONS, attachmentPrice, fitsWeapon, weaponStats,
+  ATTACHMENTS, BOBA, DEFAULT_WEAPONS, GRENADE, HIGH_EXPLOSIVE, SMOKE, WEAPONS, attachmentPrice, fitsWeapon, weaponStats,
   type AttachmentId, type WeaponDef, type WeaponId,
 } from '../weapons';
 import type { MatchState, RoundStats, Soldier, Team } from './state';
@@ -20,7 +20,7 @@ export const CASH = {
   loyalty: 1000, loyaltyEvery: 5, bomb: 500, crate: 300,
 };
 
-export type BuyItem = WeaponId | 'grenade' | 'highExplosive' | 'smoke';
+export type BuyItem = WeaponId | 'grenade' | 'highExplosive' | 'smoke' | 'boba';
 
 /** Distance (m) within which an ammo crate can be used. */
 export const CRATE_REACH = 2.4;
@@ -38,7 +38,7 @@ export function resetInventory(s: Soldier) {
   s.weapons = [...DEFAULT_WEAPONS];
   s.owned = [...DEFAULT_WEAPONS];
   s.attachments = {};
-  s.grenades = 0; s.grenadeHE = false; s.smokes = 0;
+  s.grenades = 0; s.grenadeHE = false; s.smokes = 0; s.bobas = 0;
   s.money = CASH.matchBonus;
 }
 
@@ -81,6 +81,13 @@ export function buy(state: MatchState, map: MapDef, s: Soldier | undefined, item
     if (!free) s.money -= SMOKE.price;
     s.smokes++;
     return ok('M18 smoke');
+  }
+  if (item === 'boba') {
+    if (s.bobas >= BOBA.max) return no('You already carry a bubble tea.');
+    if (!free && s.money < BOBA.price) return no('Not enough cash.');
+    if (!free) s.money -= BOBA.price;
+    s.bobas++;
+    return ok('Bubble tea');
   }
   if (item === 'grenade' || item === 'highExplosive') {
     if (item === 'grenade') {

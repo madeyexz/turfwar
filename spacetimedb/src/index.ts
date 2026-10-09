@@ -5,7 +5,7 @@ import { cleanCode, filterError, isRoomSize, mapsFor, newRoomRules, nextRoomRule
 import type { SimContext } from '../../shared/match/combat';
 import { encodeFrame } from '../../shared/match/frame';
 import {
-  ROOKIE_ROUNDS, addSoldier, balanceTeams, buyAttachmentFor, buyItem, createMatch, enterVehicle as getIn, exitVehicle as getOut, fireShot, reload, removeSoldier, reportState, switchTeam, throwSmoke,
+  ROOKIE_ROUNDS, addSoldier, balanceTeams, buyAttachmentFor, buyItem, createMatch, drinkBoba, enterVehicle as getIn, exitVehicle as getOut, fireShot, reload, removeSoldier, reportState, switchTeam, throwSmoke,
   reportVehicle, resetMatch, switchWeapon, throwGrenade, tickMatch, useAmmoCrate, TICK_RATE,
 } from '../../shared/match/sim';
 import {
@@ -256,6 +256,7 @@ type Command =
   | { kind: 'fire'; weapon: Slot; origin: { x: number; y: number; z: number }; dir: { x: number; y: number; z: number }; target: number; zone: 'head' | 'body' | 'legs' | ''; point: { x: number; y: number; z: number } }
   | { kind: 'grenade'; origin: { x: number; y: number; z: number }; dir: { x: number; y: number; z: number } }
   | { kind: 'smoke'; origin: { x: number; y: number; z: number }; dir: { x: number; y: number; z: number } }
+  | { kind: 'drink' }
   | { kind: 'reload' }
   | { kind: 'switch'; slot: Slot }
   | { kind: 'buy'; item: BuyItem }
@@ -270,6 +271,8 @@ interface Gear {
   assists: number; roundsHere: number; using: boolean; round: RoundStats;
   /** M18 smoke grenades carried (no column of its own). */
   smokes?: number;
+  /** 珍奶 carried (no column of its own). */
+  bobas?: number;
   /** A new player: bots go easier on them (no column of its own). */
   rookie?: boolean;
 }
@@ -289,7 +292,7 @@ function soldierFromRow(r: SoldierRow, brain?: BotBrain): Soldier {
     attachments: Object.fromEntries(Object.entries(gear.attachments ?? {}).map(([w, a]) => [w, normalizeAttachments(a)])),
     ammo: [r.ammo0, r.ammo1], reserve: [r.reserve0, r.reserve1],
     reloadLeft: r.reloadLeft, fireCooldown: r.fireCooldown, switchLeft: r.switchLeft, grenades: r.grenades, grenadeHE: gear.grenadeHE ?? false,
-    smokes: gear.smokes ?? 0, stamina: gear.stamina ?? STAMINA.max, money: r.money,
+    smokes: gear.smokes ?? 0, bobas: gear.bobas ?? 0, stamina: gear.stamina ?? STAMINA.max, money: r.money,
     sinceHit: r.sinceHit, lastAttacker: r.lastAttacker, kills: r.kills, deaths: r.deaths, assists: gear.assists ?? 0, score: r.score,
     sprint: r.sprint, ads: r.ads, sinceShot: r.sinceShot, using: gear.using ?? false, corrections: r.corrections,
     moveSlack: r.moveSlack, groundY: r.groundY, idle: r.idle, round: gear.round ?? newRoundStats(), roundsHere: gear.roundsHere ?? 0, brain,
@@ -304,6 +307,7 @@ function soldierToRow(s: Soldier, room: number): SoldierRow {
   const gear: Gear = {
     owned: s.owned, attachments: s.attachments, grenadeHE: s.grenadeHE, stamina: Math.round(s.stamina * 10) / 10,
     assists: s.assists, roundsHere: s.roundsHere, using: s.using, round: s.round, smokes: s.smokes,
+    ...(s.bobas ? { bobas: s.bobas } : {}),
     ...(s.rookie ? { rookie: true } : {}),
   };
   return {
@@ -327,7 +331,7 @@ function rosterRow(s: Soldier, room: number): RosterRow {
     id: s.id, room, name: s.name, team: s.team, bot: s.bot, alive: s.alive, grenades: u(s.grenades, 255), grenadeHE: s.grenadeHE,
     kills: u(s.kills), deaths: u(s.deaths), assists: u(s.assists), score: u(s.score), lastAttacker: s.lastAttacker, corrections: u(s.corrections),
     weapon0: s.weapons[0], weapon1: s.weapons[1], reserve0: u(s.reserve[0], 65535), reserve1: u(s.reserve[1], 65535), money: u(s.money),
-    gearJson: JSON.stringify({ owned: s.owned, attachments: s.attachments, ...(s.smokes ? { smokes: s.smokes } : {}) }),
+    gearJson: JSON.stringify({ owned: s.owned, attachments: s.attachments, ...(s.smokes ? { smokes: s.smokes } : {}), ...(s.bobas ? { bobas: s.bobas } : {}) }),
   };
 }
 const rosterKey = (r: RosterRow) => JSON.stringify(r);
@@ -771,6 +775,7 @@ function applyInputs(ctx: Ctx, state: MatchState, sim: SimContext) {
       case 'fire': fireShot(state, sim, c.soldierId, cmd); break;
       case 'grenade': throwGrenade(state, sim, c.soldierId, cmd.origin, cmd.dir); break;
       case 'smoke': throwSmoke(state, sim, c.soldierId, cmd.origin, cmd.dir); break;
+      case 'drink': drinkBoba(state, sim, c.soldierId); break;
       case 'reload': reload(state, c.soldierId); break;
       case 'switch': switchWeapon(state, c.soldierId, cmd.slot); break;
       case 'buy': buyItem(state, sim, c.soldierId, cmd.item); break;
@@ -986,6 +991,9 @@ export const smoke = spacetimedb.reducer({ ox: t.f32(), oy: t.f32(), oz: t.f32()
   queue(ctx, { kind: 'smoke', origin: { x: a.ox, y: a.oy, z: a.oz }, dir: { x: a.dx, y: a.dy, z: a.dz } });
 });
 
+/** Drink the carried 珍奶 (the client has sipped; the next tick heals if the shared rules allow). */
+export const drink = spacetimedb.reducer({}, ctx => { queue(ctx, { kind: 'drink' }); });
+
 export const reloadWeapon = spacetimedb.reducer({}, ctx => { queue(ctx, { kind: 'reload' }); });
 
 /** Change sides (the shared rules decide: only toward the side with fewer humans, between fights). */
@@ -995,7 +1003,7 @@ export const switchSlot = spacetimedb.reducer({ slot: t.u8() }, (ctx, { slot }) 
 
 /** Store purchase; validated by the next tick (buy time in base, cash). */
 export const buy = spacetimedb.reducer({ item: t.string() }, (ctx, { item }) => {
-  if (item !== 'grenade' && item !== 'highExplosive' && item !== 'smoke' && (!(item in WEAPONS) || item === 'knife')) throw new SenderError('Unknown item');
+  if (item !== 'grenade' && item !== 'highExplosive' && item !== 'smoke' && item !== 'boba' && (!(item in WEAPONS) || item === 'knife')) throw new SenderError('Unknown item');
   queue(ctx, { kind: 'buy', item: item as BuyItem });
 });
 

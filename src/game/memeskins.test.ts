@@ -15,13 +15,13 @@ describe('National Day reskins', () => {
     expect(classicRequested('?a=1&classic=yes')).toBe(true);
   });
 
-  it('rename the knife and the M18 everywhere they are named', () => {
+  it('rename the knife everywhere it is named; the M18 stays the M18', () => {
     const on = withMemeNames(true), off = withMemeNames(false);
     expect(on['zh-TW']['cause.knife']).toBe('藍白拖');      // kill feed
     expect(on['zh-TW']['store.knife']).toBe('藍白拖');      // store
-    expect(on['zh-TW']['item.smoke']).toBe('珍奶煙霧彈');
+    expect(on['zh-TW']['item.smoke']).toBe('M18');
     expect(on.en['cause.knife']).toBe('Slipper');
-    expect(on.en['item.smoke']).toBe('Boba Smoke');
+    expect(on.en['item.smoke']).toBe('M18');
     expect(off['zh-TW']['cause.knife']).toBe('刀');
     expect(off.en['item.smoke']).toBe('M18');
     expect(off.en['act.knife']).toBe('Knife');

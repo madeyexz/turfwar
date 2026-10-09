@@ -1,9 +1,8 @@
 /**
- * National Day reskins (cosmetic only): the knife is a 藍白拖 (the blue-and-white rubber slipper) and
- * the M18 is a 珍奶煙霧彈 (a bubble-tea cup; its cloud is milk tea with tapioca pearls). Weapon ids,
- * stats and the rules (smoke still blocks sight exactly as before) are untouched; only models, the
- * cloud's look, sounds and names change. One switch: set DEFAULT to false to turn both off, or open
- * the game with `?classic=1` for the original knife and M18.
+ * National Day reskin (cosmetic only): the knife is a 藍白拖 (the blue-and-white rubber slipper). The
+ * weapon id, stats and rules are untouched; only the model, the swing, the sound and the name change.
+ * One switch: set DEFAULT to false to turn it off, or open the game with `?classic=1` for the knife.
+ * (The 珍奶 is a real item, not a reskin: BOBA in shared/weapons.ts.)
  */
 const DEFAULT = true;
 

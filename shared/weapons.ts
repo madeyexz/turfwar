@@ -241,6 +241,12 @@ export const HIGH_EXPLOSIVE = { price: 1500, damage: 45, radius: -6 };
  */
 export const SMOKE = { price: 300, max: 1, fuse: 1.6, duration: 15, radius: 4.5, height: 1.6 };
 
+/**
+ * 珍奶 (bubble tea; our own item, not BeGone's): bought like the M18, one carried. Drinking it takes
+ * `drinkTime` (the client sips, then asks; no shooting meanwhile) and restores `heal` health up to the maximum.
+ */
+export const BOBA = { price: 400, max: 1, heal: 50, drinkTime: 1.4 };
+
 /** 100 HP, no armor, no regeneration within a round; below `critical` the screen desaturates. */
 export const HEALTH = { max: 100, critical: 25 };
 

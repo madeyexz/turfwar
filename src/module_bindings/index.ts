@@ -42,6 +42,7 @@ import BuyAttachmentReducer from "./buy_attachment_reducer";
 import ChangeTeamReducer from "./change_team_reducer";
 import CreateRoomReducer from "./create_room_reducer";
 import DeviceReducer from "./device_reducer";
+import DrinkReducer from "./drink_reducer";
 import EnterVehicleReducer from "./enter_vehicle_reducer";
 import ExitVehicleReducer from "./exit_vehicle_reducer";
 import FireReducer from "./fire_reducer";
@@ -292,6 +293,7 @@ const reducersSchema = __reducers(
   __reducerSchema("change_team", ChangeTeamReducer),
   __reducerSchema("create_room", CreateRoomReducer),
   __reducerSchema("device", DeviceReducer),
+  __reducerSchema("drink", DrinkReducer),
   __reducerSchema("enter_vehicle", EnterVehicleReducer),
   __reducerSchema("exit_vehicle", ExitVehicleReducer),
   __reducerSchema("fire", FireReducer),

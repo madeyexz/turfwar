@@ -4,10 +4,10 @@ import { rng } from '../math';
 import { CollisionWorld } from '../collision';
 import { createMoveState, eyeHeight, stepMovement } from '../movement';
 import { hitShape } from '../hitbox';
-import { GRENADE, SMOKE, WEAPONS, pelletCone, pelletDirs, weaponStats } from '../weapons';
+import { BOBA, GRENADE, HEALTH, SMOKE, WEAPONS, pelletCone, pelletDirs, weaponStats } from '../weapons';
 import { findPath, nearestNode } from './nav';
 import {
-  BOMB_REACH, addSoldier, balanceTeams, buyAttachmentFor, buyItem, createContext, createMatch, fireShot, reportState,
+  BOMB_REACH, addSoldier, balanceTeams, buyAttachmentFor, buyItem, createContext, createMatch, drinkBoba, fireShot, reportState,
   canSwitchTeam, removeSoldier, resetMatch, switchTeam, throwSmoke, tickMatch, useAmmoCrate, LATE_JOIN_SECONDS, TICK_RATE,
 } from './sim';
 import { ATTACKERS, ELIMINATION, PRACTICE_CONFIG, SABOTAGE, type MatchConfig, type MatchEvent, type MatchState, type Soldier, type Team } from './state';
@@ -532,6 +532,43 @@ describe('store and cash', () => {
       const angle = Math.acos(Math.min(1, (d.x * dir.x + d.y * dir.y + d.z * dir.z) / len)) * 180 / Math.PI;
       expect(angle).toBeLessThanOrEqual(cone + 1e-6);
     }
+  });
+});
+
+describe('珍奶 (bubble tea)', () => {
+  it('costs $400, one at a time, and the match reset takes it away', () => {
+    const { state, ctx, a } = duel();
+    a.money = 1000;
+    expect(buyItem(state, ctx, a.id, 'boba').ok).toBe(true);
+    expect(a.bobas).toBe(1);
+    expect(buyItem(state, ctx, a.id, 'boba').ok).toBe(false);
+    expect(a.money).toBe(1000 - BOBA.price);
+    a.bobas = 0; a.money = BOBA.price - 1;
+    expect(buyItem(state, ctx, a.id, 'boba').ok).toBe(false);
+    a.bobas = 1;
+    resetMatch(state, ctx);
+    expect(a.bobas).toBe(0);
+  });
+
+  it('heals +50 up to the maximum, once, and only the hurt and living', () => {
+    const { state, ctx, a, events } = duel();
+    a.health = 30;
+    expect(drinkBoba(state, ctx, a.id)).toBe(false); // none carried
+    a.bobas = 1;
+    expect(drinkBoba(state, ctx, a.id)).toBe(true);
+    expect(a.health).toBe(30 + BOBA.heal);
+    expect(a.bobas).toBe(0);
+    expect(events).toContainEqual({ type: 'drink', id: a.id, health: 30 + BOBA.heal });
+    expect(drinkBoba(state, ctx, a.id)).toBe(false); // drunk already
+    a.bobas = 1; a.health = 90;
+    expect(drinkBoba(state, ctx, a.id)).toBe(true);
+    expect(a.health).toBe(HEALTH.max);
+    a.bobas = 1;
+    expect(drinkBoba(state, ctx, a.id)).toBe(false); // full health keeps it
+    expect(a.bobas).toBe(1);
+    a.health = 40; a.alive = false;
+    expect(drinkBoba(state, ctx, a.id)).toBe(false);
+    expect(a.health).toBe(40);
   });
 });
 

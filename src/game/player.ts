@@ -3,7 +3,7 @@ import { clamp, dirFromAngles, type Vec3 } from '../../shared/math';
 import { MOVE, createMoveState, eyeHeight, isSprinting, stepMovement, type MoveEvents, type MoveInput, type MoveState } from '../../shared/movement';
 import type { Obstacle } from '../../shared/obstacles';
 import type { Soldier } from '../../shared/match/state';
-import { DEFAULT_WEAPONS, RIDER_AIM, STAMINA, oneHanded, pelletCone, weaponStats, type Attachments, type Slot, type WeaponDef, type WeaponId } from '../../shared/weapons';
+import { BOBA, DEFAULT_WEAPONS, HEALTH, RIDER_AIM, STAMINA, oneHanded, pelletCone, weaponStats, type Attachments, type Slot, type WeaponDef, type WeaponId } from '../../shared/weapons';
 import type { Input } from './input';
 import { BINOCULAR_ZOOM, adsFov, settings, isMagnified, opticFov } from './settings';
 
@@ -18,6 +18,11 @@ export interface FrameResult {
   grenade?: { origin: Vec3; dir: Vec3 };
   /** An M18 smoke grenade left the hand (same arc as the M67). */
   smoke?: { origin: Vec3; dir: Vec3 };
+  /** The 珍奶 has been drunk (the sip played out): the host heals. */
+  drink?: boolean;
+  /** A sip began this frame; `drinkRefused`: asked for at full health. */
+  drinkStarted?: boolean;
+  drinkRefused?: boolean;
   reloadStarted: boolean;
   /** The scope stepped to its other magnification this frame. */
   zoomed?: boolean;
@@ -60,6 +65,11 @@ export class LocalPlayer {
   throwingSmoke = false;
   private sinceThrow = 9;
   throwLeft = 0;
+  /** 珍奶 carried; `drinkLeft`: the sip under way (BOBA.drinkTime, no shooting); `health` as the host last said. */
+  bobas = 0;
+  drinkLeft = 0;
+  private sinceDrink = 9;
+  health: number = HEALTH.max;
   stamina: number = STAMINA.max;
   /** Binoculars up (Z): 10× zoom, no weapon. */
   binoculars = false;
@@ -122,7 +132,7 @@ export class LocalPlayer {
     this.weapons = [...s.weapons]; this.attachments = structuredClone(s.attachments); this.reserve = [...s.reserve];
     this.ammo = [this.statsOf(0).magazine, this.statsOf(1).magazine];
     this.reloadLeft = 0; this.switchLeft = this.statsOf(0).equipTime; this.fireCooldown = 0; this.bloom = 0; this.ads = 0;
-    this.grenades = s.grenades; this.smokes = s.smokes; this.alive = true; this.recoilDebt = 0; this.accumulator = 0;
+    this.grenades = s.grenades; this.smokes = s.smokes; this.bobas = s.bobas; this.drinkLeft = 0; this.health = s.health; this.alive = true; this.recoilDebt = 0; this.accumulator = 0;
     this.stamina = STAMINA.max; this.binoculars = false; this.zoomLevel = 0;
   }
 
@@ -145,6 +155,8 @@ export class LocalPlayer {
     }
     if (this.reloadLeft <= 0) this.reserve = [...s.reserve];
     if (this.sinceThrow > 1.5 && this.throwLeft <= 0) { this.grenades = s.grenades; this.smokes = s.smokes; }
+    if (this.sinceDrink > 1.5 && this.drinkLeft <= 0) this.bobas = s.bobas;
+    this.health = s.health;
   }
 
   /** In a vehicle: the seat carries us (set each frame with `seat`); no walking. */
@@ -285,16 +297,26 @@ export class LocalPlayer {
         this.throwLeft = 0.32; this.grenades--; this.sinceThrow = 0; this.binoculars = false; this.throwingSmoke = false;
       }
       const smokeKey = input!.take('smoke');
-      if (smokeKey && !this.rider && this.smokes > 0 && this.throwLeft <= 0 && this.reloadLeft <= 0) {
+      if (smokeKey && !this.rider && this.smokes > 0 && this.throwLeft <= 0 && this.drinkLeft <= 0 && this.reloadLeft <= 0) {
         this.throwLeft = 0.32; this.smokes--; this.sinceThrow = 0; this.binoculars = false; this.throwingSmoke = true;
       }
+      // 珍奶: only when hurt; the sip blocks shooting and throwing until it is drunk.
+      const drinkKey = input!.take('drink');
+      if (drinkKey && !this.rider && this.bobas > 0 && this.health < HEALTH.max && this.drinkLeft <= 0 && this.throwLeft <= 0 && this.reloadLeft <= 0) {
+        this.drinkLeft = BOBA.drinkTime; this.bobas--; this.sinceDrink = 0; this.binoculars = false; result.drinkStarted = true;
+      } else if (drinkKey && this.bobas > 0 && this.health >= HEALTH.max) result.drinkRefused = true;
+    }
+    this.sinceDrink += dt;
+    if (this.drinkLeft > 0) {
+      this.drinkLeft -= dt;
+      if (this.drinkLeft <= 0) result.drink = true;
     }
     if (this.throwLeft > 0) {
       this.throwLeft -= dt;
       if (this.throwLeft <= 0) result[this.throwingSmoke ? 'smoke' : 'grenade'] = { origin: this.eye(), dir: dirFromAngles(this.yaw, this.pitch + 0.06) };
     }
 
-    const trigger = wantsFire && !this.sprinting && this.sprintRecover <= 0 && this.throwLeft <= 0 && this.usable(this.slot);
+    const trigger = wantsFire && !this.sprinting && this.sprintRecover <= 0 && this.throwLeft <= 0 && this.drinkLeft <= 0 && this.usable(this.slot);
     if (!trigger) { this.triggerHeld = false; this.shotsInBurst = 0; }
     if (trigger && this.switchLeft <= 0 && this.reloadLeft <= 0 && this.fireCooldown <= 0 && (w.auto || !this.triggerHeld)) {
       if (this.slot !== 2 && this.ammo[this.slot] <= 0) {

@@ -1,6 +1,6 @@
 import * as THREE from 'three';
 import type { Assets } from '../assets';
-import { ATTACHMENT_SLOTS, WEAPONS, WEAPON_IDS, type Attachments, type WeaponId } from '../../shared/weapons';
+import { ATTACHMENT_SLOTS, BOBA, WEAPONS, WEAPON_IDS, type Attachments, type WeaponId } from '../../shared/weapons';
 import type { LocalPlayer } from '../game/player';
 import { curlFingers, orientHand, restorePose, solveArm, type Bones } from './rig';
 import { GUN_FIT, fitAttachments, overlayFor, vec, type Fitted, type Overlay } from './optics';
@@ -83,8 +83,8 @@ export class ViewModel {
   private attachments: Attachments = {};
   private arms: { root: THREE.Object3D; bones: Bones; bindPose: Map<string, THREE.Quaternion> };
   private grenade: THREE.Object3D;
-  /** The 珍奶 cup in the throwing hand while the reskins are on (the M18's throw). */
-  private boba?: THREE.Object3D;
+  /** The 珍奶 cup, in the left hand while drinking. */
+  private boba: THREE.Object3D;
   private flash: THREE.Group;
   private flashLeft = 0;
   private kickBack = new Spring(260, 20);
@@ -133,12 +133,10 @@ export class ViewModel {
     this.grenade = assets.weapons.get('Prop_Grenade')!.clone();
     this.grenade.visible = false;
     this.root.add(this.grenade);
-    if (MEME_SKINS) {
-      this.boba = bobaCupModel();
-      this.boba.traverse(o => { const m = o as THREE.Mesh; if (m.isMesh) { m.castShadow = false; m.frustumCulled = false; } });
-      this.boba.visible = false;
-      this.root.add(this.boba);
-    }
+    this.boba = bobaCupModel(0.9);
+    this.boba.traverse(o => { const m = o as THREE.Mesh; if (m.isMesh) { m.castShadow = false; m.frustumCulled = false; } });
+    this.boba.visible = false;
+    this.root.add(this.boba);
     this.flash = makeFlash();
     this.gun.add(this.flash);
     this.torch.position.set(0.12, -0.12, 0);
@@ -255,6 +253,10 @@ export class ViewModel {
     rx -= (1 - e) * 1.1; pos.y -= (1 - e) * 0.18;
     let throwing = 0;
     if (p.throwLeft > 0) { throwing = 1 - p.throwLeft / 0.32; pos.y -= Math.sin(throwing * Math.PI) * 0.14; rx -= Math.sin(throwing * Math.PI) * 0.5; }
+    // ---- 珍奶: the gun and arms drop out of view and the cup comes up to the mouth and tips ----
+    const sip = p.drinkLeft > 0 ? 1 - p.drinkLeft / BOBA.drinkTime : 0;
+    const raised = p.drinkLeft > 0 ? ease(Math.min(1, sip / 0.22, (1 - sip) / 0.18)) : 0;
+    pos.y -= raised * 0.5; rx -= raised * 0.9;
 
     this.rig.position.set(pos.x + bx + sx * 0.02, pos.y + by + breathe + sy * 0.015, pos.z + back * 0.05);
     this.rig.rotation.set(rx + kick * 0.06 + sy * 0.05, ry + sx * 0.06, rz + roll * 0.04 + sx * 0.05, 'YXZ');
@@ -292,11 +294,15 @@ export class ViewModel {
       const t = 1 - p.reloadLeft / p.reloadTotal;
       if (t > 0.2 && t < 0.76) { mag.visible = true; lh.getWorldPosition(mag.position).add(new THREE.Vector3(0.02, -0.05, -0.04)); mag.quaternion.copy(this.gun.getWorldQuaternion(new THREE.Quaternion())); mag.rotateY(-Math.PI / 2); }
     }
-    const cup = !!this.boba && p.throwingSmoke;
-    this.grenade.visible = p.throwLeft > 0 && !cup;
-    if (this.boba) this.boba.visible = p.throwLeft > 0 && cup;
+    this.grenade.visible = p.throwLeft > 0;
+    this.boba.visible = raised > 0;
     if (this.grenade.visible) lh.getWorldPosition(this.grenade.position).add(new THREE.Vector3(0.02, 0.03, -0.06));
-    if (this.boba?.visible) lh.getWorldPosition(this.boba.position).add(new THREE.Vector3(0.02, 0.06, -0.06));
+    if (this.boba.visible) {
+      // Up from below to just under the eyes, tipping towards us, with a little bob as it is sipped.
+      const gulp = Math.sin(sip * Math.PI * 6) * 0.006 * raised;
+      this.boba.position.set(0.035, -0.48 + raised * 0.36 + gulp, -0.32);
+      this.boba.rotation.set(0.1 + raised * 0.35, -0.25, -0.1 * raised);
+    }
 
     this.flashLeft -= dt;
     this.flash.visible = this.flashLeft > 0 && !(this.overlay && p.ads > 0.95);
