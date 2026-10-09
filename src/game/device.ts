@@ -43,6 +43,17 @@ export const isAndroid = (env: DeviceEnv) => /Android/i.test(env.userAgent);
  */
 export const isInAppBrowser = (env: DeviceEnv) => /Barcelona|Threads|FBAN|FBAV|Instagram|Line\/|MicroMessenger|; wv\)/i.test(env.userAgent);
 
+/** Which app's in-app browser this is (analytics), or undefined for a regular browser. */
+export function inAppBrowserName(env: DeviceEnv): 'threads' | 'instagram' | 'facebook' | 'line' | 'wechat' | 'webview' | undefined {
+  const ua = env.userAgent;
+  if (/Barcelona|Threads/i.test(ua)) return 'threads';
+  if (/Instagram/i.test(ua)) return 'instagram';
+  if (/FBAN|FBAV/i.test(ua)) return 'facebook';
+  if (/Line\//i.test(ua)) return 'line';
+  if (/MicroMessenger/i.test(ua)) return 'wechat';
+  return /; wv\)/i.test(ua) ? 'webview' : undefined;
+}
+
 /**
  * A link that opens `url` in Chrome from an Android in-app browser (an intent URL); none elsewhere —
  * iOS in-app browsers can only be left through their own menu (⋯ → Open in browser).
