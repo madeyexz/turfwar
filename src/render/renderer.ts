@@ -115,6 +115,31 @@ export class Renderer {
     this.camera.updateProjectionMatrix(); this.viewCamera.updateProjectionMatrix();
   }
 
+  /**
+   * Shaders and textures for everything in the scenes, ahead of first sight. Three.js compiles a shader
+   * and uploads a texture the first time something is drawn, so a camera that jumps across the map (death,
+   * to the killer's eyes) stalled for hundreds of ms on phones. Shaders compile in the background where the
+   * browser can (KHR_parallel_shader_compile); textures go up two a frame, so warming never stalls either.
+   */
+  warm() {
+    const r = this.renderer;
+    for (const [scene, camera] of [[this.scene, this.camera], [this.viewScene, this.viewCamera]] as const) r.compileAsync(scene, camera).catch(() => undefined);
+    const textures = new Set<THREE.Texture>();
+    for (const scene of [this.scene, this.viewScene]) scene.traverse(o => {
+      const material = (o as THREE.Mesh).material;
+      if (!material) return;
+      for (const m of Array.isArray(material) ? material : [material]) {
+        for (const value of Object.values(m)) if ((value as THREE.Texture | null)?.isTexture) textures.add(value as THREE.Texture);
+      }
+    });
+    const queue = [...textures];
+    const upload = () => {
+      for (let i = 0; i < 2 && queue.length; i++) r.initTexture(queue.pop()!);
+      if (queue.length) requestAnimationFrame(upload);
+    };
+    requestAnimationFrame(upload);
+  }
+
   render(time: number) {
     this.renderer.info.reset();
     // Keep the shadow frustum centered on the player, snapped to texels to avoid shimmering.

@@ -1,6 +1,7 @@
 import * as THREE from 'three';
 import { GLTFLoader, type GLTF } from 'three/examples/jsm/loaders/GLTFLoader.js';
 import { MeshoptDecoder } from 'three/examples/jsm/libs/meshopt_decoder.module.js';
+import { assetUrl } from './assetUrl';
 import { applyOptics } from './render/optics';
 import { addProceduralGuns } from './render/procguns';
 
@@ -10,28 +11,58 @@ export interface Assets {
   props: Map<string, THREE.Object3D>;
   soldier: GLTF;
   clips: Map<string, THREE.AnimationClip>;
-  textures: Map<string, THREE.Texture>;
+  textures: TextureSets;
 }
 
-const BASE = import.meta.env.BASE_URL + 'assets/';
-const TEXTURE_SETS = ['sand', 'cliff', 'dirt', 'snow', 'icerock', 'moss', 'lichen', 'path', 'concrete', 'metalplate', 'container', 'brick', 'planks', 'corrugated', 'plaster', 'cobble', 'asphalt', 'sidewalk', 'floortile', 'facadetile'];
+/** Surface sets every map builds with (src/render/level.ts): loaded with the models. */
+const SHARED_SETS = ['concrete', 'metalplate', 'container', 'brick', 'planks', 'corrugated', 'plaster', 'cobble', 'moss', 'asphalt', 'sidewalk', 'floortile', 'facadetile'];
+/** Ground sets only some maps' terrain uses (their theme's ground, rock and dirt): loaded with the first map that needs them. */
+const GROUND_SETS = ['sand', 'cliff', 'dirt', 'snow', 'icerock', 'lichen', 'path'];
+const KINDS = ['diff', 'nor', 'rough'] as const;
+
+/** The surface textures (`<set>_<diff|nor|rough>`), each set loaded once, when first wanted. */
+export class TextureSets {
+  private textures = new Map<string, THREE.Texture>();
+  private sets = new Map<string, Promise<void>>();
+  constructor(private loader: THREE.TextureLoader) {}
+
+  /** Load these sets; resolves once all their textures are in (a set that fails just stays blank). */
+  load(sets: readonly string[]) { return Promise.all(sets.map(set => this.loadSet(set).catch(() => undefined))).then(() => undefined); }
+
+  /** A texture by name. One whose set has not been loaded starts loading now and shows when it arrives. */
+  get(name: string) {
+    const set = name.slice(0, name.lastIndexOf('_'));
+    if (!this.textures.has(name) && (SHARED_SETS.includes(set) || GROUND_SETS.includes(set))) void this.loadSet(set).catch(() => undefined);
+    return this.textures.get(name);
+  }
+
+  private loadSet(set: string) {
+    let loading = this.sets.get(set);
+    if (!loading) {
+      loading = Promise.all(KINDS.map(kind => new Promise<void>((resolve, reject) => {
+        const tex = this.loader.load(assetUrl(`assets/tex/${set}_${kind}.webp`), () => resolve(), undefined, reject);
+        tex.wrapS = tex.wrapT = THREE.RepeatWrapping;
+        tex.anisotropy = 8;
+        if (kind === 'diff') tex.colorSpace = THREE.SRGBColorSpace;
+        this.textures.set(`${set}_${kind}`, tex);
+      }))).then(() => undefined);
+      this.sets.set(set, loading);
+    }
+    return loading;
+  }
+}
+
+/** The ground sets a map's terrain uses (its theme's ground, rock and dirt). */
+export const groundSets = (theme: { ground: string; rock: string; dirt: string }) => [...new Set([theme.ground, theme.rock, theme.dirt])];
 
 export async function loadAssets(onProgress: (fraction: number) => void): Promise<Assets> {
   const manager = new THREE.LoadingManager();
   manager.onProgress = (_url, loaded, total) => onProgress(loaded / total);
   const loader = new GLTFLoader(manager).setMeshoptDecoder(MeshoptDecoder);
-  const texLoader = new THREE.TextureLoader(manager);
-  const gltf = (name: string) => loader.loadAsync(BASE + name);
-  const textures = new Map<string, THREE.Texture>();
-  const texturePromises = TEXTURE_SETS.flatMap(set => (['diff', 'nor', 'rough'] as const).map(async kind => {
-    const tex = await texLoader.loadAsync(`${BASE}tex/${set}_${kind}.webp`);
-    tex.wrapS = tex.wrapT = THREE.RepeatWrapping;
-    tex.anisotropy = 8;
-    if (kind === 'diff') tex.colorSpace = THREE.SRGBColorSpace;
-    textures.set(`${set}_${kind}`, tex);
-  }));
+  const textures = new TextureSets(new THREE.TextureLoader(manager));
+  const gltf = (name: string) => loader.loadAsync(assetUrl(`assets/${name}`));
   const [weapons, props, soldier, anims, imported] = await Promise.all([
-    gltf('weapons.glb'), gltf('props.glb'), gltf('soldier.glb'), gltf('anims.glb'), gltf('guns.glb'), ...texturePromises,
+    gltf('weapons.glb'), gltf('props.glb'), gltf('soldier.glb'), gltf('anims.glb'), gltf('guns.glb'), textures.load(SHARED_SETS),
   ]) as GLTF[];
   const named = (g: GLTF) => {
     const map = new Map<string, THREE.Object3D>();

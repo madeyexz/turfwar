@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { toView, viewRect, wantSideways } from './viewport';
+import { toView, viewClasses, viewRect, wantSideways } from './viewport';
 
 describe('sideways play on an upright touch screen', () => {
   const upright = { touch: true, inMenu: false, editing: false, width: 390, height: 844 };
@@ -32,5 +32,15 @@ describe('sideways play on an upright touch screen', () => {
     // A screen rectangle in the top-right corner, 100 wide and 50 tall.
     const r = viewRect({ left: 290, top: 0, right: 390, bottom: 50, width: 100, height: 50 }, true, 390);
     expect(r).toEqual({ left: 0, top: 0, right: 50, bottom: 100, width: 50, height: 100 });
+  });
+
+  it('sizes menus by the turned view, not the upright window', () => {
+    // A phone held sideways, whether the browser turned (844 × 390) or the page did: short and wide.
+    expect(viewClasses(844, 390)).toEqual({ 'view-short': true, 'view-low': true, 'view-narrow': false, 'view-tall': false, 'view-wide': false });
+    // The lobby upright on the same phone.
+    expect(viewClasses(390, 844)).toEqual({ 'view-short': false, 'view-low': false, 'view-narrow': true, 'view-tall': true, 'view-wide': false });
+    // A tablet in landscape and a laptop window.
+    expect(viewClasses(1180, 820)).toMatchObject({ 'view-short': false, 'view-tall': true, 'view-wide': true });
+    expect(viewClasses(1440, 540)).toMatchObject({ 'view-short': true, 'view-narrow': false });
   });
 });

@@ -29,25 +29,43 @@ const filesIn = (dir: string): string[] => readdirSync(dir).flatMap(name => {
   const full = join(dir, name);
   return statSync(full).isDirectory() ? filesIn(full).map(f => `${name}/${f}`) : [name];
 });
-const hash = (data: string) => createHash('sha256').update(data).digest('hex').slice(0, 12);
+const hash = (data: string | Buffer) => createHash('sha256').update(data).digest('hex').slice(0, 12);
 
 /**
- * The service worker (src/pwa/sw.ts → dist/sw.js) gets this build's file list and two versions:
- * the shell's (this build's hashed files, so every release replaces it) and the static assets'
- * (a hash of public/, so models and textures are downloaded again only when they change).
+ * The public/ files the service worker caches as static assets (models, textures, sounds, fonts, the
+ * map pictures), each with its content hash. The game asks for `<file>?v=<hash>` (src/assetUrl.ts, and
+ * the stylesheets' url()s below), so one URL always means the same bytes: browsers keep it for good
+ * (vercel.json) and a release that changes one file has players fetch only that file.
+ */
+const publicDir = resolve(__dirname, 'public');
+const VERSIONS: Record<string, string> = Object.fromEntries(filesIn(publicDir).filter(f => /^(assets|fonts|media\/maps)\//.test(f)).sort()
+  .map(f => [f, hash(readFileSync(join(publicDir, f)))]));
+const versioned = (file: string) => `/${file}${VERSIONS[file] ? `?v=${VERSIONS[file]}` : ''}`;
+
+/** Stylesheets' `url(/fonts/…)` and the like get their file's version too. */
+const versionedCssUrls: Plugin = {
+  name: 'versioned-css-urls',
+  enforce: 'pre',
+  transform(code, id) {
+    if (!/\.css($|\?)/.test(id)) return;
+    return code.replace(/url\((['"]?)\/([^'")?#]+)\1\)/g, (all, quote: string, file: string) => VERSIONS[file] ? `url(${quote}${versioned(file)}${quote})` : all);
+  },
+};
+
+/**
+ * The service worker (src/pwa/sw.ts → dist/sw.js) gets this build's file list with the shell's
+ * version (this build's hashed files, so every release replaces it) and the static assets' current
+ * URLs (each with its content version, so it keeps the files that did not change).
  */
 const pwa: Plugin = {
   name: 'pwa-service-worker',
   apply: 'build',
   writeBundle(options, bundle) {
     const built = Object.keys(bundle).filter(f => f !== 'sw.js' && !f.startsWith('admin') && !f.includes('/admin') && !f.endsWith('.map'));
-    const publicDir = resolve(__dirname, 'public');
     const pub = filesIn(publicDir).sort();
     // Precached: the page, this build's scripts and styles, the manifest, the icons and the Latin fonts.
-    const shell = [...built, ...pub.filter(f => f === 'manifest.webmanifest' || f.startsWith('icons/') || /^fonts\/rajdhani-\d+\.woff2$/.test(f))].map(f => `/${f}`).sort();
-    const assets = createHash('sha256');
-    for (const f of pub) assets.update(f).update(readFileSync(join(publicDir, f)));
-    const data = { shell, shellVersion: `${appVersion()}-${hash(built.sort().join('|'))}`, staticVersion: assets.digest('hex').slice(0, 12) };
+    const shell = [...built.map(f => `/${f}`), ...pub.filter(f => f === 'manifest.webmanifest' || f.startsWith('icons/') || /^fonts\/rajdhani-\d+\.woff2$/.test(f)).map(versioned)].sort();
+    const data = { shell, shellVersion: `${appVersion()}-${hash(built.sort().join('|'))}`, assets: Object.keys(VERSIONS).map(versioned) };
     const file = join(options.dir!, 'sw.js');
     const code = readFileSync(file, 'utf8');
     const filled = code.replace(/(["'`])__TURFWAR_BUILD__\1/, JSON.stringify(JSON.stringify(data)));
@@ -57,8 +75,8 @@ const pwa: Plugin = {
 };
 
 export default defineConfig({
-  plugins: [pageRoutes, pwa],
-  define: { __APP_VERSION__: JSON.stringify(appVersion()) },
+  plugins: [pageRoutes, versionedCssUrls, pwa],
+  define: { __APP_VERSION__: JSON.stringify(appVersion()), __ASSET_VERSIONS__: JSON.stringify(VERSIONS) },
   server: {
     allowedHosts: true,
     // Same-origin websocket route to a local SpacetimeDB so one preview URL serves the game and the match server

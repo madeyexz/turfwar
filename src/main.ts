@@ -2,7 +2,8 @@ import { inject } from '@vercel/analytics';
 import { RETIRED_MAPS, loadMap, mapSummaries } from '../shared/maps/index';
 import { cleanCode, hasSites, listOrder, mapsFor, pickAnyRoom, ROOM_SIZES, roomFull, sizeLabel } from '../shared/match/rooms';
 import { ELIMINATION, SABOTAGE, type Mode, type Team } from '../shared/match/state';
-import { loadAssets, type Assets } from './assets';
+import { assetUrl } from './assetUrl';
+import { groundSets, loadAssets, type Assets } from './assets';
 import { Audio } from './audio';
 import { Game } from './game/game';
 import { settings } from './game/settings';
@@ -872,7 +873,7 @@ function thumb(id: string) {
     const img = document.createElement('img');
     img.loading = 'lazy'; img.decoding = 'async'; img.width = 480; img.height = 270;
     img.addEventListener('error', () => { const c = plan(id); thumbs.set(id, c); img.replaceWith(c); }, { once: true });
-    img.src = `/media/maps/${id}.webp`;
+    img.src = assetUrl(`media/maps/${id}.webp`);
     thumbs.set(id, el = img);
   }
   if (el instanceof HTMLImageElement) el.alt = mapName(id);
@@ -1123,10 +1124,12 @@ async function start(action: Action, retried = false) {
     watchLobbyRooms(); refresh();
     return;
   }
+  const linkMap = link.state()?.mapId ?? rules.mapId;
+  // The map's ground textures (the shared ones came with the lobby): from the cache after the first time.
+  await assets.textures.load(groundSets(THEMES[loadMap(linkMap).def.theme]));
   starting = undefined; joiningRoom = -1;
   status.textContent = '';
   if (backdrop) { renderer.scene.remove(backdrop.group); backdrop = undefined; backdropMap = undefined; }
-  const linkMap = link.state()?.mapId ?? rules.mapId;
   launch(link, linkMap);
   joined(link, linkMap, playServer);
   matchServer = playServer;

@@ -340,7 +340,11 @@ match, request fullscreen on Android, and keep page scroll, zoom and long-press 
 
 The game installs as a web app: `public/manifest.webmanifest` (fullscreen, landscape, icons from
 `bun tools/make-icons.ts`), iOS home-screen meta tags, and a service worker (`src/pwa/sw.ts`, built to
-`/sw.js` with this build's file list) that fetches the page network-first, serves this build's files and
-the models, textures and sounds from caches versioned by the build and by `public/`'s contents, and
-never touches SpacetimeDB, its ping, PostHog or `/admin`. Phone visitors see an install hint in the
+`/sw.js` with this build's file list) that fetches the page network-first, serves this build's files from
+a cache versioned by the build and the models, textures, sounds and fonts from one cache kept file by
+file, and never touches SpacetimeDB, its ping, PostHog or `/admin`. Every asset URL carries its content
+hash (`?v=`, `src/assetUrl.ts` and `vite.config.ts`), so Vercel serves it `immutable` (browsers without
+the worker, such as in-app browsers on iOS, keep it too) and a release re-downloads only files that
+changed. The lobby loads the models and the surface textures every map builds with; a map's own ground
+textures (sand, snow, rock…) load as its match starts. Phone visitors see an install hint in the
 lobby (Install where the browser offers it, Share → Add to Home Screen on iOS) until they dismiss it.

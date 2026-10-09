@@ -211,6 +211,10 @@ An approved, hand-traced [SVG version](tools/app-icon.svg) is also available: ei
 paths with flat colors and no embedded raster image. It follows the same logo reuse restriction above.
 The icon generator still uses the original PNG; adding the SVG does not change the shipped icons.
 
+For use without the black tile, download the [transparent SVG](tools/app-icon-transparent.svg) or
+its [1024px PNG export](tools/app-icon-transparent.png). Both keep the same emblem and logo reuse
+restriction; the white W works best on dark backgrounds. These variants do not replace the app icons.
+
 <details>
 <summary><b>Asset credits and licences</b></summary>
 

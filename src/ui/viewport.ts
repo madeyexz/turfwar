@@ -34,15 +34,39 @@ export function wantSideways(o: { touch: boolean; inMenu: boolean; editing: bool
   return o.touch && (!o.inMenu || o.editing) && o.height > o.width;
 }
 
+/**
+ * The size classes the CSS uses in place of media queries, which see the upright window even while
+ * the page is turned: `view-short` a short landscape view (a sideways phone), `view-low` a very short
+ * one, `view-narrow` a phone-width one, `view-tall` and `view-wide` tablets.
+ */
+export function viewClasses(width: number, height: number) {
+  return {
+    'view-short': height <= 560 && width > height,
+    'view-low': height <= 500,
+    'view-narrow': width <= 560,
+    'view-tall': height >= 600,
+    'view-wide': width >= 901,
+  };
+}
+
+/** The view's size as CSS variables (`--vw`, `--vh`: 1% of it) and classes on the root element. */
+function measure() {
+  const root = document.documentElement, w = viewWidth(), h = viewHeight();
+  root.style.setProperty('--vw', `${w / 100}px`);
+  root.style.setProperty('--vh', `${h / 100}px`);
+  for (const [name, on] of Object.entries(viewClasses(w, h))) root.classList.toggle(name, on);
+}
+
 export function onSideways(f: (on: boolean) => void) { listeners.add(f); return () => { listeners.delete(f); }; }
 
 function update() {
   const b = document.body;
   const want = wantSideways({ touch: b.classList.contains('touch'), inMenu: b.classList.contains('menu-open'), editing: b.classList.contains('tc-editing'), width: innerWidth, height: innerHeight });
   if (want) { b.style.width = `${innerHeight}px`; b.style.height = `${innerWidth}px`; }
-  if (want === sideways) return;
+  if (want === sideways) return measure();
   sideways = want;
   b.classList.toggle('sideways', want);
+  measure();
   if (!want) { b.style.width = ''; b.style.height = ''; }
   for (const f of listeners) f(want);
   // Everything that sizes itself on resize (the renderer, the HUD, the touch layout) measures again.

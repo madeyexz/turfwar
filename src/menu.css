@@ -6,7 +6,7 @@
  * The map picker and Solo's options open as popovers (bottom sheets on phones).
  */
 #menu {
-  --panel-w: clamp(540px, 40vw, 680px);
+  --panel-w: clamp(540px, 40 * var(--vw), 680px);
   position: fixed; inset: 0; z-index: 5;
   display: grid; grid-template-columns: var(--panel-w) minmax(0, 1fr); grid-template-rows: auto minmax(0, 1fr);
   background:
@@ -36,9 +36,9 @@
 /* Brand lockup: the name large (Noto Sans TC 900 for 角頭械鬥, Rajdhani for TURF WAR: TAIPEI), its second
    half in the accent; under it the other language's name, a tick, and the two sides. */
 #menu .logo { display: flex; flex-direction: column; gap: 5px; margin: 0; line-height: 1; white-space: nowrap; }
-#menu .logo-name { display: flex; align-items: baseline; font-weight: 700; font-size: clamp(28px, 2.3vw, 36px); letter-spacing: 0.06em; text-transform: uppercase; text-shadow: 0 0 24px rgba(127, 246, 255, 0.18); }
+#menu .logo-name { display: flex; align-items: baseline; font-weight: 700; font-size: clamp(28px, 2.3 * var(--vw), 36px); letter-spacing: 0.06em; text-transform: uppercase; text-shadow: 0 0 24px rgba(127, 246, 255, 0.18); }
 #menu .logo-name em { font-style: normal; color: var(--accent); margin-left: 0.32em; }
-#menu .logo-name.cjk { font-family: 'Noto Sans TC', var(--font); font-weight: 900; letter-spacing: 0.1em; font-size: clamp(30px, 2.5vw, 38px); }
+#menu .logo-name.cjk { font-family: 'Noto Sans TC', var(--font); font-weight: 900; letter-spacing: 0.1em; font-size: clamp(30px, 2.5 * var(--vw), 38px); }
 #menu .logo-name.cjk em { margin-left: 0; }
 #menu .logo-sub { display: flex; align-items: center; gap: 9px; color: var(--muted); font-size: 11px; font-weight: 700; letter-spacing: 0.24em; text-transform: uppercase; }
 #menu .logo-alt { color: var(--accent); opacity: 0.85; }
@@ -327,7 +327,7 @@
 /* ---- Stage: the map in view ---- */
 #menu .stage { grid-column: 2; grid-row: 2; position: relative; display: flex; flex-direction: column; justify-content: flex-end; padding: 0 36px 32px; min-width: 0; min-height: 0; pointer-events: none; }
 #menu .showcase { align-self: flex-end; max-width: 460px; text-align: right; text-shadow: 0 2px 18px rgba(0, 0, 0, 0.7); }
-#menu .showcase h2 { margin: 0; font-size: clamp(30px, 3vw, 46px); line-height: 1; letter-spacing: 0.05em; text-transform: uppercase; }
+#menu .showcase h2 { margin: 0; font-size: clamp(30px, 3 * var(--vw), 46px); line-height: 1; letter-spacing: 0.05em; text-transform: uppercase; }
 #menu .showcase .meta { margin-top: 10px; display: inline-block; padding: 3px 10px; font-size: 13px; font-weight: 700; letter-spacing: 0.12em; text-transform: uppercase; border: 1px solid var(--line); border-radius: 999px; background: rgba(4, 9, 12, 0.55); text-shadow: none; }
 
 /* ---- Footer links: the source on GitHub, the privacy page. Quiet, in the stage's bottom-left corner
@@ -345,7 +345,7 @@
 
 /* ---- Popovers ---- */
 #menu .pop {
-  position: fixed; z-index: 20; display: flex; flex-direction: column; gap: 12px; width: 340px; max-width: calc(100vw - 24px); padding: 14px;
+  position: fixed; z-index: 20; display: flex; flex-direction: column; gap: 12px; width: 340px; max-width: calc(100 * var(--vw) - 24px); padding: 14px;
   border: 1px solid rgba(127, 246, 255, 0.45); border-radius: 4px; background: rgba(6, 12, 16, 0.96); backdrop-filter: blur(10px);
   box-shadow: 0 18px 50px rgba(0, 0, 0, 0.6);
 }
@@ -366,7 +366,7 @@
 #menu .hint { margin: 0; color: var(--muted); font-size: 13px; line-height: 1.35; font-weight: 500; }
 
 /* Map picker: a card grid; maps the mode cannot host are shown but disabled. */
-#menu #map-pop { width: min(700px, calc(100vw - 24px)); max-height: calc(100vh - 24px); }
+#menu #map-pop { width: min(700px, calc(100 * var(--vw) - 24px)); max-height: calc(100 * var(--vh) - 24px); }
 #menu .map-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 8px; min-height: 0; overflow-y: auto; padding: 2px; scrollbar-width: thin; scrollbar-color: rgba(190, 236, 244, 0.2) transparent; }
 #menu .mcard {
   display: flex; flex-direction: column; gap: 2px; min-width: 0; padding: 6px 6px 7px; text-align: left;
@@ -389,8 +389,8 @@
 #menu .mcard .live i { width: 6px; height: 6px; border-radius: 50%; background: #5df29a; box-shadow: 0 0 6px #5df29a; }
 
 /* Bottom sheet on phones. */
-#menu .pop.sheet { left: 0 !important; right: 0; bottom: 0; top: auto !important; width: auto; max-width: none; max-height: 80vh; border-radius: 10px 10px 0 0; border-bottom: none; padding: 16px 16px max(16px, env(safe-area-inset-bottom)); }
-#menu #map-pop.sheet { width: auto; max-height: 80vh; }
+#menu .pop.sheet { left: 0 !important; right: 0; bottom: 0; top: auto !important; width: auto; max-width: none; max-height: calc(80 * var(--vh)); border-radius: 10px 10px 0 0; border-bottom: none; padding: 16px 16px max(16px, env(safe-area-inset-bottom)); }
+#menu #map-pop.sheet { width: auto; max-height: calc(80 * var(--vh)); }
 #menu .pop.sheet .map-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
 
 /* Map swatches (src/ui/mapthumb.ts has the same colours). */
@@ -424,7 +424,7 @@
   #menu .callsign { flex: 1 1 200px; width: auto; }
   #menu .panel { padding: 8px 16px 24px; border-right: none; }
   #menu .browser { flex: none; min-height: 0; }
-  #menu .browser-rows { flex: none; min-height: 126px; max-height: 50vh; }
+  #menu .browser-rows { flex: none; min-height: 126px; max-height: calc(50 * var(--vh)); }
   #menu .stage { display: none; }
   #menu .site-links { position: static; justify-content: center; padding: 0 16px 24px; }
   /* The install card sits over the bottom of the page: let the page scroll past it. */
@@ -433,7 +433,7 @@
 @media (max-width: 560px) {
   #menu .brand { flex: 1; gap: 8px; }
   #menu .brand-icon { width: 32px; height: 32px; border-radius: 6px; }
-  #menu .logo-name { font-size: clamp(18px, 5.6vw, 28px); }
+  #menu .logo-name { font-size: clamp(18px, 5.6 * var(--vw), 28px); }
   #menu .logo-sub { font-size: 9px; gap: 6px; letter-spacing: 0.12em; }
   #menu .logo-alt.cjk { font-size: 11px; letter-spacing: 0.15em; }
   #menu .top { position: relative; }
@@ -473,12 +473,12 @@
  */
 @media (orientation: landscape) and (max-height: 500px) {
   #menu {
-    --rail: clamp(200px, 27vw, 250px); --gap: 12px;
+    --rail: clamp(200px, 27 * var(--vw), 250px); --gap: 12px;
     display: grid; overflow: hidden; background: rgba(4, 9, 12, 0.9);
     grid-template-columns: var(--rail) minmax(0, 1fr);
     grid-template-rows: auto auto auto auto minmax(0, 1fr) auto;
     column-gap: var(--gap);
-    padding: env(safe-area-inset-top, 0px) max(var(--gap), env(safe-area-inset-right, 0px)) 0 max(var(--gap), env(safe-area-inset-left, 0px));
+    padding: var(--safe-t) max(var(--gap), var(--safe-r)) 0 max(var(--gap), var(--safe-l));
   }
   #menu .stage { display: none; }
 
@@ -515,17 +515,17 @@
   #menu .status { grid-column: 2; grid-row: 6; margin: 0 0 8px; }
   #menu .site-links {
     position: static; grid-column: 1; grid-row: 5 / 7; align-self: end; justify-content: flex-start;
-    padding: 0 0 max(4px, env(safe-area-inset-bottom, 0px)); letter-spacing: 0.1em;
+    padding: 0 0 max(4px, var(--safe-b)); letter-spacing: 0.1em;
   }
   #menu .site-links a { min-height: 44px; padding: 0 6px; }
   #menu .view {
     grid-column: 2; grid-row: 2 / 6; min-height: 0; overflow-y: auto; overscroll-behavior: contain; gap: 8px;
-    padding: 0 4px max(12px, env(safe-area-inset-bottom, 0px)) 0;
+    padding: 0 4px max(12px, var(--safe-b)) 0;
     scrollbar-width: thin; scrollbar-color: rgba(190, 236, 244, 0.2) transparent;
   }
   /* Room for the install strip under the last row (the rail is clear of it). */
   #menu:has(> .install-hint:not([hidden])) .view { padding-bottom: 70px; }
-  #menu:has(> .install-hint:not([hidden])) .site-links { padding-bottom: max(4px, env(safe-area-inset-bottom, 0px)); }
+  #menu:has(> .install-hint:not([hidden])) .site-links { padding-bottom: max(4px, var(--safe-b)); }
 
   /* Quick play. */
   #menu .deploy { flex: none; min-height: 52px; padding: 0 16px; }
@@ -561,8 +561,8 @@
 
   /* Install hint: a one-line strip over the view's bottom-right, not a card over the lobby. */
   .install-hint {
-    left: auto; right: max(12px, env(safe-area-inset-right, 0px)); bottom: max(6px, env(safe-area-inset-bottom, 0px)); transform: none;
-    width: min(560px, calc(100vw - var(--rail) - 36px - env(safe-area-inset-left, 0px) - env(safe-area-inset-right, 0px)));
+    left: auto; right: max(12px, var(--safe-r)); bottom: max(6px, var(--safe-b)); transform: none;
+    width: min(560px, calc(100 * var(--vw) - var(--rail) - 36px - var(--safe-l) - var(--safe-r)));
     grid-template-columns: minmax(0, 1fr) auto; gap: 0 8px; padding: 4px 4px 4px 12px;
   }
   .install-hint .mark, .install-hint b, .install-hint:not(.tip-only) p.tip { display: none; }
@@ -602,13 +602,11 @@
 .ask-dialog .err[hidden] { display: none; }
 .ask-dialog .go { height: 48px; font: inherit; font-size: 16px; font-weight: 700; letter-spacing: 0.3em; text-transform: uppercase; color: #031013; background: var(--accent); border: 0; cursor: pointer; }
 /* Phones sideways: the keyboard takes most of the height, so keep the dialog compact and near the top. */
-@media (max-height: 500px) {
-  .ask-dialog { place-items: start center; padding-top: max(8px, env(safe-area-inset-top, 0px)); }
-  .ask-dialog .panel { gap: 8px; padding: 10px 14px 12px; }
-  .ask-dialog h2 { font-size: 16px; }
-  .ask-dialog .why { font-size: 12px; }
-  .ask-dialog input, .ask-dialog .go { height: 42px; }
-}
+:where(.view-low) .ask-dialog { place-items: start center; padding-top: max(8px, var(--safe-t)); }
+:where(.view-low) .ask-dialog .panel { gap: 8px; padding: 10px 14px 12px; }
+:where(.view-low) .ask-dialog h2 { font-size: 16px; }
+:where(.view-low) .ask-dialog .why { font-size: 12px; }
+:where(.view-low) .ask-dialog input, :where(.view-low) .ask-dialog .go { height: 42px; }
 
 /* The dialog's yes/no row (confirmDialog): Keep playing (default) and Leave. */
 .ask-dialog .choices { display: flex; gap: 10px; }
@@ -616,10 +614,10 @@
 .ask-dialog .choices .stay { color: var(--ink); background: rgba(255, 255, 255, 0.05); border: 1px solid var(--line); }
 .ask-dialog .choices .stay:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
 .ask-dialog .go.danger { color: #fff; background: rgba(255, 90, 74, 0.85); border: 0; }
-@media (max-height: 500px) { .ask-dialog .choices button { height: 42px; } }
+:where(.view-low) .ask-dialog .choices button { height: 42px; }
 
 /* The browser lost the graphics context (src/errors.ts): a reload is the way back. */
-.gfx-lost { position: fixed; left: 50%; top: 16px; z-index: 30; transform: translateX(-50%); display: flex; align-items: center; gap: 14px; max-width: calc(100vw - 32px); padding: 12px 16px;
+.gfx-lost { position: fixed; left: 50%; top: 16px; z-index: 30; transform: translateX(-50%); display: flex; align-items: center; gap: 14px; max-width: calc(100 * var(--vw) - 32px); padding: 12px 16px;
   background: rgba(7, 13, 18, 0.95); border: 1px solid var(--crimson); color: var(--ink); font-weight: 600; font-size: 14px; }
 .gfx-lost p { margin: 0; }
 .gfx-lost button { flex: none; height: 38px; padding: 0 14px; font: inherit; font-weight: 700; color: #031013; background: var(--accent); border: 0; cursor: pointer; }
