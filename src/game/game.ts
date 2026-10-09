@@ -39,7 +39,10 @@ import { ownedOf, purchaseOf, type BuyRequest, type Owned } from './purchases';
 import { roundEnded, track } from '../analytics';
 import { TouchControls, type TouchInfo } from '../ui/touchcontrols';
 import { holdAimMode } from './holdfire';
-import { onTouchLayout, touchActive, type TouchContext } from './touchlayout';
+import { onTouchLayout, touchActive, touchAimAssist, type TouchContext } from './touchlayout';
+import { ASSIST, aimAssist, anglesTo } from './aimassist';
+import { GOALS, levelOf, loadProgress, recordProgress, type ProgressEvent } from './progress';
+import { smokeBlocks } from '../../shared/match/combat';
 
 type Sample = { x: number; y: number; z: number; vx: number; vy: number; vz: number; yaw: number; pitch: number; crouch: number };
 /** Remote soldiers closer than this get full animation and shadows; up to LOD_MID, half rate. */
@@ -386,6 +389,8 @@ export class Game {
       const p = this.vehicles.pose(seat.vehicle.id);
       if (p) this.player.seat(seatPosition({ ...p, kind: seat.vehicle.kind }, seat.seat), VEHICLES[seat.vehicle.kind].sit, { vx: p.vx, vy: 0, vz: p.vz });
     }
+    // Touch screens get aim assist (aimassist.ts): friction near a visible enemy, magnetism while firing.
+    if (active && this.player.alive && !this.driving.active && touchActive() && touchAimAssist()) this.assistAim(state, myId, dt);
     const aimed = { yaw: this.player.yaw, pitch: this.player.pitch };
     const result = this.driving.active && !this.driving.armed
       ? this.player.update(dt, undefined, this.map.world, false, true)
@@ -607,6 +612,39 @@ export class Game {
       storeHot: !!me && buyWindow && (free || inBase(me, this.map.def, sideOf(state, this.map.def, me.team))), reloading: p.reloading,
       holdAim, shots: this.shotCount,
     });
+  }
+
+  /** XP, the level and the day's goal (progress.ts): a finished goal or a new level is announced. */
+  private progress(e: ProgressEvent) {
+    const before = levelOf(loadProgress().xp).level;
+    const r = recordProgress(e);
+    const after = levelOf(r.next.xp).level;
+    if (r.goalDone) this.hud.announce(t('prog.goalDone'), `+${GOALS[r.next.goal.kind].xp} XP`, 'var(--cash)');
+    else if (after > before) this.hud.announce(t('prog.levelUp', { n: after }), '', 'var(--accent)');
+  }
+
+  /** Enemies we can see near the crosshair (as rendered last frame) steer this frame's look. */
+  private assistAim(state: MatchState, myId: number, dt: number) {
+    const me = state.soldiers.find(s => s.id === myId);
+    if (!me) return;
+    const eye = this.player.eye();
+    const zoom = this.player.ads > 0.5 ? this.player.magnification : 1;
+    const targets: Vec3[] = [];
+    for (const s of state.soldiers) {
+      if (!s.alive || s.team === me.team || s.id === myId) continue;
+      const r = this.remotes.get(s.id);
+      if (!r) continue;
+      const p = { x: r.pos.x, y: r.pos.y + (r.crouch > 0.5 ? 0.9 : 1.2), z: r.pos.z };
+      // Cheap angle check first; the ray tests only for the few near the crosshair.
+      const a = anglesTo(eye, p);
+      if (a.dist > ASSIST.range || Math.abs(Math.atan2(Math.sin(a.yaw - this.player.yaw), Math.cos(a.yaw - this.player.yaw))) > ASSIST.outer * 1.5) continue;
+      if (!this.map.world.lineOfSight(eye, p) || smokeBlocks(state.bodies, eye, p)) continue;
+      targets.push(p);
+    }
+    if (!targets.length) return;
+    const assist = aimAssist({ eye, yaw: this.player.yaw, pitch: this.player.pitch, targets, firing: this.input.fire, dt, zoom });
+    this.input.lookX *= assist.lookScale; this.input.lookY *= assist.lookScale;
+    this.player.yaw += assist.yaw; this.player.pitch += assist.pitch;
   }
 
   /** The vehicles' bodies where we see them (as rendered): they block us, carry us on their roofs and push us aside. */
@@ -970,7 +1008,7 @@ export class Game {
       case 'kill': {
         const killer = find(e.killer), victim = find(e.victim);
         this.hud.killfeed(killer, victim, e.weapon, e.head, e.killer === myId || e.victim === myId);
-        if (e.killer === myId && e.victim !== myId) { this.hud.hit('kill'); this.audio.hitmarker(e.head, true); }
+        if (e.killer === myId && e.victim !== myId) { this.hud.hit('kill'); this.audio.hitmarker(e.head, true); this.progress({ type: 'kill', head: e.head }); }
         if (e.victim === myId) this.hud.announce(t('hud.youDied'), killer && killer.id !== myId ? `${killer.name} · ${weaponLabel(e.weapon)}` : '', 'var(--crimson)');
         break;
       }
@@ -994,6 +1032,7 @@ export class Game {
           const won = e.winner === -1 ? undefined : e.winner === this.myTeam;
           this.audio.roundEnd(won);
           roundEnded({ won: e.winner === (me?.team ?? this.myTeam), mode: modeOf(state, this.map.def), map: this.mapId });
+          if (me && !state.config.practice) this.progress({ type: 'round', won: e.winner === me.team });
           const title = e.winner === -1 ? t('hud.roundDraw') : t('hud.winsRound', { team: teamName(e.winner).toUpperCase() });
           this.hud.announce(title, roundReason(e.reason), e.winner === -1 ? 'var(--ink)' : e.winner === 0 ? 'var(--aegis)' : 'var(--crimson)');
         }
@@ -1036,6 +1075,7 @@ export class Game {
       case 'phase': {
         if (e.phase === 'ended') {
           const won = e.winner === this.myTeam;
+          if (!state.config.practice) this.progress({ type: 'match', won });
           this.hud.announce(t(won ? 'hud.victory' : 'hud.defeat'), t('hud.winsMatch', { team: teamName(e.winner === -1 ? 0 : e.winner) }), won ? 'var(--accent)' : 'var(--crimson)');
         }
         if (e.phase === 'warmup') this.hud.announce(t('hud.newMatch'), mapName(this.map.def.id, this.map.def.name));

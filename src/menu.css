@@ -24,6 +24,13 @@
 /* ---- Top bar ---- */
 #menu .top { grid-column: 1 / -1; display: flex; align-items: center; justify-content: space-between; gap: 20px; padding: 18px 28px 12px 32px; min-width: 0; }
 #menu .brand { min-width: 0; }
+/* Level and the day's goal (src/ui/progressbadge.ts). */
+#menu .prog { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 10px; margin-top: 8px; font-size: 12px; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; color: var(--muted); }
+#menu .prog .lv { color: var(--accent); font-size: 13px; }
+#menu .prog .bar { position: relative; width: 84px; height: 6px; background: rgba(190, 236, 244, 0.14); }
+#menu .prog .bar i { position: absolute; inset: 0 auto 0 0; background: var(--accent); }
+#menu .prog .goal b { color: var(--ink); }
+#menu .prog.done .goal b { color: var(--cash); }
 /* Brand lockup: the name large (Noto Sans TC 900 for 角頭械鬥, Rajdhani for TURF WAR: TAIPEI), its second
    half in the accent; under it the other language's name, a tick, and the two sides. */
 #menu .logo { display: flex; flex-direction: column; gap: 5px; margin: 0; line-height: 1; white-space: nowrap; }

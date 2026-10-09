@@ -43,11 +43,16 @@ export function createMatch(mapId: string, config: MatchConfig): MatchState {
 /** Sabotage needs bomb sites on the map; anywhere else the match is played as Elimination. */
 export const modeOf = (state: MatchState, map: MapDef) => state.config.mode === 'sabotage' && map.sabotage?.sites.length ? 'sabotage' : 'elimination';
 
-export function addSoldier(state: MatchState, ctx: SimContext, opts: { name: string; team?: Team; bot: boolean }): Soldier {
+/** Rounds played before a player stops being a rookie (bots go easier on rookies). */
+export const ROOKIE_ROUNDS = 10;
+/** A human who joins within this many seconds of a round's start deploys at once instead of waiting a round. */
+export const LATE_JOIN_SECONDS = 30;
+
+export function addSoldier(state: MatchState, ctx: SimContext, opts: { name: string; team?: Team; bot: boolean; rookie?: boolean }): Soldier {
   const counts = [0, 1].map(t => state.soldiers.filter(s => s.team === t && !s.bot).length);
   const team: Team = opts.team ?? (counts[0] <= counts[1] ? 0 : 1);
   const s: Soldier = {
-    id: state.nextId++, name: opts.name.slice(0, 20), team, bot: opts.bot,
+    id: state.nextId++, name: opts.name.slice(0, 20), team, bot: opts.bot, ...(opts.rookie && !opts.bot ? { rookie: true } : {}),
     m: createMoveState(0, 0, 0), yaw: 0, pitch: 0, alive: false, health: 0, weapon: 0,
     weapons: ['mp5', 'm9a1'], owned: [], attachments: {}, ammo: [0, 0], reserve: [0, 0],
     reloadLeft: 0, fireCooldown: 0, switchLeft: 0, grenades: 0, grenadeHE: false, smokes: 0, stamina: STAMINA.max, money: 0,
@@ -59,10 +64,13 @@ export function addSoldier(state: MatchState, ctx: SimContext, opts: { name: str
   if (opts.bot) s.brain = createBrain(clamp(state.config.botSkill + (ctx.random() - 0.5) * 0.3, 0.15, 0.95));
   state.soldiers.push(s);
   ctx.emit({ type: 'join', id: s.id, name: s.name, team, bot: s.bot });
-  // Joining mid-round: you deploy at the next round start (BeGone has no mid-round respawn). In the
-  // warmup before a match everyone stands in their base and may walk about (bots wait; nothing can
-  // be shot: fireShot / throwGrenade need a live round) until round 1 deploys everyone fresh.
-  if (state.phase === 'warmup' || (state.phase === 'live' && (state.roundPhase === 'freeze' || state.config.practice))) spawnSoldier(state, ctx, s);
+  // Joining mid-round: you deploy at the next round start (BeGone has no mid-round respawn), except
+  // that a human who arrives in a round's first LATE_JOIN_SECONDS (before the bomb is down) deploys in
+  // their base at once rather than watching a whole round. In the warmup before a match everyone
+  // stands in their base and may walk about (bots wait; nothing can be shot: fireShot / throwGrenade
+  // need a live round) until round 1 deploys everyone fresh.
+  const young = state.roundPhase === 'live' && state.roundClock <= LATE_JOIN_SECONDS && !state.bomb.armed && !opts.bot;
+  if (state.phase === 'warmup' || (state.phase === 'live' && (state.roundPhase === 'freeze' || state.config.practice || young))) spawnSoldier(state, ctx, s);
   return s;
 }
 

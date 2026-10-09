@@ -1,6 +1,6 @@
 import { TOUCH_PREFS, readEnv, touchPrimary, type TouchPref } from '../game/device';
 import {
-  TOUCH_SENS_DEFAULT, TOUCH_SENS_STEPS, onTouchLayout, setTouchAutoAim, setTouchPref, setTouchSensitivity, touchActive, touchAutoAim, touchPref, touchSensFromSlider,
+  TOUCH_SENS_DEFAULT, TOUCH_SENS_STEPS, onTouchLayout, setTouchAimAssist, setTouchAutoAim, setTouchPref, setTouchSensitivity, touchActive, touchAimAssist, touchAutoAim, touchPref, touchSensFromSlider,
   touchSensToSlider, touchSensitivity,
 } from '../game/touchlayout';
 import { onLang, t } from './i18n';
@@ -27,6 +27,7 @@ export class TouchSettings {
       if (!b) return;
       if (b.dataset.pref) { setTouchPref(b.dataset.pref as TouchPref); return; }
       if (b.dataset.aim) { setTouchAutoAim(b.dataset.aim === 'on'); return; }
+      if (b.dataset.assist) { setTouchAimAssist(b.dataset.assist === 'on'); return; }
       if (b.dataset.act === 'sensDefault') { setTouchSensitivity(TOUCH_SENS_DEFAULT); return; }
       if (b.dataset.act === 'edit') openTouchEditor();
     });
@@ -49,17 +50,19 @@ export class TouchSettings {
       <div class="ts-row"><span>${esc(t('ts.mode'))}</span><div class="seg" role="group">${TOUCH_PREFS.map(p => `<button type="button" data-pref="${p}">${esc(label(p))}</button>`).join('')}</div><small class="note" data-k="status"></small></div>
       <div class="ts-row" data-k="sens"><span>${esc(t('ts.sens'))}</span><input type="range" data-in="tsens" min="0" max="${TOUCH_SENS_STEPS}" step="1" aria-label="${esc(t('ts.sens'))}"><output></output><button type="button" class="ts-default" data-act="sensDefault">${esc(t('ts.sensDefault', { n: times(TOUCH_SENS_DEFAULT) }))}</button></div>
       <div class="ts-row" data-k="aim"><span>${esc(t('ts.autoAim'))}</span><div class="seg" role="group" aria-label="${esc(t('ts.autoAim'))}"><button type="button" data-aim="on">${esc(t('ts.on'))}</button><button type="button" data-aim="off">${esc(t('ts.off'))}</button></div><p class="note">${esc(t('ts.autoAimNote'))}</p></div>
+      <div class="ts-row" data-k="assist"><span>${esc(t('ts.assist'))}</span><div class="seg" role="group" aria-label="${esc(t('ts.assist'))}"><button type="button" data-assist="on">${esc(t('ts.on'))}</button><button type="button" data-assist="off">${esc(t('ts.off'))}</button></div><p class="note">${esc(t('ts.assistNote'))}</p></div>
       <div class="ts-row" data-k="edit"><button type="button" class="edit" data-act="edit">${esc(t('ts.edit'))}</button><p class="note">${esc(t('ts.note'))}</p></div>`;
     this.refresh();
   }
 
   private refresh() {
-    const pref = touchPref(), on = touchActive(), aim = touchAutoAim();
+    const pref = touchPref(), on = touchActive(), aim = touchAutoAim(), assist = touchAimAssist();
     this.el.querySelectorAll<HTMLButtonElement>('[data-pref]').forEach(b => { const sel = b.dataset.pref === pref; b.classList.toggle('on', sel); b.setAttribute('aria-pressed', String(sel)); });
     this.el.querySelectorAll<HTMLButtonElement>('[data-aim]').forEach(b => { const sel = (b.dataset.aim === 'on') === aim; b.classList.toggle('on', sel); b.setAttribute('aria-pressed', String(sel)); });
+    this.el.querySelectorAll<HTMLButtonElement>('[data-assist]').forEach(b => { const sel = (b.dataset.assist === 'on') === assist; b.classList.toggle('on', sel); b.setAttribute('aria-pressed', String(sel)); });
     const status = this.el.querySelector<HTMLElement>('[data-k="status"]')!;
     status.textContent = pref === 'auto' ? t(touchPrimary(readEnv()) ? 'ts.autoOn' : 'ts.autoOff') : '';
-    for (const k of ['sens', 'aim', 'edit']) (this.el.querySelector(`[data-k="${k}"]`) as HTMLElement).hidden = !on;
+    for (const k of ['sens', 'aim', 'assist', 'edit']) (this.el.querySelector(`[data-k="${k}"]`) as HTMLElement).hidden = !on;
     const slider = this.el.querySelector<HTMLInputElement>('[data-in="tsens"]')!;
     const sens = touchSensitivity();
     if (document.activeElement !== slider) slider.value = String(touchSensToSlider(sens));

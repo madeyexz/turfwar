@@ -42,6 +42,8 @@ export interface Soldier {
   name: string;
   team: Team;
   bot: boolean;
+  /** A new player (fewer than ROOKIE_ROUNDS rounds played): bots react later and aim looser at them (bots.ts). */
+  rookie?: boolean;
   m: MoveState;
   yaw: number;
   pitch: number;
@@ -158,6 +160,11 @@ export const SABOTAGE: MatchConfig = { ...BEGONE, mode: 'sabotage', teamSize: 6,
 export const OFFLINE_CONFIG = ELIMINATION;
 /** Online rooms. Bots were 0.55 until 2026-10-07, when players found them too strong: now Solo's default, 0.45. */
 export const ONLINE_CONFIG: MatchConfig = { ...ELIMINATION, warmup: 8, botSkill: 0.45 };
+/**
+ * Public rooms (Quick Play, Play Online) are first to 6: a match a newcomer finishes in one sitting
+ * (players who reach a match's end come back far more often). Private rooms keep BeGone's first to 10.
+ */
+export const PUBLIC_ROUNDS_TO_WIN = 6;
 export const PRACTICE_CONFIG: MatchConfig = { ...ELIMINATION, teamSize: 0, roundsToWin: 1000, roundTime: 3600, warmup: 1, botSkill: 0.4, practice: true, freeBuy: true };
 
 export interface BombState {

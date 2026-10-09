@@ -30,7 +30,9 @@ import { currentDeviceKind, defaultQuality } from './game/device';
 import { onTouchLayout, touchActive } from './game/touchlayout';
 import { InstallBanner } from './ui/installhint';
 import { onSideways, watchSideways } from './ui/viewport';
+import { mountProgressBadge } from './ui/progressbadge';
 import { askCallsign, madeUpCallsign } from './ui/callsign';
+import { offensiveName } from '../shared/names';
 import { ask, confirmDialog } from './ui/ask';
 import { watchClientErrors } from './errors';
 import { registerServiceWorker, warmServiceWorker } from './pwa';
@@ -119,7 +121,7 @@ const deploy = (id: string, label: Key, right = '', title?: Key) =>
  */
 menu.innerHTML = `
   <header class="top">
-    <div class="brand"><h1 class="logo" id="logo"></h1></div>
+    <div class="brand"><h1 class="logo" id="logo"></h1><div class="prog" id="prog"></div></div>
     <div class="who">
       <label class="callsign">${L('lobby.callsign', 'span', 'class="label"')}<input type="text" id="callsign" maxlength="16" autocomplete="off" spellcheck="false"></label>
       ${choice('teams', 'team', [['auto', L('lobby.auto')], ['0', L('team.0', 'span', 'class="swat"')], ['1', L('team.1', 'span', 'class="militia"')]], 'lobby.team')}
@@ -240,6 +242,8 @@ onSideways(on => {
 watchSideways();
 // Inside the lobby, so it goes away with it during a match.
 if (!params.has('bench')) new InstallBanner(menu);
+// Level and the day's goal under the title (game/progress.ts).
+mountProgressBadge(menu.querySelector<HTMLElement>('#prog')!);
 
 const $ = <T extends HTMLElement = HTMLElement>(sel: string) => menu.querySelector<T>(sel)!;
 const select = (group: string, attr: string, value: string) => menu.querySelectorAll<HTMLButtonElement>(`#${group} [data-${attr}]`).forEach(b => b.setAttribute('aria-pressed', String(b.dataset[attr] === value)));
@@ -1017,7 +1021,7 @@ function showBackdrop() {
 }
 
 /** A player still on the made-up callsign is asked for one before playing (automation and `?name=` skip it). */
-const needsCallsign = () => !benchMode && !params.get('autostart') && !params.has('name') && madeUpCallsign(callsign.value);
+const needsCallsign = () => !benchMode && !params.get('autostart') && !params.has('name') && (madeUpCallsign(callsign.value) || offensiveName(callsign.value));
 
 /**
  * Run one way in. An online one pressed while the server is still waking is queued: it runs by

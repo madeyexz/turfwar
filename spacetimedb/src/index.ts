@@ -1,3 +1,4 @@
+import { offensiveName } from '../../shared/names';
 import { Identity, ScheduleAt, Timestamp } from 'spacetimedb';
 import { schema, table, t, SenderError, type ReducerCtx, type InferSchema } from 'spacetimedb/server';
 import { loadMap, loadNav } from '../../shared/maps/index';
@@ -5,11 +6,11 @@ import { cleanCode, filterError, isRoomSize, mapsFor, newRoomRules, nextRoomRule
 import type { SimContext } from '../../shared/match/combat';
 import { encodeFrame } from '../../shared/match/frame';
 import {
-  addSoldier, balanceTeams, buyAttachmentFor, buyItem, createMatch, enterVehicle as getIn, exitVehicle as getOut, fireShot, reload, removeSoldier, reportState, switchTeam, throwSmoke,
+  ROOKIE_ROUNDS, addSoldier, balanceTeams, buyAttachmentFor, buyItem, createMatch, enterVehicle as getIn, exitVehicle as getOut, fireShot, reload, removeSoldier, reportState, switchTeam, throwSmoke,
   reportVehicle, resetMatch, switchWeapon, throwGrenade, tickMatch, useAmmoCrate, TICK_RATE,
 } from '../../shared/match/sim';
 import {
-  ONLINE_CONFIG, type BombState, type BotBrain, type MatchConfig, type MatchEvent, type MatchState, type RoundStats, type Soldier, type Team,
+  ONLINE_CONFIG, PUBLIC_ROUNDS_TO_WIN, type BombState, type BotBrain, type MatchConfig, type MatchEvent, type MatchState, type RoundStats, type Soldier, type Team,
 } from '../../shared/match/state';
 import { ATTACHMENTS, DEFAULT_WEAPONS, STAMINA, WEAPONS, normalizeAttachments, type AttachmentId, type Attachments, type Slot, type WeaponId } from '../../shared/weapons';
 import { newRoundStats, type BuyItem } from '../../shared/match/economy';
@@ -270,6 +271,8 @@ interface Gear {
   assists: number; roundsHere: number; using: boolean; round: RoundStats;
   /** M18 smoke grenades carried (no column of its own). */
   smokes?: number;
+  /** A new player: bots go easier on them (no column of its own). */
+  rookie?: boolean;
 }
 const slotOf = (v: number): Slot => (v === 1 || v === 2 ? v : 0);
 
@@ -291,6 +294,7 @@ function soldierFromRow(r: SoldierRow, brain?: BotBrain): Soldier {
     sinceHit: r.sinceHit, lastAttacker: r.lastAttacker, kills: r.kills, deaths: r.deaths, assists: gear.assists ?? 0, score: r.score,
     sprint: r.sprint, ads: r.ads, sinceShot: r.sinceShot, using: gear.using ?? false, corrections: r.corrections,
     moveSlack: r.moveSlack, groundY: r.groundY, idle: r.idle, round: gear.round ?? newRoundStats(), roundsHere: gear.roundsHere ?? 0, brain,
+    ...(gear.rookie ? { rookie: true } : {}),
   };
 }
 
@@ -301,6 +305,7 @@ function soldierToRow(s: Soldier, room: number): SoldierRow {
   const gear: Gear = {
     owned: s.owned, attachments: s.attachments, grenadeHE: s.grenadeHE, stamina: Math.round(s.stamina * 10) / 10,
     assists: s.assists, roundsHere: s.roundsHere, using: s.using, round: s.round, smokes: s.smokes,
+    ...(s.rookie ? { rookie: true } : {}),
   };
   return {
     // Legacy columns (kit, shield, respawn, spawn protection, captures, law cooldown, purchases) stay neutral.
@@ -647,7 +652,9 @@ function markDay(ctx: Ctx) {
 
 /** Put the caller into `room` (leaving any other room first). Every way in (quick_any, start_room, quick_play, quick_join, join, create_room, join_room, join_public) ends here. */
 function enterRoom(ctx: Ctx, room: number, name: string, team: number) {
-  const clean = name.replace(/[^\p{L}\p{N} _\-.]/gu, '').trim().slice(0, 16) || 'Operator';
+  const typed = name.replace(/[^\p{L}\p{N} _\-.]/gu, '').trim().slice(0, 16) || 'Operator';
+  // Slurs and abuse are not shown to other players (shared/names.ts): such a name plays as an Operator.
+  const clean = offensiveName(typed) ? `Operator-${ctx.sender.toHexString().slice(-4)}` : typed;
   markSeen(ctx, { name: clean });
   const existing = ctx.db.player.identity.find(ctx.sender);
   if (existing && existing.room === room && ctx.db.soldier.id.find(existing.soldierId)) return;
@@ -655,7 +662,9 @@ function enterRoom(ctx: Ctx, room: number, name: string, team: number) {
   const row = ctx.db.match.id.find(room)!;
   if (humansIn(ctx, room) >= configOf(row).teamSize * 2) throw new SenderError('That room is full');
   withMatch(ctx, room, (state, sim) => {
-    const soldier = addSoldier(state, sim, { name: clean, bot: false, team: team === 0 || team === 1 ? team : undefined });
+    // A rookie (few rounds on this server's career stats) gets easier bots (bots.ts).
+    const rookie = (ctx.db.profile.identity.find(ctx.sender)?.roundsPlayed ?? 0) < ROOKIE_ROUNDS;
+    const soldier = addSoldier(state, sim, { name: clean, bot: false, team: team === 0 || team === 1 ? team : undefined, rookie });
     balanceTeams(state, sim);
     const player = { identity: ctx.sender, soldierId: soldier.id, lastReportMicros: micros(ctx), room };
     if (existing) ctx.db.player.identity.update({ ...existing, ...player });
@@ -696,7 +705,7 @@ function publicRooms(ctx: Ctx, size?: number): RoomView[] {
 /** A new public room for a filter: what it names is kept from match to match, what is "any" rotates. */
 function openFor(ctx: Ctx, filter: RoomFilter) {
   const rules = newRoomRules(filter, () => ctx.random());
-  const config: MatchConfig = { ...ONLINE_CONFIG, mode: rules.mode, teamSize: filter.size };
+  const config: MatchConfig = { ...ONLINE_CONFIG, mode: rules.mode, teamSize: filter.size, roundsToWin: PUBLIC_ROUNDS_TO_WIN };
   // Only rooms opened for a specific map or mode carry the flags (older rooms simply rotate).
   if (rules.fixedMap) config.fixedMap = true;
   if (rules.fixedMode) config.fixedMode = true;
@@ -804,7 +813,8 @@ export const tick = spacetimedb.reducer({ onSchedule: tickTable }, { arg: tickTa
       if (!codeOf(ctx, row)) {
         const next = nextRoomRules(state.mapId, state.config.mode, state.config.teamSize, state.config);
         state.mapId = next.mapId;
-        state.config = { ...state.config, mode: next.mode };
+        // Rooms opened before public matches were shortened pick that up here too.
+        state.config = { ...state.config, mode: next.mode, roundsToWin: PUBLIC_ROUNDS_TO_WIN };
       }
       const { def, world } = loadMap(state.mapId);
       const nextSim = { ...sim, map: def, world, nav: loadNav(state.mapId) };
@@ -879,7 +889,7 @@ export const startRoom = spacetimedb.reducer({ name: t.string(), size: t.u8(), m
   (ctx, { name, size, mode, mapId, bots, isPublic, team }) => {
     const error = startRoomError({ size, mode, map: mapId });
     if (error) throw new SenderError(error);
-    const room = openRoom(ctx, mapId, { ...ONLINE_CONFIG, ...startRoomConfig({ size, mode, map: mapId, bots, isPublic }) }, isPublic ? '' : freshCode(ctx));
+    const room = openRoom(ctx, mapId, { ...ONLINE_CONFIG, ...startRoomConfig({ size, mode, map: mapId, bots, isPublic }), ...(isPublic ? { roundsToWin: PUBLIC_ROUNDS_TO_WIN } : {}) }, isPublic ? '' : freshCode(ctx));
     enterRoom(ctx, room, name, team);
   });
 
