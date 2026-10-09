@@ -25,7 +25,11 @@ export class OfflineLink implements GameLink {
   private sinceVehicleReport = 0;
   private practice: boolean;
 
-  constructor(mapId: string, name: string, team: Team | undefined, config: Partial<MatchConfig> = {}, practice = false) {
+  /**
+   * `rival`: a 單挑我 link with no room to join (src/game/challenge.ts): the other side's bot plays
+   * under the challenger's name.
+   */
+  constructor(mapId: string, name: string, team: Team | undefined, config: Partial<MatchConfig> = {}, practice = false, private rival?: string) {
     const random = rng((Math.random() * 2 ** 31) | 0);
     this.ctx = createContext(mapId, random, e => this.events.push(e));
     this.match = createMatch(mapId, practice ? { ...PRACTICE_CONFIG, ...config } : { ...ELIMINATION, ...config });
@@ -33,6 +37,14 @@ export class OfflineLink implements GameLink {
     // A new player (few rounds on this browser) gets easier bots, as online (progress.ts).
     this.me = addSoldier(this.match, this.ctx, { name, team, bot: false, rookie: !practice && isRookie(loadProgress()) }).id;
     balanceTeams(this.match, this.ctx);
+    this.nameRival();
+  }
+
+  /** The other side's bots carry the challenger's name (bots that join later too). */
+  private nameRival() {
+    if (!this.rival) return;
+    const team = this.match.soldiers.find(s => s.id === this.me)?.team;
+    for (const s of this.match.soldiers) if (s.bot && s.team !== team) s.name = this.rival;
   }
 
   myId() { return this.me; }
@@ -50,6 +62,7 @@ export class OfflineLink implements GameLink {
       this.accumulator -= step;
       this.ticks++;
     }
+    this.nameRival();
   }
 
   report(r: ClientReport) {

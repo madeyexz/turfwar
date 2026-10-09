@@ -7,6 +7,8 @@ import { GUN_FIT, fitAttachments, overlayFor, vec, type Fitted, type Overlay } f
 import { opticFov, settings } from '../game/settings';
 import { requestScope } from './sights';
 import { createArms } from './soldier';
+import { MEME_SKINS } from '../game/memeskins';
+import { bobaCupModel } from './meme';
 
 /** Where the weapon rests at the hip (gun-group space) and how far ahead of the eye it sits when aimed (fitted sights set their own eye relief). */
 const HOLD: Record<WeaponId, { hip: THREE.Vector3; adsZ: number }> = {
@@ -31,6 +33,17 @@ const SLASH: Key[] = [
 const BACKHAND: Key[] = [
   [0, [0.16, -0.18, -0.34], [0.35, 0.25, -0.35]], [0.18, [-0.06, -0.22, -0.42], [-0.1, 0.8, 0.5]], [0.42, [0.1, -0.11, -0.5], [0.25, 0.0, 0.6]],
   [0.6, [0.24, -0.06, -0.44], [0.45, -0.6, 0.7]], [1, [0.16, -0.18, -0.34], [0.35, 0.25, -0.35]],
+];
+
+/**
+ * The 藍白拖 (src/game/memeskins.ts), held by the heel: at guard the toe points up with the white
+ * footbed and blue strap towards you; the slap cocks it high on the right, then whips it flat across
+ * the screen strap-first and lets it fly through. Quicker and flatter than the knife's cut.
+ */
+const SLIPPER_GUARD: [number[], number[]] = [[0.2, -0.2, -0.36], [1.15, 0.75, 0]];
+const SLAP: Key[] = [
+  [0, ...SLIPPER_GUARD], [0.22, [0.26, -0.04, -0.3], [1.5, -0.9, 0]], [0.42, [-0.02, -0.08, -0.48], [0.15, 1.45, 0]],
+  [0.62, [-0.2, -0.2, -0.42], [-0.3, 1.9, 0]], [1, ...SLIPPER_GUARD],
 ];
 
 /** Spring-damped scalar for weapon motion. */
@@ -70,6 +83,8 @@ export class ViewModel {
   private attachments: Attachments = {};
   private arms: { root: THREE.Object3D; bones: Bones; bindPose: Map<string, THREE.Quaternion> };
   private grenade: THREE.Object3D;
+  /** The 珍奶 cup in the throwing hand while the reskins are on (the M18's throw). */
+  private boba?: THREE.Object3D;
   private flash: THREE.Group;
   private flashLeft = 0;
   private kickBack = new Spring(260, 20);
@@ -118,6 +133,12 @@ export class ViewModel {
     this.grenade = assets.weapons.get('Prop_Grenade')!.clone();
     this.grenade.visible = false;
     this.root.add(this.grenade);
+    if (MEME_SKINS) {
+      this.boba = bobaCupModel();
+      this.boba.traverse(o => { const m = o as THREE.Mesh; if (m.isMesh) { m.castShadow = false; m.frustumCulled = false; } });
+      this.boba.visible = false;
+      this.root.add(this.boba);
+    }
     this.flash = makeFlash();
     this.gun.add(this.flash);
     this.torch.position.set(0.12, -0.12, 0);
@@ -195,7 +216,8 @@ export class ViewModel {
     const adsPos = new THREE.Vector3(0, -(this.fit.sightLine - fit.grip[1]), adsZ);
     const pos = new THREE.Vector3().lerpVectors(hold.hip, adsPos, ads);
     let rx = 0.04 * (1 - ads), ry = 0.085 * (1 - ads), rz = 0.03 * (1 - ads);
-    if (knife) { rx = 0.35; ry = 0.25; rz = -0.35; }
+    if (knife && MEME_SKINS) { pos.set(SLIPPER_GUARD[0][0], SLIPPER_GUARD[0][1], SLIPPER_GUARD[0][2]); [rx, ry, rz] = SLIPPER_GUARD[1]; }
+    else if (knife) { rx = 0.35; ry = 0.25; rz = -0.35; }
     pos.x -= sprint * 0.02; pos.y -= sprint * 0.03; pos.z += sprint * 0.06;
     rx += sprint * -0.2; ry += sprint * 0.4; rz += sprint * 0.3;
     if (pistol || knife) { ry -= sprint * 0.5; rx -= sprint * 0.4; }
@@ -204,8 +226,8 @@ export class ViewModel {
     pos.y -= p.landDip * 0.25;
     // ---- Knife slash: wind up, a fast diagonal cut across the screen, follow through; forehand and backhand alternate ----
     if (knife && this.slashT < 1) {
-      this.slashT = Math.min(1, this.slashT + dt / 0.34);
-      const keys = this.slashDir > 0 ? SLASH : BACKHAND, t = this.slashT;
+      this.slashT = Math.min(1, this.slashT + dt / (MEME_SKINS ? 0.28 : 0.34));
+      const keys = MEME_SKINS ? SLAP : this.slashDir > 0 ? SLASH : BACKHAND, t = this.slashT;
       let i = 0;
       while (i < keys.length - 2 && t > keys[i + 1][0]) i++;
       const [t0, p0, r0] = keys[i], [t1, p1, r1] = keys[i + 1], k = ease(Math.min(1, (t - t0) / (t1 - t0)));
@@ -270,8 +292,11 @@ export class ViewModel {
       const t = 1 - p.reloadLeft / p.reloadTotal;
       if (t > 0.2 && t < 0.76) { mag.visible = true; lh.getWorldPosition(mag.position).add(new THREE.Vector3(0.02, -0.05, -0.04)); mag.quaternion.copy(this.gun.getWorldQuaternion(new THREE.Quaternion())); mag.rotateY(-Math.PI / 2); }
     }
-    this.grenade.visible = p.throwLeft > 0;
+    const cup = !!this.boba && p.throwingSmoke;
+    this.grenade.visible = p.throwLeft > 0 && !cup;
+    if (this.boba) this.boba.visible = p.throwLeft > 0 && cup;
     if (this.grenade.visible) lh.getWorldPosition(this.grenade.position).add(new THREE.Vector3(0.02, 0.03, -0.06));
+    if (this.boba?.visible) lh.getWorldPosition(this.boba.position).add(new THREE.Vector3(0.02, 0.06, -0.06));
 
     this.flashLeft -= dt;
     this.flash.visible = this.flashLeft > 0 && !(this.overlay && p.ads > 0.95);

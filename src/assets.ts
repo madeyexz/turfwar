@@ -2,6 +2,8 @@ import * as THREE from 'three';
 import { GLTFLoader, type GLTF } from 'three/examples/jsm/loaders/GLTFLoader.js';
 import { MeshoptDecoder } from 'three/examples/jsm/libs/meshopt_decoder.module.js';
 import { assetUrl } from './assetUrl';
+import { MEME_SKINS } from './game/memeskins';
+import { slipperModel } from './render/meme';
 import { applyOptics } from './render/optics';
 import { addProceduralGuns } from './render/procguns';
 
@@ -76,6 +78,8 @@ export async function loadAssets(onProgress: (fraction: number) => void): Promis
   for (const [name, gun] of named(imported)) guns.set(name, gun);
   addProceduralGuns(guns);
   applyOptics(guns);
+  // The 藍白拖 reskin: every view of the knife (first person, soldiers, the store) shows the slipper.
+  if (MEME_SKINS) guns.set('Gun_Knife', slipperModel());
   return {
     weapons: guns, props: named(props), soldier,
     clips: new Map(anims.animations.map(c => [c.name, c])),

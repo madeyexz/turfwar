@@ -1,4 +1,6 @@
 import * as THREE from 'three';
+import { MEME_SKINS } from '../game/memeskins';
+import { bobaCupModel } from './meme';
 import type { Assets } from '../assets';
 import type { Body } from '../../shared/world';
 import { InterpBuffer } from './interp';
@@ -66,6 +68,14 @@ export class BodiesView {
   }
 
   private create(b: Body): View {
+    if (b.kind === 'smoke' && MEME_SKINS) {
+      // The 珍奶 reskin: a cup of bubble tea tumbling through the air, trailing milk tea.
+      const object = bobaCupModel(1.1);
+      const trail = new Trail(new THREE.Color(0xd2a676).multiplyScalar(0.5), 40);
+      object.position.set(b.x, b.y, b.z);
+      this.group.add(object, trail.line);
+      return { object, buffer: new InterpBuffer(), trail, seen: this.frame };
+    }
     if (b.kind === 'smoke') {
       // An olive canister with a pale band (the M18's look), tumbling, with a grey trail.
       const object = new THREE.Mesh(new THREE.CylinderGeometry(0.032, 0.032, 0.14, 10), new THREE.MeshStandardMaterial({ color: 0x4d5a3a, roughness: 0.75 }));

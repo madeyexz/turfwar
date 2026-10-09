@@ -59,6 +59,15 @@ Back to the [README](../README.md) · [Architecture](ARCHITECTURE.md) · [Develo
 | Tactical (4 / G) | M67 grenade | $1,000 | 70 (falloff) | One carried, not restocked; High Explosive mod $1,500 (+45 body damage, smaller radius) |
 | Tactical (5 / X) | M18 smoke grenade | $300 | — | One carried; a 9 m cloud for 15 s that blocks sight, not bullets (not in BeGone) |
 
+**National Day reskins** (`src/game/memeskins.ts`, on by default): the knife is a **藍白拖 / Slipper**
+(the blue-and-white rubber slipper, built in code, swung as a flat slap with a cartoon slap sound and
+its own kill-feed mark) and the M18 is a **珍奶煙霧彈 / Boba Smoke** (a bubble-tea cup in hand, in the
+air and in the store; the cloud is milk tea with tapioca pearls drifting in it, the minimap disc and
+the in-smoke screen are milk-tea brown, and it pops with a slurp). They are looks, names and sounds
+only: weapon ids, stats and the rules are unchanged, and the cloud hides exactly what the grey one
+did (`smokeBlocks` in `shared/match/combat.ts`). `?classic=1` shows the original knife and M18;
+`DEFAULT = false` in `memeskins.ts` turns the reskins off for everyone.
+
 ### Attachments (one per category per weapon; kept for the match)
 
 | Category | Attachment | Price | Fits |
@@ -253,6 +262,17 @@ seated facing the bike: the torso twists toward the aim at most about 60°, the 
 weapon round. Models are built procedurally (`src/render/vehicles.ts`); engines, the scooter's buzz and
 the rotor chop are synthesized.
 
+
+### Sharing a match and 單挑我
+
+The end screen has **分享戰績 / Share**: a 1080×1920 card (`src/ui/sharecard.ts`) over a frame of the match with
+the result, one brag line picked from the match (`src/game/matchstats.ts`: beating a challenger, slipper kills, a
+multi-kill round, kills on the map, headshots…), the numbers, the callsign and **單挑我 →** with a QR code and link.
+Phones share the picture through the share sheet (IG Stories, LINE, Threads); elsewhere it is saved and the link
+copied. Solo cards say "vs bots". **單挑我** (online) opens a private 1v1 room on the match's map, without bots, and
+shares that room's link from inside it. A friend who opens a challenge link sees 「<name> 向你下戰帖！」 in the lobby and
+is one tap from the room; if it is gone, full or empty they play a Solo 1v1 against a bot carrying the challenger's
+name, and either way the end screen says who won and offers their own card.
 
 ### New players, progress and staying in the match
 

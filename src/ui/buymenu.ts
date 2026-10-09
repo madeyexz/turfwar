@@ -340,7 +340,7 @@ export class BuyMenu {
       entries.push({ key: 'grenade', name: 'M67', sub: t('store.frag'), price: cost(GRENADE.price), state: full ? 'carried' : '', item: 'grenade', disabled: full || gShort > 0, reason: full ? t('store.oneM67') : gShort ? t('store.need', { money: money(gShort) }) : undefined, short: !full && gShort > 0 });
       entries.push({ key: 'highExplosive', name: t('store.he'), sub: t('store.heUpgrade'), price: cost(HIGH_EXPLOSIVE.price), state: me.grenadeHE ? 'fitted' : '', item: 'highExplosive', disabled: me.grenadeHE || heShort > 0, reason: !me.grenadeHE && heShort ? t('store.need', { money: money(heShort) }) : undefined, short: !me.grenadeHE && heShort > 0 });
       const sFull = me.smokes >= SMOKE.max, sShort = shortBy(SMOKE.price);
-      entries.push({ key: 'smoke', name: 'M18', sub: t('store.smoke'), price: cost(SMOKE.price), state: sFull ? 'carried' : '', item: 'smoke', disabled: sFull || sShort > 0, reason: sFull ? t('store.oneM18') : sShort ? t('store.need', { money: money(sShort) }) : undefined, short: !sFull && sShort > 0 });
+      entries.push({ key: 'smoke', name: t('item.smoke'), sub: t('store.smoke'), price: cost(SMOKE.price), state: sFull ? 'carried' : '', item: 'smoke', disabled: sFull || sShort > 0, reason: sFull ? t('store.oneM18') : sShort ? t('store.need', { money: money(sShort) }) : undefined, short: !sFull && sShort > 0 });
     } else {
       const wid = this.pick!, fitted = me.attachments[wid] ?? {};
       if (!this.slots(wid).includes(this.slot)) this.slot = 'optic';
@@ -400,7 +400,7 @@ export class BuyMenu {
     const he = me.grenadeHE ? ` · ${t('store.he')}` : '';
     return gun(0) + gun(1)
       + `<button type="button" class="lo knife" data-lo="knife" tabindex="-1">${kbd('knife')}<small>${t('store.lo.melee')}</small><b>${t('store.knife')}</b><span class="mods">${t('store.alwaysCarried')}</span></button>`
-      + `<button type="button" class="lo${this.tab === 'tactical' ? ' on' : ''}${me.grenades || me.smokes ? '' : ' none'}" data-lo="tactical">${kbd('grenade')}<small>${t('store.lo.tactical')}</small><b>${[me.grenades ? 'M67' : '', me.smokes ? 'M18' : ''].filter(Boolean).join(' + ') || t('store.empty')}</b><span class="mods">${me.grenades ? `${t('store.frag')}${he}` : me.smokes ? t('store.smoke') : me.grenadeHE ? t('store.heReady') : t('store.noGrenade')}</span></button>`;
+      + `<button type="button" class="lo${this.tab === 'tactical' ? ' on' : ''}${me.grenades || me.smokes ? '' : ' none'}" data-lo="tactical">${kbd('grenade')}<small>${t('store.lo.tactical')}</small><b>${[me.grenades ? 'M67' : '', me.smokes ? t('item.smokeShort') : ''].filter(Boolean).join(' + ') || t('store.empty')}</b><span class="mods">${me.grenades ? `${t('store.frag')}${he}` : me.smokes ? t('store.smoke') : me.grenadeHE ? t('store.heReady') : t('store.noGrenade')}</span></button>`;
   }
 
   private badge(e: Entry) {
@@ -485,7 +485,7 @@ export class BuyMenu {
 
   /** Name over the preview: the hovered item, else the selected one. */
   private titleHtml(e: Entry, me: Soldier) {
-    if (e.item === 'smoke') return `<h3>M18</h3><small>${t('store.m18Title', { key: keyHtml('smoke') })}</small>`;
+    if (e.item === 'smoke') return `<h3>${t('item.smoke')}</h3><small>${t('store.m18Title', { key: keyHtml('smoke') })}</small>`;
     if (e.item === 'grenade' || e.item === 'highExplosive') {
       const he = e.item === 'highExplosive';
       return `<h3>${he ? t('store.he') : 'M67'}</h3><small>${he ? t('store.heTitle') : t('store.m67Title', { key: keyHtml('grenade') })}</small>`;

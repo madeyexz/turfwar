@@ -11,6 +11,7 @@ import type { ActionId } from '../game/keybinds';
 import { kbd } from './keys';
 import type { LocalPlayer } from '../game/player';
 import { isMagnified, settings } from '../game/settings';
+import { MEME_SKINS, SLIPPER_ICON } from '../game/memeskins';
 import { RETICLE_CSS } from '../render/sights';
 import { UI_STACK } from './fonts';
 import { L, applyI18n, causeName, mapName, modeName, onLang, rewardReason, t, teamName, teamShort } from './i18n';
@@ -50,6 +51,11 @@ export class Hud {
   readonly root: HTMLElement;
   crosshairStyle: CrosshairStyle = savedCrosshair();
   onRestart?: () => void;
+  /** The end screen's 分享戰績 and 單挑我 (share.ts); 單挑我 only where online play is available. */
+  onShare?: () => void;
+  onDuel?: () => void;
+  /** A 單挑我 match: the challenger, for the end screen's "you beat …" line. */
+  rival?: string;
   onMenu?: () => void;
   private el: Record<string, HTMLElement> = {};
   private cache = new Map<string, string>();
@@ -153,6 +159,7 @@ export class Hud {
     this.el.end.addEventListener('click', e => {
       const act = (e.target as HTMLElement).closest<HTMLElement>('[data-act]')?.dataset.act;
       if (act === 'menu') this.onMenu?.(); else if (act === 'restart') this.onRestart?.();
+      else if (act === 'share') this.onShare?.(); else if (act === 'duel') this.onDuel?.();
     });
     // Chat input: Enter sends (blank just closes), Esc cancels; keys never reach the game.
     this.input = this.root.querySelector('.chat-input input')!;
@@ -385,7 +392,7 @@ export class Hud {
     const ammo = p.ammo[p.slot as 0 | 1] ?? 0;
     // Without a counter the panel is a plain list of what you carry (key, weapon), the one in hand lit.
     const carried = [['primary', WEAPONS[p.weapons[0]].name, p.slot === 0], ['secondary', WEAPONS[p.weapons[1]].name, p.slot === 1], ['knife', t('cause.knife'), p.slot === 2],
-      ['grenade', `M67 ×${p.grenades}${me?.grenadeHE ? ' HE' : ''}`, false], ['smoke', `M18 ×${p.smokes}`, false]] as [ActionId, string, boolean][];
+      ['grenade', `M67 ×${p.grenades}${me?.grenadeHE ? ' HE' : ''}`, false], ['smoke', `${t('item.smokeShort')} ×${p.smokes}`, false]] as [ActionId, string, boolean][];
     const list = `<ul class="carried">${carried.map(([k, name, on]) => `<li class="${on ? 'on' : ''}${(k === 'grenade' && !p.grenades) || (k === 'smoke' && !p.smokes) ? ' none' : ''}">${kbd(k)}${name}</li>`).join('')}</ul>`;
     this.set('ammo', counter && !melee ? `${ammo}<small>/ ${p.reserve[p.slot as 0 | 1]}</small>` : list, 'html');
     this.el.arms.classList.toggle('listed', !counter || melee);
@@ -395,7 +402,7 @@ export class Hud {
     const slot = (key: ActionId, name: string, on: boolean, extra = '') => `<span class="${on ? 'on' : ''}">${kbd(key)}${name}${extra}</span>`;
     this.set('slots', slot('primary', WEAPONS[p.weapons[0]].name, p.slot === 0) + slot('secondary', WEAPONS[p.weapons[1]].name, p.slot === 1) + slot('knife', t('hud.knife'), p.slot === 2)
       + `<span class="nade${p.grenades > 0 ? '' : ' none'}">${kbd('grenade')}M67 ×${p.grenades}${me?.grenadeHE ? '<em>HE</em>' : ''}</span>`
-      + `<span class="nade${p.smokes > 0 ? '' : ' none'}">${kbd('smoke')}M18 ×${p.smokes}</span>`, 'html');
+      + `<span class="nade${p.smokes > 0 ? '' : ' none'}">${kbd('smoke')}${t('item.smokeShort')} ×${p.smokes}</span>`, 'html');
   }
 
   /** BeGone's score bar: one avatar per soldier, most kills nearest the clock. */
@@ -480,7 +487,7 @@ export class Hud {
     const item = document.createElement('div');
     if (mine) item.className = 'me';
     const name = (s?: Soldier) => s ? `<span class="t${s.team}">${escape(s.name)}</span>` : '';
-    item.innerHTML = `${killer && killer !== victim && killer.id !== victim?.id ? name(killer) : ''}<span class="wpn">${escape(weaponLabel(weapon))}${head ? `<span class="hs" title="${t('hud.headshot')}"></span>` : ''}</span>${name(victim)}`;
+    item.innerHTML = `${killer && killer !== victim && killer.id !== victim?.id ? name(killer) : ''}<span class="wpn${weapon === 'knife' && MEME_SKINS ? ' slap' : ''}">${weapon === 'knife' && MEME_SKINS ? SLIPPER_ICON : ''}${escape(weaponLabel(weapon))}${head ? `<span class="hs" title="${t('hud.headshot')}"></span>` : ''}</span>${name(victim)}`;
     const feed = this.el.feed;
     feed.prepend(item);
     while (feed.children.length > 6) feed.lastElementChild!.remove();
@@ -694,10 +701,10 @@ export class Hud {
         });
       });
     }
-    // Smoke clouds: soft grey discs, drawn under everyone (they hide nobody on the map).
+    // Smoke clouds: soft grey discs (milk tea with the reskins), drawn under everyone (they hide nobody on the map).
     for (const b of state.bodies) {
       if (b.kind !== 'smokeCloud') continue;
-      ctx.fillStyle = 'rgba(205,210,214,0.45)';
+      ctx.fillStyle = MEME_SKINS ? 'rgba(214,176,128,0.5)' : 'rgba(205,210,214,0.45)';
       ctx.beginPath(); ctx.arc(b.x * scale, b.z * scale, SMOKE.radius * scale, 0, Math.PI * 2); ctx.fill();
     }
     // Vehicles: white when free, team-coloured when crewed (enemy crews only show while near).
@@ -737,6 +744,8 @@ export class Hud {
     this.set('end', `<small>${w === -1 ? t('hud.matchDrawn') : t('hud.winMatch', { team: teamName(w).toUpperCase() })}</small>
       <h2 style="color:${w === -1 ? 'var(--ink)' : TEAM_CSS[w]}">${t(w === -1 ? 'hud.draw' : w === myTeam ? 'hud.victory' : 'hud.defeat')}</h2>
       <div class="final"><b class="t0">${teamShort(0)} ${state.scores[0]}</b><span>—</span><b class="t1">${state.scores[1]} ${teamShort(1)}</b></div>
+      ${this.rival ? `<p class="rival ${w === myTeam ? 'won' : 'lost'}">${escape(t(w === myTeam ? 'chal.won' : 'chal.lost', { name: this.rival }))}</p>` : ''}
+      ${this.onShare ? `<div class="share-row"><button data-act="share" class="share">${t('share.button')}</button>${this.onDuel ? `<button data-act="duel" class="duel">${t('share.challenge')}</button>` : ''}</div>` : ''}
       <table><tr><th></th><th>${t('hud.player')}</th><th>${t('hud.k')}</th><th>${t('hud.d')}</th><th>${t('hud.a')}</th><th>${t('hud.score')}</th></tr>${top.map((s, i) => `<tr${s.team === myTeam ? ' class="mine"' : ''}><td>${i + 1}</td><td class="t${s.team}">${escape(s.name)}</td><td>${s.kills}</td><td>${s.deaths}</td><td>${s.assists}</td><td>${s.score}</td></tr>`).join('')}</table>
       ${career?.length ? this.careerTable(career) : ''}
       <p>${t('hud.newMatchIn', { n: Math.ceil(state.phaseLeft) })}</p>

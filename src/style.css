@@ -107,6 +107,10 @@ body.menu-open #hud, body.menu-open #hud * { visibility: hidden; }
 .killfeed .t0 { color: var(--aegis); } .killfeed .t1 { color: var(--crimson); }
 .killfeed .wpn { color: var(--muted); margin: 0 7px; font-size: 13px; text-transform: uppercase; letter-spacing: 0.08em; }
 .killfeed .hs::before { content: '◉'; margin-left: 5px; color: var(--amber); }
+/* A 藍白拖 kill (src/game/memeskins.ts): the slipper mark with motion lines, in the slipper's blue. */
+.killfeed .wpn.slap { display: inline-flex; align-items: center; gap: 4px; color: #8fb6ff; font-weight: 700; }
+.killfeed .wpn.slap .slipper { width: 34px; height: 17px; flex: none; animation: slapIn 0.35s ease-out; }
+@keyframes slapIn { 0% { transform: rotate(-35deg) scale(1.5); } 60% { transform: rotate(8deg) scale(0.95); } 100% { transform: none; } }
 
 /* Crosshair: --gap follows the weapon's cone; style chosen on the deploy screen. */
 .crosshair { --gap: 4px; --len: 7px; position: absolute; left: 50%; top: 50%; width: 0; height: 0; }
@@ -258,6 +262,8 @@ body.menu-open #hud, body.menu-open #hud * { visibility: hidden; }
 /* Full-screen overlays: low health (grey world, red edge), hit flash, scopes, binoculars */
 .lowhp { position: absolute; inset: 0; backdrop-filter: grayscale(1) contrast(1.05); -webkit-backdrop-filter: grayscale(1) contrast(1.05); background: radial-gradient(ellipse at center, transparent 42%, rgba(150, 0, 0, 0.6)); transition: opacity 0.4s; }
 .smokefog { position: absolute; inset: 0; opacity: 0; background: radial-gradient(ellipse at center, rgba(178, 182, 186, 0.93), rgba(150, 154, 158, 0.99)); }
+/* Inside a 珍奶 cloud the screen goes milk-tea brown. */
+.meme-skins .smokefog { background: radial-gradient(ellipse at center, rgba(205, 165, 118, 0.94), rgba(168, 126, 86, 0.99)); }
 /* A dropped connection being restored (main.ts rejoinAfterDrop) and graphics being restored (errors.ts). */
 /* The browser refused the mouse right after Esc: one click anywhere resumes (game.ts resume). */
 #hud .click-resume { position: absolute; inset: 0; z-index: 20; display: flex; align-items: center; justify-content: center; border: 0; background: rgba(5, 9, 12, 0.45); color: var(--ink); font: inherit; cursor: pointer; pointer-events: auto; }
