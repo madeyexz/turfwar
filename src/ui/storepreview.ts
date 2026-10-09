@@ -1,5 +1,7 @@
 import { toView } from './viewport';
 import * as THREE from 'three';
+import { MEME_SKINS } from '../game/memeskins';
+import { bobaCupModel } from '../render/meme';
 import { RoomEnvironment } from 'three/examples/jsm/environments/RoomEnvironment.js';
 import type { Assets } from '../assets';
 import { GUN_FIT, fitAttachments } from '../render/optics';
@@ -233,7 +235,7 @@ export class StorePreview {
   private build(item: PreviewItem): Built {
     const weapons = this.assets!.weapons;
     const object = new THREE.Group();
-    const model = item.kind === 'smoke' ? smokeCanister() : weapons.get(item.kind === 'grenade' ? 'Prop_Grenade' : WEAPONS[item.id].model)!.clone();
+    const model = item.kind === 'smoke' ? (MEME_SKINS ? bobaCupModel() : smokeCanister()) : weapons.get(item.kind === 'grenade' ? 'Prop_Grenade' : WEAPONS[item.id].model)!.clone();
     model.position.set(0, 0, 0);
     model.updateMatrixWorld(true);
     // Frame by the bare item so trying attachments on never rescales the view.

@@ -1,5 +1,6 @@
 import type { MapId } from '../../shared/maps/index';
 import type { AttachmentId, WeaponClass } from '../../shared/weapons';
+import { MEME_SKINS } from '../game/memeskins';
 
 /**
  * UI language: English or Traditional Chinese (Taiwan). `t(key)` looks a string up in the current
@@ -282,6 +283,7 @@ const en = {
   'store.need': 'Need {money} more',
   'store.returnToBase': 'Return to your base to buy weapons',
   'store.buyOver': 'Buy time is over — weapons are sold at the start of the next round',
+  'item.smoke': 'M18', 'item.smokeShort': 'M18',
   'store.smoke': 'Smoke grenade', 'store.oneM18': 'You carry one M18 at a time — throw it to buy another',
   'store.cloud': 'Cloud', 'store.lasts': 'Lasts',
   'store.m18Note': 'Throw with {key}. A thick cloud nobody sees through — players or bots. Bullets still pass.',
@@ -596,6 +598,7 @@ const zhTW: Record<Key, string> = {
   'store.need': '還差 {money}',
   'store.returnToBase': '回到己方基地才能購買武器',
   'store.buyOver': '購買時間已過 — 下一回合開始時才能購買武器',
+  'item.smoke': 'M18', 'item.smokeShort': 'M18',
   'store.smoke': '煙霧彈', 'store.oneM18': '一次只能攜帶一顆 M18 — 丟出後才能再買',
   'store.cloud': '煙幕', 'store.lasts': '持續',
   'store.m18Note': '按 {key} 投擲。濃煙擋住所有視線，玩家和機器人都看不穿，但子彈照樣穿過。',
@@ -653,7 +656,29 @@ const zhTW: Record<Key, string> = {
   'chal.room': '單挑房 {code} 開好了。把連結傳出去，對手點開就直接進來。', 'chal.send': '傳戰帖',
 };
 
-export const DICTIONARIES: Record<Lang, Record<Key, string>> = { en, 'zh-TW': zhTW };
+/**
+ * The National Day reskins' names (src/game/memeskins.ts): the knife is a 藍白拖 / Slipper and the M18
+ * a 珍奶煙霧彈 / Boba Smoke wherever they are named (store, weapon bar, kill feed, scoreboard, keys).
+ */
+export const MEME_NAMES: Record<Lang, Partial<Record<Key, string>>> = {
+  en: {
+    'act.knife': 'Slipper', 'tc.knife': 'Slipper', 'hud.knife': 'SLIPPER', 'cause.knife': 'Slipper', 'store.knife': 'Slipper',
+    'act.smoke': 'Boba smoke', 'tc.smoke': 'Boba', 'item.smoke': 'Boba Smoke', 'item.smokeShort': 'Boba',
+    'store.oneM18': 'You carry one boba smoke at a time — throw it to buy another',
+  },
+  'zh-TW': {
+    'act.knife': '藍白拖', 'tc.knife': '藍白拖', 'hud.knife': '藍白拖', 'cause.knife': '藍白拖', 'store.knife': '藍白拖',
+    'act.smoke': '珍奶煙霧彈', 'tc.smoke': '珍奶', 'item.smoke': '珍奶煙霧彈', 'item.smokeShort': '珍奶',
+    'store.oneM18': '一次只能帶一杯珍奶 — 丟出去才能再買',
+  },
+};
+
+/** The dictionaries in use: the reskins' names over the classic ones while they are on. */
+export const withMemeNames = (on: boolean): Record<Lang, Record<Key, string>> => on
+  ? { en: { ...en, ...MEME_NAMES.en }, 'zh-TW': { ...zhTW, ...MEME_NAMES['zh-TW'] } }
+  : { en, 'zh-TW': zhTW };
+
+export const DICTIONARIES: Record<Lang, Record<Key, string>> = withMemeNames(MEME_SKINS);
 
 // ---- Names that live in shared/ data (English there; Chinese here) ----
 

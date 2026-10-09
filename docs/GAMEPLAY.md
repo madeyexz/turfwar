@@ -59,6 +59,15 @@ Back to the [README](../README.md) · [Architecture](ARCHITECTURE.md) · [Develo
 | Tactical (4 / G) | M67 grenade | $1,000 | 70 (falloff) | One carried, not restocked; High Explosive mod $1,500 (+45 body damage, smaller radius) |
 | Tactical (5 / X) | M18 smoke grenade | $300 | — | One carried; a 9 m cloud for 15 s that blocks sight, not bullets (not in BeGone) |
 
+**National Day reskins** (`src/game/memeskins.ts`, on by default): the knife is a **藍白拖 / Slipper**
+(the blue-and-white rubber slipper, built in code, swung as a flat slap with a cartoon slap sound and
+its own kill-feed mark) and the M18 is a **珍奶煙霧彈 / Boba Smoke** (a bubble-tea cup in hand, in the
+air and in the store; the cloud is milk tea with tapioca pearls drifting in it, the minimap disc and
+the in-smoke screen are milk-tea brown, and it pops with a slurp). They are looks, names and sounds
+only: weapon ids, stats and the rules are unchanged, and the cloud hides exactly what the grey one
+did (`smokeBlocks` in `shared/match/combat.ts`). `?classic=1` shows the original knife and M18;
+`DEFAULT = false` in `memeskins.ts` turns the reskins off for everyone.
+
 ### Attachments (one per category per weapon; kept for the match)
 
 | Category | Attachment | Price | Fits |

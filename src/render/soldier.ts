@@ -1,4 +1,5 @@
 import * as THREE from 'three';
+import { MEME_SKINS } from '../game/memeskins';
 import { RoundedBoxGeometry } from 'three/examples/jsm/geometries/RoundedBoxGeometry.js';
 import { mergeGeometries } from 'three/examples/jsm/utils/BufferGeometryUtils.js';
 import * as SkeletonUtils from 'three/examples/jsm/utils/SkeletonUtils.js';
@@ -428,7 +429,10 @@ export class SoldierView {
     this.recoil = Math.max(0, this.recoil - dt * 12);
     this.stab = Math.max(0, this.stab - dt * 3.2);
     // Stab: a quick thrust out and back (peaks early).
-    const thrust = this.stab > 0 ? Math.sin((1 - this.stab) * Math.PI) ** 0.7 : 0;
+    const slapping = MEME_SKINS && knife && this.stab > 0;
+    const thrust = this.stab > 0 && !slapping ? Math.sin((1 - this.stab) * Math.PI) ** 0.7 : 0;
+    // The 藍白拖 (src/game/memeskins.ts) slaps instead: raised out to the right, then swept flat across the chest.
+    const arc = slapping ? (1 - this.stab) * Math.PI : 0, side = slapping ? Math.cos(arc) * 0.24 : 0, lift = slapping ? Math.sin(arc) * 0.14 : 0;
     const chest = spine3.getWorldPosition(v1);
     const aimDir = dirFromAngles(p.yaw, pitch);
     const fwd = v2.set(aimDir.x, aimDir.y, aimDir.z);
@@ -436,13 +440,13 @@ export class SoldierView {
     const lowReady = p.sprint ? 1 : 0;
     const grip = vec(fit.grip), fore = vec(fit.fore);
     const gripPos = chest.clone()
-      .addScaledVector(right, knife ? 0.16 : pistol ? 0.04 : 0.12)
-      .addScaledVector(gunUp, knife ? -0.08 + thrust * 0.06 : pistol ? 0.08 : 0.0 - lowReady * 0.12)
-      .addScaledVector(fwd, (knife ? 0.3 + thrust * 0.38 : pistol ? 0.44 : 0.3) - this.recoil * 0.06 - lowReady * 0.1);
+      .addScaledVector(right, knife ? 0.16 + side : pistol ? 0.04 : 0.12)
+      .addScaledVector(gunUp, knife ? -0.08 + thrust * 0.06 + lift : pistol ? 0.08 : 0.0 - lowReady * 0.12)
+      .addScaledVector(fwd, (knife ? 0.3 + thrust * 0.38 + lift * 1.2 : pistol ? 0.44 : 0.3) - this.recoil * 0.06 - lowReady * 0.1);
     // Gun basis: barrel (-X model) along fwd, +Y up; the knife points a little upward.
     const basis = new THREE.Matrix4().makeBasis(fwd.clone().negate(), gunUp, new THREE.Vector3().crossVectors(fwd.clone().negate(), gunUp));
     q1.setFromRotationMatrix(basis);
-    if (knife) q1.multiply(q2.setFromEuler(new THREE.Euler(0, 0, -0.35 + thrust * 0.3)));
+    if (knife) q1.multiply(q2.setFromEuler(new THREE.Euler(0, slapping ? Math.cos(arc) * -1.1 : 0, -0.35 + thrust * 0.3)));
     if (lowReady) q1.multiply(q2.setFromEuler(new THREE.Euler(0.5, 0.6, 0)));
     this.gun.quaternion.copy(q1);
     this.gun.position.copy(gripPos).sub(grip.clone().applyQuaternion(q1));
