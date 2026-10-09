@@ -1,4 +1,4 @@
-import { installHint, readEnv, type InstallHint } from '../game/device';
+import { installHint, openInBrowserUrl, readEnv, type InstallHint } from '../game/device';
 import { onTouchLayout, touchActive } from '../game/touchlayout';
 import { canPromptInstall, onInstallChange, promptInstall } from '../pwa';
 import { onLang, t } from './i18n';
@@ -47,10 +47,14 @@ export class InstallBanner {
     this.el.hidden = !kind && !tip;
     this.el.classList.toggle('tip-only', !kind);
     if (this.el.hidden) return;
+    const chrome = kind === 'browser' ? openInBrowserUrl(readEnv(), location.href) : undefined;
     const how = kind === 'ios' ? t('inst.ios', { share: '\u0000' }).split('\u0000').map(esc).join(SHARE) : kind ? esc(t(`inst.${kind}`)) : '';
     this.el.setAttribute('aria-label', kind ? t('inst.title') : t('inst.tipTitle'));
-    this.el.innerHTML = (kind ? `<img class="mark" src="/icons/icon-192.png" alt="" width="40" height="40"><b>${esc(t('inst.title'))}</b><p>${how}</p>` : '')
-      + `<div class="acts">${kind === 'prompt' ? `<button type="button" class="inst-go" data-act="install">${esc(t('inst.install'))}</button>` : ''}<button type="button" class="x" data-act="close" aria-label="${esc(t('inst.dismiss'))}" title="${esc(t('inst.dismiss'))}">✕</button></div>`
+    // In an app's own browser the game still plays (sideways); the real browser gives full screen and installing.
+    const title = kind === 'browser' ? t('inst.inAppTitle') : t('inst.title');
+    this.el.innerHTML = (kind ? `<img class="mark" src="/icons/icon-192.png" alt="" width="40" height="40"><b>${esc(title)}</b><p>${how}</p>` : '')
+      + `<div class="acts">${kind === 'prompt' ? `<button type="button" class="inst-go" data-act="install">${esc(t('inst.install'))}</button>` : ''}`
+      + `${chrome ? `<a class="inst-go" href="${esc(chrome)}">${esc(t('inst.openChrome'))}</a>` : ''}<button type="button" class="x" data-act="close" aria-label="${esc(t('inst.dismiss'))}" title="${esc(t('inst.dismiss'))}">✕</button></div>`
       + (tip || kind ? `<p class="tip">${esc(t('inst.tip'))}</p>` : '');
   }
 

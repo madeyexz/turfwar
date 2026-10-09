@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { defaultQuality, deviceKind, installHint, isIOS, TABLET_MIN_SIDE, touchEnabled, touchPrimary, type DeviceEnv } from './device';
+import { defaultQuality, deviceKind, installHint, isInAppBrowser, isIOS, openInBrowserUrl, TABLET_MIN_SIDE, touchEnabled, touchPrimary, type DeviceEnv } from './device';
 
 const env = (o: Partial<DeviceEnv>): DeviceEnv => ({ coarse: false, fine: true, maxTouchPoints: 0, userAgent: '', platform: '', standalone: false, ...o });
 const IPHONE = env({ coarse: true, fine: false, maxTouchPoints: 5, platform: 'iPhone', userAgent: 'Mozilla/5.0 (iPhone; CPU iPhone OS 17_5 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.5 Mobile/15E148 Safari/604.1' });
@@ -109,5 +109,25 @@ describe('phone, tablet or computer', () => {
     expect(deviceKind(MAC, LAPTOP_SCREEN)).toBe('desktop');
     expect(touchEnabled('off', IPHONE)).toBe(false);
     expect(deviceKind(IPHONE, IPHONE_SCREEN)).toBe('phone');
+  });
+});
+
+describe('in-app browsers', () => {
+  const THREADS_IOS = env({ ...IPHONE, userAgent: `${IPHONE.userAgent} Barcelona 360.0.0.30.109 (iPhone15,2; iOS 17_5; zh_TW; zh-Hant)` });
+  const THREADS_ANDROID = env({ ...ANDROID, userAgent: `${ANDROID.userAgent.replace(')', '; wv)')} Barcelona 360.0.0.30.109 Android` });
+
+  it('recognises Threads (its app calls itself Barcelona) as well as Instagram and the Android web view', () => {
+    expect(isInAppBrowser(THREADS_IOS)).toBe(true);
+    expect(isInAppBrowser(THREADS_ANDROID)).toBe(true);
+    expect(isInAppBrowser(INSTAGRAM)).toBe(true);
+    expect(isInAppBrowser(IPHONE)).toBe(false);
+    expect(installHint(THREADS_IOS, { touch: true, dismissed: false, canPrompt: false })).toBe('browser');
+  });
+
+  it('offers Chrome on Android only, keeping the page and its query', () => {
+    const url = 'https://turfwar.ianhsiao.me/?utm_source=threads';
+    expect(openInBrowserUrl(THREADS_ANDROID, url)).toBe(`intent://turfwar.ianhsiao.me/?utm_source=threads#Intent;scheme=https;package=com.android.chrome;S.browser_fallback_url=${encodeURIComponent(url)};end`);
+    expect(openInBrowserUrl(THREADS_IOS, url)).toBeUndefined();
+    expect(openInBrowserUrl(ANDROID, url)).toBeUndefined();
   });
 });

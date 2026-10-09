@@ -388,5 +388,9 @@ export function touchSensFromSlider(position: number) {
 export function touchAutoAim() { return read('lawbreaker.touchAutoAim') !== '0'; }
 export function setTouchAutoAim(on: boolean) { write('lawbreaker.touchAutoAim', on ? '1' : '0'); notify(); }
 
+/** Aim assist on touch screens (`lawbreaker.touchAimAssist`, on unless switched off; `aimassist.ts`). */
+export function touchAimAssist() { return read('lawbreaker.touchAimAssist') !== '0'; }
+export function setTouchAimAssist(on: boolean) { write('lawbreaker.touchAimAssist', on ? '1' : '0'); notify(); }
+
 /** Called when the layout or a touch preference changes. Returns an unsubscribe. */
 export function onTouchLayout(f: () => void) { listeners.add(f); return () => { listeners.delete(f); }; }
