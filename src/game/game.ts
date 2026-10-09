@@ -36,7 +36,7 @@ import { Driving } from './driving';
 import { LocalPlayer } from './player';
 import { isMagnified, settings } from './settings';
 import { ownedOf, purchaseOf, type BuyRequest, type Owned } from './purchases';
-import { roundEnded, track } from '../analytics';
+import { matchNote, roundEnded, track } from '../analytics';
 import { challengeUrl, shareRef } from './challenge';
 import { MatchTally, type MatchSummary } from './matchstats';
 import { openSharePanel } from '../ui/sharepanel';
@@ -1106,6 +1106,7 @@ export class Game {
         const killer = find(e.killer), victim = find(e.victim);
         this.tally.kill(e, myId);
         this.hud.killfeed(killer, victim, e.weapon, e.head, e.killer === myId || e.victim === myId);
+        if (e.killer === myId && e.victim !== myId && e.weapon === 'knife') matchNote('knife_kill');
         if (e.killer === myId && e.victim !== myId) { this.hud.hit('kill'); this.audio.hitmarker(e.head, true); this.progress({ type: 'kill', head: e.head }); }
         if (e.victim === myId) this.hud.announce(t('hud.youDied'), killer && killer.id !== myId ? `${killer.name} · ${weaponLabel(e.weapon)}` : '', 'var(--crimson)');
         break;
@@ -1172,7 +1173,7 @@ export class Game {
         break;
       }
       case 'drink': {
-        if (e.id === myId) { this.hud.toast(t('hud.healed', { n: BOBA.heal }), 1800); break; }
+        if (e.id === myId) { matchNote('boba'); this.hud.toast(t('hud.healed', { n: BOBA.heal }), 1800); break; }
         const r = this.remotes.get(e.id);
         if (r) this.audio.drink(this.listener(), new THREE.Vector3(r.pos.x, r.pos.y + 1.4, r.pos.z));
         break;

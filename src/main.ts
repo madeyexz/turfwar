@@ -18,7 +18,7 @@ import { onlineAvailable, connectOnline, watchRooms, ConnectError, OnlineLink, t
 import { PING_WINDOW, PingMonitor, hostAnswers, pingAllowed, pingTone, pingUrl, serverHost, serverRegion } from './net/ping';
 import { currentServer, gameServerList, onServer, type GameServer, type ServerId } from './net/servers';
 import { WakeDriver, wakeProgress, wakeSeconds, type WakeState } from './net/wake';
-import { matchJoined, matchLeft, setSuper, startAnalytics, track, type PlayKind, type Exit, type Reason } from './analytics';
+import { matchJoined, matchLeft, matchNote, setSuper, startAnalytics, track, type PlayKind, type Exit, type Reason } from './analytics';
 import { LevelView } from './render/level';
 import { THEMES } from './render/materials';
 import { QUALITY, Renderer } from './render/renderer';
@@ -30,10 +30,10 @@ import { L, applyI18n, escapeHtml as esc, isZh, lang, mapName as localMapName, m
 import './style.css';
 import './menu.css';
 import './ui/lang-zh.css';
-import { currentDeviceKind, defaultQuality } from './game/device';
-import { onTouchLayout, touchActive } from './game/touchlayout';
+import { currentDeviceKind, defaultQuality, inAppBrowserName, readEnv } from './game/device';
+import { onTouchLayout, touchActive, touchAimAssist } from './game/touchlayout';
 import { InstallBanner } from './ui/installhint';
-import { onSideways, watchSideways } from './ui/viewport';
+import { isSideways, onSideways, watchSideways } from './ui/viewport';
 import { mountProgressBadge } from './ui/progressbadge';
 import { askCallsign, madeUpCallsign } from './ui/callsign';
 import { ask, confirmDialog } from './ui/ask';
@@ -1261,6 +1261,14 @@ function backToLobby(reason: 'menu' | 'disconnect', message = '', exit?: Exit) {
 /** The server of the online match being played (for a rejoin after a dropped connection). */
 let matchServer: ServerId | undefined;
 
+/** The in-app browser's app and touch aim assist, when they apply. */
+function playContext() {
+  const app = inAppBrowserName(readEnv());
+  return { ...(app ? { in_app: app } : {}), ...(touchActive() ? { aim_assist: touchAimAssist() } : {}) };
+}
+// A match turned sideways (an upright phone) counts for its match_left.
+onSideways(on => { if (on && game) matchNote('sideways'); });
+
 /** Analytics: we are in a match (once per link; online map rotations keep the same session). */
 function joined(link: GameLink, map: string, serverChoice: ServerId | undefined, rejoin = false) {
   const state = link.state(), me = state?.soldiers.find(s => s.id === link.myId());
@@ -1270,7 +1278,10 @@ function joined(link: GameLink, map: string, serverChoice: ServerId | undefined,
     online: link.mode === 'online', ...(info ? { room: info.code || `public-${info.room}` } : {}), map,
     mode: config?.mode ?? 'elimination', size: config?.practice ? 'practice' : sizeLabel(config?.teamSize ?? perTeam()), team: me?.team === 1 ? 'militia' : 'swat',
     ...(serverChoice ? { server_choice: serverChoice } : {}), device: currentDeviceKind(), ...(rejoin ? { rejoin: true } : {}),
+    // How it is played (phones): touch, an upright screen (the match then turns sideways), which app's browser, aim assist.
+    touch: touchActive(), upright: innerHeight > innerWidth && !isSideways(), ...playContext(),
   });
+  if (isSideways()) matchNote('sideways');
   // The server removed us (it stopped hearing from this client) or the connection dropped: back to
   // the lobby with a note, rather than playing on against a frozen match the server no longer runs.
   // A dropped connection (a phone that slept, an in-app browser sent to the background, a network

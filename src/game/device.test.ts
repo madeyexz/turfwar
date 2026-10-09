@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { defaultQuality, deviceKind, installHint, isInAppBrowser, isIOS, openInBrowserUrl, TABLET_MIN_SIDE, touchEnabled, touchPrimary, type DeviceEnv } from './device';
+import { defaultQuality, deviceKind, inAppBrowserName, installHint, isInAppBrowser, isIOS, openInBrowserUrl, TABLET_MIN_SIDE, touchEnabled, touchPrimary, type DeviceEnv } from './device';
 
 const env = (o: Partial<DeviceEnv>): DeviceEnv => ({ coarse: false, fine: true, maxTouchPoints: 0, userAgent: '', platform: '', standalone: false, ...o });
 const IPHONE = env({ coarse: true, fine: false, maxTouchPoints: 5, platform: 'iPhone', userAgent: 'Mozilla/5.0 (iPhone; CPU iPhone OS 17_5 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.5 Mobile/15E148 Safari/604.1' });
@@ -122,6 +122,15 @@ describe('in-app browsers', () => {
     expect(isInAppBrowser(INSTAGRAM)).toBe(true);
     expect(isInAppBrowser(IPHONE)).toBe(false);
     expect(installHint(THREADS_IOS, { touch: true, dismissed: false, canPrompt: false })).toBe('browser');
+  });
+
+  it('names the app for analytics: Threads before the Android web view it runs in', () => {
+    expect(inAppBrowserName(THREADS_IOS)).toBe('threads');
+    expect(inAppBrowserName(THREADS_ANDROID)).toBe('threads');
+    expect(inAppBrowserName(INSTAGRAM)).toBe('instagram');
+    expect(inAppBrowserName(env({ ...ANDROID, userAgent: ANDROID.userAgent.replace(')', '; wv)') }))).toBe('webview');
+    expect(inAppBrowserName(IPHONE)).toBeUndefined();
+    expect(inAppBrowserName(MAC)).toBeUndefined();
   });
 
   it('offers Chrome on Android only, keeping the page and its query', () => {
