@@ -207,6 +207,10 @@ The TW app icon was generated with Amp Painter. Its source is `tools/app-icon.pn
 run `bun tools/make-icons.ts` (after installing `tools/` dependencies) to regenerate the browser
 and home-screen sizes.
 
+An approved, hand-traced [SVG version](tools/app-icon.svg) is also available: eight editable vector
+paths with flat colors and no embedded raster image. It follows the same logo reuse restriction above.
+The icon generator still uses the original PNG; adding the SVG does not change the shipped icons.
+
 <details>
 <summary><b>Asset credits and licences</b></summary>
 
