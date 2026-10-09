@@ -78,7 +78,7 @@ const root = document.querySelector<HTMLDivElement>('#admin')!;
 const serverLabel = (s: AdminServer) => `${s.name} · ${regionName(s.uri)} · ${s.database}`;
 root.innerHTML = `
   <header class="top">
-    <h1>Turf War <em>Admin</em></h1>
+    <h1><img src="/icons/icon-192.png" width="32" height="32" alt=""> Turf War <em>Admin</em></h1>
     <label class="server-pick" title="Which game server to show; each has its own login">
       <span>Server</span>
       <select id="server">${SERVERS.map(s => `<option value="${esc(s.id)}">${esc(serverLabel(s))}</option>`).join('')}</select>

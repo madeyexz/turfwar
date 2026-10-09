@@ -203,6 +203,10 @@ The code is released under the [MIT License](LICENSE). Third-party assets keep t
 (CC0 and the SIL Open Font License). The names 角頭械鬥 and Turf War: Taipei and the logo are not
 licensed for reuse — forks are welcome under a different name.
 
+The TW app icon was generated with Amp Painter. Its source is `tools/app-icon.png`;
+run `bun tools/make-icons.ts` (after installing `tools/` dependencies) to regenerate the browser
+and home-screen sizes.
+
 <details>
 <summary><b>Asset credits and licences</b></summary>
 
