@@ -68,7 +68,8 @@ export function limitShadowCasters(root: THREE.Object3D, q: Pick<Quality, 'minCa
     if (!data.shadowWanted) return;
     const geometry = mesh.geometry;
     if (!geometry.boundingSphere) geometry.computeBoundingSphere();
-    const radius = sphere.copy(geometry.boundingSphere!).applyMatrix4(mesh.matrixWorld).radius;
+    // A batch of small parts (src/render/batch.ts) counts by its parts' size, not the whole batch's.
+    const radius = (data.casterRadius as number | undefined) ?? sphere.copy(geometry.boundingSphere!).applyMatrix4(mesh.matrixWorld).radius;
     mesh.castShadow = radius >= q.minCaster && !(q.leanCasters && LEAN_CASTERS.test(mesh.name));
   });
 }
