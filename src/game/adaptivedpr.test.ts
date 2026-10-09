@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { AdaptiveDpr, basePixelRatio } from './adaptivedpr';
+import { AdaptiveDpr, PHONE_ADAPTIVE_DPR, basePixelRatio } from './adaptivedpr';
 
 /** Run `seconds` of frames at `fps`; returns how many times the multiplier changed. */
 function run(a: AdaptiveDpr, fps: number, seconds: number, active = true) {
@@ -108,5 +108,32 @@ describe('basePixelRatio', () => {
   it('caps a number at the screen', () => {
     expect(basePixelRatio(1.5, 1)).toBe(1);
     expect(basePixelRatio(1.5, 2)).toBe(1.5);
+  });
+
+  it('on phones, a steady 57 fps steps down once and stays at the size that holds 60', () => {
+    const a = new AdaptiveDpr(PHONE_ADAPTIVE_DPR);
+    start(a, 57);
+    run(a, 57, 4);
+    expect(a.multiplier).toBe(0.9);
+    // Smooth at the smaller size: it does not climb back into the size that ran slow.
+    expect(run(a, 60, 60)).toBe(0);
+    expect(a.multiplier).toBe(0.9);
+  });
+
+  it('on phones, a heavy stretch steps further down and recovers only to the last size that held', () => {
+    const a = new AdaptiveDpr(PHONE_ADAPTIVE_DPR);
+    start(a, 57);
+    run(a, 57, 4);      // 1 → 0.9 (1 ran slow)
+    run(a, 40, 8);      // 0.9 → 0.8 → 0.7 (a heavy fight)
+    expect(a.multiplier).toBe(0.7);
+    run(a, 60, 60);     // smooth again: nothing above 0.7 is proven, so it stays
+    expect(a.multiplier).toBe(0.7);
+  });
+
+  it('desktops keep the 30 fps floor: 57 fps is fine', () => {
+    const a = new AdaptiveDpr();
+    start(a, 57);
+    expect(run(a, 57, 40)).toBe(0);
+    expect(a.multiplier).toBe(1);
   });
 });

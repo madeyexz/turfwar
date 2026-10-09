@@ -4,7 +4,7 @@ import { EffectComposer } from 'three/examples/jsm/postprocessing/EffectComposer
 import { RenderPass } from 'three/examples/jsm/postprocessing/RenderPass.js';
 import { UnrealBloomPass } from 'three/examples/jsm/postprocessing/UnrealBloomPass.js';
 import { OutputPass } from 'three/examples/jsm/postprocessing/OutputPass.js';
-import { AdaptiveDpr, basePixelRatio } from '../game/adaptivedpr';
+import { AdaptiveDpr, PHONE_ADAPTIVE_DPR, basePixelRatio } from '../game/adaptivedpr';
 import { setMaterialQuality, type Theme } from './materials';
 import { ScopePass } from './sights';
 import { SkyView } from './sky';
@@ -143,7 +143,7 @@ export class Renderer {
   }
 
   applyQuality(q: Quality) {
-    if (q !== this.quality) this.adaptive = new AdaptiveDpr();
+    if (q !== this.quality) this.adaptive = new AdaptiveDpr(q.pixelRatio === 'phone' ? PHONE_ADAPTIVE_DPR : {});
     this.quality = q;
     setMaterialQuality(q.cheapMaterials);
     this.sun.castShadow = q.shadows > 0;
