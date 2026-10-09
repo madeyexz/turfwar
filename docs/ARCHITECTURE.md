@@ -109,13 +109,24 @@ Back to the [README](../README.md) · [Gameplay](GAMEPLAY.md) · [Development](D
 
 ## Performance
 
-Targets 60 fps on an M-series MacBook at the default *medium* preset (DPR ≤ 1, 2048 shadow map,
-half-resolution bloom). Budgets: merged static geometry per material, one draw call set per soldier,
-at most three dynamic point lights (pooled muzzle/explosion flashes), pooled effects. The light count
-never changes mid-match (a new light recompiles every lit shader): both sides' first-person arms and
-their flashlights exist from the start, so watching an enemy after death adds none. Once the map's
+Targets 60 fps on an M-series MacBook at the default *medium* preset (DPR ≤ 1, 2048 soft shadow map
+over 80 m around the camera, half-resolution bloom). Phones default to *low*, after messenger.abeto.co:
+DPR up to 1.15 (screens of ratio ≤ 2) or 1.5 (above), one plain-PCF 1024 shadow map over 44 m that
+follows the camera and redraws every other frame, no shadows from small meshes (bounding radius under
+1.2 m: scooters, crates, props) or merged clutter (hedges, lot detail, street props), no bloom, no
+dynamic lights, no roughness maps on architecture and no ground normal maps. Every preset scales its
+DPR by frame rate while a match is played (`src/game/adaptivedpr.ts`: 0.6–1 in 0.1 steps per 4 s window
+below 30 or at 60 fps, settling after four reversals). The canvas has no MSAA, depth or stencil buffer:
+everything is drawn into the composer's target. Budgets: merged static geometry per material, one draw
+call set per soldier, at most three dynamic point lights (pooled muzzle/explosion flashes) and one
+flashlight spot light, pooled effects. The light count never changes mid-match (a new light recompiles
+every lit shader): both sides' first-person arms exist from the start and share the renderer's one
+flashlight light, which is in the scene all match on presets with dynamic lights, so watching an enemy
+after death adds none. Once the map's
 dressing loads, `Renderer.warm` compiles every shader in the background and uploads every texture two a
-frame, so a camera that jumps (death, a new round) does not stall on first sight. Remote soldiers
+frame, so a camera that jumps (death, a new round) does not stall on first sight. Image textures are
+GPU-compressed KTX2 (`src/render/textures.ts`, built by `tools/make-ktx2.ts`), half size on Low: Taipei's
+textures take about 50 MB of video memory on Low and 180 MB on Medium, against 350 MB as raw RGBA. Remote soldiers
 use a crowd level of detail: off-screen soldiers are hidden and not animated; on screen, full
 animation and shadows within 30 m, half-rate animation to 70 m, quarter rate beyond. Remote gunfire
 beyond 110 m is not drawn and gunshot audio is limited to 85 m, six voices per frame and 14 ringing at

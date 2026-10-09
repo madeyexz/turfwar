@@ -13,10 +13,11 @@ import type { BombState } from '../shared/match/state';
 
 const params = new URLSearchParams(location.search);
 const info = document.getElementById('info')!;
-const assets = await loadAssets(f => { info.textContent = `loading ${(f * 100).toFixed(0)}%`; });
+const quality = (params.get('q') as 'medium') ?? 'medium';
+const r = new Renderer(document.body, QUALITY[quality]);
+const assets = await loadAssets(f => { info.textContent = `loading ${(f * 100).toFixed(0)}%`; }, { renderer: r.renderer, quality });
 const map = loadMap(params.get('map') ?? 'cinder').def;
 const theme = THEMES[map.theme];
-const r = new Renderer(document.body, QUALITY[(params.get('q') as 'medium') ?? 'medium']);
 r.setTheme(theme, map.sun);
 const level = new LevelView(assets, map, theme);
 r.scene.add(level.group);

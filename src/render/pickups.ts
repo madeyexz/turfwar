@@ -1,7 +1,9 @@
 import * as THREE from 'three';
 import type { PickupDef } from '../../shared/maps/types';
 import type { Assets } from '../assets';
+import { mergeGeometries } from 'three/examples/jsm/utils/BufferGeometryUtils.js';
 import { UI_STACK } from '../ui/fonts';
+import { mergeStatic, staticMeshes } from './batch';
 
 /** Stencilled side of the ammo box (yellow military lettering on transparent). */
 function stencil(lines: [string, number][], w = 256, h = 128) {
@@ -66,26 +68,54 @@ function ammoBox() {
 
 /**
  * Ammo crates (E restocks the held weapon; the first use each round costs $300). Each sits on
- * the map where its pickup is defined, with a soft lamp glow so it is easy to find.
+ * the map where its pickup is defined, with a soft lamp glow so it is easy to find. The crates
+ * never move and are found by position, so all of them draw as one mesh per material (a crate
+ * is twenty parts), and their lamp pools as one mesh whose per-crate flicker is a vertex alpha.
  */
 export class CratesView {
   readonly group = new THREE.Group();
-  private crates: { def: PickupDef; pool: THREE.Mesh }[] = [];
+  private crates: { def: PickupDef }[] = [];
+  private pools?: { alpha: THREE.BufferAttribute; perCrate: number };
 
   constructor(_assets: Assets, pickups: PickupDef[] = []) {
+    const pools: THREE.Mesh[] = [];
     pickups.forEach((def, i) => {
       const box = ammoBox().clone();
       box.position.set(def.x, def.y, def.z);
       box.rotation.y = i % 2 ? Math.PI / 2 : 0;
-      const pool = box.getObjectByName('pool') as THREE.Mesh;
-      pool.material = (pool.material as THREE.Material).clone();
+      pools.push(box.getObjectByName('pool') as THREE.Mesh);
       this.group.add(box);
-      this.crates.push({ def, pool });
+      this.crates.push({ def });
     });
+    if (!pickups.length) return;
+    mergeStatic(this.group, staticMeshes(this.group, new Set(pools)), { name: 'crates' });
+    // Lamp pools: one additive mesh; each crate's corners carry its own opacity in the colour alpha.
+    this.group.updateMatrixWorld(true);
+    const parts = pools.map(p => { const g = p.geometry.clone().applyMatrix4(p.matrixWorld); p.removeFromParent(); return g; });
+    const perCrate = parts[0].getAttribute('position').count;
+    const geometry = mergeGeometries(parts, false)!;
+    const alpha = new THREE.BufferAttribute(new Float32Array(perCrate * pools.length * 4).fill(1), 4);
+    alpha.setUsage(THREE.DynamicDrawUsage);
+    geometry.setAttribute('color', alpha);
+    const source = pools[0].material as THREE.MeshBasicMaterial;
+    const material = source.clone();
+    material.opacity = 1; material.vertexColors = true;
+    const mesh = new THREE.Mesh(geometry, material);
+    mesh.name = 'crates:pools'; mesh.renderOrder = pools[0].renderOrder;
+    this.group.add(mesh);
+    for (const c of [...this.group.children]) if (c.type === 'Group' && c.children.length === 0) c.removeFromParent();
+    this.pools = { alpha, perCrate };
+    this.update(0);
   }
 
   update(time: number) {
-    this.crates.forEach((c, i) => { (c.pool.material as THREE.MeshBasicMaterial).opacity = 0.36 + Math.sin(time * 2 + i) * 0.05; });
+    if (!this.pools) return;
+    const { alpha, perCrate } = this.pools, a = alpha.array as Float32Array;
+    this.crates.forEach((_, i) => {
+      const o = 0.36 + Math.sin(time * 2 + i) * 0.05;
+      for (let v = i * perCrate; v < (i + 1) * perCrate; v++) a[v * 4 + 3] = o;
+    });
+    alpha.needsUpdate = true;
   }
 
   /** Index of the nearest crate within `reach` of (x, z) and about the same floor, or -1. */

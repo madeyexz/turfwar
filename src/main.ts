@@ -1461,7 +1461,7 @@ async function boot() {
   // Chinese UI: fetch the CJK face with the assets, so the first screens never show a fallback font.
   const fonts = isZh() ? cjkFontReady('繁體中文') : Promise.resolve();
   showChallenge();
-  assets = await loadAssets(f => { loadFraction = f; renderQuick(); renderStart(); renderOthers(); renderChallenge(); });
+  assets = await loadAssets(f => { loadFraction = f; renderQuick(); renderStart(); renderOthers(); renderChallenge(); }, { renderer: renderer.renderer, quality });
   await fonts;
   ready = true;
   warmServiceWorker();

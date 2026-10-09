@@ -6,8 +6,10 @@ import { cutTest, modelCut, type Cut } from '../../shared/maps/dressing';
 import type { Decor } from '../../shared/maps/types';
 import { rng } from '../../shared/math';
 import { assetUrl } from '../assetUrl';
+import { mergeStatic } from './batch';
 import { buildSkyline, type SkylineData } from './skyline';
 import { lotDetail, type LotRow } from './lotdetail';
+import { loadTexture } from './textures';
 import { CJK_STACK, cjkFontReady } from '../ui/fonts';
 
 /**
@@ -60,12 +62,16 @@ type Dressing = Extract<Decor, { kind: 'dressing' }>;
 type Instances = Extract<Decor, { kind: 'instances' }>;
 const STRIDE = 8;
 
-/** Build every dressing set and model instance of a map into `group` (asynchronously: sets and meshes load on demand). */
-export async function addDressing(group: THREE.Group, decor: Decor[]) {
+/**
+ * Build every dressing set and model instance of a map into `group` (asynchronously: sets and meshes
+ * load on demand). Resolves to the time the static batching took (ms).
+ */
+export async function addDressing(group: THREE.Group, decor: Decor[]): Promise<number> {
   const sets = decor.filter((d): d is Dressing => d.kind === 'dressing');
   const instances = decor.filter((d): d is Instances => d.kind === 'instances');
-  if (!sets.length && !instances.length) return;
+  if (!sets.length && !instances.length) return 0;
   const models = await loadModels();
+  const before = new Set(group.children);
   for (const d of sets) {
     const set = await SETS[d.set]?.();
     if (!set) { console.warn('unknown dressing set', d.set); continue; }
@@ -79,6 +85,67 @@ export async function addDressing(group: THREE.Group, decor: Decor[]) {
   const byModel = new Map<string, number[]>();
   for (const d of instances) byModel.set(d.model, [...(byModel.get(d.model) ?? []), ...d.data]);
   for (const [model, data] of byModel) for (const m of instanced(model, data, 0, 0, models)) group.add(m);
+  const t0 = performance.now();
+  batch(group, group.children.filter(c => !before.has(c)));
+  return performance.now() - t0;
+}
+
+/** Instanced models up to this many triangles in all are baked into plain geometry and batched. */
+const BAKE_TRIANGLES = 12000;
+
+/**
+ * Static batching of the dressing: small instanced models (bikes, signals, cars, the smaller
+ * plants) become plain geometry, then everything sharing a material, shadow flags and render
+ * order draws as one mesh. The big instanced sets (scooters, street trees) stay instanced, where
+ * one draw costs no extra memory.
+ */
+function batch(group: THREE.Group, added: THREE.Object3D[]) {
+  const meshes: THREE.Mesh[] = [];
+  for (const child of added) if (child.name !== 'dressing:skyline') child.traverseVisible(o => { if ((o as THREE.Mesh).isMesh) meshes.push(o as THREE.Mesh); });
+  const parts = meshes.map(mesh => {
+    const inst = mesh as THREE.InstancedMesh;
+    if (!inst.isInstancedMesh) return mesh;
+    const g = inst.geometry, tris = (g.index ? g.index.count : g.getAttribute('position').count) / 3;
+    if (tris * inst.count > BAKE_TRIANGLES) return null;
+    const baked = bakeInstances(inst);
+    inst.parent!.add(baked); inst.removeFromParent();
+    return baked;
+  }).filter((m): m is THREE.Mesh => m !== null);
+  mergeStatic(group, parts, { name: 'dressing' });
+}
+
+/** An instanced mesh as one plain mesh: each copy's matrix, colour and per-instance attributes written into its vertices. */
+function bakeInstances(inst: THREE.InstancedMesh) {
+  const src = inst.geometry.index ? inst.geometry.toNonIndexed() : inst.geometry;
+  const copies: THREE.BufferGeometry[] = [], m = new THREE.Matrix4(), c = new THREE.Color();
+  const perInstance = Object.entries(src.attributes).filter(([, a]) => (a as THREE.InstancedBufferAttribute).isInstancedBufferAttribute) as [string, THREE.InstancedBufferAttribute][];
+  for (let i = 0; i < inst.count; i++) {
+    const g = new THREE.BufferGeometry(), n = src.getAttribute('position').count;
+    for (const [name, a] of Object.entries(src.attributes)) if (!(a as THREE.InstancedBufferAttribute).isInstancedBufferAttribute) g.setAttribute(name, (a as THREE.BufferAttribute).clone());
+    inst.getMatrixAt(i, m);
+    g.applyMatrix4(m);
+    if (inst.instanceColor) {
+      inst.getColorAt(i, c);
+      let col = g.getAttribute('color') as THREE.BufferAttribute | undefined;
+      if (!col) { col = new THREE.BufferAttribute(new Float32Array(n * 3).fill(1), 3); g.setAttribute('color', col); }
+      for (let v = 0; v < n; v++) col.setXYZ(v, col.getX(v) * c.r, col.getY(v) * c.g, col.getZ(v) * c.b);
+    }
+    for (const [name, a] of perInstance) {
+      const out = new Float32Array(n * a.itemSize);
+      for (let v = 0; v < n; v++) for (let k = 0; k < a.itemSize; k++) out[v * a.itemSize + k] = a.getComponent(i, k);
+      g.setAttribute(name, new THREE.BufferAttribute(out, a.itemSize));
+    }
+    copies.push(g);
+  }
+  const mesh = new THREE.Mesh(mergeGeometries(copies, false)!, inst.material);
+  mesh.castShadow = inst.castShadow; mesh.receiveShadow = inst.receiveShadow; mesh.renderOrder = inst.renderOrder;
+  mesh.name = inst.name;
+  // As a shadow caster it is still as small as one copy (the renderer drops small casters on low).
+  if (!src.boundingSphere) src.computeBoundingSphere();
+  let scale = 0;
+  for (let i = 0; i < inst.count; i++) { inst.getMatrixAt(i, m); scale = Math.max(scale, m.getMaxScaleOnAxis()); }
+  mesh.userData.casterRadius = src.boundingSphere!.radius * scale;
+  return mesh;
 }
 
 /** The street set without what stands in the cut boxes. */
@@ -110,9 +177,8 @@ function cutStreet(s: StreetData, ox: number, oz: number, cut: Cut): StreetData 
 async function districtGroup(d: DistrictData, ox: number, oz: number, cut: Cut) {
   const [gltf, atlas] = await Promise.all([
     new GLTFLoader().setMeshoptDecoder(MeshoptDecoder).loadAsync(assetUrl(`assets/${d.mesh}`)),
-    new THREE.TextureLoader().loadAsync(assetUrl(`assets/${d.atlas}`)),
+    loadTexture(`assets/${d.atlas}`, { srgb: true }).ready,
   ]);
-  atlas.colorSpace = THREE.SRGBColorSpace; atlas.anisotropy = 8;
   const solid = new THREE.MeshStandardMaterial({ map: atlas, vertexColors: true, roughness: 0.8, metalness: 0.05 });
   solid.onBeforeCompile = s => {
     s.vertexShader = s.vertexShader
