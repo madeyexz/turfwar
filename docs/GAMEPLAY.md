@@ -308,7 +308,7 @@ The end screen has **分享戰績 / Share**: a 1080×1920 card (`src/ui/sharecar
 the result, one brag line picked from the match (`src/game/matchstats.ts`: beating a challenger, slipper kills, a
 multi-kill round, kills on the map, headshots…), the numbers, the callsign and **單挑我 →** with a QR code and link.
 Phones share the picture through the share sheet (IG Stories, LINE, Threads); elsewhere it is saved and the link
-copied. Solo cards say "vs bots". **單挑我** (online) opens a private 1v1 room on the match's map, without bots, and
+copied. Solo cards say "vs bots". **發起單挑** (online) opens a private 1v1 room on the match's map, without bots, and
 shares that room's link from inside it. A friend who opens a challenge link sees 「<name> 向你下戰帖！」 in the lobby and
 is one tap from the room; if it is gone, full or empty they play a Solo 1v1 against a bot carrying the challenger's
 name, and either way the end screen says who won and offers their own card.

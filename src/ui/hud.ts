@@ -51,7 +51,7 @@ export class Hud {
   readonly root: HTMLElement;
   crosshairStyle: CrosshairStyle = savedCrosshair();
   onRestart?: () => void;
-  /** The end screen's 分享戰績 and 單挑我 (share.ts); 單挑我 only where online play is available. */
+  /** The end screen's 分享戰績 and 發起單挑 (share.ts); 發起單挑 only where online play is available. */
   onShare?: () => void;
   onDuel?: () => void;
   /** A 單挑我 match: the challenger, for the end screen's "you beat …" line. */
