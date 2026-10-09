@@ -3,12 +3,28 @@ import { createHash } from 'node:crypto';
 import { readFileSync, readdirSync, statSync, writeFileSync } from 'node:fs';
 import { join, resolve } from 'node:path';
 import { defineConfig, type Plugin } from 'vite';
+import { mergeReleases, parseReleaseLog, type Release } from './src/admin/releases';
 
 /** The build's git short SHA (Vercel provides it; locally ask git), sent with analytics events. */
 function appVersion() {
   const sha = process.env.VERCEL_GIT_COMMIT_SHA;
   if (sha) return sha.slice(0, 7);
   try { return execSync('git rev-parse --short HEAD', { stdio: ['ignore', 'pipe', 'ignore'] }).toString().trim() || 'dev'; } catch { return 'dev'; }
+}
+
+/**
+ * The releases the admin page marks on its charts: the snapshot in src/admin/releases.json plus what
+ * this checkout's git history shows of `main` (and HEAD) — Vercel clones shallowly, so the snapshot keeps
+ * the older ones — plus the commit Vercel is building when it is itself a release.
+ */
+function releases(): Release[] {
+  const snapshot = JSON.parse(readFileSync(resolve(__dirname, 'src/admin/releases.json'), 'utf8')) as Release[];
+  const fromGit = ['main', 'HEAD'].flatMap(ref => {
+    try { return parseReleaseLog(execSync(`git log ${ref} --first-parent --format=%h%x09%ct%x09%s --`, { stdio: ['ignore', 'pipe', 'ignore'] }).toString()); } catch { return []; }
+  });
+  const sha = process.env.VERCEL_GIT_COMMIT_SHA, message = process.env.VERCEL_GIT_COMMIT_MESSAGE;
+  const building = sha && message ? parseReleaseLog(`${sha}\t${Math.floor(Date.now() / 1000)}\t${message.split('\n')[0]}`) : [];
+  return mergeReleases(snapshot, fromGit, building);
 }
 
 /** /admin and /privacy without the trailing slash serve their pages in the dev server too (Vercel rewrites them). */
@@ -76,7 +92,7 @@ const pwa: Plugin = {
 
 export default defineConfig({
   plugins: [pageRoutes, versionedCssUrls, pwa],
-  define: { __APP_VERSION__: JSON.stringify(appVersion()), __ASSET_VERSIONS__: JSON.stringify(VERSIONS) },
+  define: { __APP_VERSION__: JSON.stringify(appVersion()), __ASSET_VERSIONS__: JSON.stringify(VERSIONS), __RELEASES__: JSON.stringify(releases()) },
   server: {
     allowedHosts: true,
     // Same-origin websocket route to a local SpacetimeDB so one preview URL serves the game and the match server

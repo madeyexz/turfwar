@@ -20,7 +20,7 @@ import { beginPlay, endPlay, flushDue, flushPlay, type PlayStore } from '../../s
 import { acceptNetReport, foldNetDay } from '../../shared/netstats';
 import { acceptDevice } from '../../shared/devicekind';
 import * as Admin from './admin';
-import { AdminError, dailyNetRows, dailyRows, dailyTimeRows, dayOf, forAdmin, playerDeviceRows, playerNetRows, playerRows, playTimeRows, type AdminStore } from './admin';
+import { AdminError, dailyNetRows, dailyRows, dailyTimeRows, dayOf, forAdmin, playerDayRows, playerDeviceRows, playerNetRows, playerRows, playTimeRows, type AdminStore } from './admin';
 
 /**
  * Authoritative multiplayer: the same shared match simulation the offline client runs, executed
@@ -1229,3 +1229,10 @@ export const adminPlayerDevice = spacetimedb.view({ name: 'admin_player_device',
     const rows = [...ctx.db.playerDevice.iter()].map(r => ({ ...r, identity: r.identity.toHexString(), lastAt: r.lastAt.microsSinceUnixEpoch }));
     return playerDeviceRows(rows).map(r => ({ ...r, lastAt: new Timestamp(r.lastAt) }));
   }));
+
+// Retention has a view of its own too (joined to `admin_players` by id on the page).
+
+/** Every UTC day each player was active (from `player_day`, same short id as `admin_players`): the page's retention and period-over-period counts. */
+export const adminPlayerDay = spacetimedb.view({ name: 'admin_player_day', public: true },
+  t.array(t.row('AdminPlayerDayRow', { id: t.string(), day: t.u32() })),
+  ctx => forAdmin(viewAdmins(ctx.db), ctx.sender.toHexString(), () => playerDayRows([...ctx.db.playerDay.iter()].map(r => ({ identity: r.identity.toHexString(), day: r.day })))));
