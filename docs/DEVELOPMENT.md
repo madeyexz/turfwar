@@ -234,10 +234,20 @@ whenever what is collected changes. These answer "how many players, and from whe
   only identities in `player_seen`), and `match_joined` carries `device` to PostHog. Local check:
   `ADMIN_TEST_KEY=<test key> bun scripts/devicecheck.ts ws://127.0.0.1:<port> <db>`.
 
-**Admin page** (`/admin`, `admin/index.html`, not linked from the game, `noindex`): live totals,
-online play time (total, average and median per player, today, 7 days), rooms, 30-day charts of new
-and active players and of play time, countries and a sortable player list (play time, rounds,
-matches, kills …), for the database of the build (`VITE_SPACETIMEDB_*`). Connection quality adds a
+**Admin page** (`/admin`, `admin/index.html`, not linked from the game, `noindex`): one section per
+question, linked from a sticky nav: **Now** (online, rooms, live rooms), **Growth** (players, new and
+active with the change from the period before, a 30-day chart of returning and new players per day,
+countries), **Retention**, **Play time** (total, average and median per player, today, 7 days, a
+30-day chart), **Connection & devices** and **Players** (a sortable list: play time, active days,
+rounds, matches, kills …), for the server picked at the top (the build's own by default). Days are UTC
+days. **Retention** (`src/admin/retention.ts`) comes from the view `admin_player_day` (every UTC day
+each player was active, from `player_day`; subscribed separately: a database without it shows "—"):
+the share who came back on any later day, classic day-N retention (back exactly 1, 3, 7, 14 or 30 days
+after their first day) pooled over every cohort whose day N is over, and a table of the last 14 days'
+cohorts. **Release flags** on the 30-day charts mark the days `main` got a release (hover for what
+shipped): the build reads `main`'s first-parent "Release…" commits from git and adds the snapshot in
+`src/admin/releases.json`, since Vercel's clone is shallow; refresh it with `bun scripts/releases.ts`
+on `dev` now and then (after a release is fine) and commit it. Connection quality adds a
 PING column (typical p50, coloured; hover for p95 and worst p95) and CORR/MIN to the player list,
 median ping cards (24 h, 7 d) and corrections per minute, ping by country and a 30-day ping chart, from
 the views `admin_player_net` and `admin_daily_net` (subscribed separately: a database without them

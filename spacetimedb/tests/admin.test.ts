@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { sha256Hex } from '../../shared/sha256';
 import {
   ADMIN_KEY_SHA256, ADMIN_MAX_FAILURES, ADMIN_WINDOW_MICROS, AdminError, adminLogin, adminLogout, adminRevokeAll, dailyRows, DAY_MICROS,
-  dailyNetRows, dailyTimeRows, forAdmin, keyMatches, playerDeviceRows, playerNetRows, playerRows, playTimeRows, shortId, type AdminAttempts, type AdminStore,
+  dailyNetRows, dailyTimeRows, forAdmin, keyMatches, playerDayRows, playerDeviceRows, playerNetRows, playerRows, playTimeRows, shortId, type AdminAttempts, type AdminStore,
 } from '../src/admin';
 import { foldNetDay, type NetDay } from '../../shared/netstats';
 import { acceptDevice } from '../../shared/devicekind';
@@ -209,5 +209,21 @@ describe('admin device view', () => {
     adminLogin(store, 'owner', TEST_KEY, 0n, TEST_HASH);
     expect(forAdmin(store, 'someone', () => playerDeviceRows(records))).toEqual([]);
     expect(forAdmin(store, 'owner', () => playerDeviceRows(records))).toHaveLength(2);
+  });
+});
+
+describe('admin active-days view', () => {
+  it('gives every active day of every player by the same short id, to admins only', () => {
+    const records = [{ identity: 'aa11', day: 20733 }, { identity: 'bb22', day: 20733 }, { identity: 'aa11', day: 20735 }];
+    const rows = playerDayRows(records);
+    expect(rows).toEqual([{ id: shortId('aa11'), day: 20733 }, { id: shortId('bb22'), day: 20733 }, { id: shortId('aa11'), day: 20735 }]);
+    // Same ids as admin_players, so the page can join them; no identity in the rows.
+    expect(rows[1].id).toBe(playerRows([{ identity: 'bb22', firstSeen: 0n, lastSeen: 0n, sessions: 1, tz: '', lang: '' }], [])[0].id);
+    for (const r of rows) expect(JSON.stringify(r)).not.toMatch(/aa11|bb22/);
+    expect(playerDayRows([])).toEqual([]);
+    const { store } = memoryStore();
+    adminLogin(store, 'owner', TEST_KEY, 0n, TEST_HASH);
+    expect(forAdmin(store, 'someone', () => playerDayRows(records))).toEqual([]);
+    expect(forAdmin(store, 'owner', () => playerDayRows(records))).toHaveLength(3);
   });
 });
