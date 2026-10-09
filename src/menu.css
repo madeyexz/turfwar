@@ -23,7 +23,8 @@
 
 /* ---- Top bar ---- */
 #menu .top { grid-column: 1 / -1; display: flex; align-items: center; justify-content: space-between; gap: 20px; padding: 18px 28px 12px 32px; min-width: 0; }
-#menu .brand { min-width: 0; }
+#menu .brand { min-width: 0; display: flex; align-items: center; gap: 12px; }
+#menu .brand-icon { flex: none; width: 56px; height: 56px; border-radius: 10px; }
 /* Brand lockup: the name large (Noto Sans TC 900 for 角頭械鬥, Rajdhani for TURF WAR: TAIPEI), its second
    half in the accent; under it the other language's name, a tick, and the two sides. */
 #menu .logo { display: flex; flex-direction: column; gap: 5px; margin: 0; line-height: 1; white-space: nowrap; }
@@ -472,7 +473,8 @@
 
   /* Top bar: one line, 44 px tall. */
   #menu .top { grid-column: 1 / -1; grid-row: 1; flex-wrap: nowrap; gap: var(--gap); padding: 8px 0 6px; }
-  #menu .brand { flex: 0 0 var(--rail); }
+  #menu .brand { flex: 0 0 var(--rail); gap: 6px; }
+  #menu .brand-icon { width: 28px; height: 28px; border-radius: 5px; }
   #menu .logo { gap: 0; }
   #menu .logo-name, #menu .logo-name.cjk { font-size: 20px; }
   #menu .logo-sub { display: none; }

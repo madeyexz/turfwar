@@ -36,7 +36,7 @@ html:not([data-lang]) article + article { margin-top: 56px; padding-top: 40px; b
   font-family: var(--display); font-weight: 700; font-size: 18px; letter-spacing: 0.12em; text-transform: uppercase;
 }
 .home:hover { color: var(--accent); }
-.mark { width: 12px; height: 12px; transform: rotate(45deg); background: var(--accent); box-shadow: 0 0 12px rgba(127, 246, 255, 0.5); }
+.mark { flex: none; width: 32px; height: 32px; border-radius: 6px; }
 .langs { display: flex; border: 1px solid var(--line); border-radius: 3px; overflow: hidden; }
 .langs button {
   padding: 6px 12px; border: none; background: transparent; color: var(--muted); cursor: pointer;

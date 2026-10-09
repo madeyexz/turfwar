@@ -118,7 +118,7 @@ const deploy = (id: string, label: Key, right = '', title?: Key) =>
  */
 menu.innerHTML = `
   <header class="top">
-    <div class="brand"><h1 class="logo" id="logo"></h1></div>
+    <div class="brand"><img class="brand-icon" src="/icons/icon-192.png" width="56" height="56" alt=""><h1 class="logo" id="logo"></h1></div>
     <div class="who">
       <label class="callsign">${L('lobby.callsign', 'span', 'class="label"')}<input type="text" id="callsign" maxlength="16" autocomplete="off" spellcheck="false"></label>
       ${choice('teams', 'team', [['auto', L('lobby.auto')], ['0', L('team.0', 'span', 'class="swat"')], ['1', L('team.1', 'span', 'class="militia"')]], 'lobby.team')}
