@@ -423,8 +423,11 @@
   #menu:has(> .install-hint:not([hidden])) .site-links { padding-bottom: 220px; }
 }
 @media (max-width: 560px) {
-  #menu .brand { flex: 1; }
-  #menu .logo-name { font-size: 28px; }
+  #menu .brand { flex: 1; gap: 8px; }
+  #menu .brand-icon { width: 32px; height: 32px; border-radius: 6px; }
+  #menu .logo-name { font-size: clamp(18px, 5.6vw, 28px); }
+  #menu .logo-sub { font-size: 9px; gap: 6px; letter-spacing: 0.12em; }
+  #menu .logo-alt.cjk { font-size: 11px; letter-spacing: 0.15em; }
   #menu .top { position: relative; }
   #menu .icons { position: absolute; top: 16px; right: 16px; margin: 0; }
   #menu .who .segmented { flex: 1 1 100%; width: auto; }
