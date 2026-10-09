@@ -57,7 +57,7 @@ export class LocalPlayer {
   grenades = 0;
   /** M18 smoke grenades carried; `throwingSmoke`: the throw under way is a smoke, not the M67. */
   smokes = 0;
-  private throwingSmoke = false;
+  throwingSmoke = false;
   private sinceThrow = 9;
   throwLeft = 0;
   stamina: number = STAMINA.max;
