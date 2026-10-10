@@ -247,6 +247,19 @@ export const SMOKE = { price: 300, max: 1, fuse: 1.6, duration: 15, radius: 4.5,
  */
 export const BOBA = { price: 400, max: 1, heal: 50, drinkTime: 1.4 };
 
+/**
+ * 飛拖 (our own; not in BeGone): the 藍白拖 in hand can be thrown. Hold aim with it to wind up for up
+ * to `charge` s (the throw goes from `minSpeed` to `maxSpeed` m/s), let go to throw. In flight it hurts
+ * the first enemy it strikes: `minDamage` thrown without a wind-up, rising with it, and only a full
+ * wind-up kills outright (`kill`); the first wall or floor it touches makes it harmless. Everyone carries
+ * one each round and never more: thrown, it lies where it lands until someone empty-handed walks within
+ * `pickup` m of it (a fresh throw can't be caught back for `catchDelay` s); rounds clear them. No slipper, no slap.
+ */
+export const SLIPPER = { charge: 0.8, minSpeed: 10, maxSpeed: 30, lift: 1.5, pickup: 1.3, catchDelay: 0.5, minDamage: 30, kill: 999, lifetime: 3600 };
+
+/** What a thrown slipper wound up to `power` (0..1) does to whoever it strikes: 30 up to 100, a kill only at full power. */
+export const slipperDamage = (power: number) => power >= 0.999 ? SLIPPER.kill : SLIPPER.minDamage + (100 - SLIPPER.minDamage) * Math.max(0, power);
+
 /** 100 HP, no armor, no regeneration within a round; below `critical` the screen desaturates. */
 export const HEALTH = { max: 100, critical: 25 };
 

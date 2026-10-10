@@ -39,8 +39,8 @@ export function onlineAvailable(): { ok: boolean; reason: string } {
 }
 
 const weaponOr = (id: string, fallback: WeaponId): WeaponId => (id in WEAPONS && id !== 'knife' ? id as WeaponId : fallback);
-const gearOf = (json: string): { owned: WeaponId[]; attachments: Partial<Record<WeaponId, Attachments>>; smokes: number; bobas: number } => {
-  try { const g = JSON.parse(json); return { owned: g.owned ?? [...DEFAULT_WEAPONS], attachments: Object.fromEntries(Object.entries(g.attachments ?? {}).map(([w, a]) => [w, normalizeAttachments(a as Record<string, string>)])), smokes: Number(g.smokes) || 0, bobas: Number(g.bobas) || 0 }; } catch { return { owned: [...DEFAULT_WEAPONS], attachments: {}, smokes: 0, bobas: 0 }; }
+const gearOf = (json: string): { owned: WeaponId[]; attachments: Partial<Record<WeaponId, Attachments>>; smokes: number; bobas: number; slippers: number } => {
+  try { const g = JSON.parse(json); return { owned: g.owned ?? [...DEFAULT_WEAPONS], attachments: Object.fromEntries(Object.entries(g.attachments ?? {}).map(([w, a]) => [w, normalizeAttachments(a as Record<string, string>)])), smokes: Number(g.smokes) || 0, bobas: Number(g.bobas) || 0, slippers: g.slippers === 0 ? 0 : 1 }; } catch { return { owned: [...DEFAULT_WEAPONS], attachments: {}, smokes: 0, bobas: 0, slippers: 1 }; }
 };
 
 /** Rebuild a shared Soldier from its roster row and its pose in the latest frame. */
@@ -52,7 +52,7 @@ function soldierFrom(r: RosterRow, p: FramePose, reloadLeft: number, sinceShot: 
     yaw: p.yaw, pitch: p.pitch, alive: p.alive, health: p.health, weapon: p.weapon,
     weapons: [weaponOr(r.weapon0, DEFAULT_WEAPONS[0]), weaponOr(r.weapon1, DEFAULT_WEAPONS[1])], owned: gear.owned, attachments: gear.attachments,
     ammo: p.weapon === 0 ? [p.ammo, 0] : p.weapon === 1 ? [0, p.ammo] : [0, 0], reserve: [r.reserve0, r.reserve1],
-    reloadLeft, fireCooldown: 0, switchLeft: 0, grenades: r.grenades, grenadeHE: r.grenadeHe, smokes: gear.smokes, bobas: gear.bobas, stamina: STAMINA.max, money: r.money,
+    reloadLeft, fireCooldown: 0, switchLeft: 0, grenades: r.grenades, grenadeHE: r.grenadeHe, smokes: gear.smokes, bobas: gear.bobas, slippers: gear.slippers, stamina: STAMINA.max, money: r.money,
     sinceHit: 99, lastAttacker: r.lastAttacker, kills: r.kills, deaths: r.deaths, assists: r.assists, score: r.score,
     sprint: p.sprint, ads: p.ads, sinceShot, using: p.using, corrections: r.corrections,
     idle: 0, moveSlack: 0, groundY: 0, round: newRoundStats(), roundsHere: 0,
@@ -322,6 +322,7 @@ export class OnlineLink implements GameLink {
   switchTeam() { if (!this.inMatch()) return; try { void this.conn.reducers.changeTeam({}).catch(() => undefined); } catch { /* a server without change_team */ } }
   say(text: string, team: boolean) { if (!this.inMatch()) return; void this.conn.reducers.say({ text, team }).catch(() => undefined); }
   smoke(o: Vec3, d: Vec3) { if (!this.inMatch()) return; try { void this.conn.reducers.smoke({ ox: o.x, oy: o.y, oz: o.z, dx: d.x, dy: d.y, dz: d.z }).catch(() => undefined); } catch { /* a server without smoke */ } }
+  slipper(o: Vec3, d: Vec3, power: number) { if (!this.inMatch()) return; try { void this.conn.reducers.slipper({ ox: o.x, oy: o.y, oz: o.z, dx: d.x, dy: d.y, dz: d.z, power }).catch(() => undefined); } catch { /* a server without the thrown slipper */ } }
   drink() { if (!this.inMatch()) return; try { void this.conn.reducers.drink({}).catch(() => undefined); } catch { /* a server without bubble tea */ } }
   grenade(o: Vec3, d: Vec3) { if (!this.inMatch()) return; void this.conn.reducers.grenade({ ox: o.x, oy: o.y, oz: o.z, dx: d.x, dy: d.y, dz: d.z }).catch(() => undefined); }
   reload() { if (!this.inMatch()) return; void this.conn.reducers.reloadWeapon({}).catch(() => undefined); }

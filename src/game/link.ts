@@ -23,6 +23,8 @@ export interface GameLink {
   grenade(origin: Vec3, dir: Vec3): void;
   /** Throw the M18 smoke grenade (the host checks we carry one). */
   smoke(origin: Vec3, dir: Vec3): void;
+  /** Throw the 藍白拖 in hand, wound up to `power` (0..1); the host checks we hold one. Hosts without it leave it out. */
+  slipper?(origin: Vec3, dir: Vec3, power: number): void;
   /** Drink the carried 珍奶 (the sip has played; the host heals). */
   drink(): void;
   reload(): void;
