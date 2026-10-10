@@ -93,24 +93,26 @@ export class Hud {
     this.root = document.createElement('div');
     this.root.id = 'hud';
     this.root.innerHTML = `
-      <div class="smokefog" data-k="smokefog"></div>
-      <div class="lowhp" data-k="lowhp" hidden></div>
-      <div class="flash" data-k="flash"></div>
-      <div class="scope" data-k="scope" hidden><svg class="scope-reticle sniper" viewBox="-100 -100 200 200" aria-hidden="true"><g fill="#050607"><rect x="-100" y="-1.3" width="68" height="2.6" rx="1.3"/><rect x="32" y="-1.3" width="68" height="2.6" rx="1.3"/><rect x="-1.3" y="32" width="2.6" height="68" rx="1.3"/><rect x="-1.3" y="-100" width="2.6" height="68" rx="1.3"/></g><g stroke="#050607" stroke-width="0.32"><line x1="-32" y1="0" x2="32" y2="0"/><line x1="0" y1="-32" x2="0" y2="32"/></g><g fill="#050607">${[-24, -18, -12, -6, 6, 12, 18, 24].map(i => `<circle cx="${i}" cy="0" r="0.75"/><circle cx="0" cy="${i}" r="0.75"/>`).join('')}</g><circle class="lit" r="0.55"/></svg><svg class="scope-reticle prism" viewBox="-100 -100 200 200" aria-hidden="true"><g class="lit-stroke" fill="none" stroke-width="1.6" stroke-linejoin="round" filter="url(#hud-glow)"><path d="M -7 7 L 0 -1 L 7 7"/></g><defs><filter id="hud-glow" x="-50%" y="-50%" width="200%" height="200%"><feGaussianBlur stdDeviation="1.2" result="b"/><feMerge><feMergeNode in="b"/><feMergeNode in="SourceGraphic"/></feMerge></filter></defs><g stroke="#08090a" stroke-width="0.5"><line x1="0" y1="9" x2="0" y2="60"/><line x1="-6" y1="18" x2="6" y2="18"/><line x1="-4.5" y1="27" x2="4.5" y2="27"/><line x1="-3.2" y1="36" x2="3.2" y2="36"/><line x1="-2.2" y1="45" x2="2.2" y2="45"/><line x1="-100" y1="0" x2="-30" y2="0"/><line x1="30" y1="0" x2="100" y2="0"/></g></svg><span class="scope-mag" data-k="scopeMag"></span></div>
-      <div class="binos" data-k="binos" hidden>
-        <svg viewBox="-100 -50 200 100" preserveAspectRatio="xMidYMid meet" aria-hidden="true">
-          <defs>
-            <filter id="hud-bino-soft" x="-10%" y="-10%" width="120%" height="120%"><feGaussianBlur stdDeviation="2.2"/></filter>
-            <mask id="hud-bino-mask"><rect x="-2000" y="-2000" width="4000" height="4000" fill="#fff"/><g filter="url(#hud-bino-soft)"><circle cx="-26" r="39"/><circle cx="26" r="39"/></g></mask>
-          </defs>
-                    <rect x="-2000" y="-2000" width="4000" height="4000" fill="#030405" mask="url(#hud-bino-mask)"/>
-          <g class="rf" stroke-width="0.28" fill="none">
-            <line x1="-56" y1="0" x2="-3" y2="0"/><line x1="3" y1="0" x2="56" y2="0"/><line x1="0" y1="-34" x2="0" y2="-3"/><line x1="0" y1="3" x2="0" y2="32"/>
-            <rect x="-1.4" y="-1.4" width="2.8" height="2.8"/>${binoTicks()}
-            <path d="M-12 -14 h-4 v4 M12 -14 h4 v4 M-12 14 h-4 v-4 M12 14 h4 v-4"/>
-          </g>
-        </svg>
-        <div class="binos-read"><span data-k="binoRange">RNG ---- M</span><span data-k="binoBearing">BRG 000°</span><span data-k="binoMag">10×</span></div>
+      <div class="screen">
+        <div class="smokefog" data-k="smokefog"></div>
+        <div class="lowhp" data-k="lowhp" hidden></div>
+        <div class="flash" data-k="flash"></div>
+        <div class="scope" data-k="scope" hidden><svg class="scope-reticle sniper" viewBox="-100 -100 200 200" aria-hidden="true"><g fill="#050607"><rect x="-100" y="-1.3" width="68" height="2.6" rx="1.3"/><rect x="32" y="-1.3" width="68" height="2.6" rx="1.3"/><rect x="-1.3" y="32" width="2.6" height="68" rx="1.3"/><rect x="-1.3" y="-100" width="2.6" height="68" rx="1.3"/></g><g stroke="#050607" stroke-width="0.32"><line x1="-32" y1="0" x2="32" y2="0"/><line x1="0" y1="-32" x2="0" y2="32"/></g><g fill="#050607">${[-24, -18, -12, -6, 6, 12, 18, 24].map(i => `<circle cx="${i}" cy="0" r="0.75"/><circle cx="0" cy="${i}" r="0.75"/>`).join('')}</g><circle class="lit" r="0.55"/></svg><svg class="scope-reticle prism" viewBox="-100 -100 200 200" aria-hidden="true"><g class="lit-stroke" fill="none" stroke-width="1.6" stroke-linejoin="round" filter="url(#hud-glow)"><path d="M -7 7 L 0 -1 L 7 7"/></g><defs><filter id="hud-glow" x="-50%" y="-50%" width="200%" height="200%"><feGaussianBlur stdDeviation="1.2" result="b"/><feMerge><feMergeNode in="b"/><feMergeNode in="SourceGraphic"/></feMerge></filter></defs><g stroke="#08090a" stroke-width="0.5"><line x1="0" y1="9" x2="0" y2="60"/><line x1="-6" y1="18" x2="6" y2="18"/><line x1="-4.5" y1="27" x2="4.5" y2="27"/><line x1="-3.2" y1="36" x2="3.2" y2="36"/><line x1="-2.2" y1="45" x2="2.2" y2="45"/><line x1="-100" y1="0" x2="-30" y2="0"/><line x1="30" y1="0" x2="100" y2="0"/></g></svg><span class="scope-mag" data-k="scopeMag"></span></div>
+        <div class="binos" data-k="binos" hidden>
+          <svg viewBox="-100 -50 200 100" preserveAspectRatio="xMidYMid meet" aria-hidden="true">
+            <defs>
+              <filter id="hud-bino-soft" x="-10%" y="-10%" width="120%" height="120%"><feGaussianBlur stdDeviation="2.2"/></filter>
+              <mask id="hud-bino-mask"><rect x="-2000" y="-2000" width="4000" height="4000" fill="#fff"/><g filter="url(#hud-bino-soft)"><circle cx="-26" r="39"/><circle cx="26" r="39"/></g></mask>
+            </defs>
+                      <rect x="-2000" y="-2000" width="4000" height="4000" fill="#030405" mask="url(#hud-bino-mask)"/>
+            <g class="rf" stroke-width="0.28" fill="none">
+              <line x1="-56" y1="0" x2="-3" y2="0"/><line x1="3" y1="0" x2="56" y2="0"/><line x1="0" y1="-34" x2="0" y2="-3"/><line x1="0" y1="3" x2="0" y2="32"/>
+              <rect x="-1.4" y="-1.4" width="2.8" height="2.8"/>${binoTicks()}
+              <path d="M-12 -14 h-4 v4 M12 -14 h4 v4 M-12 14 h-4 v-4 M12 14 h4 v-4"/>
+            </g>
+          </svg>
+          <div class="binos-read"><span data-k="binoRange">RNG ---- M</span><span data-k="binoBearing">BRG 000°</span><span data-k="binoMag">10×</span></div>
+        </div>
       </div>
       <div class="minimap panel"><canvas width="380" height="380"></canvas></div>
       <div class="sb" data-k="sb">
@@ -122,15 +124,18 @@ export class Hud {
       <div class="bomb" data-k="bomb" hidden><div class="sites" data-k="sites"></div><span data-k="bombText"></span><div class="track"><i data-k="bombBar"></i></div></div>
       <div class="netstat" data-k="net"></div>
       <div class="killfeed" data-k="feed"></div>
-      <div class="markers" data-k="markers"></div>
-      <div class="crosshair" data-k="cross"><i class="t"></i><i class="b"></i><i class="l"></i><i class="r"></i><i class="dot"></i><i class="ring"></i></div>
-      <div class="pipvig" data-k="pipvig" hidden></div>
-      <div class="hitmarker" data-k="hit"><i></i><i></i><i></i><i></i></div>
-      <div class="target-tag" data-k="targetTag" hidden></div>
-      <div class="damage-ring" data-k="dmg"></div>
-      <div class="rewards" data-k="rewards"></div>
-      <div class="prompt" data-k="prompt" hidden></div>
-      <div class="progress" data-k="progress" hidden><span data-k="progressText"></span><div class="track"><i data-k="progressBar"></i></div></div>
+      <div class="screen">
+        <div class="markers" data-k="markers"></div>
+        <div class="crosshair" data-k="cross"><i class="t"></i><i class="b"></i><i class="l"></i><i class="r"></i><i class="dot"></i><i class="ring"></i></div>
+        <div class="pipvig" data-k="pipvig" hidden></div>
+        <div class="hitmarker" data-k="hit"><i></i><i></i><i></i><i></i></div>
+        <div class="target-tag" data-k="targetTag" hidden></div>
+        <div class="damage-ring" data-k="dmg"></div>
+        <div class="rewards" data-k="rewards"></div>
+        <div class="prompt" data-k="prompt" hidden></div>
+        <div class="progress" data-k="progress" hidden><span data-k="progressText"></span><div class="track"><i data-k="progressBar"></i></div></div>
+        <div class="zoomtag" data-k="zoomtag" hidden></div>
+      </div>
       <div class="toast" data-k="toast"></div>
       <div class="announce" data-k="announce"><b></b><small></small></div>
       <div class="chat" data-k="chat"><div class="lines" data-k="chatLines"></div><label class="chat-input" data-k="chatBox" hidden><span data-k="chatLabel">${t('hud.chatAll')}</span><input maxlength="75" autocomplete="off" spellcheck="false" enterkeyhint="send"></label></div>
@@ -148,7 +153,6 @@ export class Hud {
       <div class="buyhint" data-k="buyhint" hidden></div>
       <div class="vehicle panel" data-k="vehicle" hidden><div class="vrow"><b data-k="vName"></b><span class="vread"><b data-k="vSpeed">0</b>${L('hud.kmh', 'small')}</span><span class="vread" data-k="vAltBox"><b data-k="vAlt">0</b>${L('hud.alt', 'small')}</span></div><div class="track"><i data-k="vHealth"></i></div><small class="vkeys" data-k="vKeys"></small></div>
       <div class="spectate" data-k="spectate" hidden></div>
-      <div class="zoomtag" data-k="zoomtag" hidden></div>
       <div class="released panel" data-k="released" hidden><b data-k="releasedTitle"></b><span>${L('hud.clickResume')} · <span data-k="leaveKey">${kbd('leave')}</span> ${L('hud.leave')}</span></div>
       <div class="scoreboard panel" data-k="board" hidden></div>
       <div class="end panel" data-k="end" hidden></div>

@@ -21,12 +21,12 @@ describe('touch controls drive the key map', () => {
     }
   });
 
-  it('holds what is held on a keyboard, taps what is pressed, toggles aim and crouch', () => {
+  it('holds what is held on a keyboard, taps what is pressed, toggles aim', () => {
     expect(controlAction('fire')).toEqual({ action: 'fire', kind: 'hold' });
     expect(controlAction('use')).toEqual({ action: 'use', kind: 'hold' });
     expect(controlAction('reload')).toEqual({ action: 'reload', kind: 'tap' });
     expect(controlAction('aim')).toEqual({ action: 'aim', kind: 'toggle' });
-    expect(controlAction('crouch')).toEqual({ action: 'crouch', kind: 'toggle' });
+    expect(controlAction('crouch')).toEqual({ action: 'crouch', kind: 'hold' });
     expect(controlAction('grenade')).toEqual({ action: 'grenade', kind: 'tap' });
     expect(controlAction('handbrake')).toEqual({ action: 'handbrake', kind: 'hold' });
     expect(controlAction('exit')).toEqual({ action: 'exitVehicle', kind: 'tap' });

@@ -159,6 +159,9 @@ body.touch:not(.menu-open) canvas { touch-action: none; }
 
 /* The HUD around the touch controls: clear of notches, compact, and out from under the thumbs. */
 body.touch #hud { left: var(--safe-l); right: var(--safe-r); top: var(--safe-t); bottom: var(--safe-b); }
+/* …but the crosshair must stay on the camera's centre: one cutout side (Android) or the home bar (iPhone)
+   made the insets uneven and moved it off where shots go. */
+body.touch #hud .screen { inset: calc(-1 * var(--safe-t)) calc(-1 * var(--safe-r)) calc(-1 * var(--safe-b)) calc(-1 * var(--safe-l)); }
 body.touch #hud kbd, body.touch #hud .vkeys { display: none; }
 /* The score bar fits between the top buttons (Hud.fitScoreBar sets --sbs and drops the chips when tight). */
 body.touch .sb { transform: translateX(-50%) scale(var(--sbs, 0.78)); transform-origin: top center; top: 6px; }

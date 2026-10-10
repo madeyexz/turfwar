@@ -51,6 +51,8 @@ kbd { font-family: var(--font); font-weight: 700; font-size: 0.8em; padding: 0 0
 
 /* ---------- HUD (BeGone layout) ---------- */
 #hud { --av: 28px; position: fixed; inset: 0; pointer-events: none; z-index: 2; text-transform: uppercase; letter-spacing: 0.04em; }
+/* Layers drawn over the 3D view (crosshair, scope, markers): the canvas's frame, whatever insets the HUD takes. */
+#hud .screen { position: absolute; inset: 0; }
 #hud .panel { background: var(--panel); border: 1px solid var(--line); backdrop-filter: blur(4px); }
 body.menu-open #hud, body.menu-open #hud * { visibility: hidden; }
 #hud .t0 { --team: var(--aegis); } #hud .t1 { --team: var(--crimson); }
