@@ -103,6 +103,12 @@ export class Effects {
     }
   }
 
+  /** Erase every bullet hole (each round starts on clean walls). */
+  clearDecals() {
+    for (const d of this.decals) d.removeFromParent();
+    this.decals.length = 0;
+  }
+
   /** Energy splash when shots hit a soldier's shield or body. */
   hitSpark(at: THREE.Vector3, shield: boolean) {
     const color = shield ? 0x6fd8ff : 0xff7a4a;
