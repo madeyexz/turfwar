@@ -35,6 +35,7 @@ import { onTouchLayout, touchActive, touchAimAssist } from './game/touchlayout';
 import { InstallBanner } from './ui/installhint';
 import { isSideways, onSideways, watchSideways } from './ui/viewport';
 import { mountProgressBadge } from './ui/progressbadge';
+import { mountNews } from './ui/news';
 import { askCallsign, madeUpCallsign } from './ui/callsign';
 import { ask, confirmDialog } from './ui/ask';
 import { watchClientErrors } from './errors';
@@ -195,6 +196,7 @@ menu.innerHTML = `
       </div>
     </div>
 
+    <section class="news" id="news" hidden></section>
     <nav class="others" aria-label="${t('lobby.more')}" data-i18n-aria-label="lobby.more">
       ${L('lobby.offline', 'span', 'class="label"')}
       <button type="button" class="sub" id="open-solo" aria-haspopup="dialog" aria-expanded="false" aria-controls="solo-pop">${L('lobby.solo')}</button>
@@ -247,6 +249,8 @@ watchSideways();
 if (!params.has('bench')) new InstallBanner(menu);
 // Level and the day's goal under the title (game/progress.ts).
 mountProgressBadge(menu.querySelector<HTMLElement>('#prog')!);
+// 最新更新: the newest entry of src/ui/news.ts.
+mountNews(menu.querySelector<HTMLElement>('#news')!);
 
 const $ = <T extends HTMLElement = HTMLElement>(sel: string) => menu.querySelector<T>(sel)!;
 const select = (group: string, attr: string, value: string) => menu.querySelectorAll<HTMLButtonElement>(`#${group} [data-${attr}]`).forEach(b => b.setAttribute('aria-pressed', String(b.dataset[attr] === value)));

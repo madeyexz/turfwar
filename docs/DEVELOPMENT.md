@@ -29,6 +29,11 @@ game and the match server. After changing the module, regenerate client bindings
 `spacetime generate --lang typescript --out-dir src/module_bindings --module-path spacetimedb`.
 In Amp orbs, `.amp/services.yaml` declares both services (`amp orb services ensure`).
 
+**最新更新 (latest update)**: the lobby shows the newest entry of `NEWS` in `src/ui/news.ts`, one line with
+its date and a NEW mark the first time a browser sees it (`lawbreaker.newsSeen`). Add an entry at the top
+when a release brings something players will notice: short, player-facing (not a commit message), in both
+languages, with a new `id`.
+
 Lobby URL flags: `?tab=quick|start|join` (the open tab), `?mode=offline|online|lab` (what `&autostart=1`
 starts: Solo, Quick Play or Practice), `&game=elimination|sabotage`, `&size=duel|squad|war` and `&map=<id>`
 (the Start a Server form; a 24v24 map picks 24v24 unless `size` says otherwise), `&room=CODE` (opens Join a

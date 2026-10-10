@@ -268,6 +268,15 @@
 #menu .code-row .code-box { flex: 0 1 240px; }
 
 /* ---- Offline: Solo vs bots, Practice ---- */
+/* 最新更新 (src/ui/news.ts): one line above the offline row. */
+#menu .news { flex: none; margin-top: auto; padding: 9px 12px 10px; border: 1px solid var(--line); border-left: 3px solid var(--accent); border-radius: 3px; background: rgba(6, 12, 16, 0.72); backdrop-filter: blur(4px); }
+#menu .news[hidden] { display: none; }
+#menu .news-head { display: flex; align-items: center; gap: 8px; font-size: 11px; font-weight: 700; letter-spacing: 0.18em; text-transform: uppercase; color: var(--muted); }
+#menu .news-head b { color: var(--accent); }
+#menu .news-new { padding: 0 6px; border-radius: 2px; background: var(--amber); color: #120c04; font-size: 10px; letter-spacing: 0.12em; line-height: 16px; }
+#menu .news-head time { margin-left: auto; font-variant-numeric: tabular-nums; letter-spacing: 0.08em; }
+#menu .news p { margin: 4px 0 0; font-size: 15px; font-weight: 600; line-height: 1.35; color: var(--ink); }
+#menu .news:not([hidden]) + .others { margin-top: 0; }
 #menu .others { flex: none; margin-top: auto; display: grid; grid-template-columns: auto 1fr 1fr; align-items: center; gap: 8px; }
 #menu .sub {
   min-width: 0; height: 40px; padding: 0 8px; border: 1px solid var(--line); border-radius: 3px; background: rgba(6, 12, 16, 0.6);
@@ -505,6 +514,13 @@
   #menu .others .label { grid-column: 1 / -1; font-size: 10px; }
   #menu .sub { height: 44px; padding: 0 4px; font-size: 12px; letter-spacing: 0.03em; }
   #menu .unavailable { grid-column: 1; grid-row: 4; margin-top: 8px; font-size: 12px; }
+  /* The latest update sits under the open view (the rail has no room); a status line takes its place. */
+  #menu .news { grid-column: 2; grid-row: 6; display: flex; align-items: baseline; gap: 10px; margin: 0 4px max(8px, var(--safe-b)) 0; padding: 6px 10px; }
+  #menu .news[hidden], #menu:has(.status:not(:empty)) .news { display: none; }
+  #menu .news-head { flex: none; font-size: 10px; letter-spacing: 0.12em; }
+  #menu .news-head time { margin-left: 0; }
+  #menu .news p { margin: 0; font-size: 13px; line-height: 1.3; }
+  #menu .news:not([hidden]) + .others { margin-top: 10px; }
   /* The waking card sits beside the tabs (the rail's tallest row, so the screen grows no taller) and
      the open view starts under it. */
   #menu .wake { grid-column: 2; grid-row: 2; align-self: start; margin: 0 4px 6px 0; gap: 4px; padding: 7px 12px; }
