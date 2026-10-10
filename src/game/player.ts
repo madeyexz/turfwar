@@ -3,7 +3,7 @@ import { clamp, dirFromAngles, type Vec3 } from '../../shared/math';
 import { MOVE, createMoveState, eyeHeight, isSprinting, stepMovement, type MoveEvents, type MoveInput, type MoveState } from '../../shared/movement';
 import type { Obstacle } from '../../shared/obstacles';
 import type { Soldier } from '../../shared/match/state';
-import { BOBA, DEFAULT_WEAPONS, HEALTH, RIDER_AIM, STAMINA, oneHanded, pelletCone, weaponStats, type Attachments, type Slot, type WeaponDef, type WeaponId } from '../../shared/weapons';
+import { BOBA, DEFAULT_WEAPONS, HEALTH, RIDER_AIM, SLIPPER, STAMINA, oneHanded, pelletCone, weaponStats, type Attachments, type Slot, type WeaponDef, type WeaponId } from '../../shared/weapons';
 import type { Input } from './input';
 import { BINOCULAR_ZOOM, adsFov, settings, isMagnified, opticFov } from './settings';
 
@@ -18,6 +18,9 @@ export interface FrameResult {
   grenade?: { origin: Vec3; dir: Vec3 };
   /** An M18 smoke grenade left the hand (same arc as the M67). */
   smoke?: { origin: Vec3; dir: Vec3 };
+  /** The 藍白拖 left the hand, wound up to `power` (0..1). `noSlipper`: asked for it with an empty hand. */
+  slipper?: { origin: Vec3; dir: Vec3; power: number };
+  noSlipper?: boolean;
   /** The 珍奶 has been drunk (the sip played out): the host heals. */
   drink?: boolean;
   /** A sip began this frame; `drinkRefused`: asked for at full health. */
@@ -69,6 +72,16 @@ export class LocalPlayer {
   bobas = 0;
   drinkLeft = 0;
   private sinceDrink = 9;
+  /**
+   * 藍白拖 in hand (0 once thrown, until one is picked up). `slipperCharge`: seconds wound up while aim
+   * is held with it (-1 = not winding up); `slipperFollow`: the throw's follow-through, then the secondary comes up.
+   */
+  slippers = 1;
+  slipperCharge = -1;
+  slipperFollow = 0;
+  private sinceSlipper = 9;
+  /** How far the slipper is wound up (0..1). */
+  get windup() { return this.slipperCharge < 0 ? 0 : Math.min(1, this.slipperCharge / SLIPPER.charge); }
   health: number = HEALTH.max;
   stamina: number = STAMINA.max;
   /** Binoculars up (Z): 10× zoom, no weapon. */
@@ -132,7 +145,7 @@ export class LocalPlayer {
     this.weapons = [...s.weapons]; this.attachments = structuredClone(s.attachments); this.reserve = [...s.reserve];
     this.ammo = [this.statsOf(0).magazine, this.statsOf(1).magazine];
     this.reloadLeft = 0; this.switchLeft = this.statsOf(0).equipTime; this.fireCooldown = 0; this.bloom = 0; this.ads = 0;
-    this.grenades = s.grenades; this.smokes = s.smokes; this.bobas = s.bobas; this.drinkLeft = 0; this.health = s.health; this.alive = true; this.recoilDebt = 0; this.accumulator = 0;
+    this.grenades = s.grenades; this.smokes = s.smokes; this.bobas = s.bobas; this.drinkLeft = 0; this.slippers = s.slippers ?? 1; this.slipperCharge = -1; this.slipperFollow = 0; this.health = s.health; this.alive = true; this.recoilDebt = 0; this.accumulator = 0;
     this.stamina = STAMINA.max; this.binoculars = false; this.zoomLevel = 0;
   }
 
@@ -156,6 +169,7 @@ export class LocalPlayer {
     if (this.reloadLeft <= 0) this.reserve = [...s.reserve];
     if (this.sinceThrow > 1.5 && this.throwLeft <= 0) { this.grenades = s.grenades; this.smokes = s.smokes; }
     if (this.sinceDrink > 1.5 && this.drinkLeft <= 0) this.bobas = s.bobas;
+    if (this.sinceSlipper > 1 && this.slipperFollow <= 0) this.slippers = s.slippers ?? 1;
     this.health = s.health;
   }
 
@@ -167,8 +181,8 @@ export class LocalPlayer {
    */
   rider = false;
 
-  /** Can this slot be fired right now (a rider holds only one-handed weapons)? */
-  usable(slot: Slot) { return !this.rider || oneHanded(this.statsOf(slot)); }
+  /** Can this slot be fired right now (a rider holds only one-handed weapons; the 藍白拖 must be in hand)? */
+  usable(slot: Slot) { return (!this.rider || oneHanded(this.statsOf(slot))) && (slot !== 2 || this.slippers > 0); }
 
   /** Mounting a scooter: bring up the one-handed secondary if the weapon in hand needs two. Returns the slot drawn. */
   drawOneHanded(): Slot | undefined {
@@ -245,7 +259,7 @@ export class LocalPlayer {
       yaw: this.yaw, jump: jumpKey, crouch: input!.down('crouch'),
       sprint: sprintKey && canSprint && this.sprintBlock <= 0,
       ads: (input!.aim && w.class !== 'melee' && this.reloadLeft <= 0 && this.switchLeft < 0.1 && !this.rider) || this.binoculars,
-      speed: w.speed * (this.tired ? 0.8 : 1),
+      speed: w.speed * (this.tired ? 0.8 : 1) * (this.slipperCharge >= 0 ? 0.75 : 1),
     } : { forward: 0, strafe: 0, yaw: this.yaw, jump: false, crouch: false, sprint: false, ads: false };
     // Round-start freeze (and holding E on the bomb): look and aim, but stay put.
     if (this.frozen || this.using) { moveInput.forward = moveInput.strafe = 0; moveInput.jump = moveInput.sprint = false; }
@@ -278,7 +292,7 @@ export class LocalPlayer {
       if (scoped && wheel !== 0) { this.zoomLevel = this.zoomLevel ? 0 : 1; result.zoomed = true; }
       else if (this.throwLeft <= 0) {
         let to: Slot | undefined;
-        if (input!.take('knife')) to = 2;
+        if (input!.take('knife')) { to = 2; if (this.slippers <= 0) result.noSlipper = true; }
         if (input!.take('secondary')) to = 1;
         if (input!.take('primary')) to = 0;
         if (input!.take('lastWeapon')) to = this.lastSlot;
@@ -306,6 +320,19 @@ export class LocalPlayer {
         this.drinkLeft = BOBA.drinkTime; this.bobas--; this.sinceDrink = 0; this.binoculars = false; result.drinkStarted = true;
       } else if (drinkKey && this.bobas > 0 && this.health >= HEALTH.max) result.drinkRefused = true;
     }
+    // ---- 藍白拖: hold aim with it in hand to wind up, let go to throw ----
+    this.sinceSlipper += dt;
+    const windable = can && this.slot === 2 && this.slippers > 0 && !this.rider && this.switchLeft <= 0 && this.throwLeft <= 0 && this.drinkLeft <= 0 && this.slipperFollow <= 0 && !this.frozen;
+    if (windable && input!.aim) this.slipperCharge = Math.max(0, this.slipperCharge) + dt;
+    else if (windable && this.slipperCharge >= 0) {
+      result.slipper = { origin: this.eye(), dir: dirFromAngles(this.yaw, this.pitch), power: this.windup };
+      this.slippers = 0; this.slipperCharge = -1; this.slipperFollow = 0.22; this.sinceSlipper = 0;
+    } else this.slipperCharge = -1;
+    if (this.slipperFollow > 0) {
+      this.slipperFollow -= dt;
+      // Empty-handed: the secondary comes up.
+      if (this.slipperFollow <= 0 && this.slot === 2) this.swap(1, result);
+    }
     this.sinceDrink += dt;
     if (this.drinkLeft > 0) {
       this.drinkLeft -= dt;
@@ -316,7 +343,7 @@ export class LocalPlayer {
       if (this.throwLeft <= 0) result[this.throwingSmoke ? 'smoke' : 'grenade'] = { origin: this.eye(), dir: dirFromAngles(this.yaw, this.pitch + 0.06) };
     }
 
-    const trigger = wantsFire && !this.sprinting && this.sprintRecover <= 0 && this.throwLeft <= 0 && this.drinkLeft <= 0 && this.usable(this.slot);
+    const trigger = wantsFire && !this.sprinting && this.sprintRecover <= 0 && this.throwLeft <= 0 && this.drinkLeft <= 0 && this.slipperCharge < 0 && this.slipperFollow <= 0 && this.usable(this.slot);
     if (!trigger) { this.triggerHeld = false; this.shotsInBurst = 0; }
     if (trigger && this.switchLeft <= 0 && this.reloadLeft <= 0 && this.fireCooldown <= 0 && (w.auto || !this.triggerHeld)) {
       if (this.slot !== 2 && this.ammo[this.slot] <= 0) {
