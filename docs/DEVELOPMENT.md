@@ -193,12 +193,12 @@ its tool. Releases still need the owner's go-ahead (see AGENTS.md).
 | `SPACETIME_MAINCLOUD_TOKEN` | personal | default `spacetime` config: `lawbreaker-dev` and `3d-game-c4lhd` on Maincloud (the default server stays `local`); expires 2028-10-03 |
 | `TURFWAR_OWNER_TOKEN` | personal | `~/.config/turfwar/instacloud-cli.toml`, so `bun run publish:prod` works unchanged |
 | `TURFWAR_TW_SSH_KEY` | personal | `ssh turfwar-tw` (user `amp`, sudo, instance metadata of VM `turfwar-tw`) |
-| `VERCEL_TOKEN`, `VERCEL_ORG_ID`, `VERCEL_PROJECT_ID` | project | `bunx vercel ls` and friends, no login or link needed |
-| `INSTA_TOKEN` | project | `insta login --api-key`; run `insta project link 5ad5aa00-045d-4015-bdbd-ef74f558dec6` in `deploy/instacloud` once per orb before `insta --agent …`. InstaCloud refuses to let agents mint this; make it in a normal terminal with `insta tokens create amp-orb-turfwar --project 5ad5aa00-045d-4015-bdbd-ef74f558dec6 --expires 1y` |
+| `VERCEL_TOKEN`, `VERCEL_ORG_ID`, `VERCEL_PROJECT_ID` | project | not set (optional): `bunx vercel ls` and friends, no login or link needed. Without them, `gh api repos/madeyexz/turfwar/deployments` lists preview URLs |
+| `INSTA_TOKEN` | project | `insta login --api-key`; run `insta project link 5ad5aa00-045d-4015-bdbd-ef74f558dec6` in `deploy/instacloud` once per orb before `insta --agent …`. The current key is an account-wide agent key from `insta login --claim ian.xiao@hotmail.com` (the owner approves a code). Agents may not mint keys; a project-only one comes from a normal terminal: `insta tokens create amp-orb-turfwar --project 5ad5aa00-045d-4015-bdbd-ef74f558dec6 --expires 1y` |
 | `TURFWAR_ADMIN_KEY` | project | the `/admin` login |
 | `POSTHOG_PERSONAL_API_KEY` | project | read-only queries on PostHog project 649207 |
 
-Set or rotate one with `amp secrets set NAME --user|--project ianhsiao/lawbreaker --secret --data-file -`
+Set or rotate one with `amp secrets set NAME --user|--project ianhsiao/turfwar --secret --data-file -`
 (value on stdin), or in Amp Settings; never paste a value into a thread. Read-only checks: `spacetime list
 --server maincloud`, `spacetime --config-path ~/.config/turfwar/instacloud-cli.toml login show`,
 `ssh turfwar-tw 'sudo docker ps'`, `bunx vercel ls`, `insta status`, and
