@@ -7,7 +7,7 @@ export const GRAVITY = 9.8;
 
 /**
  * `smokeCloud`: a smoke grenade that has popped (still, `timer` = seconds left). `slipper`: a thrown
- * 藍白拖 (SLIPPER in weapons.ts; `hp` 1 while it can still kill, 0 once it has touched anything).
+ * 藍白拖 (SLIPPER in weapons.ts; `hp` the damage it does in flight, 0 once it has touched anything).
  * Keep the order: the frame sends the index.
  */
 export type BodyKind = 'grenade' | 'smoke' | 'smokeCloud' | 'slipper';
@@ -22,7 +22,7 @@ export interface Body {
   owner: number;
   /** Team of the thrower (-1 = neutral, hurts everyone). */
   team: number;
-  /** 2 = carries the High Explosive mod; for a slipper, 1 = still lethal. */
+  /** 2 = carries the High Explosive mod; for a slipper, the damage it still does (0 once harmless). */
   hp: number;
   /** Fuse remaining (seconds); for a smoke cloud, the seconds it has left. */
   timer: number;

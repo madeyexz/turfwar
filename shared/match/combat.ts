@@ -3,7 +3,7 @@ import { chestPoint, hitShape, raycastSoldier } from '../hitbox';
 import type { MapDef } from '../maps/types';
 import { dist3, segmentPointDistance, type Vec3 } from '../math';
 import { MOVE, createMoveState, eyeHeight } from '../movement';
-import { GRENADE, HEALTH, HIGH_EXPLOSIVE, SLIPPER, SMOKE, STAMINA, pelletCone, pelletDirs, zoneDamage, type HitZone, type WeaponDef } from '../weapons';
+import { GRENADE, HEALTH, HIGH_EXPLOSIVE, SLIPPER, SMOKE, STAMINA, slipperDamage, pelletCone, pelletDirs, zoneDamage, type HitZone, type WeaponDef } from '../weapons';
 import { VEHICLES, obstaclesOf, raycastVehicle, vehicleCenter, type Vehicle } from '../vehicles';
 import { deepestOverlap, resolveObstacles } from '../obstacles';
 import { BODY_RADIUS, type Body } from '../world';
@@ -281,16 +281,19 @@ export function smokeBlocks(bodies: readonly Body[], a: Vec3, b: Vec3) {
 export function throwSlipperFrom(state: MatchState, ctx: SimContext, s: Soldier, origin: Vec3, dir: Vec3, power: number) {
   if (!s.alive || s.slippers <= 0) return undefined;
   s.slippers--;
-  const speed = SLIPPER.minSpeed + (SLIPPER.maxSpeed - SLIPPER.minSpeed) * Math.max(0, Math.min(1, power || 0));
+  power = Math.max(0, Math.min(1, power || 0));
+  const speed = SLIPPER.minSpeed + (SLIPPER.maxSpeed - SLIPPER.minSpeed) * power;
   const v = { x: dir.x * speed + s.m.vx * 0.5, y: dir.y * speed + SLIPPER.lift, z: dir.z * speed + s.m.vz * 0.5 };
   if (s.weapon === 2) { s.weapon = 1; s.reloadLeft = 0; s.switchLeft = statsOf(s, 1).equipTime; }
   ctx.emit({ type: 'slipper', action: 'throw', id: s.id, x: origin.x, y: origin.y, z: origin.z });
-  return spawnBody(state, 'slipper', origin, v, s.id, s.team, 1, SLIPPER.lifetime);
+  // Its hp carries the damage it will do (slipperDamage), until something takes the sting out of it.
+  return spawnBody(state, 'slipper', origin, v, s.id, s.team, slipperDamage(power), SLIPPER.lifetime);
 }
 
 /**
  * A slipper still in flight moved `from` → where it is now: the first enemy across that path (not the
- * thrower, not a teammate, not someone inside a car) dies, and the slipper drops off them, harmless.
+ * thrower, not a teammate, not someone inside a car) takes its damage (a full wind-up kills), and the
+ * slipper drops off them, harmless.
  */
 export function slipperStrike(state: MatchState, ctx: SimContext, b: Body, from: Vec3) {
   const dx = b.x - from.x, dy = b.y - from.y, dz = b.z - from.z, len = Math.hypot(dx, dy, dz);
@@ -305,12 +308,13 @@ export function slipperStrike(state: MatchState, ctx: SimContext, b: Body, from:
     if (hit && hit.t <= len + BODY_RADIUS.slipper && (!best || hit.t < best.t)) best = { s, ...hit };
   }
   if (!best) return;
+  const damage = b.hp;
   b.hp = 0;
   b.x = from.x + dir.x * best.t; b.y = from.y + dir.y * best.t; b.z = from.z + dir.z * best.t;
   b.vx *= -0.08; b.vz *= -0.08; b.vy = 1;
   ctx.emit({ type: 'slipper', action: 'hit', id: best.s.id, x: b.x, y: b.y, z: b.z });
   // A kill with the 藍白拖 is a knife kill (kill feed mark, cash, match stats).
-  applyDamage(state, ctx, best.s, b.owner, SLIPPER.kill, best.zone, { x: b.x, y: b.y, z: b.z }, 'knife');
+  applyDamage(state, ctx, best.s, b.owner, damage, best.zone, { x: b.x, y: b.y, z: b.z }, 'knife');
 }
 
 /** Anyone alive with an empty hand picks up a slipper lying (or bouncing) within reach. */

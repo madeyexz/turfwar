@@ -67,8 +67,9 @@ its own kill-feed mark). Looks, name and sound only: the weapon id, stats and ru
 
 **飛拖 (thrown slipper; not in BeGone)**: with the knife (藍白拖) in hand, hold aim (right mouse; the aim
 button on phones) to wind it up for up to 0.8 s, and let go to throw it (`SLIPPER` in `shared/weapons.ts`:
-10 m/s at no wind-up, 30 m/s at full). In flight it kills the first enemy it strikes outright, any zone,
-and counts as a knife kill; the first wall or floor it touches makes it harmless. Everyone carries exactly
+10 m/s at no wind-up, 30 m/s at full). In flight it hurts the first enemy it strikes: 30 thrown without a
+wind-up, rising with it to 100, and only a full wind-up kills outright (`slipperDamage`); a kill with it counts
+as a knife kill. The first wall or floor it touches makes it harmless. Everyone carries exactly
 one each round: once thrown you have no slipper (no slap, slot 3 is skipped) until you walk over one lying
 on the ground (yours or anyone's, within 1.3 m; a lying slipper shows a pulsing ring). The server simulates
 the flight and the strike (`slipperStrike`, `pickUpSlippers` in `shared/match/combat.ts`); the client only

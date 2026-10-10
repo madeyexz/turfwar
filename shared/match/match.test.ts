@@ -657,7 +657,7 @@ describe('飛拖 (thrown 藍白拖)', () => {
     return { x: d.x / l, y: d.y / l, z: d.z / l };
   };
 
-  it('kills the first enemy it strikes outright, as a knife kill, then lies harmless', () => {
+  it('at full wind-up kills the first enemy it strikes outright, as a knife kill, then lies harmless', () => {
     const { state, ctx, a, b, events } = duel();
     expect(a.slippers).toBe(1); expect(b.slippers).toBe(1);
     a.weapon = 2;
@@ -674,6 +674,17 @@ describe('飛拖 (thrown 藍白拖)', () => {
     tick(state, ctx, 2);
     expect(Math.hypot(slipper.vx, slipper.vy, slipper.vz)).toBe(0);
     expect(Math.hypot(slipper.x - b.m.x, slipper.z - b.m.z)).toBeLessThan(3);
+  });
+
+  it('only a full wind-up kills: no wind-up does 30, half does 65', () => {
+    for (const [power, health] of [[0, 70], [0.5, 35], [0.99, 1], [1, 0]] as const) {
+      const { state, ctx, a, b } = duel(4);
+      expect(throwSlipper(state, ctx, a.id, eye(a), at(a, b), power)).toBe(true);
+      tick(state, ctx, 1);
+      expect(Math.round(b.health)).toBe(health);
+      expect(b.alive).toBe(health > 0);
+      expect(state.bodies.find(x => x.kind === 'slipper')!.hp).toBe(0);
+    }
   });
 
   it('a weak throw is a lob; whatever it lands on first takes the sting out of it', () => {
