@@ -98,7 +98,7 @@ export class Kit {
    */
   flight(r: R, y0: number, y1: number, dir: 0 | 1 | 2 | 3, opts: { steps?: number; base?: number; style?: BlockStyle; color?: number } = {}) {
     const [x0, z0, x1, z1] = r, base = opts.base ?? y0;
-    this.b.ramps.push({ minX: x0, maxX: x1, minZ: z0, maxZ: z1, y0, y1, dir, surface: 'concrete' });
+    this.b.ramps.push({ minX: x0, maxX: x1, minZ: z0, maxZ: z1, y0, y1, dir, surface: 'concrete', base: base - 0.05 });
     const alongX = dir === 0 || dir === 2, sign = dir === 0 || dir === 1 ? 1 : -1;
     const run = alongX ? x1 - x0 : z1 - z0, start = sign > 0 ? (alongX ? x0 : z0) : (alongX ? x1 : z1);
     const slice = (t0: number, t1: number): R => {

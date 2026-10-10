@@ -135,11 +135,14 @@ export class MapBuilder {
     this.decor.push({ kind: 'shape', min: [cx - w / 2, y, cz - d / 2], max: [cx + w / 2, y + h, cz + d / 2], style, ...(color === undefined ? {} : { color }) });
   }
 
-  /** Ramp rising toward local direction dir (0:+X 1:+Z 2:-X 3:-Z). */
+  /**
+   * Ramp rising toward local direction dir (0:+X 1:+Z 2:-X 3:-Z). Stairs are drawn as a solid flight,
+   * so they collide as one: the wedge under the slope blocks soldiers, vehicles and shots.
+   */
   ramp(x: number, z: number, w: number, d: number, y0: number, y1: number, dir: 0 | 1 | 2 | 3, style: RampStyle = 'ramp') {
     const cx = this.tx(x), cz = this.tz(z);
     const mdir = (this.s < 0 ? (dir + 2) % 4 : dir) as 0 | 1 | 2 | 3;
-    this.ramps.push({ minX: cx - w / 2, maxX: cx + w / 2, minZ: cz - d / 2, maxZ: cz + d / 2, y0, y1, dir: mdir, surface: 'metal' });
+    this.ramps.push({ minX: cx - w / 2, maxX: cx + w / 2, minZ: cz - d / 2, maxZ: cz + d / 2, y0, y1, dir: mdir, surface: 'metal', ...(style === 'stairs' ? { base: y0 - 0.05 } : {}) });
     this.decor.push({ kind: 'ramp', ramp: this.ramps.length - 1, style });
   }
 
@@ -225,20 +228,9 @@ export class MapBuilder {
     this.decor.push({ kind: 'water', x: this.tx(x), y, z: this.tz(z), w, d });
   }
 
-  /**
-   * Stairs that are as solid as they are drawn: the ramp is the walking surface, and a stepped fill
-   * under it (every block's top below the slope) stops anyone walking through the flight.
-   */
+  /** Stairs: a solid flight (see `ramp`). */
   stairs(x: number, z: number, w: number, d: number, y0: number, y1: number, dir: 0 | 1 | 2 | 3) {
     this.ramp(x, z, w, d, y0, y1, dir, 'stairs');
-    const alongX = dir === 0 || dir === 2, run = alongX ? w : d, sign = dir === 0 || dir === 1 ? 1 : -1;
-    const n = Math.max(1, Math.ceil(run / 0.6)), start = (alongX ? x : z) - sign * run / 2;
-    for (let i = 1; i < n; i++) {
-      const top = y0 + (y1 - y0) * (i / n) - 0.03, c = start + sign * (i + 0.5) * run / n;
-      if (top - y0 < 0.15) continue;
-      if (alongX) this.box(c, y0 - 0.05, z, run / n, top - y0 + 0.05, d, 'invisible', 'metal');
-      else this.box(x, y0 - 0.05, c, w, top - y0 + 0.05, run / n, 'invisible', 'metal');
-    }
   }
 
   prop(model: string, x: number, y: number | 'ground', z: number, rotY = 0, scale = 1) {

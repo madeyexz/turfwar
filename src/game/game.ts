@@ -1161,6 +1161,7 @@ export class Game {
           // survivors included (they keep their gear, the server refills it).
           if (me?.alive) { this.player.spawnFrom(me); this.shownWeapon = ''; }
           this.skids.clear();
+          this.effects.clearDecals();
           this.audio.roundStart();
           const sabotage = modeOf(state, this.map.def) === 'sabotage';
           const goal = t(!sabotage ? 'hud.goal.elim' : me?.team === ATTACKERS ? 'hud.goal.attack' : 'hud.goal.defend');
