@@ -22,6 +22,11 @@ export interface Ramp {
   /** 0: rises along +X, 1: along +Z, 2: along -X, 3: along -Z. */
   dir: 0 | 1 | 2 | 3;
   surface: Surface;
+  /**
+   * Bottom of a solid flight (stairs): the wedge under the slope down to here blocks soldiers,
+   * vehicles and shots like a solid. Undefined for a bare slope (ramps, roofs): only its top counts.
+   */
+  base?: number;
 }
 
 /**
@@ -85,10 +90,13 @@ export class CollisionWorld {
   readonly cells = new Map<number, { solids: number[]; ramps: number[] }>();
   private stamp: Uint32Array;
   private stampId = 1;
+  private rampStamp: Uint32Array;
+  private rampStampId = 1;
 
   constructor(readonly solids: Solid[], readonly ramps: Ramp[], readonly terrain: Heightfield,
     readonly bounds: { minX: number; maxX: number; minZ: number; maxZ: number }, readonly ladders: Ladder[] = []) {
     this.stamp = new Uint32Array(Math.max(1, solids.length));
+    this.rampStamp = new Uint32Array(Math.max(1, ramps.length));
     solids.forEach((s, i) => this.insert(s.minX, s.minZ, s.maxX, s.maxZ, c => c.solids.push(i)));
     ramps.forEach((r, i) => this.insert(r.minX, r.minZ, r.maxX, r.maxZ, c => c.ramps.push(i)));
   }
@@ -115,6 +123,22 @@ export class CollisionWorld {
           if (this.stamp[i] === id) continue;
           this.stamp[i] = id;
           visit(this.solids[i], i);
+        }
+      }
+  }
+
+  /** Visit each solid flight (a ramp with a base) whose footprint might overlap the rectangle, once. */
+  forFlightsIn(minX: number, minZ: number, maxX: number, maxZ: number, visit: (r: Ramp) => void) {
+    if (++this.rampStampId > 0xfffffff0) { this.rampStamp.fill(0); this.rampStampId = 1; }
+    const id = this.rampStampId;
+    for (let cx = Math.floor(minX / CELL); cx <= Math.floor(maxX / CELL); cx++)
+      for (let cz = Math.floor(minZ / CELL); cz <= Math.floor(maxZ / CELL); cz++) {
+        const cell = this.cells.get(this.key(cx, cz));
+        if (!cell) continue;
+        for (const i of cell.ramps) {
+          if (this.rampStamp[i] === id || this.ramps[i].base === undefined) continue;
+          this.rampStamp[i] = id;
+          visit(this.ramps[i]);
         }
       }
   }
@@ -196,6 +220,19 @@ export class CollisionWorld {
         }
         moved = true; blocked = true;
       });
+      this.forFlightsIn(pos.x - radius, pos.z - radius, pos.x + radius, pos.z + radius, r => {
+        if (!blocksCylinder(r, pos, radius, height)) return;
+        const cx = clamp(pos.x, r.minX, r.maxX), cz = clamp(pos.z, r.minZ, r.maxZ);
+        const dx = pos.x - cx, dz = pos.z - cz, d = Math.hypot(dx, dz);
+        if (d > 1e-5) { pos.x += dx / d * (radius - d); pos.z += dz / d * (radius - d); }
+        else {
+          const left = pos.x - r.minX, right = r.maxX - pos.x, back = pos.z - r.minZ, front = r.maxZ - pos.z;
+          const m = Math.min(left, right, back, front);
+          if (m === left) pos.x = r.minX - radius; else if (m === right) pos.x = r.maxX + radius;
+          else if (m === back) pos.z = r.minZ - radius; else pos.z = r.maxZ + radius;
+        }
+        moved = true; blocked = true;
+      });
       if (!moved) break;
     }
     const b = this.bounds;
@@ -216,6 +253,9 @@ export class CollisionWorld {
       if (hit || (s.team !== undefined && (team < 0 || s.team === team)) || s.maxY <= pos.y + STEP_HEIGHT || s.minY >= pos.y + height) return;
       if (circleRect(pos.x, pos.z, radius, s)) hit = true;
     });
+    if (!hit) this.forFlightsIn(pos.x - radius, pos.z - radius, pos.x + radius, pos.z + radius, r => {
+      if (!hit && blocksCylinder(r, pos, radius, height)) hit = true;
+    });
     return hit;
   }
 
@@ -230,9 +270,14 @@ export class CollisionWorld {
       const hit = rayBox(o, d, s, bestT);
       if (hit && hit.t < bestT) { bestT = hit.t; best = { ...hit, surface: s.surface, index: i }; }
     });
-    // Ramps (top surface only).
+    // Ramps: the top surface, or the whole wedge of a solid flight.
     for (let i = 0; i < this.ramps.length; i++) {
       const r = this.ramps[i];
+      const wedge = r.base === undefined ? null : rayWedge(o, d, r, bestT);
+      if (wedge) {
+        if (wedge.t < bestT) { bestT = wedge.t; best = { ...wedge, surface: r.surface, index: -2 - i }; }
+        continue;
+      }
       const t = rayRamp(o, d, r, bestT);
       if (t >= 0 && t < bestT) {
         bestT = t;
@@ -329,6 +374,50 @@ function rampNormal(r: Ramp): Vec3 {
     case 2: return { x: -h, y: v, z: 0 };
     default: return { x: 0, y: v, z: -h };
   }
+}
+
+/**
+ * True when a solid flight's wedge stands in the way of a vertical cylinder (feet at pos.y): it
+ * overlaps the footprint where the slope is more than a step above the feet. The slope is read at
+ * the footprint point nearest the axis, the height `groundHeight` stands a soldier on.
+ */
+function blocksCylinder(r: Ramp, pos: Vec3, radius: number, height: number) {
+  if (r.base === undefined || r.base >= pos.y + height || !circleRect(pos.x, pos.z, radius, r)) return false;
+  return rampHeight(r, clamp(pos.x, r.minX, r.maxX), clamp(pos.z, r.minZ, r.maxZ)) > pos.y + STEP_HEIGHT;
+}
+
+/**
+ * Entry into a solid flight's wedge (its box from base to the top, clipped by the slope), or null on
+ * a miss. A ray starting inside the wedge also returns null, so it falls back to the slope test.
+ */
+function rayWedge(o: Vec3, d: Vec3, r: Ramp, maxT: number): { t: number; point: Vec3; normal: Vec3 } | null {
+  let tmin = 0, tmax = maxT, normal: Vec3 | null = null;
+  const lo = [r.minX, r.base!, r.minZ], hi = [r.maxX, r.y1, r.maxZ];
+  const oo = [o.x, o.y, o.z], dd = [d.x, d.y, d.z];
+  for (let a = 0; a < 3; a++) {
+    if (Math.abs(dd[a]) < 1e-12) {
+      if (oo[a] < lo[a] || oo[a] > hi[a]) return null;
+      continue;
+    }
+    const inv = 1 / dd[a];
+    let t1 = (lo[a] - oo[a]) * inv, t2 = (hi[a] - oo[a]) * inv, sg = -1;
+    if (t1 > t2) { const tmp = t1; t1 = t2; t2 = tmp; sg = 1; }
+    if (t1 > tmin) { tmin = t1; normal = { x: a === 0 ? sg : 0, y: a === 1 ? sg : 0, z: a === 2 ? sg : 0 }; }
+    if (t2 < tmax) tmax = t2;
+    if (tmin > tmax) return null;
+  }
+  // The slope's half-space (the outward normal points up the open side).
+  const n = rampNormal(r);
+  const px = r.dir === 2 ? r.maxX : r.minX, pz = r.dir === 3 ? r.maxZ : r.minZ;
+  const dist = n.x * (o.x - px) + n.y * (o.y - r.y0) + n.z * (o.z - pz), denom = n.x * d.x + n.y * d.y + n.z * d.z;
+  if (Math.abs(denom) < 1e-12) { if (dist > 0) return null; }
+  else {
+    const t = -dist / denom;
+    if (denom < 0) { if (t > tmin) { tmin = t; normal = n; } } else if (t < tmax) tmax = t;
+    if (tmin > tmax) return null;
+  }
+  if (!normal) return null;
+  return { t: tmin, point: { x: o.x + d.x * tmin, y: o.y + d.y * tmin, z: o.z + d.z * tmin }, normal };
 }
 
 function rayRamp(o: Vec3, d: Vec3, r: Ramp, maxT: number) {
