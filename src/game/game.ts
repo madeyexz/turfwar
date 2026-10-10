@@ -742,7 +742,14 @@ export class Game {
 
   /** 單挑我 from the end screen (main.ts opens the 1v1 room); only where online play is available. */
   onDuel(open: (summary: MatchSummary) => void) {
-    this.hud.onDuel = () => { if (this.summary) open(this.summary); };
+    this.hud.onDuel = () => {
+      const summary = this.summary;
+      if (!summary) return;
+      let storage: Storage | undefined;
+      try { storage = localStorage; } catch { /* storage disabled */ }
+      track('duel_clicked', { ref: shareRef(storage), solo: summary.solo, result: summary.result });
+      open(summary);
+    };
   }
 
   /** A short line over the match (main.ts: the challenge's notes). */

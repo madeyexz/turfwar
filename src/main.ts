@@ -1231,7 +1231,7 @@ async function start(action: Action, retried = false) {
   status.textContent = '';
   if (backdrop) { renderer.scene.remove(backdrop.group); backdrop = undefined; backdropMap = undefined; }
   launch(link, linkMap);
-  joined(link, linkMap, playServer);
+  joined(link, linkMap, playServer, false, duel?.kind === 'host');
   matchServer = playServer;
   if (duel) startedDuel(duel, link);
   // The map's own files have loaded by now: cache them too on a first visit.
@@ -1274,12 +1274,12 @@ function playContext() {
 onSideways(on => { if (on && game) matchNote('sideways'); });
 
 /** Analytics: we are in a match (once per link; online map rotations keep the same session). */
-function joined(link: GameLink, map: string, serverChoice: ServerId | undefined, rejoin = false) {
+function joined(link: GameLink, map: string, serverChoice: ServerId | undefined, rejoin = false, hosted = false) {
   const state = link.state(), me = state?.soldiers.find(s => s.id === link.myId());
   const config = state?.config;
   const info = link.roomInfo?.();
   matchJoined({
-    online: link.mode === 'online', ...(info ? { room: info.code || `public-${info.room}` } : {}), map,
+    online: link.mode === 'online', ...(info ? { room: info.code || `public-${info.room}`, private: !!info.code } : {}), ...(hosted ? { hosted: true } : {}), map,
     mode: config?.mode ?? 'elimination', size: config?.practice ? 'practice' : sizeLabel(config?.teamSize ?? perTeam()), team: me?.team === 1 ? 'militia' : 'swat',
     ...(serverChoice ? { server_choice: serverChoice } : {}), device: currentDeviceKind(), ...(rejoin ? { rejoin: true } : {}),
     // How it is played (phones): touch, an upright screen (the match then turns sideways), which app's browser, aim assist.
