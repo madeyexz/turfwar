@@ -14,6 +14,7 @@ import type { Assets } from '../assets';
 import { Audio, type EngineVoice } from '../audio';
 import { BodiesView } from '../render/bodies';
 import { SmokeView } from '../render/smoke';
+import { Flyover, overheadPass } from '../render/flyover';
 import { BombSitesView } from '../render/bombsite';
 import { Effects } from '../render/effects';
 import { InterpBuffer } from '../render/interp';
@@ -65,6 +66,9 @@ export class Game {
   private effects = new Effects();
   private bodies: BodiesView;
   private smoke = new SmokeView();
+  /** Development only (?flyover): the National Day flyover going over now and then (render/flyover.ts). */
+  private flyover?: Flyover;
+  private flyoverAt = -Infinity;
   private viewmodel: ViewModel;
   private remotes = new Map<number, Remote>();
   private hud: Hud;
@@ -212,6 +216,11 @@ export class Game {
     renderer.scene.add(this.level.group, this.effects.group);
     this.bodies = new BodiesView(assets);
     renderer.scene.add(this.bodies.group, this.smoke.group);
+    if (import.meta.env.DEV && new URLSearchParams(location.search).has('flyover')) {
+      this.flyover = new Flyover(overheadPass());
+      this.flyover.setHaze(theme.fog, theme.fogDensity * 0.2);
+      renderer.scene.add(this.flyover.group);
+    }
     this.crates = new CratesView(assets, def.pickups);
     this.sites = new BombSitesView(def);
     renderer.scene.add(this.crates.group, this.sites.group, this.vehicles.group, this.skids.mesh);
@@ -279,6 +288,18 @@ export class Game {
     if (import.meta.env.DEV) Object.assign(window, { __game: this });
   }
 
+  /**
+   * The development flyover: a pass every minute, the lead overhead half-way through it, fading in and out
+   * at the ends of the minute; its roar starts as the formation nears.
+   */
+  private flyPass(now: number) {
+    const every = 60, t = (now % every) - every / 2;
+    this.flyover!.opacity = Math.max(0, Math.min(1, (t + every / 2) / 3, (every / 2 - t) / 3));
+    this.flyover!.update(t);
+    if (t >= -2.5 && this.flyoverAt < -2.5) this.audio.jetPass(2.5, 7);
+    this.flyoverAt = t;
+  }
+
   stop(keepLink = false) {
     this.running = false;
     if (!keepLink) this.link.dispose();
@@ -288,6 +309,7 @@ export class Game {
     this.menu.dispose();
     this.renderer.scene.remove(this.level.group, this.effects.group, this.bodies.group, this.smoke.group, this.crates.group, this.sites.group, this.vehicles.group);
     this.smoke.clear();
+    this.flyover?.dispose();
     this.vehicles.dispose();
     this.renderer.scene.remove(this.skids.mesh); this.skids.dispose();
     for (const e of [...this.engines.values(), ...this.screeches.values()]) e.stop();
@@ -577,6 +599,7 @@ export class Game {
     this.updateEngines(state);
     // Smoke after the camera is placed: standing in a cloud greys the whole screen.
     this.hud.smokeFog(this.smoke.update(performance.now() / 1000, cam.position));
+    if (this.flyover) this.flyPass(performance.now() / 1000);
     // One flashlight light for whichever view model is shown.
     this.renderer.torch.intensity = Math.max(this.viewmodel.torch, this.otherViewmodel?.torch ?? 0);
     if (render) this.renderer.render(this.time, this.levelReady && !this.menu.open);

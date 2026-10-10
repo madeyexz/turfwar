@@ -65,8 +65,11 @@ everything above 6 m to see under roofs),
 `/dev/soldier.html` (animation/IK pose sheet), `/dev/viewmodel.html?ads=1` (first-person weapon),
 `/dev/viewer.html?model=/assets/props.glb` (asset viewer), `/dev/vehicles.html?show=car:0,scooter:1,heli:2&focus=0&angle=front`
 (drivable vehicles in a studio, with `&wrecked=1`, `&rotor=1`, `&seats=1`, `&boxes=1`; `?map=taipei&focus=3` at their map
-spots; `window.__stats` gives each one's draw calls and triangles). Dev-only URL flags `debuginput`,
-`fixeddt` and `capture` make automated runs deterministic on software renderers.
+spots; `window.__stats` gives each one's draw calls and triangles), `/dev/flyover.html?sky=overcast&live=1` (the National
+Day flyover, `src/render/flyover.ts`, over Liberty Square from the memorial hall's platform, with a crowd; without `live`,
+`window.__fly.frame(t)` draws pass time `t`, frame by frame for trailers). Dev-only URL flags `debuginput`,
+`fixeddt` and `capture` make automated runs deterministic on software renderers; `flyover` sends the flyover over a
+match every minute (not in production builds).
 
 The map picker shows a picture of each map (`public/media/maps/<id>.webp`, 480×270, under 40 KB).
 `bun scripts/mapshots.ts [--url <dev server>] [map …]` shoots them from the level preview through the

@@ -806,6 +806,48 @@ export class Audio {
     this.noiseBurst(out, t + 0.05, 2.2, 'bandpass', 900, 0.7, 0.25, 0.3);
   }
 
+  /**
+   * A jet formation going over (the National Day flyover, render/flyover.ts): heard over the whole sky,
+   * a roar swelling to its loudest `peak` s from now and dying away by `length` s, the engines' whine
+   * falling a few semitones as the jets go by (Doppler) and the roar darkening with it.
+   */
+  jetPass(peak = 2.5, length = 7) {
+    if (!this.ready) return;
+    const ctx = this.ctx!, t = this.now(), top = t + peak, end = t + length;
+    const out = this.out(0.85, undefined, undefined, 0.45);
+    // Loudness: a long swell in, the loudest moment, a slower fade away.
+    const swell = (param: AudioParam, level: number) => {
+      param.setValueAtTime(0.0001, t);
+      param.exponentialRampToValueAtTime(level * 0.2, t + peak * 0.55);
+      param.exponentialRampToValueAtTime(level, top);
+      param.exponentialRampToValueAtTime(level * 0.25, top + (end - top) * 0.45);
+      param.exponentialRampToValueAtTime(0.0001, end);
+    };
+    const noise = (type: BiquadFilterType, from: number, to: number, q: number, level: number) => {
+      const src = ctx.createBufferSource(); src.buffer = this.noise; src.loop = true;
+      const f = ctx.createBiquadFilter(); f.type = type; f.Q.value = q;
+      f.frequency.setValueAtTime(from, t); f.frequency.setValueAtTime(from, top - 0.4); f.frequency.exponentialRampToValueAtTime(to, top + 0.8);
+      const g = ctx.createGain(); swell(g.gain, level);
+      src.connect(f).connect(g).connect(out);
+      src.start(t, Math.random() * 1.5); src.stop(end + 0.05);
+      this.v.track(src);
+    };
+    noise('lowpass', 220, 150, 0.7, 1.1);   // the rumble
+    noise('bandpass', 1500, 650, 0.6, 0.7); // the roar
+    noise('highpass', 4200, 2600, 0.5, 0.18); // the hiss of the air
+    // The whine: two detuned saws through a narrow band, falling as the jets pass.
+    for (const [hz, level] of [[2350, 0.035], [2410, 0.03]] as const) {
+      const o = ctx.createOscillator(); o.type = 'sawtooth';
+      o.frequency.setValueAtTime(hz, t); o.frequency.setValueAtTime(hz, top - 0.5); o.frequency.exponentialRampToValueAtTime(hz * 0.78, top + 0.9);
+      const f = ctx.createBiquadFilter(); f.type = 'bandpass'; f.frequency.value = hz; f.Q.value = 2.5;
+      f.frequency.setValueAtTime(hz, top - 0.5); f.frequency.exponentialRampToValueAtTime(hz * 0.78, top + 0.9);
+      const g = ctx.createGain(); swell(g.gain, level);
+      o.connect(f).connect(g).connect(out);
+      o.start(t); o.stop(end + 0.05);
+      this.v.track(o);
+    }
+  }
+
   /** Drinking a 珍奶 (ours, or someone's nearby): the lid's pop, a long slurp through the straw and pearls bubbling up. */
   drink(listener?: Listener, at?: V3) {
     const t = this.now(), out = this.out(listener ? 0.5 : 0.75, listener, at, 0.3);

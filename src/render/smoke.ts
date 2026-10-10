@@ -10,8 +10,8 @@ const GROW = 1.4, CLEAR = 1.2;
 interface Puff { sprite: THREE.Sprite; base: THREE.Vector3; size: number; spin: number; phase: number }
 interface Cloud { group: THREE.Group; puffs: Puff[]; center: THREE.Vector3; born: number; gone: number; seen: number; alpha: number }
 
-/** A lumpy grey puff: a few offset soft blobs, so overlapping sprites do not read as discs. */
-function puffTexture() {
+/** A lumpy white puff: a few offset soft blobs, so overlapping sprites do not read as discs (tinted per use). */
+export function puffTexture() {
   const canvas = document.createElement('canvas');
   canvas.width = canvas.height = 128;
   const ctx = canvas.getContext('2d')!;
