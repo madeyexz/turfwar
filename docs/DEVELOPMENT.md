@@ -65,8 +65,11 @@ everything above 6 m to see under roofs),
 `/dev/soldier.html` (animation/IK pose sheet), `/dev/viewmodel.html?ads=1` (first-person weapon),
 `/dev/viewer.html?model=/assets/props.glb` (asset viewer), `/dev/vehicles.html?show=car:0,scooter:1,heli:2&focus=0&angle=front`
 (drivable vehicles in a studio, with `&wrecked=1`, `&rotor=1`, `&seats=1`, `&boxes=1`; `?map=taipei&focus=3` at their map
-spots; `window.__stats` gives each one's draw calls and triangles). Dev-only URL flags `debuginput`,
-`fixeddt` and `capture` make automated runs deterministic on software renderers.
+spots; `window.__stats` gives each one's draw calls and triangles), `/dev/flyover.html?sky=overcast&live=1` (the National
+Day flyover, `src/render/flyover.ts`, over Liberty Square from the memorial hall's platform, with a crowd; without `live`,
+`window.__fly.frame(t)` draws pass time `t`, frame by frame for trailers). Dev-only URL flags `debuginput`,
+`fixeddt` and `capture` make automated runs deterministic on software renderers; `flyover` sends the flyover over a
+match every minute (not in production builds).
 
 The map picker shows a picture of each map (`public/media/maps/<id>.webp`, 480×270, under 40 KB).
 `bun scripts/mapshots.ts [--url <dev server>] [map …]` shoots them from the level preview through the
@@ -177,6 +180,29 @@ publication. On an existing empty starter database, the first valid join initial
 atomically; subsequent joins preserve its state. Publish the compatible module before pushing
 the matching commit to `main`, which triggers Vercel's GitHub deployment.
 Verify the production URL and two separate Online clients after each release.
+
+### Orb credentials
+
+Amp orbs get the deploy credentials as Amp secrets. `.agents/setup` installs the clients (bun
+dependencies, `spacetime` 2.10.2, `insta`) into the shared snapshot, which never holds a credential;
+`.agents/resume` logs them in from the secrets each time an orb starts. A missing secret just skips
+its tool. Releases still need the owner's go-ahead (see AGENTS.md).
+
+| Secret | Scope | Gives the orb |
+| --- | --- | --- |
+| `SPACETIME_MAINCLOUD_TOKEN` | personal | default `spacetime` config: `lawbreaker-dev` and `3d-game-c4lhd` on Maincloud (the default server stays `local`); expires 2028-10-03 |
+| `TURFWAR_OWNER_TOKEN` | personal | `~/.config/turfwar/instacloud-cli.toml`, so `bun run publish:prod` works unchanged |
+| `TURFWAR_TW_SSH_KEY` | personal | `ssh turfwar-tw` (user `amp`, sudo, instance metadata of VM `turfwar-tw`) |
+| `VERCEL_TOKEN`, `VERCEL_ORG_ID`, `VERCEL_PROJECT_ID` | project | not set (optional): `bunx vercel ls` and friends, no login or link needed. Without them, `gh api repos/madeyexz/turfwar/deployments` lists preview URLs |
+| `INSTA_TOKEN` | project | `insta login --api-key`; run `insta project link 5ad5aa00-045d-4015-bdbd-ef74f558dec6` in `deploy/instacloud` once per orb before `insta --agent …`. The current key is an account-wide agent key from `insta login --claim ian.xiao@hotmail.com` (the owner approves a code). Agents may not mint keys; a project-only one comes from a normal terminal: `insta tokens create amp-orb-turfwar --project 5ad5aa00-045d-4015-bdbd-ef74f558dec6 --expires 1y` |
+| `TURFWAR_ADMIN_KEY` | project | the `/admin` login |
+| `POSTHOG_PERSONAL_API_KEY` | project | read-only queries on PostHog project 649207 |
+
+Set or rotate one with `amp secrets set NAME --user|--project ianhsiao/turfwar --secret --data-file -`
+(value on stdin), or in Amp Settings; never paste a value into a thread. Read-only checks: `spacetime list
+--server maincloud`, `spacetime --config-path ~/.config/turfwar/instacloud-cli.toml login show`,
+`ssh turfwar-tw 'sudo docker ps'`, `bunx vercel ls`, `insta status`, and
+`curl -H "Authorization: Bearer $POSTHOG_PERSONAL_API_KEY" https://us.posthog.com/api/projects/649207/`.
 
 ## Players, analytics and the admin page
 

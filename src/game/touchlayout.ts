@@ -21,8 +21,9 @@ export type ControlId =
 export type PlaceId = ControlId | 'stick';
 
 /**
- * `hold`: the action is held while a finger is on the control (fire, use, handbrake).
- * `tap`: one press per tap (reload, a weapon slot). `toggle`: a tap holds the action, the next lets it go (aim, crouch).
+ * `hold`: the action is held while a finger is on the control (fire, use, crouch, handbrake): letting go of
+ * Crouch stands up and ends a slide, as releasing the key does.
+ * `tap`: one press per tap (reload, a weapon slot). `toggle`: a tap holds the action, the next lets it go (aim).
  */
 export type ControlKind = 'hold' | 'tap' | 'toggle';
 
@@ -42,7 +43,7 @@ export const CONTROLS: Record<ControlId, ControlDef> = {
   fire: { action: 'fire', kind: 'hold', x: 0.875, y: 0.62, size: 88 },
   aim: { action: 'aim', kind: 'toggle', x: 0.745, y: 0.8, size: 60 },
   jump: { action: 'jump', kind: 'hold', x: 0.955, y: 0.37, size: 56 },
-  crouch: { action: 'crouch', kind: 'toggle', x: 0.955, y: 0.86, size: 52 },
+  crouch: { action: 'crouch', kind: 'hold', x: 0.955, y: 0.86, size: 52 },
   reload: { action: 'reload', kind: 'tap', x: 0.775, y: 0.44, size: 52 },
   use: { action: 'use', kind: 'hold', x: 0.64, y: 0.55, size: 68 },
   zoom: { action: 'nextWeapon', kind: 'tap', x: 0.655, y: 0.8, size: 46 },

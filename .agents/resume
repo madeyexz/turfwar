@@ -1,0 +1,41 @@
+#!/usr/bin/env bash
+# Amp orb resume: log the deploy CLIs in from Amp secrets each time an orb starts or wakes. Fast and
+# idempotent; a missing secret just skips its CLI. Never print a secret. See docs/DEVELOPMENT.md,
+# "Orb credentials". Vercel needs nothing here: its CLI reads VERCEL_TOKEN, VERCEL_ORG_ID and
+# VERCEL_PROJECT_ID from the environment.
+set -euo pipefail
+SPACETIME="$(command -v spacetime || echo "$HOME/.local/bin/spacetime")"
+umask 077
+
+# Maincloud (lawbreaker-dev, legacy 3d-game-c4lhd) in the default spacetime config, with the local
+# server as the default so a bare `spacetime publish` never reaches Maincloud.
+if [ -n "${SPACETIME_MAINCLOUD_TOKEN:-}" ] && [ -x "$SPACETIME" ]; then
+  "$SPACETIME" login --token "$SPACETIME_MAINCLOUD_TOKEN" >/dev/null 2>&1
+  "$SPACETIME" server set-default local >/dev/null 2>&1 || true
+  chmod 600 "$HOME/.config/spacetime/cli.toml"
+  echo "spacetime: Maincloud login"
+fi
+
+# Production owner identity (Taipei and Singapore `turfwar`), in the profile publish:prod reads.
+if [ -n "${TURFWAR_OWNER_TOKEN:-}" ] && [ -x "$SPACETIME" ]; then
+  mkdir -p "$HOME/.config/turfwar"
+  "$SPACETIME" --config-path "$HOME/.config/turfwar/instacloud-cli.toml" login --token "$TURFWAR_OWNER_TOKEN" >/dev/null 2>&1
+  chmod 600 "$HOME/.config/turfwar/instacloud-cli.toml"
+  echo "spacetime: production owner profile"
+fi
+
+# Taipei VM: `ssh turfwar-tw`.
+if [ -n "${TURFWAR_TW_SSH_KEY:-}" ]; then
+  mkdir -p "$HOME/.ssh"
+  printf '%s\n' "$TURFWAR_TW_SSH_KEY" > "$HOME/.ssh/turfwar_tw"
+  if ! grep -q '^Host turfwar-tw$' "$HOME/.ssh/config" 2>/dev/null; then
+    printf '\nHost turfwar-tw\n  HostName 34.81.41.144\n  User amp\n  IdentityFile ~/.ssh/turfwar_tw\n  IdentitiesOnly yes\n  StrictHostKeyChecking accept-new\n' >> "$HOME/.ssh/config"
+  fi
+  echo "ssh: turfwar-tw"
+fi
+
+# InstaCloud (Singapore). `insta project link` in deploy/instacloud is still needed once per orb
+# before `insta --agent …` commands.
+if [ -n "${INSTA_TOKEN:-}" ] && command -v insta >/dev/null && [ ! -s "$HOME/.insta/config.json" ]; then
+  timeout 6 insta login --api-key "$INSTA_TOKEN" >/dev/null 2>&1 && echo "insta: logged in" || echo "insta: login failed"
+fi

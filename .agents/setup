@@ -1,0 +1,32 @@
+#!/usr/bin/env bash
+# Amp orb setup: dependencies and deploy CLIs. Runs once per fresh orb and its result is snapshotted
+# and shared, so it installs clients only and never logs anything in; .agents/resume does that from
+# the thread's secrets (docs/DEVELOPMENT.md, "Orb credentials").
+set -euo pipefail
+cd "$(dirname "$0")/.."
+SPACETIME_VERSION=2.10.2
+
+step() { echo "== $1"; SECONDS=0; }
+done_() { echo "   ${SECONDS}s"; }
+
+step "bun install"
+bun install --frozen-lockfile
+bun install --cwd spacetimedb --frozen-lockfile
+done_
+
+step "spacetime $SPACETIME_VERSION"
+if ! command -v spacetime >/dev/null && [ ! -x "$HOME/.local/bin/spacetime" ]; then
+  curl -sSf https://install.spacetimedb.com | sh -s -- --yes
+fi
+SPACETIME="$(command -v spacetime || echo "$HOME/.local/bin/spacetime")"
+if ! "$SPACETIME" --version | grep -q "/$SPACETIME_VERSION/"; then
+  "$SPACETIME" version install "$SPACETIME_VERSION" --use
+fi
+done_
+
+# InstaCloud CLI for the Singapore server (deploy/instacloud).
+step "insta"
+if ! command -v insta >/dev/null; then
+  curl -fsSL https://raw.githubusercontent.com/InsForge/instacloud-cli/main/install.sh | sh
+fi
+done_

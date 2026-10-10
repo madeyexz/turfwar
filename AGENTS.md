@@ -116,7 +116,7 @@ spacetime generate --lang typescript --out-dir src/module_bindings --module-path
   off `dev`, commit, and merge back into `dev` with git (no pull requests). A release is merging `dev`
   into `main` and pushing, after publishing the module to the production database (see below); nothing
   reaches `main` otherwise.
-- GitHub-backed Amp project: `https://ampcode.com/@ianhsiao/lawbreaker`.
+- GitHub-backed Amp project: `https://ampcode.com/@ianhsiao/turfwar` (project secrets for orbs: docs/DEVELOPMENT.md, "Orb credentials").
 - Mac development checkout: `/Users/ianhsiao/Developer/turfwar` (formerly `lawbreaker-release`).
 - Mac and orbs are separate clones. Check `git status`, fetch/pull before work, and
   preserve uncommitted changes. Files are not automatically mirrored between machines.

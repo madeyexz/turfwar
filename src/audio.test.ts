@@ -145,6 +145,18 @@ describe('Audio voices', () => {
     expect(() => screech.set(Infinity, { pos: L.pos, yaw: NaN }, { x: 1, y: 0, z: 1 })).not.toThrow();
   });
 
+  it('plays a jet pass over the sky that ends by itself and leaves the mix', async () => {
+    const permanent = plugged(ctx, nodes, mix());
+    const first = ctx.sources.length;
+    audio.jetPass(2.5, 7);
+    const pass = ctx.sources.slice(first);
+    expect(pass.length).toBe(5);
+    expect(pass.every(s => s.stoppedAt !== undefined && Math.abs(s.stoppedAt - 7.05) < 1e-9)).toBe(true);
+    await flush();
+    endAll();
+    expect(plugged(ctx, nodes, mix())).toBe(permanent);
+  });
+
   it('unplugs an engine once stop() has ended its sources', () => {
     const permanent = plugged(ctx, nodes, mix());
     const first = ctx.sources.length;
