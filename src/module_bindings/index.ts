@@ -59,6 +59,7 @@ import QuickPlayReducer from "./quick_play_reducer";
 import ReloadWeaponReducer from "./reload_weapon_reducer";
 import ReportReducer from "./report_reducer";
 import SayReducer from "./say_reducer";
+import SlipperReducer from "./slipper_reducer";
 import SmokeReducer from "./smoke_reducer";
 import StartRoomReducer from "./start_room_reducer";
 import SwitchSlotReducer from "./switch_slot_reducer";
@@ -342,6 +343,7 @@ const reducersSchema = __reducers(
   __reducerSchema("reload_weapon", ReloadWeaponReducer),
   __reducerSchema("report", ReportReducer),
   __reducerSchema("say", SayReducer),
+  __reducerSchema("slipper", SlipperReducer),
   __reducerSchema("smoke", SmokeReducer),
   __reducerSchema("start_room", StartRoomReducer),
   __reducerSchema("switch_slot", SwitchSlotReducer),

@@ -247,6 +247,15 @@ export const SMOKE = { price: 300, max: 1, fuse: 1.6, duration: 15, radius: 4.5,
  */
 export const BOBA = { price: 400, max: 1, heal: 50, drinkTime: 1.4 };
 
+/**
+ * 飛拖 (our own; not in BeGone): the 藍白拖 in hand can be thrown. Hold aim with it to wind up for up
+ * to `charge` s (the throw goes from `minSpeed` to `maxSpeed` m/s), let go to throw. In flight it kills
+ * any enemy it strikes outright; the first wall or floor it touches makes it harmless. Everyone carries
+ * one each round and never more: thrown, it lies where it lands until someone empty-handed walks within
+ * `pickup` m of it (a fresh throw can't be caught back for `catchDelay` s); rounds clear them. No slipper, no slap.
+ */
+export const SLIPPER = { charge: 0.8, minSpeed: 10, maxSpeed: 30, lift: 1.5, pickup: 1.3, catchDelay: 0.5, kill: 999, lifetime: 3600 };
+
 /** 100 HP, no armor, no regeneration within a round; below `critical` the screen desaturates. */
 export const HEALTH = { max: 100, critical: 25 };
 

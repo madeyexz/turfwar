@@ -346,6 +346,8 @@ const en = {
   'item.boba': 'Bubble Tea', 'item.bobaShort': 'Boba', 'tc.drink': 'Boba', 'store.boba': 'Drink: +{heal} health',
   'store.bobaTitle': 'Drink it when hurt: +{heal} health in {s} s, no shooting while you sip · {key}', 'store.oneBoba': 'You carry one bubble tea at a time; drink it to buy another',
   'hud.healed': '+{n} health', 'hud.fullHealth': 'Already at full health',
+  'hud.throwHint': 'Hold {key} to wind up · let go to throw', 'hud.windup': 'Winding up… let go to throw', 'hud.windupFull': 'Full power! Let go to throw',
+  'hud.slipperGone': 'Knife thrown: walk over it to pick it up', 'hud.slipperBack': 'Knife back in hand',
   'store.heals': 'Heals', 'store.sip': 'Sip', 'store.bobaNote': 'Drink one when hurt: +{heal} health. You can’t shoot while you sip. {key}', 'store.carryCup': 'One at a time',
 } as const;
 
@@ -662,6 +664,8 @@ const zhTW: Record<Key, string> = {
   'item.boba': '珍珠奶茶', 'item.bobaShort': '珍奶', 'tc.drink': '珍奶', 'store.boba': '喝了 +{heal} 血',
   'store.bobaTitle': '受傷時喝：{s} 秒回 {heal} 血，喝的時候不能開槍 · {key}', 'store.oneBoba': '一次只能帶一杯珍奶，喝掉才能再買',
   'hud.healed': '+{n} 血', 'hud.fullHealth': '血已經是滿的',
+  'hud.throwHint': '按住 {key} 蓄力 · 放開丟出', 'hud.windup': '蓄力中… 放開丟出', 'hud.windupFull': '蓄滿了！放開丟出',
+  'hud.slipperGone': '刀丟出去了，走過去撿回來', 'hud.slipperBack': '刀撿回來了',
   'store.heals': '回血', 'store.sip': '喝的時間', 'store.bobaNote': '受傷時喝一杯：+{heal} 血，喝的時候不能開槍。{key}', 'store.carryCup': '一次 1 杯',
 };
 
@@ -672,9 +676,11 @@ const zhTW: Record<Key, string> = {
 export const MEME_NAMES: Record<Lang, Partial<Record<Key, string>>> = {
   en: {
     'act.knife': 'Slipper', 'tc.knife': 'Slipper', 'hud.knife': 'SLIPPER', 'cause.knife': 'Slipper', 'store.knife': 'Slipper',
+    'hud.slipperGone': 'Slipper thrown: walk over it to pick it up', 'hud.slipperBack': 'Slipper back on',
   },
   'zh-TW': {
     'act.knife': '藍白拖', 'tc.knife': '藍白拖', 'hud.knife': '藍白拖', 'cause.knife': '藍白拖', 'store.knife': '藍白拖',
+    'hud.slipperGone': '藍白拖丟出去了，走過去撿回來', 'hud.slipperBack': '藍白拖撿回來了',
   },
 };
 

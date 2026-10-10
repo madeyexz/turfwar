@@ -231,6 +231,16 @@ export class ViewModel {
       pos.set(at(p0, p1, 0), at(p0, p1, 1), at(p0, p1, 2));
       rx = at(r0, r1, 0); ry = at(r0, r1, 1); rz = at(r0, r1, 2);
     }
+    // ---- 飛拖: winding up pulls the slipper back high over the shoulder (trembling when full); letting go whips it forward and it is gone ----
+    if (knife && p.slipperFollow > 0) {
+      const f = ease(1 - p.slipperFollow / 0.22);
+      pos.set(0.22 - f * 0.3, 0.02 - f * 0.22, -0.3 - f * 0.25);
+      rx = 2 - f * 1.8; ry = 0.3 - f * 0.4; rz = -0.3 + f * 0.2;
+    } else if (knife && p.windup > 0) {
+      const w = ease(Math.min(1, p.windup * 1.6)), shake = p.windup >= 1 ? Math.sin(this.time * 70) * 0.004 : 0;
+      pos.set(pos.x + (0.22 - pos.x) * w + shake, pos.y + (-0.05 - pos.y) * w + shake, pos.z + (-0.38 - pos.z) * w);
+      rx += (1.75 - rx) * w; ry += (0.55 - ry) * w; rz += (-0.35 - rz) * w;
+    }
     // ---- Reload choreography (left hand pulls and seats the magazine) ----
     let leftTarget: THREE.Vector3 | undefined;
     const mag = fit.magModel ? this.mags.get(fit.magModel) : undefined;
@@ -293,6 +303,8 @@ export class ViewModel {
       if (t > 0.2 && t < 0.76) { mag.visible = true; lh.getWorldPosition(mag.position).add(new THREE.Vector3(0.02, -0.05, -0.04)); mag.quaternion.copy(this.gun.getWorldQuaternion(new THREE.Quaternion())); mag.rotateY(-Math.PI / 2); }
     }
     this.grenade.visible = p.throwLeft > 0;
+    // The thrown 藍白拖 has left the hand.
+    if (knife) this.models.get('knife')!.visible = p.slipperFollow <= 0 && p.slippers > 0;
     this.boba.visible = raised > 0;
     if (this.grenade.visible) lh.getWorldPosition(this.grenade.position).add(new THREE.Vector3(0.02, 0.03, -0.06));
     if (this.boba.visible) {

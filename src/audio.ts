@@ -613,6 +613,14 @@ export class Audio {
     if (this.live) this.noiseBurst(out, t + 0.075, 0.12, 'bandpass', 420, 1.5, 0.35, 0.01);
   }
 
+  /** A thrown 藍白拖: the whoosh as it leaves the hand, or the THWACK as it strikes someone. */
+  slipper(action: 'throw' | 'hit', listener?: Listener, at?: V3) {
+    if (!this.ready) return;
+    const t = this.now();
+    if (action === 'throw') this.swish(t, listener, at);
+    else this.slap(t, listener, at);
+  }
+
   /** The 藍白拖 landing (src/game/memeskins.ts): a bright rubber THWACK with a little cartoon boing after it. */
   private slap(t: number, listener?: Listener, at?: V3) {
     const out = this.out(listener ? 0.7 : 0.6, listener, at, 0.12);

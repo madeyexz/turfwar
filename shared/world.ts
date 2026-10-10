@@ -1,12 +1,16 @@
 import { CollisionWorld, terrainHeight } from './collision';
 import { near, raycastObstacle, type Obstacle } from './obstacles';
 
-/** Thrown M67 frags and M18 smoke grenades, integrated under plain gravity; smoke clouds stay put. */
+/** Thrown M67 frags, M18 smoke grenades and 藍白拖, integrated under plain gravity; smoke clouds stay put. */
 export const PHYSICS_STEP = 1 / 120;
 export const GRAVITY = 9.8;
 
-/** `smokeCloud`: a smoke grenade that has popped (still, `timer` = seconds left). Keep the order: the frame sends the index. */
-export type BodyKind = 'grenade' | 'smoke' | 'smokeCloud';
+/**
+ * `smokeCloud`: a smoke grenade that has popped (still, `timer` = seconds left). `slipper`: a thrown
+ * 藍白拖 (SLIPPER in weapons.ts; `hp` 1 while it can still kill, 0 once it has touched anything).
+ * Keep the order: the frame sends the index.
+ */
+export type BodyKind = 'grenade' | 'smoke' | 'smokeCloud' | 'slipper';
 
 export interface Body {
   id: number;
@@ -18,13 +22,13 @@ export interface Body {
   owner: number;
   /** Team of the thrower (-1 = neutral, hurts everyone). */
   team: number;
-  /** 2 = carries the High Explosive mod. */
+  /** 2 = carries the High Explosive mod; for a slipper, 1 = still lethal. */
   hp: number;
   /** Fuse remaining (seconds); for a smoke cloud, the seconds it has left. */
   timer: number;
 }
 
-export const BODY_RADIUS: Record<BodyKind, number> = { grenade: 0.09, smoke: 0.09, smokeCloud: 0.09 };
+export const BODY_RADIUS: Record<BodyKind, number> = { grenade: 0.09, smoke: 0.09, smokeCloud: 0.09, slipper: 0.06 };
 const RESTITUTION = 0.38;
 
 /**
@@ -35,7 +39,8 @@ export function stepBodies(bodies: Body[], dt: number, world: CollisionWorld | u
   if (dt <= 0) return;
   for (let i = bodies.length - 1; i >= 0; i--) {
     const b = bodies[i];
-    if (b.kind === 'smokeCloud') { b.age += dt; continue; }
+    // Smoke clouds stay put, and so does a slipper once it has come to rest (it may lie there all round).
+    if (b.kind === 'smokeCloud' || (b.kind === 'slipper' && b.vx === 0 && b.vy === 0 && b.vz === 0)) { b.age += dt; continue; }
     b.vy -= GRAVITY * dt;
     const ox = b.x, oy = b.y, oz = b.z;
     b.x += b.vx * dt; b.y += b.vy * dt; b.z += b.vz * dt;
@@ -57,6 +62,8 @@ function collide(b: Body, ox: number, oy: number, oz: number, world: CollisionWo
       if (h) hit = h;
     }
     if (hit) {
+      // A slipper is lethal only on the fly: whatever it touches first takes the sting out of it.
+      if (b.kind === 'slipper') b.hp = 0;
       // Reflect velocity about the surface normal and back off to the contact point.
       const n = hit.normal, vn = b.vx * n.x + b.vy * n.y + b.vz * n.z;
       if (vn < 0) {
@@ -67,12 +74,20 @@ function collide(b: Body, ox: number, oy: number, oz: number, world: CollisionWo
       }
       const back = Math.max(0, hit.t - r);
       b.x = ox + dir.x * back + n.x * 0.01; b.y = oy + dir.y * back + n.y * 0.01; b.z = oz + dir.z * back + n.z * 0.01;
+      if (n.y > 0.5) settle(b);
     }
   }
   const g = terrainHeight(world.terrain, b.x, b.z);
   if (b.y - r < g) {
     b.y = g + r;
+    if (b.kind === 'slipper') b.hp = 0;
     if (b.vy < 0) { b.vy = -b.vy * RESTITUTION; b.vx *= 0.8; b.vz *= 0.8; }
+    settle(b);
   }
+}
+
+/** A slipper slowed to a crawl on a floor lies still (and is no longer simulated). */
+function settle(b: Body) {
+  if (b.kind === 'slipper' && Math.hypot(b.vx, b.vy, b.vz) < 0.8) { b.vx = 0; b.vy = 0; b.vz = 0; }
 }
 

@@ -127,8 +127,9 @@ export interface TouchContext {
   scooter?: boolean;
   /** Something in reach to use: a vehicle, an ammo crate, the bomb site (arm or disarm). */
   use?: boolean;
-  /** The knife is in hand: nothing to aim or reload. */
+  /** The knife is in hand: nothing to aim or reload. `throwable`: it is the 藍白拖, so aim winds it up for a throw. */
   melee?: boolean;
+  throwable?: boolean;
   /** A sniper scope is up: the zoom button steps its magnification. */
   scoped?: boolean;
   /** Someone alive to watch while dead. */
@@ -147,7 +148,7 @@ export function contextControls(ctx: TouchContext): Set<ControlId> {
   switch (ctx.scope) {
     case 'foot':
       weapons(); add('jump', 'crouch', 'knife', 'grenade', 'smoke', 'drink', 'binoculars');
-      if (!ctx.melee) add('aim');
+      if (!ctx.melee || ctx.throwable) add('aim');
       if (ctx.use) add('use');
       if (ctx.scoped) add('zoom');
       break;
@@ -159,7 +160,7 @@ export function contextControls(ctx: TouchContext): Set<ControlId> {
     case 'heli': add('climb', 'descend', 'view', 'exit'); break;
     case 'passenger':
       weapons(); add('knife', 'grenade', 'smoke', 'drink', 'binoculars', 'exit');
-      if (!ctx.melee) add('aim');
+      if (!ctx.melee || ctx.throwable) add('aim');
       if (ctx.scoped) add('zoom');
       break;
     case 'dead': if (ctx.canSpectate) add('spectate'); break;

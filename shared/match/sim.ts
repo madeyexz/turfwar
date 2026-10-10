@@ -11,8 +11,8 @@ import {
   CASH, award, botShop, buy, buyAttachment, finishReload, newRoundStats, refillAmmo, resetInventory, statsOf, useCrate, type BuyItem,
 } from './economy';
 import {
-  MOVE_SLACK, TICK_RATE, applyDamage, crewTeam, explode, eyeOf, feetOf, killSoldier, onSite, popSmoke, resolvePellets, resolveShot, seatOf, shieldedIds, sideOf, spawnSoldier, throwSmokeFrom,
-  throwGrenadeFrom, traceShot, weaponOf, type SimContext, type TraceResult,
+  MOVE_SLACK, TICK_RATE, applyDamage, crewTeam, explode, eyeOf, feetOf, killSoldier, onSite, pickUpSlippers, popSmoke, resolvePellets, resolveShot, seatOf, shieldedIds, sideOf, slipperStrike, spawnSoldier, throwSmokeFrom,
+  throwGrenadeFrom, throwSlipperFrom, traceShot, weaponOf, type SimContext, type TraceResult,
 } from './combat';
 import { ATTACKERS, targetVehicle, type ClientReport, type MatchConfig, type MatchEvent, type MatchState, type RoundEnd, type ShotClaim, type Soldier, type Team } from './state';
 import { resetVehicles, shoverSpeed, updateVehicles, vehicleRoof, walksIntoVehicle } from './vehicles';
@@ -55,7 +55,7 @@ export function addSoldier(state: MatchState, ctx: SimContext, opts: { name: str
     id: state.nextId++, name: opts.name.slice(0, 20), team, bot: opts.bot, ...(opts.rookie && !opts.bot ? { rookie: true } : {}),
     m: createMoveState(0, 0, 0), yaw: 0, pitch: 0, alive: false, health: 0, weapon: 0,
     weapons: ['mp5', 'm9a1'], owned: [], attachments: {}, ammo: [0, 0], reserve: [0, 0],
-    reloadLeft: 0, fireCooldown: 0, switchLeft: 0, grenades: 0, grenadeHE: false, smokes: 0, bobas: 0, stamina: STAMINA.max, money: 0,
+    reloadLeft: 0, fireCooldown: 0, switchLeft: 0, grenades: 0, grenadeHE: false, smokes: 0, bobas: 0, slippers: 1, stamina: STAMINA.max, money: 0,
     sinceHit: 99, lastAttacker: -1, kills: 0, deaths: 0, assists: 0, score: 0, sprint: false, ads: false, sinceShot: 99, using: false,
     corrections: 0, moveSlack: MOVE_SLACK.max, groundY: 0, idle: 0, round: newRoundStats(), roundsHere: 0,
   };
@@ -199,7 +199,7 @@ export function reportState(state: MatchState, ctx: SimContext, id: number, r: C
 
 export function switchWeapon(state: MatchState, id: number, slot: Slot) {
   const s = state.soldiers.find(x => x.id === id);
-  if (!s || !s.alive || s.weapon === slot || ![0, 1, 2].includes(slot)) return;
+  if (!s || !s.alive || s.weapon === slot || ![0, 1, 2].includes(slot) || (slot === 2 && s.slippers <= 0)) return;
   s.weapon = slot; s.reloadLeft = 0;
   s.switchLeft = statsOf(s, slot).equipTime;
 }
@@ -226,6 +226,8 @@ export function fireShot(state: MatchState, ctx: SimContext, id: number, claim: 
   const seat = seatOf(state, id);
   if (seat?.seat === 0 && (!VEHICLES[seat.vehicle.kind].driverArms || !oneHanded(statsOf(s, slotOf(claim.weapon))))) return false;
   if (claim.weapon !== s.weapon) switchWeapon(state, id, claim.weapon);
+  // The slap needs the 藍白拖 in hand (thrown, it must be picked up first).
+  if (claim.weapon === 2 && s.slippers <= 0) return false;
   const w = weaponOf(s);
   const melee = s.weapon === 2;
   // Token-bucket rate limit: network jitter can deliver a few shots at once, so a client may run
@@ -341,6 +343,15 @@ export function throwSmoke(state: MatchState, ctx: SimContext, id: number, origi
   const eye = eyeOf(s);
   const o = [origin.x, origin.y, origin.z, dir.x, dir.y, dir.z].every(Number.isFinite) && dist3(origin, eye) < 2.5 ? origin : eye;
   return !!throwSmokeFrom(state, s, o, normalize3(dir));
+}
+
+/** Throw the 藍白拖 wound up to `power` (0..1): the same checks as the M67. */
+export function throwSlipper(state: MatchState, ctx: SimContext, id: number, origin: Vec3, dir: Vec3, power: number) {
+  const s = state.soldiers.find(x => x.id === id);
+  if (!s || !s.alive || state.phase !== 'live' || state.roundPhase === 'freeze' || seatOf(state, id)?.seat === 0) return false;
+  const eye = eyeOf(s);
+  const o = [origin.x, origin.y, origin.z, dir.x, dir.y, dir.z].every(Number.isFinite) && dist3(origin, eye) < 2.5 ? origin : eye;
+  return !!throwSlipperFrom(state, ctx, s, o, normalize3(dir), Number.isFinite(power) ? power : 0);
 }
 
 export function throwGrenade(state: MatchState, ctx: SimContext, id: number, origin: Vec3, dir: Vec3) {
@@ -531,7 +542,17 @@ function stepWorld(state: MatchState, ctx: SimContext, dt: number) {
   const steps = Math.max(1, Math.ceil(dt / PHYSICS_STEP - 1e-9));
   // Grenades bounce off the vehicles where they are after this tick's driving.
   const obstacles = state.bodies.length && state.vehicles.length ? obstaclesOf(state.vehicles) : undefined;
-  for (let i = 0; i < steps; i++) stepBodies(state.bodies, dt / steps, ctx.world, obstacles);
+  // A slipper in flight strikes whoever stands across the path of each physics step.
+  const flying = state.bodies.filter(b => b.kind === 'slipper' && b.hp > 0);
+  const from = flying.map(b => ({ x: b.x, y: b.y, z: b.z }));
+  for (let i = 0; i < steps; i++) {
+    stepBodies(state.bodies, dt / steps, ctx.world, obstacles);
+    flying.forEach((b, j) => {
+      if (b.hp > 0 && state.roundPhase === 'live') slipperStrike(state, ctx, b, from[j]);
+      from[j] = { x: b.x, y: b.y, z: b.z };
+    });
+  }
+  pickUpSlippers(state, ctx);
   const b0 = ctx.map.bounds;
   for (const b of [...state.bodies]) {
     const far = b.x < b0.minX - 60 || b.x > b0.maxX + 60 || b.z < b0.minZ - 60 || b.z > b0.maxZ + 60 || b.y < -40 || b.y > 260;

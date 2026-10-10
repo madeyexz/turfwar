@@ -469,6 +469,8 @@ export class Game {
     if (result.zoomed) this.player.binoculars ? this.audio.binoculars() : this.audio.ui();
     if (result.grenade) link.grenade(result.grenade.origin, result.grenade.dir);
     if (result.smoke) link.smoke(result.smoke.origin, result.smoke.dir);
+    if (result.slipper) { link.slipper?.(result.slipper.origin, result.slipper.dir, result.slipper.power); this.audio.slipper('throw'); }
+    if (result.noSlipper) this.hud.toast(t('hud.slipperGone'), 1800);
     if (result.drinkStarted) this.audio.drink();
     if (result.drink) link.drink();
     if (result.drinkRefused) this.hud.toast(t('hud.fullHealth'), 1500);
@@ -616,6 +618,10 @@ export class Game {
       if (this.beepTimer <= 0) { this.beepTimer = Math.max(0.12, Math.min(1, state.phaseLeft / 40)); this.audio.bombBeep(); }
     }
     this.hudTimer -= dt; this.mapTimer -= dt;
+    // Winding up the 藍白拖: the centre bar fills every frame.
+    if (this.player.windup > 0) this.hud.progress(t(this.player.windup >= 1 ? 'hud.windupFull' : 'hud.windup'), this.player.windup);
+    else if (this.wasWinding) this.hud.progress(undefined, 0);
+    this.wasWinding = this.player.windup > 0;
     if (this.hudTimer <= 0) {
       if (this.menu.open) this.menu.refreshTeam();
       this.hudTimer = 0.1;
@@ -630,7 +636,7 @@ export class Game {
       this.hud.vehicle(this.vehicleInfo(state));
       const bomb = state.bomb;
       const mine = bomb.by === myId && bomb.progress > 0;
-      this.hud.progress(mine ? t(bomb.armed ? 'hud.disarming2' : 'hud.arming2') : undefined, bomb.progress);
+      if (this.player.windup <= 0) this.hud.progress(mine ? t(bomb.armed ? 'hud.disarming2' : 'hud.arming2') : undefined, bomb.progress);
       this.hud.matchEnd(state, this.myTeam, state.phase === 'ended' ? link.leaderboard?.() : undefined);
       this.hud.net(link.status());
     }
@@ -654,7 +660,7 @@ export class Game {
       const crate = this.crates.nearest(p.m.x, p.m.y, p.m.z, CRATE_REACH) >= 0 && p.slot !== 2;
       if (scope === 'foot') use = this.nearVehicle >= 0 ? 'vehicle' : myJob && site >= 0 && live ? (state.bomb.armed ? 'disarm' : 'arm') : crate ? 'crate' : undefined;
       ctx = {
-        scope, scooter: kind === 'scooter', use: !!use, melee: p.slot === 2,
+        scope, scooter: kind === 'scooter', use: !!use, melee: p.slot === 2, throwable: p.slot === 2 && p.slippers > 0,
         scoped: p.ads > 0.6 && p.weapon.class === 'sniper' && !p.binoculars,
       };
     }
@@ -922,6 +928,8 @@ export class Game {
     });
   }
 
+  private wasWinding = false;
+
   private promptText(state: MatchState, me: Soldier | undefined, site: number, myJob: boolean) {
     const near = state.vehicles[this.nearVehicle];
     if (me?.alive && near && !this.seated) {
@@ -931,6 +939,7 @@ export class Game {
     // Joined mid-round: say why we are only watching.
     if (me && !me.alive && !this.deployed && state.phase === 'live' && state.roundPhase === 'live') return t('hud.deployNext');
     if (!me?.alive || state.roundPhase !== 'live') return '';
+    if (this.player.slot === 2 && this.player.slippers > 0 && this.player.windup <= 0 && !touchActive()) return t('hud.throwHint', { key: kbd('aim') });
     if (site >= 0 && myJob) return state.bomb.armed ? t('hud.holdDisarm', { key: kbd('use') }) : t('hud.holdArm', { key: kbd('use'), site: this.map.def.sabotage!.sites[site] });
     if (this.crates.nearest(this.player.m.x, this.player.m.y, this.player.m.z, CRATE_REACH) >= 0 && this.player.slot !== 2) {
       return `${kbd('use')} ${t('hud.crate')}${me.round.crate || state.config.freeBuy ? '' : ` ($${CASH.crate})`}`;
@@ -1207,6 +1216,13 @@ export class Game {
       }
       case 'smoke': {
         this.audio.smoke(this.listener(), new THREE.Vector3(e.x, e.y, e.z));
+        break;
+      }
+      case 'slipper': {
+        const at = new THREE.Vector3(e.x, e.y, e.z);
+        if (e.action === 'pickup') { if (e.id === myId) { this.hud.toast(t('hud.slipperBack'), 1500); this.audio.ui(); } break; }
+        if (e.action === 'hit') { this.audio.slipper('hit', this.listener(), at); this.effects.hitSpark(at, false); break; }
+        if (e.id !== myId) { this.remotes.get(e.id)?.view.shoot(); this.audio.slipper('throw', this.listener(), at); }
         break;
       }
       case 'drink': {

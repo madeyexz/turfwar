@@ -3,10 +3,10 @@ import { chestPoint, hitShape, raycastSoldier } from '../hitbox';
 import type { MapDef } from '../maps/types';
 import { dist3, segmentPointDistance, type Vec3 } from '../math';
 import { MOVE, createMoveState, eyeHeight } from '../movement';
-import { GRENADE, HEALTH, HIGH_EXPLOSIVE, SMOKE, STAMINA, pelletCone, pelletDirs, zoneDamage, type HitZone, type WeaponDef } from '../weapons';
+import { GRENADE, HEALTH, HIGH_EXPLOSIVE, SLIPPER, SMOKE, STAMINA, pelletCone, pelletDirs, zoneDamage, type HitZone, type WeaponDef } from '../weapons';
 import { VEHICLES, obstaclesOf, raycastVehicle, vehicleCenter, type Vehicle } from '../vehicles';
 import { deepestOverlap, resolveObstacles } from '../obstacles';
-import type { Body } from '../world';
+import { BODY_RADIUS, type Body } from '../world';
 import { CASH, award, statsOf } from './economy';
 import type { NavGraph } from './nav';
 import { ATTACKERS, type MatchEvent, type MatchState, type Soldier, type Team } from './state';
@@ -78,7 +78,7 @@ export function spawnSoldier(state: MatchState, ctx: SimContext, s: Soldier) {
     }
   }
   s.yaw = best.yaw; s.pitch = 0;
-  s.alive = true; s.health = HEALTH.max; s.stamina = STAMINA.max;
+  s.alive = true; s.health = HEALTH.max; s.stamina = STAMINA.max; s.slippers = 1;
   s.weapon = 0; s.reloadLeft = 0; s.fireCooldown = 0; s.switchLeft = statsOf(s, 0).equipTime;
   s.sinceHit = 99; s.lastAttacker = -1; s.sinceShot = 99; s.moveSlack = MOVE_SLACK.max; s.groundY = s.m.y; s.using = false;
   s.round.streak = 0;
@@ -272,6 +272,58 @@ export function smokeBlocks(bodies: readonly Body[], a: Vec3, b: Vec3) {
     if (segmentPointDistance({ x: c.x, y: c.y + SMOKE.height, z: c.z }, a, b).distance < SMOKE.radius) return true;
   }
   return false;
+}
+
+/**
+ * Throw the 藍白拖 in hand, wound up to `power` (0..1: SLIPPER.minSpeed to maxSpeed), nearly flat
+ * along the aim. The hand that held it brings up the secondary.
+ */
+export function throwSlipperFrom(state: MatchState, ctx: SimContext, s: Soldier, origin: Vec3, dir: Vec3, power: number) {
+  if (!s.alive || s.slippers <= 0) return undefined;
+  s.slippers--;
+  const speed = SLIPPER.minSpeed + (SLIPPER.maxSpeed - SLIPPER.minSpeed) * Math.max(0, Math.min(1, power || 0));
+  const v = { x: dir.x * speed + s.m.vx * 0.5, y: dir.y * speed + SLIPPER.lift, z: dir.z * speed + s.m.vz * 0.5 };
+  if (s.weapon === 2) { s.weapon = 1; s.reloadLeft = 0; s.switchLeft = statsOf(s, 1).equipTime; }
+  ctx.emit({ type: 'slipper', action: 'throw', id: s.id, x: origin.x, y: origin.y, z: origin.z });
+  return spawnBody(state, 'slipper', origin, v, s.id, s.team, 1, SLIPPER.lifetime);
+}
+
+/**
+ * A slipper still in flight moved `from` → where it is now: the first enemy across that path (not the
+ * thrower, not a teammate, not someone inside a car) dies, and the slipper drops off them, harmless.
+ */
+export function slipperStrike(state: MatchState, ctx: SimContext, b: Body, from: Vec3) {
+  const dx = b.x - from.x, dy = b.y - from.y, dz = b.z - from.z, len = Math.hypot(dx, dy, dz);
+  if (len < 1e-6) return;
+  const dir = { x: dx / len, y: dy / len, z: dz / len };
+  let best: { s: Soldier; t: number; zone: HitZone } | undefined;
+  const shielded = state.vehicles.length ? shieldedIds(state) : undefined;
+  for (const s of state.soldiers) {
+    if (!s.alive || s.id === b.owner || s.team === b.team || shielded?.has(s.id)) continue;
+    if (Math.abs(s.m.x - from.x) > len + 1.5 || Math.abs(s.m.z - from.z) > len + 1.5) continue;
+    const hit = raycastSoldier(from, dir, hitShape(feetOf(s), s.m.crouch, s.yaw));
+    if (hit && hit.t <= len + BODY_RADIUS.slipper && (!best || hit.t < best.t)) best = { s, ...hit };
+  }
+  if (!best) return;
+  b.hp = 0;
+  b.x = from.x + dir.x * best.t; b.y = from.y + dir.y * best.t; b.z = from.z + dir.z * best.t;
+  b.vx *= -0.08; b.vz *= -0.08; b.vy = 1;
+  ctx.emit({ type: 'slipper', action: 'hit', id: best.s.id, x: b.x, y: b.y, z: b.z });
+  // A kill with the 藍白拖 is a knife kill (kill feed mark, cash, match stats).
+  applyDamage(state, ctx, best.s, b.owner, SLIPPER.kill, best.zone, { x: b.x, y: b.y, z: b.z }, 'knife');
+}
+
+/** Anyone alive with an empty hand picks up a slipper lying (or bouncing) within reach. */
+export function pickUpSlippers(state: MatchState, ctx: SimContext) {
+  for (let i = state.bodies.length - 1; i >= 0; i--) {
+    const b = state.bodies[i];
+    if (b.kind !== 'slipper' || b.hp > 0 || b.age < SLIPPER.catchDelay) continue;
+    const s = state.soldiers.find(s => s.alive && s.slippers <= 0 && Math.hypot(s.m.x - b.x, s.m.z - b.z) <= SLIPPER.pickup && b.y > s.m.y - 1 && b.y < s.m.y + 2);
+    if (!s) continue;
+    s.slippers = 1;
+    state.bodies.splice(i, 1);
+    ctx.emit({ type: 'slipper', action: 'pickup', id: s.id, x: b.x, y: b.y, z: b.z });
+  }
 }
 
 /** Throw the M67 (a High Explosive grenade is marked by hp 2). */

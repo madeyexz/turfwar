@@ -4,11 +4,11 @@ import { rng } from '../math';
 import { CollisionWorld } from '../collision';
 import { createMoveState, eyeHeight, stepMovement } from '../movement';
 import { hitShape } from '../hitbox';
-import { BOBA, GRENADE, HEALTH, SMOKE, WEAPONS, pelletCone, pelletDirs, weaponStats } from '../weapons';
+import { BOBA, GRENADE, HEALTH, SLIPPER, SMOKE, WEAPONS, pelletCone, pelletDirs, weaponStats } from '../weapons';
 import { findPath, nearestNode } from './nav';
 import {
   BOMB_REACH, addSoldier, balanceTeams, buyAttachmentFor, buyItem, createContext, createMatch, drinkBoba, fireShot, reportState,
-  canSwitchTeam, removeSoldier, resetMatch, switchTeam, throwSmoke, tickMatch, useAmmoCrate, LATE_JOIN_SECONDS, TICK_RATE,
+  canSwitchTeam, removeSoldier, resetMatch, switchTeam, switchWeapon, throwSlipper, throwSmoke, tickMatch, useAmmoCrate, LATE_JOIN_SECONDS, TICK_RATE,
 } from './sim';
 import { ATTACKERS, ELIMINATION, PRACTICE_CONFIG, SABOTAGE, type MatchConfig, type MatchEvent, type MatchState, type Soldier, type Team } from './state';
 import { MOVE_SLACK, killSoldier, sideOf, smokeBlocks, type SimContext } from './combat';
@@ -647,6 +647,104 @@ describe('M18 smoke grenade', () => {
     expect(look()).toBe(foe.id);
     state.bodies.push(cloudAt(0, bot.m.y, 22));
     expect(look()).toBe(-1);
+  });
+});
+
+describe('飛拖 (thrown 藍白拖)', () => {
+  const eye = (s: Soldier) => ({ x: s.m.x, y: s.m.y + eyeHeight(s.m), z: s.m.z });
+  const at = (a: Soldier, b: Soldier) => {
+    const o = eye(a), d = { x: b.m.x - o.x, y: b.m.y + 1.2 - o.y, z: b.m.z - o.z }, l = Math.hypot(d.x, d.y, d.z);
+    return { x: d.x / l, y: d.y / l, z: d.z / l };
+  };
+
+  it('kills the first enemy it strikes outright, as a knife kill, then lies harmless', () => {
+    const { state, ctx, a, b, events } = duel();
+    expect(a.slippers).toBe(1); expect(b.slippers).toBe(1);
+    a.weapon = 2;
+    expect(throwSlipper(state, ctx, a.id, eye(a), at(a, b), 1)).toBe(true);
+    expect(a.slippers).toBe(0);
+    expect(a.weapon).toBe(1); // the empty hand brings up the secondary
+    tick(state, ctx, 1);
+    expect(b.alive).toBe(false);
+    expect(events.find(e => e.type === 'kill')).toMatchObject({ killer: a.id, victim: b.id, weapon: 'knife' });
+    expect(a.money).toBeGreaterThanOrEqual(CASH.knifeKill);
+    const slipper = state.bodies.find(x => x.kind === 'slipper')!;
+    expect(slipper.hp).toBe(0);
+    // It drops off its victim and comes to rest.
+    tick(state, ctx, 2);
+    expect(Math.hypot(slipper.vx, slipper.vy, slipper.vz)).toBe(0);
+    expect(Math.hypot(slipper.x - b.m.x, slipper.z - b.m.z)).toBeLessThan(3);
+  });
+
+  it('a weak throw is a lob; whatever it lands on first takes the sting out of it', () => {
+    const { state, ctx, a, b } = duel(16);
+    // Lobbed at the floor halfway: it lands short, then slides harmlessly into the enemy's feet.
+    expect(throwSlipper(state, ctx, a.id, eye(a), { x: 0.6, y: -0.8, z: 0 }, 0)).toBe(true);
+    tick(state, ctx, 2);
+    expect(b.alive).toBe(true);
+    expect(b.health).toBe(HEALTH.max);
+  });
+
+  it('spares the thrower and teammates', () => {
+    const { state, ctx, a, b } = duel();
+    const mate = addSoldier(state, ctx, { name: 'C', team: 0, bot: false });
+    place(mate, 0, 22, ctx);
+    expect(throwSlipper(state, ctx, a.id, eye(a), at(a, mate), 1)).toBe(true);
+    tick(state, ctx, 1);
+    expect(mate.health).toBe(HEALTH.max);
+    // The teammate let it through: it flew on to the enemy behind.
+    expect(b.alive).toBe(false);
+    expect(a.health).toBe(HEALTH.max);
+  });
+
+  it('one per hand: no slap or second throw until one is picked up; anyone empty-handed may pick one up', () => {
+    const { state, ctx, a, b } = duel();
+    expect(throwSlipper(state, ctx, a.id, eye(a), { x: 0, y: -1, z: 0.05 }, 0)).toBe(true);
+    expect(throwSlipper(state, ctx, a.id, eye(a), { x: 1, y: 0, z: 0 }, 1)).toBe(false);
+    place(a, a.m.x - 5, a.m.z, ctx);
+    expect(state.bodies.filter(x => x.kind === 'slipper')).toHaveLength(1);
+    switchWeapon(state, a.id, 2);
+    expect(a.weapon).not.toBe(2);
+    a.fireCooldown = 0;
+    expect(fireShot(state, ctx, a.id, { ...claimAt(a, b), weapon: 2 })).toBe(false);
+    // The slipper lies at a's feet; a full hand (b's) does not take it.
+    tick(state, ctx, 1);
+    const lying = state.bodies.find(x => x.kind === 'slipper')!;
+    expect(lying).toBeDefined();
+    place(b, lying.x + 0.3, lying.z, ctx);
+    place(a, lying.x + 5, lying.z, ctx);
+    tick(state, ctx, 0.2);
+    expect(b.slippers).toBe(1);
+    expect(state.bodies.some(x => x.kind === 'slipper')).toBe(true);
+    // Back to it: picked up, and the slap works again.
+    place(a, lying.x - 0.5, lying.z, ctx);
+    tick(state, ctx, 0.1);
+    expect(a.slippers).toBe(1);
+    expect(state.bodies.some(x => x.kind === 'slipper')).toBe(false);
+    switchWeapon(state, a.id, 2);
+    expect(a.weapon).toBe(2);
+  });
+
+  it('not in the freeze, not by the dead; a new round hands everyone a fresh one and clears the floor', () => {
+    const { state, ctx, a, b } = duel();
+    state.roundPhase = 'freeze';
+    expect(throwSlipper(state, ctx, a.id, eye(a), at(a, b), 1)).toBe(false);
+    state.roundPhase = 'live'; a.alive = false;
+    expect(throwSlipper(state, ctx, a.id, eye(a), at(a, b), 1)).toBe(false);
+    a.alive = true;
+    expect(throwSlipper(state, ctx, a.id, eye(a), { x: 0, y: -1, z: 0.05 }, 0)).toBe(true);
+    killSoldier(state, ctx, b, a, 'mp5', false);
+    tick(state, ctx, state.config.roundOverTime + 0.2);
+    expect(state.bodies.some(x => x.kind === 'slipper')).toBe(false);
+    expect(a.slippers).toBe(1);
+  });
+
+  it('rides the frame as its own body kind', () => {
+    const { state, ctx, a, b } = duel();
+    throwSlipper(state, ctx, a.id, eye(a), at(a, b), 0.5);
+    const frame = decodeFrame(encodeFrame(state, []))!;
+    expect(frame.bodies.map(x => x.kind)).toEqual(['slipper']);
+    expect(SLIPPER.maxSpeed).toBeGreaterThan(SLIPPER.minSpeed);
   });
 });
 
