@@ -84,7 +84,7 @@ export class Ximen extends Town {
     const mid = alongX ? (x0 + x1) / 2 : (z0 + z1) / 2, len = alongX ? x1 - x0 : z1 - z0;
     // The lit window over the counter on the open side, and the vendor's shelves behind it.
     const lo = (alongX ? x0 : z0) + 0.15, hi = (alongX ? x1 : z1) - 0.15, w0 = Math.min(face, face + out * 0.03), w1 = Math.max(face, face + out * 0.03);
-    this.shape(alongX ? [lo, w0, hi, w1] : [w0, lo, w1, hi], 1.1, 2.3, 'light');
+    this.shape(alongX ? [lo, w0, hi, w1] : [w0, lo, w1, hi], 1.1, 2.3, 'neon', 0x6a6452);
     this.shape(alongX ? [lo, w0 - 0.01, hi, w1 + 0.01] : [w0 - 0.01, lo, w1 + 0.01, hi], 1.62, 1.66, 'steel', C.iron);
     // The board stands on the awning's front edge; the neon tube runs along it.
     const at = face + out * 0.06;
