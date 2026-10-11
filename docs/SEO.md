@@ -77,6 +77,35 @@ curl -sI https://turfwar.ianhsiao.me/admin | grep -i x-robots-tag               
 - **Ask the assistants** (after they have crawled): "What is 角頭械鬥?", "Is Turf War: Taipei free?", "browser FPS from
   Taiwan" in ChatGPT search, Perplexity, Gemini and Copilot; compare what they say with [llms.txt](../public/llms.txt).
 
+## Search data (Search Console, Bing, IndexNow)
+
+Decide SEO changes from real search data, not guesses. `scripts/seo.ts` reads the free Google Search Console and
+Bing Webmaster APIs and pings IndexNow; no dependencies (it signs the service-account token with `node:crypto`).
+
+```sh
+bun run seo:report               # last 28 days: totals, queries, pages, countries, devices, sitemaps, index status of each sitemap URL; Bing queries, pages, sitemaps
+bun run seo:report -- --days 90 --json
+bun run seo:ping                 # after a release: submit sitemap.xml to Google and Bing, send every sitemap URL to IndexNow
+bun run seo:ping -- /about       # or just the pages that changed
+```
+
+- **Credentials** are Amp project secrets (docs/DEVELOPMENT.md, "Orb credentials"): `GSC_SERVICE_ACCOUNT_JSON` (a
+  service account of Google Cloud project `turfwar-seo`, a **Full** user on the property) and
+  `BING_WEBMASTER_API_KEY`. A missing secret or a failing API prints an error in that section; the rest still runs.
+  Never print the secrets.
+- **Google property** is the Domain property `sc-domain:ianhsiao.me` (verified by DNS TXT at Cloudflare). It also
+  covers the owner's other subdomains, so every Search Analytics query is filtered to `https://turfwar.ianhsiao.me/`
+  pages. Data lags 2–3 days, and Google hides rare queries for privacy, so totals can exceed the sum of query rows.
+  URL Inspection is limited to about 2,000 calls a day.
+- **Bing** has the site `https://turfwar.ianhsiao.me/`, imported from Search Console.
+- **IndexNow** (Bing, Yandex, Naver, Seznam): the key is `INDEXNOW_KEY` in `scripts/seo.ts`, served as
+  `public/<key>.txt` (public by design; `src/seo.test.ts` checks they match). Ping only URLs that `main` actually
+  serves, i.e. after a release; a ping from a `dev` change announces pages production does not have yet.
+- Google ignores IndexNow, and its old sitemap "ping" URL is gone; Google relies on the `robots.txt` `Sitemap:` line
+  and the Search Console submission. Its Indexing API is only for job postings and live broadcasts: do not use it.
+- Read-only `seo:report` is always fine. `seo:ping` changes nothing on the site but tells the search engines to
+  crawl; running it on a release is part of the release procedure.
+
 ## Queries to win
 
 Brand first: people who arrive from Google already convert to players at about 93% (78 visitors from search in
@@ -104,14 +133,13 @@ to BeGone?") and the GitHub README. Do not claim a ranking, a player count or a 
 
 ## Needs the owner (nothing here can be done from the repo)
 
-1. **Google Search Console**: add the property for `https://turfwar.ianhsiao.me` (a Domain property with a DNS TXT
-   record at Cloudflare covers every host and scheme; or a URL-prefix property with an HTML tag, which needs
-   `<meta name="google-site-verification" content="…">` added to `index.html` by us). Then **Sitemaps → submit
-   `sitemap.xml`**, run **URL Inspection → Request indexing** for `/`, `/about`, `/en/about`, and check Pages
-   (indexing), Performance (queries) and Core Web Vitals after a few weeks.
-2. **Bing Webmaster Tools**: add the site (importing it from Search Console is the quickest if it is offered), submit
-   the sitemap, and turn on IndexNow if wanted. Yahoo Taiwan's results come from Bing as far as we know (unverified
-   for the current Taiwan edition), so Bing coverage is also Yahoo coverage.
+1. **Google Search Console**: done 2026-10-11 (Domain property `sc-domain:ianhsiao.me`, API access, sitemap
+   submitted; see "Search data"). Still only in the web UI: **URL Inspection → Request indexing** (the API can inspect
+   but not request) for `/about`, `/en/about`, `/privacy`, which were unknown to Google on 2026-10-11, and Core Web
+   Vitals once there is data.
+2. **Bing Webmaster Tools**: done 2026-10-11 (imported from Search Console, API key, sitemap submitted, IndexNow key
+   in the repo). Yahoo Taiwan's results come from Bing as far as we know (unverified for the current Taiwan
+   edition), so Bing coverage is also Yahoo coverage.
 3. **Entity consistency**: keep the GitHub repo description and README, the site's names and the social profiles identical (the repo and site already use the same two names), so search and assistants match them as one entity.
 4. **Link back from the personal site.** The author (Ian Hsiao) is confirmed and linked from the structured data, `llms.txt` / `llms-full.txt` and the about pages' credits (a plain link, no UTM) to https://ianhsiao.me/, the owner's site, which serves it directly (`www.ianhsiao.me` 301s to it, `/about` 308s to it; its canonical and `Person.url` are `https://ianhsiao.me/`). The `Person` `@id` here is `https://ianhsiao.me/about#person`, the id the owner's own JSON-LD uses, so the two entities match; the id is an identifier, not the profile link. A backlink to the game exists on https://ianhsiao.me/work (checked 2026-10-11), but the homepage https://ianhsiao.me/ has no direct link to https://turfwar.ianhsiao.me/ yet. A plain homepage link (ideally named "角頭械鬥 · Turf War: Taipei") would be a stronger signal; that is the owner's call on their own site. Still open: whether to ever move `lawbreaker.vercel.app` to a redirect (needs a saved-state migration), and whether to add a non-affiliation line about nPlay/BeGone (the repo says "homage" and "no proprietary assets", not more).
 5. **Confirm after the first release**: the `main` deploy serves the new files (the `curl`s above), because this

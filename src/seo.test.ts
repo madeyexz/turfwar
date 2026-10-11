@@ -220,6 +220,14 @@ describe('sitemap.xml', () => {
   });
 });
 
+describe('IndexNow key', () => {
+  it('is served as public/<key>.txt containing exactly the key scripts/seo.ts pings with', () => {
+    const key = /const INDEXNOW_KEY = '([0-9a-f]{32})'/.exec(read('scripts/seo.ts'))?.[1];
+    expect(key).toBeDefined();
+    expect(read(`public/${key}.txt`)).toBe(key);
+  });
+});
+
 describe('robots.txt', () => {
   const robots = read('public/robots.txt');
   const groups = robots.split(/\n\s*\n/).map(g => g.split('\n').filter(l => l && !l.startsWith('#')));
