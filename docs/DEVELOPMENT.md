@@ -115,26 +115,23 @@ preview wired to the development database `lawbreaker-dev`. Releases are maintai
 | Use | Server | Database |
 | --- | --- | --- |
 | Production, the default | SpacetimeDB 2.10.2 self-hosted on **GCP, Taiwan** (`asia-east1-b`, `wss://tw.turfwar.ianhsiao.me`) | `turfwar` |
-| Singapore (production before Taipei; **retired**: not offered to players since 2026-10-12, **stopped on 2026-10-11**, not deleted; its data is still on its volume) | SpacetimeDB 2.10.2 self-hosted on **InstaCloud, Singapore** (`wss://play.turfwar.ianhsiao.me`, returns 503 while stopped) | `turfwar` |
 | US East (the previous production; still published, a choice in Settings → Server, read by `/admin`) | Maincloud, US East | `3d-game-c4lhd` |
 | Development (`dev` previews) | Maincloud, US East | `lawbreaker-dev` |
 
 Players pick their server in **Settings → Server** (`src/net/servers.ts`; `?server=tw|us` for one
 visit): Taipei, the build's own server and the default; or US East, where players from before
-Singapore keep their saved identity and career. Singapore is no longer a choice (2026-10-12): a
-`sg` saved in a browser silently falls back to the default and is rewritten, and `?server=sg` is
-ignored (`?stdb=` / `?db=` can still point a build at any server, for development). Taipei began on
-2026-10-07 as a copy of Singapore, signing keys included, so a player has one identity on both
-(the client keys both servers' saved token alike) and kept their career; from then on each server
-keeps its own stats. Players who played on Singapore on 2026-10-07 have their career there, and
-their identity is the same on Taipei.
+Singapore keep their saved identity and career. A `sg` saved in a browser (from when Singapore was a
+choice) silently falls back to the default and is rewritten, and `?server=sg` is ignored (`?stdb=` /
+`?db=` can still point a build at any server, for development). Taipei began on 2026-10-07 as a copy
+of Singapore, signing keys included, so a player's identity is the same on Taipei; each server keeps
+its own stats.
 The lobby switches at once, a match in progress stays on its server, and `play_clicked` /
 `match_joined` carry `server_choice`. A `dev` preview's own server is `lawbreaker-dev` (offered with
 US East).
 
 The Taipei server (`deploy/gcp-taipei/`, GCP project `game-turfwar-ianhsiao-me`, VM `turfwar-tw`, an
-e2-small with 2 GB of swap and a 20 GB disk, static IP 34.81.41.144) runs the same container as
-Singapore (`deploy/instacloud/Dockerfile`, with `start.sh`'s pruning) on `/var/lib/turfwar`, behind
+e2-small with 2 GB of swap and a 20 GB disk, static IP 34.81.41.144) runs the container built from
+`deploy/instacloud/Dockerfile` (with `start.sh`'s pruning) on `/var/lib/turfwar`, behind
 Caddy (HTTPS from Let's Encrypt for `tw.turfwar.ianhsiao.me`, a Cloudflare DNS-only A record, and
 `34-81-41-144.sslip.io`). It is always on (no scale-to-zero): roughly US$18–20 a month plus
 traffic, under the project's NT$1000 budget alert. Request round trip from Taipei ~12–35 ms
@@ -145,22 +142,12 @@ The disk has a daily snapshot schedule (`turfwar-daily`, 19:00 UTC, kept 7 days)
 before risky work with `gcloud compute disks snapshot turfwar-tw --zone asia-east1-b`. `setup.sh` leaves
 the image built; `sudo docker builder prune -af && sudo docker image prune -af` frees the build layers.
 
-The Singapore server (`deploy/instacloud/`, InstaCloud project `5ad5aa00-…`, compute service `stdb`)
-is **retired**: players are no longer offered it (2026-10-12; in the first week 52 people loaded the
-lobby on it on 2026-10-07 before Taipei became the default, and 5 after), `bun run publish:prod`
-and `/admin` no longer touch it, and the owner stopped the service on 2026-10-11 (there are no real
-players left on it). The service and its 10 GiB `/data` volume still exist; deleting them is
-irreversible and is the owner's call. To start it again: `cd deploy/instacloud && insta --agent compute start stdb`
-(it then answers at `wss://play.turfwar.ianhsiao.me` within ~20–30 s; it also scales to zero when idle,
-so a request wakes it). `deploy/instacloud/` stays in the repo for that, and because the Taipei
-container is built from its Dockerfile and `start.sh`. It is a slim container with SpacetimeDB's two binaries.
+Singapore (InstaCloud, production before Taipei) was retired and deleted on 2026-10-11, and its data is gone.
 The game has no code for a sleeping or stopped server: every server it offers is always on, so a
 failed ping or connect is just "can't reach it" (normal "connecting" copy, retries for 30 s, then
-"Can't reach the server" with Retry; `src/net/connect.ts`). While it was a choice, traffic on an
-already-open WebSocket did not count as activity (only requests through the router do), so the platform
-suspended it mid-match, 5–13 minutes in, dropping everyone (2026-10-07), and a client in a room requested
-`/v1/ping` once a minute to hold it up. `cd deploy/instacloud && insta --agent compute logs stdb --deploy` lists the
-platform's suspends and wakes. `start.sh` supervises the server: SpacetimeDB never
+"Can't reach the server" with Retry; `src/net/connect.ts`). The Taipei container is built from
+`deploy/instacloud/` (a slim image with SpacetimeDB's two binaries; the folder keeps its old name).
+`start.sh` supervises the server: SpacetimeDB never
 deletes its commitlog (100 players write ~12 GB an hour, ~3x smaller once sealed), so once the data
 passes 4 GB and nothing has been written for 2 minutes it restarts the server around
 `prune-commitlog.sh` (a few seconds), and past 8 GB it does so even mid-match. Measured before
@@ -168,10 +155,10 @@ launch: 100 headless players in nine 6v6 rooms held 30 ticks/s; reducer round tr
 ~112 ms (Maincloud ~206 ms); ~21 KB/s down per player.
 
 The owner identity lives outside the repo in `~/.config/turfwar/` (made once with
-`deploy/instacloud/owner.sh <server-url>` (it is also how the profile is made for Taipei), in its own CLI profile so the Maincloud login is untouched;
-its servers `taipei` and `instacloud`). Back that folder up: the identity that published `turfwar`
-is the only one that can update it, on Taipei (and it was on Singapore).
-To rebuild or reconfigure the container: `cd deploy/instacloud && insta --agent deploy . --group stdb --port 8080 --websocket`.
+`deploy/instacloud/owner.sh <server-url>`, in its own CLI profile `instacloud-cli.toml` so the Maincloud
+login is untouched; its server `taipei` is added by `deploy/publish-prod.sh`). Back that folder up: the
+identity that published `turfwar` is the only one that can update it. To rebuild or reconfigure the
+container, see `deploy/gcp-taipei/` above.
 
 Vercel production build variables are `VITE_SPACETIMEDB_URI=wss://tw.turfwar.ianhsiao.me` (Taipei) and
 `VITE_SPACETIMEDB_DATABASE=turfwar`. The client keys saved identities by server (`serverIdentityKey` in
@@ -182,7 +169,7 @@ running it against production. Do not use `same-origin` on Vercel; that proxy ex
 development server.
 
 For module updates, run tests and module type checks, then publish non-destructively to production
-(Taipei, then the legacy Maincloud database; `deploy/publish-prod.sh`; Singapore is no longer published to):
+(Taipei, then the legacy Maincloud database; `deploy/publish-prod.sh`):
 
 ```sh
 bun run test && bun run build && bun run typecheck:module
@@ -200,7 +187,7 @@ Verify the production URL and two separate Online clients after each release.
 ### Orb credentials
 
 Amp orbs get the deploy credentials as Amp secrets. `.agents/setup` installs the clients (bun
-dependencies, `spacetime` 2.10.2, `insta`) into the shared snapshot, which never holds a credential;
+dependencies, `spacetime` 2.10.2) into the shared snapshot, which never holds a credential;
 `.agents/resume` logs them in from the secrets each time an orb starts. A missing secret just skips
 its tool. Releases still need the owner's go-ahead (see AGENTS.md).
 
@@ -210,14 +197,13 @@ its tool. Releases still need the owner's go-ahead (see AGENTS.md).
 | `TURFWAR_OWNER_TOKEN` | personal | `~/.config/turfwar/instacloud-cli.toml`, so `bun run publish:prod` works unchanged |
 | `TURFWAR_TW_SSH_KEY` | personal | `ssh turfwar-tw` (user `amp`, sudo, instance metadata of VM `turfwar-tw`) |
 | `VERCEL_TOKEN`, `VERCEL_ORG_ID`, `VERCEL_PROJECT_ID` | project | not set (optional): `bunx vercel ls` and friends, no login or link needed. Without them, `gh api repos/madeyexz/turfwar/deployments` lists preview URLs |
-| `INSTA_TOKEN` | project | `insta login --api-key`; run `insta project link 5ad5aa00-045d-4015-bdbd-ef74f558dec6` in `deploy/instacloud` once per orb before `insta --agent …`. The current key is an account-wide agent key from `insta login --claim ian.xiao@hotmail.com` (the owner approves a code). Agents may not mint keys; a project-only one comes from a normal terminal: `insta tokens create amp-orb-turfwar --project 5ad5aa00-045d-4015-bdbd-ef74f558dec6 --expires 1y` |
 | `TURFWAR_ADMIN_KEY` | project | the `/admin` login |
 | `POSTHOG_PERSONAL_API_KEY` | project | read-only queries on PostHog project 649207 |
 
 Set or rotate one with `amp secrets set NAME --user|--project ianhsiao/turfwar --secret --data-file -`
 (value on stdin), or in Amp Settings; never paste a value into a thread. Read-only checks: `spacetime list
 --server maincloud`, `spacetime --config-path ~/.config/turfwar/instacloud-cli.toml login show`,
-`ssh turfwar-tw 'sudo docker ps'`, `bunx vercel ls`, `insta status`, and
+`ssh turfwar-tw 'sudo docker ps'`, `bunx vercel ls`, and
 `curl -H "Authorization: Bearer $POSTHOG_PERSONAL_API_KEY" https://us.posthog.com/api/projects/649207/`.
 
 ## Search and AI-answer visibility

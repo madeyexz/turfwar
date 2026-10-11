@@ -1,5 +1,5 @@
 #!/bin/bash
-# One-time: mint the owner identity for the InstaCloud SpacetimeDB server and store it in its own CLI
+# One-time: mint the owner identity for the game's SpacetimeDB server (Taipei) and store it in its own CLI
 # profile, so the Maincloud login in the default spacetime config is never touched. The identity that
 # first publishes a database owns it; keep ~/.config/turfwar/ private and backed up.
 #   deploy/instacloud/owner.sh <server-url>

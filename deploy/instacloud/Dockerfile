@@ -1,6 +1,7 @@
-# The game's SpacetimeDB server on InstaCloud (Singapore). The official image carries a full Rust and
+# The game's SpacetimeDB server image (Taipei, built by deploy/gcp-taipei/setup.sh; it first ran on InstaCloud's
+# Singapore service, deleted 2026-10-11, hence the folder's name). The official image carries a full Rust and
 # .NET toolchain (several GB); only its two server binaries are needed, so they are copied onto a
-# slim Debian (the same glibc as the image's build) to keep cold starts quick.
+# slim Debian (the same glibc as the image's build) to keep it small.
 FROM clockworklabs/spacetime:v2.10.2 AS stdb
 
 FROM debian:bookworm-slim
