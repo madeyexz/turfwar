@@ -345,7 +345,7 @@ export function yard(t: Ximen) {
   // Mixer, rebar piles, pallets of bricks, a crane's base.
   t.b.cylinder(58.5, 0, -10.5, 1.0, 1.9, 'steel', 'y', 0xd8a838);
   // (Nothing low stands against the baffles or the screens: no stepping up onto them to see over the base's screens.)
-  t.box([55, 8.6, 58.5, 10.3], 0, 1.0, 'steel', 0x8a7a64);
+  t.box([55, 8.6, 58.5, 10.3], 0, 1.0, 'painted', 0x8a7a64);
   t.box([60, 9, 63, 11.2], 0, 1.3, 'brick', 0xb8683e);
   t.box([60.6, -10.6, 63.2, -8.8], 0, 1.4, 'crate', 0xa07848);
   t.box([56.5, -15, 58.5, -14.2], 0, 1.1, 'crate', 0xb08a5a);

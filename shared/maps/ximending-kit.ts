@@ -132,13 +132,14 @@ export class Ximen extends Town {
 
   /** A shipping container, 6 × 2.4 and 2.6 high by default (cover; a flat roof to climb onto). */
   container(r: R, color: number, y = 0, h = 2.6) {
-    this.box(r, y, y + h, 'steel', color);
+    // Painted (the rusty plate behind 'steel' turns a container's colour near black in the shade).
+    this.box(r, y, y + h, 'painted', color);
     const [x0, z0, x1, z1] = r, alongX = x1 - x0 >= z1 - z0;
     // Corrugation ribs.
     const len = alongX ? x1 - x0 : z1 - z0;
     for (let i = 1; i < Math.floor(len / 0.5); i++) {
       const p = (alongX ? x0 : z0) + i * 0.5;
-      this.shape(alongX ? [p - 0.03, z0 - 0.03, p + 0.03, z1 + 0.03] : [x0 - 0.03, p - 0.03, x1 + 0.03, p + 0.03], y + 0.1, y + h - 0.1, 'steel', shadeHex(color, 0.88));
+      this.shape(alongX ? [p - 0.03, z0 - 0.03, p + 0.03, z1 + 0.03] : [x0 - 0.03, p - 0.03, x1 + 0.03, p + 0.03], y + 0.1, y + h - 0.1, 'painted', shadeHex(color, 0.82));
     }
   }
 

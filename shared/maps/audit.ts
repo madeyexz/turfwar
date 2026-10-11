@@ -215,8 +215,8 @@ export const luminance = (hex: number) => {
  */
 export function dark(def: MapDef, opts: { threshold?: number; area?: number; margin?: number } = {}): Finding[] {
   const threshold = opts.threshold ?? 0.08, minArea = opts.area ?? 2.5, out: Finding[] = [];
-  // The renderer's surface textures darken some tints further (src/render/level.ts LOOKS): rusty paint about by half.
-  const factor: Record<string, number> = { steel: 0.5, brick: 0.8, concrete: 0.85 };
+  // The renderer's surface textures darken some tints further (src/render/level.ts LOOKS): the rusty metal-plate photo behind `steel` to about a fifth.
+  const factor: Record<string, number> = { steel: 0.2, brick: 0.8, concrete: 0.85 };
   const skip = new Set(['wood', 'glass', 'window', 'neon', 'light', 'asphalt', 'invisible', 'hedge', 'curtain', 'facade', 'mosaic', 'carpet', 'roof', 'tile', 'paving', 'cobble', 'slab']);
   for (const d of def.decor) {
     if ((d.kind !== 'block' && d.kind !== 'shape') || d.color === undefined || skip.has(d.style)) continue;
