@@ -42,7 +42,7 @@ export const PLAZA: R = [-68, -15, -47.5, 15], YARD: R = [47.5, -15, 68, 15];
  * where a chicane or a scooter row stands at its foot): the arcade's west face (from Hanzhong St,
  * between its two doors), its east face (from East St) and the hotel's south face (from lane S).
  */
-export const LADDERS: [x: number, z: number, dir: 0 | 1 | 2 | 3][] = [[ARCADE_HALL[0], -16, 0], [ARCADE_HALL[2], -21.2, 2], [24, HOTEL[3], 3]];
+export const LADDERS: [x: number, z: number, dir: 0 | 1 | 2 | 3][] = [[ARCADE_HALL[0], -16, 0], [ARCADE_HALL[2], -21.2, 2], [34.75, HOTEL[3], 3]];
 /**
  * The galleries' sheet roofs over the lanes' ends and the bases' mouths, underside and top: above
  * the shop signs, and higher than a soldier can jump from anything near them (a container, a

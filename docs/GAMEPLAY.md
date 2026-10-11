@@ -145,7 +145,8 @@ Every long street is broken up by chicanes (two walls of street clutter, a van a
 a poster hoarding, a bus shelter, a billboard, standing out from opposite sides, one after the other),
 so no eye-level line between two places a soldier can stand runs longer than 60 m except along the ring
 road's drive lanes, the rooftops are rimmed by windowed walls (they look across a street, never along
-it) and covered galleries roof the lane ends. Everything sits on the bots' 2.5 m navigation grid
+it) and covered galleries roof the lane ends (out of a jump from anything near them, so nobody perches on
+one to look down a lane). Everything sits on the bots' 2.5 m navigation grid
 (bots walk every alley, stair, hall, roof, bridge and ladder). The city past the map, with Taipei 101
 on the horizon, is a procedural skyline (client only, `src/render/cityscape.ts`); the shop names are
 generic (a noodle shop, a game hall), not brands.

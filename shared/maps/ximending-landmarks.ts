@@ -41,6 +41,27 @@ function parapet(t: Ximen, r: R, y: number, gaps: { side: 'n' | 's' | 'e' | 'w';
   run('n', x0, x1); run('s', x0, x1); run('w', z0 + th, z1 - th); run('e', z0 + th, z1 - th);
 }
 
+/**
+ * Keep a ladder's climb clear of the facade's fittings (window cages, AC units, the parapet's trim
+ * and roofline neon): small ones in its way go, long strips are cut round it. A flush shop sign may
+ * stay behind the rungs.
+ */
+function clearForLadder(t: Ximen, x: number, z: number, dir: 0 | 1 | 2 | 3, top: number) {
+  const alongX = dir === 1 || dir === 3, out = dir === 0 || dir === 1 ? -1 : 1;
+  const lo = (alongX ? x : z) - 0.6, hi = (alongX ? x : z) + 0.6, face = alongX ? z : x;
+  const [n0, n1] = [Math.min(face, face + out * 1.2), Math.max(face, face + out * 1.2)];
+  const decor = t.b.decor;
+  for (let i = decor.length - 1; i >= 0; i--) {
+    const d = decor[i];
+    if (d.kind !== 'shape') continue;
+    const [a0, , c0] = d.min, [a1, , c1] = d.max, y0 = d.min[1], y1 = d.max[1];
+    const [u0, u1, v0, v1] = alongX ? [a0, a1, c0, c1] : [c0, c1, a0, a1];
+    if (u1 <= lo || u0 >= hi || v1 <= n0 || v0 >= n1 || y1 <= 0.2 || y0 >= top + 1.2) continue;
+    const pieces: [number, number][] = u1 - u0 > 3 ? [[u0, lo], [hi, u1]].filter(([p, q]) => q - p > 0.05) as [number, number][] : [];
+    decor.splice(i, 1, ...pieces.map(([p, q]) => ({ ...d, min: (alongX ? [p, y0, c0] : [a0, y0, p]) as [number, number, number], max: (alongX ? [q, y1, c1] : [a1, y1, q]) as [number, number, number] })));
+  }
+}
+
 /** A sign on a roof facing south: the panel on two steel legs standing on the roof at `y` (the legs are cover). */
 function roofSign(t: Ximen, x: number, y: number, z: number, w: number, h: number, text: string, bg: string, fg: string, sub: string, style: 'billboard' | 'gate' = 'billboard') {
   const lift = 1.0;
@@ -136,7 +157,7 @@ export function arcade(t: Ximen) {
   t.box([19.5, -13, 23.5, -11.6], ROOF, ROOF + 1.3, 'steel', C.iron);
   t.box([34, -14, 36, -11.6], ROOF, ROOF + 1.6, 'painted', 0xe4e4de);
   // Ladders: from Hanzhong St up the west face, from East St up the east face.
-  for (const [lx, lz, dir] of [west, east]) t.b.ladder(lx, lz, 0, ROOF, dir);
+  for (const [lx, lz, dir] of [west, east]) { t.b.ladder(lx, lz, 0, ROOF, dir); clearForLadder(t, lx, lz, dir, ROOF); }
   roofSign(t, 10, ROOF, z1 - 0.4, 8, 3, '電玩', '#2c2c54', '#ffd24a', 'ARCADE');
 }
 
@@ -157,10 +178,11 @@ export function hotel(t: Ximen) {
   for (const s of ['n', 's', 'e'] as const) t.fascia(HOTEL, s, 700 + s.charCodeAt(0), { roof: h });
   const [lx, lz, dir] = LADDERS[2];
   parapet(t, HOTEL, h, [{ side: 'n', from: 26, to: 31 }, { side: 's', from: lx - 0.6, to: lx + 0.6 }]);
-  roofSign(t, 31, h, z1 - 0.4, 9, 1.6, '旅館', '#8a1a3a', '#ffd0e0', 'HOTEL', 'gate');
+  roofSign(t, 23.5, h, z1 - 0.4, 7, 1.6, '旅館', '#8a1a3a', '#ffd0e0', 'HOTEL', 'gate');
   for (const [ax, az] of [[21, 7], [33, 7], [21, 24], [35, 24]]) t.box([ax, az, ax + 1.6, az + 1.0], h, h + 1.2, 'painted', 0xe4e4de);
   t.box([29, 12, 33, 16], h, h + 2.6, 'painted', 0xc8c0b0);
   t.b.ladder(lx, lz, 0, h, dir);
+  clearForLadder(t, lx, lz, dir, h);
   // The skybridge: a deck with solid rails and a truss under it, from the arcade's roof to the hotel's.
   const bx0 = 26, bx1 = 31, y = ROOF;
   t.box([bx0, -5.05, bx1, 5.05], y - 0.35, y, 'floor');
