@@ -140,6 +140,14 @@ export class Ximen extends Town {
     this.shape([x - 0.48, z - 0.1, x - 0.1, z + 0.1], h - 0.16, h - 0.1, 'neon', 0xffe6b0);
   }
 
+  /**
+   * The collider of a street tree (the renderer's 'tree:camphor', its trunk 4.6 m at scale 1): up
+   * the trunk and into the crown where the limbs spread, so it is cover and nobody can stand on it.
+   */
+  trunk(x: number, z: number, scale = 1) {
+    this.box([x - 0.35, z - 0.35, x + 0.35, z + 0.35], 0, 4.6 * scale + 1, 'invisible');
+  }
+
   /** Paving and paint on the ground over a rectangle (decorative, flush). */
   floor(r: R, color: number, style: BlockStyle = 'paving', y0 = -0.02, y1 = 0.012) {
     this.shape(r, y0, y1, style, color);

@@ -448,9 +448,11 @@ export class LevelView {
   }
 
   private ball(x: number, y: number, z: number, radius: number, style: BlockStyle, color?: number) {
-    const look = LOOKS[style as keyof typeof LOOKS] ?? LOOKS.steel;
     const g = new THREE.IcosahedronGeometry(radius, 3);
     g.translate(x, y, z);
+    // A lit globe (a lantern, a beacon) glows in its colour like any neon.
+    if (style === 'neon') { this.add('neon', glowing(g, color ?? 0xffe0a0)); return; }
+    const look = LOOKS[style as keyof typeof LOOKS] ?? LOOKS.steel;
     worldUV(g, look.uv);
     tint(g, color ?? look.color, y - radius, radius * 2, look.ao);
     this.add(look.material, g);

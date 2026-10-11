@@ -7,10 +7,10 @@ import { C, NEON, TINTS, Ximen, type R } from './ximending-kit';
  * lanterns, and the city round the map (the blocks that close it, drawn only beyond the bounds).
  */
 export function dressing(t: Ximen) {
+  lamps(t);
   scooterRows(t);
   trees(t);
   overhead(t);
-  lamps(t);
 }
 
 /** Scooters side by side, noses to the wall: [x0, z0, count, alongX, nose]. */
@@ -23,9 +23,25 @@ function scooterRows(t: Ximen) {
     // The ring's sidewalks, against the buildings.
     [-65, -50.8, 8, true, 1], [-26, -50.8, 9, true, 1], [20, -50.8, 6, true, 1], [-62, 50.8, 6, true, -1], [-2, 50.8, 4, true, -1], [26, 50.8, 8, true, -1], [50, 50.8, 5, true, -1],
     // West, Hanzhong and East streets.
-    [-47, -20, 4, false, -1], [-38, 21, 4, false, 1], [-4.2, -20, 4, false, -1], [4.2, 21, 4, false, 1], [38, -21, 4, false, -1], [46.5, 20, 4, false, 1],
+    [-47, -20, 4, false, -1], [-38, 21, 4, false, 1], [-4.2, -20, 4, false, -1], [4.2, 21, 4, false, 1], [38, -9, 4, false, -1], [46.5, 20, 4, false, 1],
   ];
-  for (const [x, z, n, alongX, nose] of rows) t.scooters(x, z, n, alongX, nose, seed++);
+  // A row stops short of anything already standing where a scooter would (a chicane's container, a
+  // lamp post): the scooters either side of it park as rows of their own.
+  const clear = (x: number, z: number, alongX: boolean) => {
+    const [hx, hz] = alongX ? [0.36, 0.7] : [0.7, 0.36];
+    let free = true;
+    t.b.solids.forEach(s => { if (free && s.minY < 1 && s.maxY > 0.2 && s.minX < x + hx && s.maxX > x - hx && s.minZ < z + hz && s.maxZ > z - hz) free = false; });
+    return free;
+  };
+  for (const [x, z, n, alongX, nose] of rows) {
+    let run: [number, number][] = [];
+    const park = () => { if (run.length) t.scooters(run[0][0], run[0][1], run.length, alongX, nose, seed++); run = []; };
+    for (let i = 0; i < n; i++) {
+      const sx = alongX ? x + i * 0.78 : x, sz = alongX ? z : z + i * 0.78;
+      if (clear(sx, sz, alongX)) run.push([sx, sz]); else park();
+    }
+    park();
+  }
 }
 
 /** Street trees along the ring's sidewalks (the trunk is cover) and in the squares. */
@@ -33,7 +49,7 @@ function trees(t: Ximen) {
   const data: number[] = [];
   const add = (x: number, z: number, scale = 1) => {
     data.push(x, 0, z, ((x * 7 + z * 3) % 6.28), scale, 0, 0xffffff, 0);
-    t.box([x - 0.35, z - 0.35, x + 0.35, z + 0.35], 0, 3.4, 'invisible');
+    t.trunk(x, z, scale);
     // The tree pit's grate.
     t.shape([x - 0.9, z - 0.9, x + 0.9, z + 0.9], 0, 0.03, 'steel', 0x3c3a36);
   };
@@ -52,15 +68,16 @@ function overhead(t: Ximen) {
   const gantry = (x: number, z: number, alongX: boolean, text: [string, string], color: string, neon: number) => {
     const len = alongX ? 10 : 10;
     t.shape(alongX ? [x - len / 2, z - 0.15, x + len / 2, z + 0.15] : [x - 0.15, z - len / 2, x + 0.15, z + len / 2], 6.6, 6.9, 'steel', C.iron);
-    for (const s of [-1, 1]) t.shape(alongX ? [x + s * len / 2 - 0.12, z - 0.12, x + s * len / 2 + 0.12, z + 0.12] : [x - 0.12, z + s * len / 2 - 0.12, x + 0.12, z + s * len / 2 + 0.12], 0, 6.9, 'steel', C.iron);
+    // The posts are solid (cover; nobody walks through them), the frame and board above are out of reach.
+    for (const s of [-1, 1]) t.box(alongX ? [x + s * len / 2 - 0.12, z - 0.12, x + s * len / 2 + 0.12, z + 0.12] : [x - 0.12, z + s * len / 2 - 0.12, x + 0.12, z + s * len / 2 + 0.12], 0, 6.9, 'steel', C.iron);
     t.shape(alongX ? [x - len / 2 + 0.3, z - 0.18, x + len / 2 - 0.3, z + 0.18] : [x - 0.18, z - len / 2 + 0.3, x + 0.18, z + len / 2 - 0.3], 6.4, 6.5, 'neon', neon);
     for (const s of [0, 1]) t.sign('board', alongX ? x : x + (s ? 0.2 : -0.2), 7.7, alongX ? z + (s ? 0.2 : -0.2) : z, alongX ? (s ? Math.PI : 0) : (s ? Math.PI / 2 : -Math.PI / 2), 7.5, 1.4, text[0], color, '#ffffff', text[1]);
   };
   // Posts stand in the sidewalk strips next to the buildings' faces, clear of the lanes' middles.
-  gantry(-2.5, -50.1, true, ['漢中街', 'HANZHONG ST'], '#c8141e', 0xff3a5a);
+  gantry(0, -50.1, true, ['漢中街', 'HANZHONG ST'], '#c8141e', 0xff3a5a);
   gantry(-42.5, -50.1, true, ['西寧街', 'XINING ST'], '#14306a', 0x4af0ff);
   gantry(42.5, -50.1, true, ['成都路', 'CHENGDU RD'], '#1a6a3a', 0x5aff8a);
-  gantry(-2.5, 50.1, true, ['漢中街', 'HANZHONG ST'], '#c8141e', 0xff3a5a);
+  gantry(0, 50.1, true, ['漢中街', 'HANZHONG ST'], '#c8141e', 0xff3a5a);
   // String lanterns across lane S by the Red House.
   for (let x = -36; x < 4; x += 4) t.lantern(x, 5.4 + random() * 0.3, 32.5 + (random() - 0.5) * 3, random() < 0.5 ? 0xff3a2a : 0xffb02a);
   void NEON;
@@ -69,7 +86,9 @@ function overhead(t: Ximen) {
 /** Street lamps along the lanes' edges and the ring's sidewalks. */
 function lamps(t: Ximen) {
   for (const x of [-64, -50, -34, -8, 14, 30, 52, 62]) { t.lamp(x, -37.0); t.lamp(x + 6, 37.0); }
-  for (const z of [-42, -12, 12, 42]) { t.lamp(-47.0, z); t.lamp(-38.0, z); t.lamp(-4.4, z); t.lamp(4.4, z); t.lamp(38.0, z); t.lamp(47.0, z); }
+  for (const z of [-42, -12, 12, 42]) { t.lamp(-47.0, z); t.lamp(-38.0, z); t.lamp(4.4, z); t.lamp(38.0, z); t.lamp(47.0, z); }
+  // Hanzhong St's west kerb, but not where the Red House stands on it.
+  for (const z of [-42, -12, 12]) t.lamp(-4.4, z);
 }
 
 /**

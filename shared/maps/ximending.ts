@@ -92,11 +92,12 @@ export function ximending(): MapDef {
   nightMarket(t);
   stationPlaza(t);
   yard(t);
-  galleries(t);
   lanes(t);
-  dressing(t);
-  backdrop(t);
   screens(t);
+  dressing(t);
+  // Last of the street furniture: the galleries' posts step round whatever already stands under them.
+  galleries(t);
+  backdrop(t);
 
   for (const [team, x, z, yaw] of SPAWNS) b.spawn(team, x, 0, z, yaw);
   for (const [id, name, x, y, z, r] of POINTS) b.point(id, name, x, y, z, r);
@@ -112,7 +113,8 @@ export function ximending(): MapDef {
 function screens(t: Ximen) {
   const wall = (r: R, text: [string, string], color: number) => {
     t.box(r, 0, 2.4, 'painted', 0xe8ecf0);
-    t.box([r[0], r[1], r[2], r[3]], 0.7, 1.4, 'painted', color);
+    // The stripe stands a hair proud of the wall (a box in the same faces would flicker).
+    t.shape([r[0] - 0.02, r[1] - 0.02, r[2] + 0.02, r[3] + 0.02], 0.7, 1.4, 'painted', color);
     const [x0, z0, x1, z1] = r, mid = (z0 + z1) / 2;
     for (const [px, rot] of [[x0 - 0.04, -Math.PI / 2], [x1 + 0.04, Math.PI / 2]] as const) t.sign('board', px, 1.9, mid, rot, 3.6, 0.7, text[0], '#1a3a7a', '#ffffff', text[1]);
     t.shape([x0 - 0.03, z0, x1 + 0.03, z1], 2.4, 2.5, 'steel', 0xb8bcc0);

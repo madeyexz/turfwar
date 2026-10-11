@@ -106,17 +106,28 @@ export function chicane(t: Ximen, alongX: boolean, c: number, lo: number, hi: nu
 export const LANE_CHICANES: { alongX: boolean; at: ([c: number, lo: number, hi: number] | [c: number, lo: number, hi: number, tall: true])[] }[] = [
   // Lane N, lane M (the market's aisle, then east of Hanzhong St) and lane S.
   { alongX: true, at: [[-51, -37.5, -27.5], [-35, -37.5, -27.5], [12, -37.5, -27.5], [31, -37.5, -27.5, true], [51, -37.5, -27.5]] },
-  { alongX: true, at: [[-23, -4, 4], [-9.5, -4, 4], [18, -5, 5]] },
+  // (East of Hanzhong St the chicane stands between the arcade's doors, clear of its main entrance.)
+  { alongX: true, at: [[-23, -4, 4], [-9.5, -4, 4], [15, -5, 5]] },
   { alongX: true, at: [[-51, 27.5, 37.5], [-42, 27.5, 37.5], [-28, 27.5, 37.5], [12, 27.5, 37.5], [31, 27.5, 37.5], [62, 27.5, 37.5]] },
   // West, Hanzhong and East streets: [c, lo, hi] with lo and hi in x.
   { alongX: false, at: [[-45, -47.5, -37.5], [-20, -47.5, -37.5], [20, -47.5, -37.5], [43, -47.5, -37.5]] },
-  { alongX: false, at: [[-43, -5, 5], [-22, -5, 5, true], [20, -5, 5], [43, -5, 5]] },
+  // (Past lane S, Hanzhong St runs on beside the Red House: its last chicane fills only the slot east of the octagon.)
+  { alongX: false, at: [[-43, -5, 5], [-22, -5, 5, true], [20, -5, 5], [43, -0.6, 5]] },
   { alongX: false, at: [[-45, 37.5, 47.5], [-20, 37.5, 47.5], [20, 37.5, 47.5], [43, 37.5, 47.5]] },
 ];
+
+/** The tall billboard wall (4.6 m) would poke through a gallery's roof: under one, a poster hoarding stands in for it. */
+const TALL = 3, POSTER = 2;
 
 /** Every chicane of the map. */
 export function lanes(t: Ximen) {
   let i = 0;
-  for (const { alongX, at } of LANE_CHICANES) for (const [c, lo, hi, tall] of at) { chicane(t, alongX, c, lo, hi, i, tall ? { kinds: [4, i % 4] } : {}); i++; }
+  for (const { alongX, at } of LANE_CHICANES) for (const [c, lo, hi, tall] of at) {
+    const kinds: [number, number] = tall ? [4, i % 4] : [i % PIECES.length, (i + 1 + Math.floor(i / PIECES.length)) % PIECES.length];
+    // The lanes' ends past the cross streets are under the galleries.
+    const roofed = alongX && Math.abs(c) > 47.5;
+    chicane(t, alongX, c, lo, hi, i, { kinds: roofed ? kinds.map(k => (k === TALL ? POSTER : k)) as [number, number] : kinds });
+    i++;
+  }
   void C; void shadeHex;
 }
