@@ -14,7 +14,8 @@
 /** One stack frame as PostHog's `$exception_list` wants it. */
 export interface ExceptionFrame {
   filename?: string;
-  function?: string;
+  /** Always present: PostHog rejects a frame without it, so anonymous frames get `?`. */
+  function: string;
   lineno?: number;
   colno?: number;
   in_app: boolean;
@@ -50,6 +51,13 @@ export const cleanUrl = (url: string) => scrub(url).split(/[?#]/)[0];
 
 const V8 = /^\s*at (?:(.*?) \()?(.*?):(\d+):(\d+)\)?\s*$/;
 const GECKO = /^(.*?)@(.*?):(\d+):(\d+)\s*$/;
+/** PostHog's (and posthog-js's) name for a frame without a function name. */
+export const UNKNOWN_FUNCTION = '?';
+
+function frameName(fn: string | undefined): string {
+  const name = fn && fn !== 'new' ? scrub(fn.replace(/^async /, '').replace(/^new /, '')).trim().slice(0, 80) : '';
+  return name || UNKNOWN_FUNCTION;
+}
 
 /** Frames of a browser's `error.stack` (newest first), without query strings or hashes in the files. */
 export function parseStack(stack: string | undefined, appOrigin = ''): ExceptionFrame[] {
@@ -61,7 +69,7 @@ export function parseStack(stack: string | undefined, appOrigin = ''): Exception
     if (!file || file === '<anonymous>' || file.startsWith('native') ) continue;
     const filename = cleanUrl(file);
     frames.push({
-      ...(fn && fn !== 'new' ? { function: scrub(fn.replace(/^async /, '')).slice(0, 80) } : {}),
+      function: frameName(fn),
       filename, lineno: Number(l), colno: Number(c),
       in_app: !appOrigin || filename.startsWith(appOrigin + '/') || filename.startsWith('/'),
       platform: 'web:javascript',
