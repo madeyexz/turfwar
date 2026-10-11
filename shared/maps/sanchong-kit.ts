@@ -134,6 +134,9 @@ export class Town extends Kit {
         // An AC unit under the window on a bracket.
         const at = face + out * 0.3;
         this.shape(alongX ? [c + 0.2, Math.min(at, at + out * 0.5), c + 0.95, Math.max(at, at + out * 0.5)] : [Math.min(at, at + out * 0.5), c + 0.2, Math.max(at, at + out * 0.5), c + 0.95], y - 0.75, y - 0.2, 'painted', 0xe4e4de);
+        // The bracket's two arms, from the wall out under the unit.
+        const [w0, w1] = [Math.min(face, at + out * 0.45), Math.max(face, at + out * 0.45)];
+        for (const u of [c + 0.3, c + 0.85]) this.shape(alongX ? [u - 0.025, w0, u + 0.025, w1] : [w0, u - 0.025, w1, u + 0.025], y - 0.8, y - 0.75, 'steel', C.iron);
       }
     }
     for (let i = 0; i < blades; i++) {
@@ -163,7 +166,7 @@ export class Town extends Kit {
     box(c - w / 2, c - w / 2 + bar, a, b, y, y + hh); box(c + w / 2 - bar, c + w / 2, a, b, y, y + hh);
     box(c - w / 2 - 0.08, c + w / 2 + 0.08, a, b + (out > 0 ? 0.12 : 0), y + hh, y + hh + 0.06, 'roof', C.tinWhite);
     // Potted plants on the sill of some cages.
-    if ((Math.floor(c * 3.7 + y) & 3) === 0) box(c - 0.6, c + 0.2, fa - out * 0.3, fa, y, y + 0.35, 'painted', 0x4f8a3a);
+    if ((Math.floor(c * 3.7 + y) & 3) === 0) box(c - 0.6, c + 0.2, Math.min(fa, fa - out * 0.3), Math.max(fa, fa - out * 0.3), y, y + 0.35, 'painted', 0x4f8a3a);
   }
 
   /** A sign decor (no collision), its face turned to `rotY` (0 north, π/2 east, π south, -π/2 west). */
@@ -176,8 +179,8 @@ export class Town extends Kit {
    * `facing`), on one collider (knee-high cover a soldier cannot walk through). Rows of model
    * instances: x, y, z, heading, scale, roll, colour, seed.
    */
-  scooters(x0: number, z0: number, count: number, alongX: boolean, nose: 1 | -1, seed = 1, parallel = false, y = 0) {
-    const random = rng(seed * 131 + 7), gap = parallel ? 2.0 : 0.78, data: number[] = [];
+  scooters(x0: number, z0: number, count: number, alongX: boolean, nose: 1 | -1, seed = 1, parallel = false, y = 0, spacing = 0.78) {
+    const random = rng(seed * 131 + 7), gap = parallel ? 2.0 : spacing, data: number[] = [];
     const colors = [0xd8d8d8, 0x2a2a2e, 0xc8141e, 0x1d5fa8, 0xf0f0f0, 0x8a8a8a, 0xe8b830, 0x3a7a4a, 0xf2b8c8, 0x6a4a8a];
     for (let i = 0; i < count; i++) {
       const x = alongX ? x0 + i * gap : x0, z = alongX ? z0 : z0 + i * gap;

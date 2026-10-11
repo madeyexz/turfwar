@@ -35,7 +35,7 @@ const ROW_NM: Bldg[] = [
 const ROW_MS: Bldg[] = [
   [[-68, 15, -60, 27.5], 4, tan, '', 'swne'], [[-55, 15, -47.5, 27.5], 4, mint, '', 'sne'],
   [[-37.5, 5, -33, 27.5], 5, pink, 's', 'nwse'], [[-28, 5, -5, 27.5], 4, cream, 's', 'nswe'],
-  [[5, 5, 19, 27.5], 4, blueGrey, 's', 'nswe'],
+  [[5, 5, 19, 27.5], 4, blueGrey, 's', 'nsw'],
   [[47.5, 15, 52, 27.5], 4, grey, '', 'nws'], [[57, 15, 68, 27.5], 4, ochre, '', 'nse'],
 ];
 
@@ -47,11 +47,10 @@ function partition(t: Ximen, r: R, side: Side, color: number) {
   const [x0, z0, x1, z1] = r, depth = 3.5, alongX = side === 'n' || side === 's';
   const len = alongX ? x1 - x0 : z1 - z0;
   if (len < 12) return;
-  const mid = (alongX ? x0 + x1 : z0 + z1) / 2, at = side === 'n' ? z0 : side === 's' ? z1 - depth : side === 'w' ? x0 : x1 - depth;
-  const wall: R = alongX ? [mid - 0.25, at, mid + 0.25, at + depth - 0.6] : [at, mid - 0.25, at + depth - 0.6, mid + 0.25];
+  // From the shop's back wall to just short of the columns along the street edge (never through one).
+  const mid = (alongX ? x0 + x1 : z0 + z1) / 2, [a, b] = side === 'n' ? [z0 + 0.6, z0 + depth] : side === 's' ? [z1 - depth, z1 - 0.6] : side === 'w' ? [x0 + 0.6, x0 + depth] : [x1 - depth, x1 - 0.6];
+  const wall: R = alongX ? [mid - 0.25, a, mid + 0.25, b] : [a, mid - 0.25, b, mid + 0.25];
   t.box(wall, 0, 3.0, 'painted', color);
-  const out = alongX ? [mid, at + depth - 0.6] : [at + depth - 0.6, mid];
-  void out;
 }
 
 export function streets(t: Ximen) {
@@ -65,10 +64,11 @@ export function streets(t: Ximen) {
   build(ROW_N); build(ROW_S); build(ROW_NM); build(ROW_MS);
   // The mall's bridge: upper storeys over the passage.
   t.box([MALL[0], MALL[1], MALL[2], MALL[3]], 4.4, 20.2, 'facade', pink);
-  t.shape([MALL[0], MALL[1] + 0.02, MALL[2], MALL[1] + 0.06], 3.9, 4.4, 'neon', 0xff4ad0);
-  t.shape([MALL[0], MALL[3] - 0.06, MALL[2], MALL[3] - 0.02], 3.9, 4.4, 'neon', 0xff4ad0);
-  t.sign('gate', (MALL[0] + MALL[2]) / 2, 3.2, MALL[3] + 0.08, Math.PI, 4.6, 0.8, '西門商場', '#14306a', '#ffd24a', 'XIMEN MALL');
-  t.sign('gate', (MALL[0] + MALL[2]) / 2, 3.2, MALL[1] - 0.08, 0, 4.6, 0.8, '西門商場', '#14306a', '#ffd24a', 'XIMEN MALL');
+  // A neon band along the bridge's faces, and the gate boards hung from its underside at each end.
+  t.shape([MALL[0], MALL[1] - 0.04, MALL[2], MALL[1]], 4.45, 4.7, 'neon', 0xff4ad0);
+  t.shape([MALL[0], MALL[3], MALL[2], MALL[3] + 0.04], 4.45, 4.7, 'neon', 0xff4ad0);
+  t.sign('gate', (MALL[0] + MALL[2]) / 2, 4.0, MALL[3] - 0.1, Math.PI, 4.6, 0.8, '西門商場', '#14306a', '#ffd24a', 'XIMEN MALL');
+  t.sign('gate', (MALL[0] + MALL[2]) / 2, 4.0, MALL[1] + 0.1, 0, 4.6, 0.8, '西門商場', '#14306a', '#ffd24a', 'XIMEN MALL');
   ground(t);
 }
 

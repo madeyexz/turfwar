@@ -119,8 +119,8 @@ function screens(t: Ximen) {
     for (const [px, rot] of [[x0 - 0.04, -Math.PI / 2], [x1 + 0.04, Math.PI / 2]] as const) t.sign('board', px, 1.9, mid, rot, 3.6, 0.7, text[0], '#1a3a7a', '#ffffff', text[1]);
     t.shape([x0 - 0.03, z0, x1 + 0.03, z1], 2.4, 2.5, 'steel', 0xb8bcc0);
   };
-  wall([-51.5, -15, -50, 1.5], ['警戒線 請勿進入', 'POLICE LINE'], 0x1a3a7a);
-  wall([-46.5, -1.5, -45, 15], ['警戒線 請勿進入', 'POLICE LINE'], 0x1a3a7a);
+  wall([-51.5, -15, -50, 1.5], ['警戒線 請勿進入', 'POLICE LINE'], 0x3a5ab0);
+  wall([-46.5, -1.5, -45, 15], ['警戒線 請勿進入', 'POLICE LINE'], 0x3a5ab0);
   wall([50, -1.5, 51.5, 15], ['施工中 請繞行', 'SITE · KEEP OUT'], 0xc8641a);
   wall([45, -15, 46.5, 1.5], ['施工中 請繞行', 'SITE · KEEP OUT'], 0xc8641a);
 }
