@@ -5,8 +5,8 @@
  * 502/503/504, holds the request or times out. The lobby and /admin show this as "waking" (the
  * server is asleep, not down) and keep trying gently until it answers, giving up after 3 minutes.
  *
- *   idle → probing → ready                 a warm server: nothing extra is shown
- *            │ a failed ping or connect, or no answer within 3 s
+ *   idle → probing → ready                 a warm server: nothing extra is shown (a slow one only says "connecting")
+ *            │ a failed ping or connect
  *            ▼
  *          waking → ready                  it booted; a play action pressed meanwhile runs now, once
  *            │ 3 minutes without an answer
@@ -30,8 +30,10 @@ export interface WakeState<A> {
   failures: number;
   /** The host answered `/v1/ping`: the machine is up, the database may still be loading. */
   hostUp: boolean;
-  /** This attempt went through `waking` (the server was asleep, or slow to answer). */
+  /** This attempt went through `waking`: a ping or connect failed (the server was asleep or restarting). */
   woke: boolean;
+  /** This attempt has run `slowMs` without an answer (not necessarily asleep: see `woke`). */
+  slow: boolean;
   /** A play action pressed before the server was up: it runs once, on `ready`. */
   queued?: A;
 }
@@ -49,8 +51,12 @@ export type WakeEvent<A> =
   | { type: 'stop' }; // leave (a match starts, the admin page switches server)
 
 export const WAKE = {
-  /** No answer this long on a first attempt counts as asleep. */
-  slowMs: 3000,
+  /**
+   * No answer this long on an attempt makes it `slow` (analytics only: the screen keeps saying "connecting").
+   * Only a failed ping or connect says the server is asleep; the always-on Taipei server took 3–6 s to answer a
+   * quarter of visitors (phones, a lazy chunk, cold TLS), and "asleep" copy for that was wrong.
+   */
+  slowMs: 6000,
   /** Give up (unreachable) after this long. */
   giveUpMs: 180_000,
   /** How long a wake usually takes: the copy says "about 30 s" and the bar fills by then. */
@@ -64,11 +70,11 @@ export const WAKE = {
 };
 export type WakeLimits = typeof WAKE;
 
-export const idleWake = <A>(): WakeState<A> => ({ phase: 'idle', since: 0, failures: 0, hostUp: false, woke: false });
+export const idleWake = <A>(): WakeState<A> => ({ phase: 'idle', since: 0, failures: 0, hostUp: false, woke: false, slow: false });
 
 /** The state machine: the next state for an event at `now`, and the queued action to run (at most once). */
 export function step<A>(s: WakeState<A>, e: WakeEvent<A>, now: number, limits: WakeLimits = WAKE): { state: WakeState<A>; run?: A } {
-  const begin = (queued: A | undefined): WakeState<A> => ({ phase: 'probing', since: now, failures: 0, hostUp: false, woke: false, queued });
+  const begin = (queued: A | undefined): WakeState<A> => ({ phase: 'probing', since: now, failures: 0, hostUp: false, woke: false, slow: false, queued });
   const trying = s.phase === 'probing' || s.phase === 'waking';
   switch (e.type) {
     case 'start': return { state: s.phase === 'idle' ? begin(undefined) : s };
@@ -91,7 +97,7 @@ export function step<A>(s: WakeState<A>, e: WakeEvent<A>, now: number, limits: W
     case 'tick': {
       // (Timers pause while a laptop sleeps: one tick may jump past both limits.)
       if (trying && now - s.since >= limits.giveUpMs) return { state: { ...s, phase: 'unreachable', hostUp: false } };
-      if (s.phase === 'probing' && now - s.since >= limits.slowMs) return { state: { ...s, phase: 'waking', woke: true } };
+      if (trying && !s.slow && now - s.since >= limits.slowMs) return { state: { ...s, slow: true } };
       return { state: s };
     }
     case 'queue': {
@@ -122,7 +128,20 @@ export function wakeProgress(ms: number, expect = WAKE.expectMs) {
 export const retryDelay = (failures: number) => Math.min(3000, 2000 + 500 * Math.max(0, failures - 1));
 
 /** A connection the driver opens: `live` settles once (resolves when usable, rejects when it failed). */
-export interface WakeLink { live: Promise<void>; stop(): void }
+export interface WakeLink {
+  live: Promise<void>;
+  stop(): void;
+  /** Milliseconds the connection spent loading its code (the lazy SDK chunk) before it could dial, once known. */
+  importMs?(): number | undefined;
+}
+
+/** How the current attempt went, for `server_woke`: the first ping, and the connection that came up. */
+export interface WakeTimings {
+  /** The first ping's round trip (ms) and whether it answered 200. */
+  pingMs?: number; pingOk?: boolean;
+  /** The connection that went live: dial to live (ms), and the part of it spent loading its code. */
+  connectMs?: number; importMs?: number;
+}
 
 export interface WakeDeps {
   /** One `/v1/ping`: true when the host answered 200 (false or a rejection: not up). */
@@ -151,6 +170,8 @@ export class WakeDriver<A> {
   private link?: WakeLink;
   private linkLive = false;
   private connectStarted = -Infinity;
+  /** Timings of this attempt (reset when a new one begins). */
+  timings: WakeTimings = {};
 
   constructor(
     private deps: WakeDeps,
@@ -187,6 +208,7 @@ export class WakeDriver<A> {
     const fresh = after.phase === 'probing' && (before.phase !== 'probing' || after.since !== before.since);
     if (fresh) {
       this.halt(true);
+      this.timings = {};
       const gen = this.gen;
       this.tickTimer = setInterval(() => this.dispatch({ type: 'tick' }), 1000);
       this.connect(gen, true);
@@ -214,11 +236,13 @@ export class WakeDriver<A> {
   private async ping(gen: number) {
     if (gen !== this.gen || this.pingAbort) return;
     const abort = this.pingAbort = new AbortController();
+    const pingStart = this.now();
     const timeout = setTimeout(() => abort.abort(), this.limits.pingTimeoutMs);
     let up = false;
     try { up = await this.deps.ping(abort.signal); } catch { up = false; } finally { clearTimeout(timeout); }
     if (this.pingAbort === abort) this.pingAbort = undefined;
     if (gen !== this.gen || !this.trying()) return;
+    if (this.timings.pingMs === undefined) { this.timings.pingMs = Math.round(this.now() - pingStart); this.timings.pingOk = up; }
     this.dispatch(up ? { type: 'hostUp' } : { type: 'cold', from: 'ping' });
     if (gen !== this.gen || !this.trying()) return;
     this.connect(gen, up);
@@ -238,6 +262,9 @@ export class WakeDriver<A> {
       clearTimeout(timeout);
       if (this.link !== link) return;
       this.linkLive = true;
+      this.timings.connectMs = Math.round(this.now() - this.connectStarted);
+      const loaded = link.importMs?.();
+      if (loaded !== undefined) this.timings.importMs = Math.round(loaded);
       this.dispatch({ type: 'up' });
     }, () => { clearTimeout(timeout); this.failed(link); });
   }
