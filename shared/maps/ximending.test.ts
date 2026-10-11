@@ -8,6 +8,7 @@ import { LADDER_DIRS } from '../collision';
 import { TICK_RATE, addSoldier, createContext, createMatch, resetMatch, tickMatch } from '../match/sim';
 import { ATTACKERS, SABOTAGE, type MatchEvent } from '../match/state';
 import { clearLine, longSightlines } from './sightlines';
+import { buriedSigns, clashing, dark, floating, formatFinding, scooters } from './audit';
 import { AMMO, SPAWNS, VEHICLES, XIMENDING_NAME_ZH } from './ximending';
 import { ARCADE_HALL, BALCONY, GALLERY, LADDERS, PAD, RED_HOUSE, ROOF, YARD } from './ximending-plan';
 
@@ -270,6 +271,27 @@ describe('taipei: Ximending (西門町), our own layout', () => {
       let length = 0;
       for (let i = 1; i < path.length; i++) length += Math.hypot(nav.x[path[i]] - nav.x[path[i - 1]], nav.z[path[i]] - nav.z[path[i - 1]]);
       expect(length, `straight through ${dx},${dz}`).toBeLessThan(8);
+    }
+  });
+
+  it('dresses the streets cleanly: nothing floats, no sign faces into a wall, no props cut into each other, no black slabs', () => {
+    // The prop audit (audit.ts) over the playable area: what a player notices standing in the street.
+    const { def } = loadMap(ID);
+    expect(floating(def).map(formatFinding), 'floating').toEqual([]);
+    expect(buriedSigns(def).map(formatFinding), 'buried signs').toEqual([]);
+    expect(clashing(def).map(formatFinding), 'props cutting into each other').toEqual([]);
+    expect(scooters(def).map(formatFinding), 'parked scooters').toEqual([]);
+    expect(dark(def).map(formatFinding), 'dark slabs').toEqual([]);
+  });
+
+  it('opens every booth away from its van, its board on the awning over the open side', () => {
+    const { def, world } = loadMap(ID);
+    const boards = def.decor.filter(d => d.kind === 'sign' && ['檳榔', '彩券', '報攤', '冰'].includes(d.text));
+    expect(boards.length).toBeGreaterThan(10);
+    for (const d of boards) if (d.kind === 'sign') {
+      // A metre in front of the board, at a soldier's eye: open street, not a van.
+      const nx = Math.sin(d.rotY), nz = -Math.cos(d.rotY);
+      expect(world.overlapsSolid({ x: d.x + nx * 1.0, y: 0.9, z: d.z + nz * 1.0 }, 0.2, 0.8), `${d.text} at ${d.x.toFixed(1)},${d.z.toFixed(1)}`).toBe(false);
     }
   });
 });
