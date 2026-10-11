@@ -292,3 +292,20 @@ footer p { margin: 0; flex: 1 1 360px; max-width: 80ch; line-height: 1.45; }
 footer code { font-family: ui-monospace, 'SF Mono', Menlo, monospace; font-size: 12px; color: var(--muted); padding: 0 4px; border-radius: 3px; background: rgba(255, 255, 255, 0.06); }
 .btn.revoke { font-size: 12px; color: var(--muted); }
 .btn.revoke:hover { border-color: var(--crimson); color: var(--crimson); }
+
+/* Peak online (src/admin/peak.ts): a dashed reference line at one full 6v6 room. */
+.chart .ref { stroke: var(--cash); stroke-width: 1; stroke-dasharray: 5 4; opacity: 0.7; }
+.legend i.ref { height: 0; border-top: 2px dashed var(--cash); border-radius: 0; vertical-align: 3px; }
+
+/* Benchmarks (src/admin/benchmarks.ts): Turf War against BeGone's estimated Taiwan peak. */
+.muted { color: var(--faint); font-weight: 500; }
+table.bench td { vertical-align: top; white-space: normal; }
+table.bench td small { font-size: 12px; }
+td .tag.vs.within { color: var(--cash); border-color: rgba(156, 240, 138, 0.4); }
+td .tag.vs.above { color: var(--accent); border-color: var(--accent-dim); }
+td .tag.vs.below { color: var(--amber); border-color: rgba(255, 180, 90, 0.4); }
+pre.funnel { margin: 0 0 10px; padding: 10px 12px; overflow-x: auto; font: 12px/1.35 ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; color: var(--ink); background: rgba(0, 0, 0, 0.25); border: 1px solid var(--line); border-radius: 6px; }
+ul.evidence { margin: 0; padding-left: 18px; color: var(--muted); font-size: 13px; display: grid; gap: 4px; }
+ul.launch { list-style: none; margin: 0; padding: 0; display: grid; gap: 6px; }
+ul.launch li { display: grid; grid-template-columns: 7em 3em auto; align-items: baseline; gap: 8px; font-weight: 600; }
+ul.launch b { font-size: 22px; color: var(--accent); text-align: right; font-variant-numeric: tabular-nums; }

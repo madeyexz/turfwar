@@ -271,12 +271,20 @@ whenever what is collected changes. These answer "how many players, and from whe
   `ADMIN_TEST_KEY=<test key> bun scripts/devicecheck.ts ws://127.0.0.1:<port> <db>`.
 
 **Admin page** (`/admin`, `admin/index.html`, not linked from the game, `noindex`): one section per
-question, linked from a sticky nav: **Now** (online, rooms, live rooms), **Growth** (players, new and
-active with the change from the period before, a 30-day chart of returning and new players per day,
+question, linked from a sticky nav: **Now** (online, rooms, live rooms, peak online), **Growth** (players, new and
+active with the change from the period before, active 30 days = MAU, a 30-day chart of returning and new players per day,
 countries), **Retention**, **Play time** (total, average and median per player, today, 7 days, a
-30-day chart), **Connection & devices** and **Players** (a sortable list: play time, active days,
+30-day chart), **Connection & devices**, **Benchmarks** and **Players** (a sortable list: play time, active days,
 rounds, matches, kills …, with an All / Phone / Computer switch), for the server picked at the top (the
-build's own by default). Days are UTC days. **Phone and Computer side by side**
+build's own by default). **Peak online** (peak CCU, `src/admin/peak.ts`): the private table `peak_hour` keeps, per
+hour since the epoch, the most players in rooms at once (all, and Phone and Computer by each player's latest device
+report) and when the all-player peak was reached; entering a room (the only time the count rises) and each room's
+minute flush raise it, and it is kept (24 rows a day). The view `admin_peak_hour` feeds the Peak today / 7 d / ever
+tiles and a chart of the peak per day or hour (tick: the average at once, from play time; dashed line: 12, one full
+6v6 room). Local check: `ADMIN_TEST_KEY=<test key> bun scripts/peakcheck.ts ws://127.0.0.1:<port> <db>`.
+**Benchmarks** (`src/admin/benchmarks.ts`): this server's MAU, DAU, peak CCU and lifetime players (all, and on a
+Taiwan time zone) against BeGone's estimated Taiwan peak, the estimate's funnel and evidence (nplay.com in the
+Wayback Machine), and Turf War's launch-week peaks rebuilt from PostHog before `peak_hour` existed. Days are UTC days. **Phone and Computer side by side**
 (`src/admin/groups.ts`): every figure shows All, Phone and Computer, and the 30-day charts draw a Phone
 and a Computer bar each day. A player's side is the device they last played on (`admin_player_device`;
 phones and tablets are Phone; players without a report count only in All), and per-day figures use it
