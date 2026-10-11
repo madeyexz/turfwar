@@ -41,7 +41,7 @@ import { mountProgressBadge } from './ui/progressbadge';
 import { mountNews } from './ui/news';
 import { askCallsign, madeUpCallsign } from './ui/callsign';
 import { ask, confirmDialog } from './ui/ask';
-import { watchClientErrors } from './errors';
+import { reportBootFailure, watchClientErrors } from './errors';
 import { registerServiceWorker, warmServiceWorker } from './pwa';
 
 inject();
@@ -1532,6 +1532,6 @@ async function boot() {
 
 void boot().catch(error => {
   console.error(error);
-  track('error_shown', { where: 'boot', message: String((error as Error)?.message ?? error).slice(0, 120) });
+  reportBootFailure(error);
   status.textContent = t('lobby.unableToStart', { error: (error as Error).message });
 });

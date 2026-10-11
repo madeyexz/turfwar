@@ -57,7 +57,10 @@
         <h2>Product analytics</h2>
         <p>We use PostHog to learn how the game is played: anonymous events such as page views, opening the lobby, starting or leaving a match, rounds, maps and modes played, vehicles used, store purchases, language changes, errors, how long the game server took to connect and your connection quality in online matches (ping and movement corrections), with your callsign, language, graphics setting, the game server you chose, your device type (phone, tablet or computer) and rounded screen size, and how you play on it: touch controls, whether the phone was held upright, whether the game was opened inside an app's built-in browser (such as Threads, Instagram, Messenger, Facebook, LINE or TikTok), how many times you have opened the game, whether your browser already had saved data for the game when the page loaded (and can save data at all), where you came from (the UTM tags of the link you followed, the referring website's name without its address, and only whether an ad click ID such as gclid or fbclid was present, never its value; the first of these is remembered in your browser and sent with every event), your touch aim assist setting, in each match your knife (slipper) kills, the bubble teas you drank and your frame rate (frames per second and the slowest 1%), how long the page took to load, how long it took from pressing Play to being in a match, and your first kill ever. PostHog estimates your approximate country from the connection; we don't store IP addresses ourselves. When you play online, these events are linked to your anonymous game ID. There are no session recordings, and no clicks or typing are captured from the page. If your browser sends Do Not Track or Global Privacy Control, no analytics events are sent.</p>
 
+        <p>Error reports include cleaned exception messages and stack traces (script URLs without query strings or fragments, function names, line and column numbers), the build version, server host, browser and operating system, in-app browser and whether a match is active. We remove known secret fields, email addresses and long identity strings from error text, and exclude callsign, room and attribution properties from error events. Error reports retain PostHog's anonymous device and session identifiers. We send at most five distinct failures and one opaque browser error per page. Early errors wait in memory until analytics starts; the same opt-out rules apply. Private source maps help us read minified stacks; they are not served with the website.</p>
+
         <h2>Website analytics</h2>
+        <p>An optional server monitor counts panic and ERROR log lines. It can send fixed count summaries to an owner-selected webhook and keep the latest 200 summaries in a private, admin-only database view. These summaries contain no player identifiers or raw log text. Raw diagnostic logs remain on the server.</p>
         <p>Vercel Web Analytics counts anonymous page views and visitors, without cookies.</p>
 
         <h2>What we don't do</h2>
@@ -95,7 +98,10 @@
         <h2>產品分析</h2>
         <p>我們使用 PostHog 了解大家怎麼玩：匿名的事件，例如瀏覽頁面、開啟大廳、開始或離開對戰、回合、玩過的地圖與模式、使用載具、商店購買、切換語言、錯誤、遊戲伺服器連線所需的時間，以及線上對戰的連線品質（延遲與移動修正），並附上你的呼號、語言、畫質設定、你選擇的遊戲伺服器、裝置類型（手機、平板或電腦）與概略的螢幕尺寸，以及你怎麼玩：是否使用觸控操作、手機是否直拿、是否在 App 內建瀏覽器（例如 Threads、Instagram、Messenger、Facebook、LINE 或 TikTok）中開啟、你開啟遊戲的次數、頁面載入時你的瀏覽器是否已存有這個遊戲的資料（以及是否能儲存資料）、你從哪裡來（你點的連結上的 UTM 標籤、來源網站的名稱但不含網址，以及是否帶有 gclid 或 fbclid 這類廣告點擊 ID，僅記錄有或沒有，不記錄其值；第一次的來源會記在你的瀏覽器中，並隨每個事件送出）、觸控輔助瞄準的設定，每場對戰中的藍白拖擊殺數、喝了幾杯珍奶與畫面流暢度（每秒畫格數與最慢的 1%），頁面載入花了多久、從按下開始到進入對戰花了多久，以及你的第一個擊殺。PostHog 會從連線推估你大致所在的國家；我們自己不保存 IP 位址。線上遊玩時，這些事件會與你的匿名遊戲 ID 連結。不錄製操作畫面，也不擷取你在頁面上的點擊或輸入。如果你的瀏覽器送出「不要追蹤」（Do Not Track）或全球隱私控制（Global Privacy Control），就不會傳送任何分析事件。</p>
 
+        <p>錯誤報告包含經清理的例外訊息與堆疊追蹤（不含查詢參數或片段的程式網址、函式名稱、行號與欄號）、版本、伺服器主機、瀏覽器與作業系統、App 內建瀏覽器，以及是否正在對戰。我們會從錯誤文字移除已知的機密欄位、電子郵件地址與長身分識別字串，並排除錯誤事件中的呼號、房間與來源屬性。錯誤報告保留 PostHog 的匿名裝置與工作階段識別碼。每頁最多傳送五種不同錯誤與一次瀏覽器未提供細節的錯誤。啟動初期的錯誤會先保存在記憶體，等待分析功能啟動；同樣遵守拒絕追蹤設定。私有原始碼對照檔協助我們讀取壓縮程式的堆疊，不會隨網站公開提供。</p>
+
         <h2>網站分析</h2>
+        <p>可選用的伺服器監控會計算 panic 與 ERROR 日誌行數。它可將固定格式的數量摘要傳給擁有者指定的 webhook，並在僅管理員可讀取的私有資料庫檢視保留最新 200 筆摘要。摘要不包含玩家識別資料或原始日誌文字。原始診斷日誌保留在伺服器上。</p>
         <p>Vercel Web Analytics 計算匿名的瀏覽次數與訪客數，不使用 Cookie。</p>
 
         <h2>我們不做的事</h2>

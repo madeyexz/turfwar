@@ -4,6 +4,7 @@ import type { NetFields } from '../shared/netstats';
 import type { DeviceKind } from '../shared/devicekind';
 import type { ServerId } from './net/servers';
 import { currentVisitProps, dropClickIds } from './visit';
+import { scrub } from './exceptions';
 
 /**
  * Product analytics (PostHog, US cloud): how many players, from where (PostHog derives the country
@@ -24,7 +25,7 @@ export type Reason = 'menu' | 'disconnect' | 'close';
  */
 export type Exit = 'menu_button' | 'end_screen' | 'leave_key' | 'removed' | 'lost' | 'rejoined' | 'close';
 /** The page's own failures: an uncaught error, a promise nobody caught, the graphics (WebGL) context lost. */
-export type ClientErrorKind = 'error' | 'rejection' | 'webgl_lost' | 'webgl_restored';
+export type ClientErrorKind = 'error' | 'rejection' | 'boot' | 'webgl_lost' | 'webgl_restored';
 
 /**
  * How long the lobby took to reach a server (`seconds`; `queued`: a play button was waiting). `failures`: pings and connects that failed first.
@@ -133,6 +134,19 @@ export function track<E extends EventName>(event: E, props: Events[E], options: 
   }));
 }
 
+/** Manual error capture for the slim SDK (no exception extension is loaded). */
+export function captureException(list: unknown[], props: Record<string, string | number | boolean>) {
+  const release = (globalThis as { _posthogReleaseId?: string })._posthogReleaseId;
+  run(ph => ph.capture('$exception', { $exception_list: list, $exception_level: 'error', ...(release ? { $release_id: release } : {}), ...props }, { _noTruncate: true }));
+}
+
+/** Error events must not inherit URL parameters, room codes or player properties. */
+export function privateErrorProperties(props: Record<string, unknown>): Record<string, unknown> {
+  const allowed = new Set(['token', 'distinct_id', '$device_id', '$session_id', '$window_id', '$lib', '$lib_version', '$browser', '$browser_version', '$os', '$os_version', '$current_url', '$exception_list', '$exception_level', '$release_id', 'app_version', 'server_host', 'in_app', 'kind', 'in_match', 'message', 'source', 'opaque', 'uptime_s', 'standalone', 'visible', 'test']);
+  const diagnostic = new Set(['message', 'source', '$current_url', 'server_host']);
+  return Object.fromEntries(Object.entries(props).filter(([key]) => allowed.has(key)).map(([key, value]) => [key, diagnostic.has(key) && typeof value === 'string' ? scrub(value) : value]));
+}
+
 /** Set person properties (`$set`, and `$set_once` for first-touch values). */
 export function setPerson(set: Props, setOnce?: Props) { run(ph => ph.setPersonProperties(set, setOnce)); }
 
@@ -178,6 +192,11 @@ export function startAnalytics(base: { lang: string; online_db: string; server_h
         event.properties = dropClickIds(event.properties);
         event.$set = dropClickIds(event.$set);
         event.$set_once = dropClickIds(event.$set_once);
+        if (event.event === '$exception' || event.event === 'client_error') {
+          event.properties = privateErrorProperties(event.properties ?? {});
+          delete event.$set;
+          delete event.$set_once;
+        }
         // Dev test events are printed as sent (our properties, PostHog's own `$…` ones left out).
         if (guard.test) {
           const own = Object.fromEntries(Object.entries(event.properties ?? {}).filter(([k]) => !k.startsWith('$') || k === '$current_url' || k === '$set'));

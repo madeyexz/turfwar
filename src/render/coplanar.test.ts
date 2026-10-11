@@ -62,7 +62,7 @@ describe('coplanar overlays', () => {
     const out = separateCoplanar(boxes);
     expect(performance.now() - t).toBeLessThan(500);
     expect(flush(out)).toBe(0);
-  });
+  }, 30_000); // the pairwise check below is quadratic: Ximending draws about 14,000 boxes
 });
 
 // Every map builds through the same pass in the renderer; keep it cheap there too.

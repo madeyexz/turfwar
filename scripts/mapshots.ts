@@ -33,7 +33,7 @@ export const SHOTS: readonly Shot[] = [
   { id: 'railyard', cam: [55, 16, -40], look: [0, 2, 8], note: 'the freight yard and its ramps' },
   { id: 'skyline', cam: [56, 54, 58], look: [0, 33, 0], note: 'the rooftops above the city' },
   { id: 'meridian', cam: [-160, 75, 100], look: [-30, 0, -10], note: 'the downtown blocks and the tower' },
-  { id: 'taipei', cam: [55, 40, 75], look: [0, 0, -5], fov: 55, note: "Ximending's neon streets at dusk" },
+  { id: 'taipei', cam: [-70, 45, 70], look: [-10, 0, 0], fov: 60, note: "Ximending's neon lanes and the Red House" },
   { id: 'xinyi', cam: [140, 70, 160], look: [-60, 200, 6], fov: 60, note: 'Taipei 101 over Xinyi at night' },
   { id: 'taipei101', cam: [8, 6.8, 8], look: [0, 5.4, 0], fov: 65, note: "88F's damper hall from the 89F gallery" },
   { id: 'memorial', cam: [60, 16, 34], look: [-14, 6, 0], note: 'the Memorial Hall and its blue roof' },

@@ -47,8 +47,8 @@ export const QUALITY: Record<'low' | 'medium' | 'high' | 'test', Quality> = {
   test: { ...SHARP, pixelRatio: 0.5, adaptive: false, shadows: 0, bloom: false, dynamicLights: false },
 };
 
-/** Merged clutter that casts no shadow on lean presets (mesh names from level.ts, dressing.ts and lotdetail.ts). */
-const LEAN_CASTERS = /^(level:hedge|lots:|street:props)/;
+/** Merged clutter that casts no shadow on lean presets (mesh names from level.ts and dressing.ts). */
+const LEAN_CASTERS = /^(level:hedge)/;
 const sphere = new THREE.Sphere();
 
 /**

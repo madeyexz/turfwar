@@ -35,12 +35,14 @@ requests.
 - `src/game/`: client loop, player prediction/input, Solo link, settings, performance check.
 - `src/net/online.ts`: SpacetimeDB connection, replicated state, interpolation, and intents.
 - `src/analytics.ts`: PostHog product analytics (lazy, guarded; see `docs/DEVELOPMENT.md` "Players, analytics and the admin page").
+- `src/errors.ts`, `src/exceptions.ts`, `src/bootstrap.ts`: bounded client stacks and early/boot errors. Preserve analytics opt-outs and error-property filtering. Hidden maps must be removed from build output; private upload setup is in `docs/DEVELOPMENT.md`. Never claim PostHog symbolication from local parsing alone.
 - `privacy/index.html`, `src/privacy/`: the public `/privacy` page (English and 繁體中文). Keep it true
   whenever what the game stores or sends changes.
 - `about/`, `en/about/`, `public/{robots.txt,sitemap.xml,llms.txt,llms-full.txt,og/}`: the crawlable text, structured data and previews for search and AI answer engines (`docs/SEO.md`). Keep them true to `docs/GAMEPLAY.md` when rules, modes, maps or names change; canonicals and sitemap URLs stay clean (no `utm_*`); `src/seo.test.ts` checks them. Before SEO work, run `bun run seo:report` (Google Search Console and Bing data) and decide from it; after a release, `bun run seo:ping`.
 - `admin/index.html`, `src/admin/`: the owner's `/admin` dashboard (admin-key login checked in the module; admin-only views).
 - Other `src/` modules: rendering, soldier/viewmodel animation, effects, HUD, and audio.
 - `spacetimedb/src/index.ts`: tables, reducers, lifecycle, and scheduled match tick.
+- Server error summaries use private `server_error` and admin-only `admin_errors`. The optional `deploy/gcp-taipei/watch-errors.py` writes fixed log counts in a separate transaction. Do not swallow reducer errors or commit partial match state to preserve a diagnostic. Watcher install and module publication require approval.
 - `src/module_bindings/`: generated client bindings; regenerate after module API changes.
 - `public/assets/`, `public/fonts/`: runtime assets and licenses.
 - `tools/`: asset conversion/fetch tools with their own dependencies; not runtime code.
