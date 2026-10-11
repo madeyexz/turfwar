@@ -102,8 +102,8 @@ nav.sections {
 .nav-links { flex: 1 1 320px; min-width: 0; display: flex; gap: 4px; overflow-x: auto; scrollbar-width: none; }
 .nav-links::-webkit-scrollbar { display: none; }
 nav.sections a {
-  flex: none; padding: 4px 12px; border-radius: 999px; border: 1px solid transparent; color: var(--muted); text-decoration: none;
-  font-weight: 700; font-size: 14px; letter-spacing: 0.06em; text-transform: uppercase;
+  flex: none; padding: 4px 8px; border-radius: 999px; border: 1px solid transparent; color: var(--muted); text-decoration: none;
+  font-weight: 700; font-size: 13px; letter-spacing: 0.04em; text-transform: uppercase;
 }
 nav.sections a:hover { color: var(--ink); border-color: var(--line-strong); }
 nav.sections a:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
@@ -292,3 +292,89 @@ footer p { margin: 0; flex: 1 1 360px; max-width: 80ch; line-height: 1.45; }
 footer code { font-family: ui-monospace, 'SF Mono', Menlo, monospace; font-size: 12px; color: var(--muted); padding: 0 4px; border-radius: 3px; background: rgba(255, 255, 255, 0.06); }
 .btn.revoke { font-size: 12px; color: var(--muted); }
 .btn.revoke:hover { border-color: var(--crimson); color: var(--crimson); }
+
+/* Peak online (src/admin/peak.ts): a dashed reference line at one full 6v6 room. */
+.chart .ref { stroke: var(--cash); stroke-width: 1; stroke-dasharray: 5 4; opacity: 0.7; }
+.legend i.ref { height: 0; border-top: 2px dashed var(--cash); border-radius: 0; vertical-align: 3px; }
+
+/* Benchmarks (src/admin/benchmarks.ts): Turf War against BeGone's estimated Taiwan peak. */
+.muted { color: var(--faint); font-weight: 500; }
+table.bench td { vertical-align: top; white-space: normal; }
+table.bench td small { font-size: 12px; }
+td .tag.vs.within { color: var(--cash); border-color: rgba(156, 240, 138, 0.4); }
+td .tag.vs.above { color: var(--accent); border-color: var(--accent-dim); }
+td .tag.vs.below { color: var(--amber); border-color: rgba(255, 180, 90, 0.4); }
+pre.funnel { margin: 0 0 10px; padding: 10px 12px; overflow-x: auto; font: 12px/1.35 ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; color: var(--ink); background: rgba(0, 0, 0, 0.25); border: 1px solid var(--line); border-radius: 6px; }
+ul.evidence { margin: 0; padding-left: 18px; color: var(--muted); font-size: 13px; display: grid; gap: 4px; }
+ul.launch { list-style: none; margin: 0; padding: 0; display: grid; gap: 6px; }
+ul.launch li { display: grid; grid-template-columns: 7em 3em auto; align-items: baseline; gap: 8px; font-weight: 600; }
+ul.launch b { font-size: 22px; color: var(--accent); text-align: right; font-variant-numeric: tabular-nums; }
+
+/* ---- Growth stages (src/admin/growth.ts): status colours, the scorecard, the funnel ---------- */
+:root { --good: #9cf08a; --watch: #ffb45a; --bad: #ff6a5a; --none: #6c8288; }
+.st-good { --st: var(--good); }
+.st-watch { --st: var(--watch); }
+.st-bad { --st: var(--bad); }
+.st-none { --st: var(--none); }
+.st { color: var(--st); }
+.tile .col b.st, .tile b.st { color: var(--st); }
+.tile.hero .col b.st { color: var(--st); }
+td .st { font-weight: 700; }
+
+.focus { display: flex; flex-wrap: wrap; align-items: baseline; gap: 4px 14px; margin-bottom: 12px; padding: 12px 16px; border-radius: 8px;
+  background: color-mix(in srgb, var(--st) 11%, var(--panel)); border: 1px solid color-mix(in srgb, var(--st) 55%, transparent); border-left: 5px solid var(--st); }
+.focus b { font-size: 18px; letter-spacing: 0.04em; color: var(--st); text-transform: uppercase; }
+.focus span { color: var(--ink); line-height: 1.4; }
+.focus a { margin-left: auto; font-weight: 700; text-decoration: none; }
+
+.stages { display: grid; grid-template-columns: repeat(auto-fill, minmax(250px, 1fr)); gap: 10px; }
+.stage { display: grid; grid-template-columns: minmax(0, 1fr) auto; align-items: center; gap: 2px 10px; padding: 12px 14px 12px 16px; border-radius: 8px;
+  background: var(--panel); border: 1px solid var(--line); border-top: 3px solid var(--st); color: var(--ink); text-decoration: none; transition: border-color 0.15s; }
+.stage:hover { border-color: var(--st); }
+.stage:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.stage small { grid-column: 1 / -1; color: var(--muted); font-weight: 700; font-size: 13px; text-transform: uppercase; letter-spacing: 0.08em; }
+.stage .q { grid-column: 1 / -1; color: var(--faint); font-size: 14px; font-weight: 600; }
+.stage b { font-size: 34px; line-height: 1.1; font-weight: 700; color: var(--st); font-variant-numeric: tabular-nums; }
+.stage .target, .stage .split { grid-column: 1 / -1; font-size: 13px; color: var(--muted); line-height: 1.35; }
+.stage .split { color: var(--faint); }
+.badge { justify-self: end; padding: 2px 8px; border-radius: 999px; font-size: 12px; font-weight: 700; letter-spacing: 0.06em; text-transform: uppercase;
+  color: var(--st); background: color-mix(in srgb, var(--st) 14%, transparent); border: 1px solid color-mix(in srgb, var(--st) 45%, transparent); }
+
+table.funnel th { text-align: left; font-weight: 600; vertical-align: top; width: 22%; }
+table.funnel th b { display: block; color: var(--ink); text-transform: none; letter-spacing: 0.02em; font-size: 15px; }
+table.funnel th small { color: var(--faint); font-weight: 500; text-transform: none; letter-spacing: 0; }
+table.funnel td { min-width: 150px; }
+table.funnel td span { display: block; margin-top: 3px; font-size: 13px; color: var(--muted); font-variant-numeric: tabular-nums; }
+table.funnel td span b { color: var(--ink); font-size: 15px; }
+table.funnel td em { font-style: normal; color: var(--faint); margin-left: 4px; }
+table.funnel tr.leak th b, table.funnel tr.leak td em { color: var(--bad); }
+table.funnel tr.leak { background: color-mix(in srgb, var(--bad) 7%, transparent); }
+.fbar { height: 10px; border-radius: 3px; background: rgba(255, 255, 255, 0.06); overflow: hidden; }
+.fbar i { display: block; height: 100%; }
+.fbar i.g-all { background: var(--all-mid); }
+.fbar i.g-phone { background: var(--phone-mid); }
+.fbar i.g-computer { background: var(--computer-mid); }
+
+.rounds { list-style: none; margin: 0 0 6px; padding: 0; display: grid; gap: 8px; }
+.rounds li { display: grid; grid-template-columns: 64px minmax(0, 1fr); gap: 2px 10px; align-items: center; font-weight: 600; }
+.rounds li > span { color: var(--muted); font-variant-numeric: tabular-nums; }
+.rounds li.core > span { color: var(--accent); }
+.rounds li.slow > span { color: var(--bad); }
+.rounds small { grid-column: 2; color: var(--faint); font-size: 12px; }
+.bar.two { display: grid; gap: 2px; }
+.bar.two i { display: block; height: 6px; border-radius: 2px; min-width: 1px; }
+.bar.two i.p { background: var(--all-mid); }
+.bar.two i.r { background: var(--accent); }
+.bar.two i.g-phone { background: var(--phone-mid); }
+.bar.two i.g-computer { background: var(--computer-mid); }
+.legend i.lp { background: var(--all-mid); }
+.legend i.lr { background: var(--accent); }
+
+.flow { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 10px; margin-bottom: 12px; }
+.flow div { padding: 6px 12px; border: 1px solid var(--line); border-radius: 6px; background: rgba(255, 255, 255, 0.03); min-width: 84px; }
+.flow div b { display: block; font-size: 22px; font-variant-numeric: tabular-nums; }
+.flow div small { color: var(--faint); font-weight: 600; }
+.flow > i { font-style: normal; color: var(--faint); }
+.tile.one b { font-size: 32px; }
+.tile.one > span { display: block; }
+.tile.one.hero b:not(.st) { color: var(--accent); }

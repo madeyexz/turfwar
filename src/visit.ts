@@ -139,3 +139,20 @@ const prior = hadStorage(store('localStorage'));
 export function currentVisitProps(): Props {
   return visitProps({ local: store('localStorage'), session: store('sessionStorage'), landing, prior, inApp: inAppBrowserName(readEnv()) });
 }
+
+/**
+ * The first touch as the server keeps it (the `visit` reducer, shared/metrics.ts): its UTM source,
+ * else the referrer's host, with medium and campaign; this visit's own when none is stored. Reads
+ * only (`visitProps` keeps the first touch).
+ */
+export function firstTouchOf(local: Store | undefined, landing: Landing): { source: string; medium: string; campaign: string } {
+  let first = works(local) && local ? readJson<Touch>(local, TOUCH) : undefined;
+  if (!first) {
+    const tags = parseUtm(landing.search), ref = referrerHost(landing.referrer, landing.host);
+    first = { ...tags, ...(ref ? { ref } : {}), at: '' };
+  }
+  return { source: first.utm_source || first.ref || '', medium: first.utm_medium ?? '', campaign: first.utm_campaign ?? '' };
+}
+
+/** This browser's first touch (see `firstTouchOf`). */
+export const currentFirstTouch = () => firstTouchOf(store('localStorage'), landing);

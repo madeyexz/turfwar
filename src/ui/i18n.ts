@@ -77,6 +77,7 @@ const en = {
   // The footer links: the source on GitHub and the privacy page.
   'lobby.openSource': 'Open source', 'lobby.openSourceTitle': 'The source code on GitHub (opens in a new tab)',
   'lobby.privacy': 'Privacy', 'lobby.about': 'How to play', 'lobby.siteLinks': 'About this game',
+  'lobby.discord': 'Discord', 'lobby.discordTitle': 'Join the players on Discord (opens in a new tab)',
   'tab.quick': 'Quick play', 'tab.quickSub': 'No setup', 'tab.start': 'Start a server', 'tab.startSub': 'Your rules',
   'tab.join': 'Join a server', 'tab.joinSub': 'Rooms · code',
   'quick.tag': 'Any room',
@@ -405,6 +406,7 @@ const zhTW: Record<Key, string> = {
   'lobby.ways': '線上玩法', 'lobby.offline': '離線',
   'lobby.openSource': '開放原始碼', 'lobby.openSourceTitle': 'GitHub 上的原始碼（在新分頁開啟）',
   'lobby.privacy': '隱私權', 'lobby.about': '玩法介紹', 'lobby.siteLinks': '關於本遊戲',
+  'lobby.discord': 'Discord 社群', 'lobby.discordTitle': '加入玩家的 Discord 社群（在新分頁開啟）',
   'tab.quick': '快速遊戲', 'tab.quickSub': '免設定', 'tab.start': '開設房間', 'tab.startSub': '自訂規則',
   'tab.join': '加入房間', 'tab.joinSub': '房間列表 · 代碼',
   'quick.tag': '任意房間',

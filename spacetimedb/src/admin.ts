@@ -293,3 +293,87 @@ export function playerHourRows(rows: Iterable<HourLike>): PlayerHourRow[] {
   }
   return out;
 }
+
+// ---- Peak online (players in rooms at once; a table and a view of their own) ------------------
+
+/** Players in rooms at one moment: everyone, and by the side of their latest device report (phones and tablets are Phone). */
+export interface Online { all: number; phone: number; computer: number }
+/** A `peak_hour` row: the most players in rooms at once in one hour (hours since the epoch), and when the all-player peak was reached (epoch microseconds). */
+export interface PeakHour { hour: number; peak: number; phone: number; computer: number; at: bigint }
+
+/** Count players in rooms from each one's latest device kind (undefined: no report, counted only in `all`). */
+export function onlineBySide(devices: Iterable<string | undefined>): Online {
+  const online = { all: 0, phone: 0, computer: 0 };
+  for (const d of devices) {
+    online.all++;
+    if (d === 'phone' || d === 'tablet') online.phone++;
+    else if (d === 'desktop') online.computer++;
+  }
+  return online;
+}
+
+/**
+ * `hour`'s record after counting `online` at `now`: each figure keeps its own maximum, and `at` moves
+ * only when the all-player peak rises. Undefined when nothing changes (no write needed).
+ */
+export function bumpPeak(prev: PeakHour | undefined, hour: number, online: Online, now: bigint): PeakHour | undefined {
+  if (!prev) return online.all > 0 ? { hour, peak: online.all, phone: online.phone, computer: online.computer, at: now } : undefined;
+  if (online.all <= prev.peak && online.phone <= prev.phone && online.computer <= prev.computer) return undefined;
+  return {
+    hour, peak: Math.max(prev.peak, online.all), phone: Math.max(prev.phone, online.phone), computer: Math.max(prev.computer, online.computer),
+    at: online.all > prev.peak ? now : prev.at,
+  };
+}
+
+// ---- Growth metrics (shared/metrics.ts; tables and views of their own) ------------------------
+
+export interface PerfLike { identity: string; seconds: number; fpsSum: number; lowSum: number; lastFps: number; lastLow: number; waits: number; waitMsSum: number; boots: number; bootMsSum: number; lastAt: bigint }
+/** An `admin_player_perf` row: mean fps and 1% low over the seconds measured (else the latest), mean load times in ms. */
+export interface PlayerPerfRow { id: string; fps: number; low: number; seconds: number; waitMs: number; waits: number; bootMs: number; boots: number; lastAt: bigint }
+
+export function playerPerfRows(rows: Iterable<PerfLike>): PlayerPerfRow[] {
+  const out: PlayerPerfRow[] = [];
+  for (const r of rows) {
+    const round1 = (v: number) => Math.round(v * 10) / 10;
+    out.push({
+      id: shortId(r.identity), seconds: r.seconds,
+      fps: round1(r.seconds > 0 ? r.fpsSum / r.seconds : r.lastFps), low: round1(r.seconds > 0 ? r.lowSum / r.seconds : r.lastLow),
+      waitMs: r.waits ? Math.round(r.waitMsSum / r.waits) : 0, waits: r.waits, bootMs: r.boots ? Math.round(r.bootMsSum / r.boots) : 0, boots: r.boots, lastAt: r.lastAt,
+    });
+  }
+  return out;
+}
+
+export interface SourceLike { identity: string; source: string; medium: string; campaign: string; inApp: string; refBy: string; ref: string; shares: number; duels: number; played: boolean; firstAt: bigint }
+/** An `admin_player_source` row: no share codes, only whether a share brought this player and how many players theirs brought. */
+export interface PlayerSourceRow {
+  id: string; source: string; medium: string; campaign: string; inApp: string; referred: boolean;
+  shares: number; duels: number; invited: number; invitedPlayed: number; firstAt: bigint;
+}
+
+export function playerSourceRows(rows: Iterable<SourceLike>): PlayerSourceRow[] {
+  const all = [...rows];
+  const byRef = new Map<string, { invited: number; played: number }>();
+  for (const r of all) {
+    if (!r.refBy) continue;
+    const n = byRef.get(r.refBy) ?? { invited: 0, played: 0 };
+    n.invited++; if (r.played) n.played++;
+    byRef.set(r.refBy, n);
+  }
+  return all.map(r => {
+    const n = (r.ref && byRef.get(r.ref)) || { invited: 0, played: 0 };
+    return {
+      id: shortId(r.identity), source: r.source, medium: r.medium, campaign: r.campaign, inApp: r.inApp, referred: !!r.refBy,
+      shares: r.shares, duels: r.duels, invited: n.invited, invitedPlayed: n.played, firstAt: r.firstAt,
+    };
+  });
+}
+
+export interface MilestoneLike { identity: string; room: bigint; round: bigint; kill: bigint; match: bigint }
+export interface PlayerMilestoneRow { id: string; room: bigint; round: bigint; kill: bigint; match: bigint }
+
+export function playerMilestoneRows(rows: Iterable<MilestoneLike>): PlayerMilestoneRow[] {
+  const out: PlayerMilestoneRow[] = [];
+  for (const r of rows) out.push({ id: shortId(r.identity), room: r.room, round: r.round, kill: r.kill, match: r.match });
+  return out;
+}

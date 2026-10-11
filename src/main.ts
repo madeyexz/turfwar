@@ -21,6 +21,7 @@ import { PING_WINDOW, PingMonitor, hostAnswers, pingAllowed, pingTone, pingUrl, 
 import { currentServer, gameServerList, onServer, type GameServer, type ServerId } from './net/servers';
 import { ConnectDriver, connectSeconds, type ConnectState } from './net/connect';
 import { matchJoined, matchLeft, matchNote, setSuper, startAnalytics, track, type PlayKind, type Exit, type Reason } from './analytics';
+import { frameTook, lobbyReady, matchFrameStats, matchStarted, noteArrival, playFailed, playPressed } from './growth';
 import { LevelView } from './render/level';
 import { THEMES } from './render/materials';
 import { QUALITY, Renderer } from './render/renderer';
@@ -90,8 +91,12 @@ const PLAY = '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M7 4.5v15l12.
 const CARET = '<svg class="caret" viewBox="0 0 24 24" aria-hidden="true"><path d="m6 9 6 6 6-6"/></svg>';
 /** GitHub's mark, for the footer's source link. */
 const GITHUB = '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 .3a12 12 0 0 0-3.8 23.38c.6.12.83-.26.83-.57L9 21.07c-3.34.72-4.04-1.61-4.04-1.61-.55-1.39-1.34-1.76-1.34-1.76-1.08-.74.09-.73.09-.73 1.2.09 1.83 1.24 1.83 1.24 1.07 1.83 2.81 1.3 3.5 1 .1-.78.42-1.31.76-1.61-2.67-.3-5.47-1.33-5.47-5.93 0-1.31.47-2.38 1.24-3.22-.14-.3-.54-1.52.1-3.18 0 0 1-.32 3.3 1.23a11.5 11.5 0 0 1 6 0c2.28-1.55 3.29-1.23 3.29-1.23.64 1.66.24 2.88.12 3.18a4.65 4.65 0 0 1 1.23 3.22c0 4.61-2.8 5.63-5.48 5.92.42.36.81 1.1.81 2.22l-.01 3.29c0 .31.2.69.82.57A12 12 0 0 0 12 .3"/></svg>';
+/** Discord's mark (Simple Icons, CC0), for the lobby's community button. */
+const DISCORD = '<svg class="mark" viewBox="0 0 24 24" aria-hidden="true"><path d="M20.317 4.3698a19.7913 19.7913 0 00-4.8851-1.5152.0741.0741 0 00-.0785.0371c-.211.3753-.4447.8648-.6083 1.2495-1.8447-.2762-3.68-.2762-5.4868 0-.1636-.3933-.4058-.8742-.6177-1.2495a.077.077 0 00-.0785-.037 19.7363 19.7363 0 00-4.8852 1.515.0699.0699 0 00-.0321.0277C.5334 9.0458-.319 13.5799.0992 18.0578a.0824.0824 0 00.0312.0561c2.0528 1.5076 4.0413 2.4228 5.9929 3.0294a.0777.0777 0 00.0842-.0276c.4616-.6304.8731-1.2952 1.226-1.9942a.076.076 0 00-.0416-.1057c-.6528-.2476-1.2743-.5495-1.8722-.8923a.077.077 0 01-.0076-.1277c.1258-.0943.2517-.1923.3718-.2914a.0743.0743 0 01.0776-.0105c3.9278 1.7933 8.18 1.7933 12.0614 0a.0739.0739 0 01.0785.0095c.1202.099.246.1981.3728.2924a.077.077 0 01-.0066.1276 12.2986 12.2986 0 01-1.873.8914.0766.0766 0 00-.0407.1067c.3604.698.7719 1.3628 1.225 1.9932a.076.076 0 00.0842.0286c1.961-.6067 3.9495-1.5219 6.0023-3.0294a.077.077 0 00.0313-.0552c.5004-5.177-.8382-9.6739-3.5485-13.6604a.061.061 0 00-.0312-.0286zM8.02 15.3312c-1.1825 0-2.1569-1.0857-2.1569-2.419 0-1.3332.9555-2.4189 2.157-2.4189 1.2108 0 2.1757 1.0952 2.1568 2.419 0 1.3332-.9555 2.4189-2.1569 2.4189zm7.9748 0c-1.1825 0-2.1569-1.0857-2.1569-2.419 0-1.3332.9554-2.4189 2.1569-2.4189 1.2108 0 2.1757 1.0952 2.1568 2.419 0 1.3332-.946 2.4189-2.1568 2.4189Z"/></svg>';
 /** The public repository and the privacy page, linked from the lobby's footer. */
 const REPO_URL = 'https://github.com/madeyexz/turfwar';
+/** The players' Discord server, linked from the lobby's top bar. */
+const DISCORD_URL = 'https://discord.gg/ugFv3GzwcD';
 /** The privacy page in the lobby's language (a `?lang=` visit passes it on; otherwise the page reads the saved choice). */
 const privacyHref = () => `/privacy${params.get('lang') ? `?lang=${lang()}` : ''}`;
 /** The static about page (how to play, modes, maps, FAQ; crawlable text for search engines, docs/SEO.md) in the lobby's language. */
@@ -134,6 +139,7 @@ menu.innerHTML = `
       <label class="callsign">${L('lobby.callsign', 'span', 'class="label"')}<input type="text" id="callsign" maxlength="16" autocomplete="off" spellcheck="false"></label>
       ${choice('teams', 'team', [['auto', L('lobby.auto')], ['0', L('team.0', 'span', 'class="swat"')], ['1', L('team.1', 'span', 'class="militia"')]], 'lobby.team')}
       <div class="icons">
+        <a class="icon-btn discord" id="discord-top" href="${DISCORD_URL}" target="_blank" rel="noopener" data-tip="${t('lobby.discord')}" data-i18n-tip="lobby.discord" aria-label="${t('lobby.discordTitle')}" data-i18n-aria-label="lobby.discordTitle">${DISCORD}</a>
         <button type="button" class="icon-btn" id="open-controls" data-tip="${t('lobby.controls')}" data-i18n-tip="lobby.controls" aria-label="${t('lobby.controls')}" data-i18n-aria-label="lobby.controls" aria-haspopup="dialog">?</button>
         <button type="button" class="icon-btn" id="open-settings" data-tip="${t('lobby.settings')}" data-i18n-tip="lobby.settings" aria-label="${t('lobby.settings')}" data-i18n-aria-label="lobby.settings" aria-haspopup="dialog">${GEAR}</button>
       </div>
@@ -964,6 +970,7 @@ const openOptions = (tab: SettingsTab, focus?: SettingsFocus) => {
 };
 for (const id of ['#quick-server', '#rooms-server']) $(id).addEventListener('click', () => openOptions('options', 'server'));
 $('#open-settings').addEventListener('click', () => openOptions('options'));
+$('#discord-top').addEventListener('click', () => track('discord_clicked', { where: 'lobby' }));
 $('#open-controls').addEventListener('click', () => openOptions('controls'));
 
 /**
@@ -1033,6 +1040,7 @@ type Duel = { kind: 'join'; c: Challenge; mapId: string }
 let special: Duel | undefined;
 /** The challenge this page was opened with. */
 const challenge = parseChallenge(location.search);
+if (challenge) noteArrival(challenge.ref);
 if (challenge) track('challenge_link_opened', { ref: challenge.ref ?? '', has_room: !!challenge.room }, { setOnce: { ref_by: challenge.ref ?? '' } });
 
 /** 「<name> 向你下戰帖！」 over the lobby: one tap (with the callsign asked for if needed) and you're in. */
@@ -1122,6 +1130,7 @@ function run(action: Action, room = -1, retried = false) {
     return;
   }
   if (modeOf(action) === 'online' && phase() !== 'ready') {
+    playPressed();
     // Still inside the tap: full screen now, as starting would (a queued start runs without a gesture).
     fullscreenForTouch();
     // (A lobby that let go of the server in a background tab reconnects first.)
@@ -1130,6 +1139,7 @@ function run(action: Action, room = -1, retried = false) {
     return;
   }
   if (action === 'room' && !rooms.some(r => r.room === room)) return;
+  playPressed();
   joiningRoom = room;
   void start(action, retried);
 }
@@ -1218,6 +1228,7 @@ async function start(action: Action, retried = false) {
       lobbyConn.queue({ action, room, retried: true });
       return;
     }
+    playFailed();
     status.textContent = t('lobby.couldNotJoin', { error: serverError((error as Error).message) });
     track('error_shown', { where: 'join', message: String((error as Error)?.message ?? error).slice(0, 120) });
     watchLobbyRooms(); refresh();
@@ -1278,12 +1289,14 @@ function joined(link: GameLink, map: string, serverChoice: ServerId | undefined,
   const state = link.state(), me = state?.soldiers.find(s => s.id === link.myId());
   const config = state?.config;
   const info = link.roomInfo?.();
+  // The wait from pressing Play (a rejoin or a map change has none); the match's frame count starts over.
+  const wait = matchStarted();
   matchJoined({
     online: link.mode === 'online', ...(info ? { room: info.code || `public-${info.room}`, private: !!info.code } : {}), ...(hosted ? { hosted: true } : {}), map,
     mode: config?.mode ?? 'elimination', size: config?.practice ? 'practice' : sizeLabel(config?.teamSize ?? perTeam()), team: me?.team === 1 ? 'militia' : 'swat',
     ...(serverChoice ? { server_choice: serverChoice } : {}), device: currentDeviceKind(), ...(rejoin ? { rejoin: true } : {}),
     // How it is played (phones): touch, an upright screen (the match then turns sideways), which app's browser, aim assist.
-    touch: touchActive(), upright: innerHeight > innerWidth && !isSideways(), ...playContext(),
+    touch: touchActive(), upright: innerHeight > innerWidth && !isSideways(), ...playContext(), ...(wait !== undefined && !rejoin ? { wait_ms: wait } : {}),
   });
   if (isSideways()) matchNote('sideways');
   // The server removed us (it stopped hearing from this client) or the connection dropped: back to
@@ -1341,7 +1354,7 @@ async function rejoinAfterDrop(old: OnlineLink) {
 function leftMatch(reason: Reason, exit?: Exit) {
   const link = game?.link, me = link?.state()?.soldiers.find(s => s.id === link.myId());
   // Online: the match's connection quality, and its last report to the server.
-  matchLeft(reason, { kills: me?.kills ?? 0, deaths: me?.deaths ?? 0 }, link instanceof OnlineLink ? link.netLeft() : undefined, exit);
+  matchLeft(reason, { kills: me?.kills ?? 0, deaths: me?.deaths ?? 0 }, link instanceof OnlineLink ? link.netLeft() : undefined, exit, matchFrameStats());
 }
 // Closing the tab mid-match: match_left goes out by beacon.
 addEventListener('pagehide', () => leftMatch('close', 'close'));
@@ -1468,6 +1481,7 @@ async function boot() {
   assets = await loadAssets(f => { loadFraction = f; renderQuick(); renderStart(); renderOthers(); renderChallenge(); }, { renderer: renderer.renderer, quality });
   await fonts;
   ready = true;
+  if (!benchMode) lobbyReady();
   warmServiceWorker();
   refresh();
   renderChallenge();
@@ -1498,6 +1512,7 @@ async function boot() {
     const t0 = performance.now();
     if (bench && !bench.done && game) bench.drive(dt);
     step(dt, now);
+    if (game && !fixed) frameTook(interval);
     if (bench && !bench.done) {
       bench.record(interval, performance.now() - t0);
       const left = Math.ceil(bench.remaining);
