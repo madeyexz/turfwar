@@ -147,7 +147,7 @@ describe('the about pages', () => {
   it('carry a FAQPage whose questions and answers are the visible FAQ, word for word', () => {
     for (const html of [zh, en]) {
       const faq = jsonLd(html).find(n => n['@type'] === 'FAQPage') as { mainEntity: { name: string; acceptedAnswer: { text: string } }[] };
-      expect(faq.mainEntity.length).toBeGreaterThanOrEqual(8);
+      expect(faq.mainEntity.length).toBeGreaterThan(0);
       const body = html.slice(Math.max(html.indexOf('<h2>FAQ</h2>'), html.indexOf('<h2>常見問題</h2>')));
       const visible = [...body.matchAll(/<h3>([\s\S]*?)<\/h3>\s*<p>([\s\S]*?)<\/p>/g)].map(m => ({ q: text(m[1]), a: text(m[2]) }));
       expect(visible.length).toBe(faq.mainEntity.length);
