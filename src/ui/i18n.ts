@@ -77,6 +77,7 @@ const en = {
   'wake.line': 'Waking the server… {n} s', 'wake.chip': 'waking',
   'wake.rooms': 'Waking the server…', 'wake.roomsSub': 'Rooms show up here once it is awake (about 30 s).',
   'wake.downHead': "Can't reach the server", 'wake.downBody': 'It did not wake up within 3 minutes. Solo and Practice still work.',
+  'wake.downBodyOn': 'We could not connect to the server. Check your connection and retry. Solo and Practice still work.',
   'wake.downChip': 'unreachable', 'wake.retry': 'Retry',
   // The three online views: Quick Play, Start a Server, Join a Server.
   'lobby.ways': 'Ways to play online', 'lobby.offline': 'Offline',
@@ -413,6 +414,7 @@ const zhTW: Record<Key, string> = {
   'wake.line': '正在喚醒伺服器… {n} 秒', 'wake.chip': '喚醒中',
   'wake.rooms': '正在喚醒伺服器…', 'wake.roomsSub': '伺服器醒來後（約 30 秒），房間就會出現在這裡。',
   'wake.downHead': '無法連上伺服器', 'wake.downBody': '3 分鐘內未能喚醒。仍可單人對戰電腦或進入練習場。',
+  'wake.downBodyOn': '無法連上伺服器。請檢查網路後重試。仍可單人對戰電腦或進入練習場。',
   'wake.downChip': '無法連線', 'wake.retry': '重試',
   'lobby.ways': '線上玩法', 'lobby.offline': '離線',
   'lobby.openSource': '開放原始碼', 'lobby.openSourceTitle': 'GitHub 上的原始碼（在新分頁開啟）',

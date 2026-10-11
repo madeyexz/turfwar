@@ -18,7 +18,7 @@ import { OfflineLink } from './game/offline';
 import { Bench, BENCH_SECONDS, benchReport, type BenchResult } from './game/bench';
 import { onlineAvailable, connectOnline, watchRooms, ConnectError, OnlineLink, type OnlineEntry, type PublicRoom } from './net/online';
 import { PING_WINDOW, PingMonitor, hostAnswers, pingAllowed, pingTone, pingUrl, serverHost, serverRegion } from './net/ping';
-import { currentServer, gameServerList, onServer, type GameServer, type ServerId } from './net/servers';
+import { currentServer, gameServerList, onServer, serverSleeps, type GameServer, type ServerId } from './net/servers';
 import { WakeDriver, wakeProgress, wakeSeconds, type WakeState } from './net/wake';
 import { matchJoined, matchLeft, matchNote, setSuper, startAnalytics, track, type PlayKind, type Exit, type Reason } from './analytics';
 import { LevelView } from './render/level';
@@ -316,9 +316,9 @@ if (!mapOk(map)) map = firstMap();
 
 // ---- Live rooms: a light subscription to the server's room rows while the lobby is open. ----
 /*
- * The server sleeps when nobody plays and boots on the next request (src/net/wake.ts). The wake
- * driver owns the rooms connection: it pings, connects, shows "waking" while the server boots and
- * gives up after 3 minutes. Play buttons pressed meanwhile are queued and run once it is up.
+ * The wake driver (src/net/wake.ts) owns the rooms connection: it pings and connects, and gives up
+ * (unreachable, Retry) after 30 s, or 3 minutes for a server that scales to zero (Singapore), which
+ * also shows "waking" while it boots. Play buttons pressed meanwhile are queued and run once it is up.
  */
 /** A play action held until the server is up; `retried`: it already failed to reach the server once. */
 interface Queued { action: Action; room: number; retried: boolean }
@@ -327,6 +327,7 @@ let rooms: PublicRoom[] = [];
 const wake = new WakeDriver<Queued>({
   ping: signal => { const url = server && pingUrl(server.uri); return url ? hostAnswers(url, signal) : Promise.resolve(false); },
   connect: lost => watchRooms(list => { rooms = list; refresh(); }, lost),
+  sleeps: () => !!server && serverSleeps(server),
 }, s => onWake(s), q => run(q.action, q.room, q.retried));
 const phase = () => wake.state.phase;
 /** What the screen last showed of the wake state: a change redraws everything, a tick only the timer. */
@@ -344,10 +345,11 @@ function onWake(s: WakeState<Queued>) {
   // A new attempt (or a dropped connection): the old room list is stale. (Stopping keeps it: the
   // room being joined stays on screen while the game connects.)
   if (s.phase !== was && s.phase !== 'ready' && s.phase !== 'idle') rooms = [];
-  if (s.phase === 'ready' && was !== 'ready' && (s.woke || s.slow)) {
+  if (s.phase === 'ready' && was !== 'ready' && (s.woke || s.slow || s.failures > 0)) {
     const tm = wake.timings;
-    track('server_woke', {
-      seconds: wakeSeconds(s, performance.now()), queued: !!queued, failures: s.failures, reconnect: wasReady, woke: s.woke,
+    // `server_woke`: a sleeping server was woken (the "asleep" screen showed); `connect_slow`: any other slow or retried connect.
+    track(s.woke ? 'server_woke' : 'connect_slow', {
+      seconds: wakeSeconds(s, performance.now()), queued: !!queued, failures: s.failures, reconnect: wasReady,
       ...(tm.pingMs !== undefined ? { ping_ms: tm.pingMs, ping_ok: !!tm.pingOk } : {}),
       ...(tm.connectMs !== undefined ? { connect_ms: tm.connectMs } : {}), ...(tm.importMs !== undefined ? { import_ms: tm.importMs } : {}),
     });
@@ -383,7 +385,7 @@ function followServer() {
 }
 /**
  * A server chosen in Settings: in the lobby, the room list, chips and ping switch at once, and the
- * new server is woken if it sleeps (a play action waiting for the old one is dropped). In a match,
+ * new server is woken if it scales to zero (a play action waiting for the old one is dropped). In a match,
  * or while joining one, the lobby picks it up when it is back on screen.
  */
 onServer(() => {
@@ -398,9 +400,9 @@ function unwatchRooms() {
   pings.setActive(false);
 }
 /**
- * A lobby left in a background tab lets the server sleep (an open connection keeps it awake, and
- * that costs money): after 5 minutes hidden it disconnects, and on coming back it reconnects,
- * waking the server if need be. Not while a play action waits for the server.
+ * A lobby left in a background tab lets go of the server: after 5 minutes hidden it disconnects, and
+ * on coming back it reconnects with a fresh socket (a phone's may have died meanwhile; an open connection
+ * also keeps a server that scales to zero awake, and that costs money). Not while a play action waits.
  */
 const LET_SLEEP_HIDDEN_MS = 5 * 60_000;
 let hiddenTimer: ReturnType<typeof setTimeout> | undefined;
@@ -431,7 +433,7 @@ const pingClass = (uri: string | undefined) => { const ms = pings.get(uri); retu
 /** The chosen server by its name in Settings ("Singapore", "US East", "Dev server"); any other by its region. */
 const serverName = (uri: string) => server && uri === server.uri ? t(server.label) : serverRegion(uri);
 const pingTitle = (uri: string | undefined) => uri ? t('server.pingTitle', { server: serverName(uri), n: PING_WINDOW }) : '';
-/** "Server · Singapore · 110 ms ▾" for the chips; "Server · Singapore · waking" while it boots. */
+/** "Server · Taipei · 30 ms ▾" for the chips; "Server · Singapore · waking" while a sleeping server boots. */
 function chipHtml(uri: string) {
   const ms = pings.get(uri), p = phase();
   const value = p === 'waking' ? `<span class="ping waking">${esc(t('wake.chip'))}</span>`
@@ -551,7 +553,7 @@ function renderLine(id: string, action: Action, liveText: string) {
 function setText(el: HTMLElement, text: string) { if (el.textContent !== text) el.textContent = text; }
 
 /**
- * The waking card over the tabs' views: the server is asleep (not down), the time so far and a bar,
+ * The waking card over the tabs' views (a server that scales to zero): the server is asleep (not down), the time so far and a bar,
  * the queued play action with Cancel; after 3 minutes, "Can't reach the server" with Retry.
  */
 function renderWake() {
@@ -563,7 +565,7 @@ function renderWake() {
   box.classList.toggle('down', down);
   $('#wake-dot').className = `conn ${down ? 'down' : 'wait'}`;
   setText($('#wake-title'), t(down ? 'wake.downHead' : 'wake.head'));
-  setText($('#wake-body'), t(down ? 'wake.downBody' : 'wake.body'));
+  setText($('#wake-body'), t(down ? (server && serverSleeps(server) ? 'wake.downBody' : 'wake.downBodyOn') : 'wake.body'));
   // The machine answers but the database is still loading; or it is slower than usual.
   const note = down ? '' : s.hostUp ? t('wake.loading') : secs >= 60 ? t('wake.slow') : '';
   $('#wake-note').hidden = !note;
@@ -1237,8 +1239,8 @@ async function start(action: Action, retried = false) {
     const room = joiningRoom;
     starting = undefined; joiningRoom = -1;
     inMenu = !benchMode; menuMusic();
-    // The server could not be reached (it fell asleep under a lobby that still looked connected,
-    // after a laptop slept say): wake it and join once it is up. Only once: a second failure is shown.
+    // The server could not be reached (it fell asleep under a lobby that still looked connected, or the
+    // network dropped, after a laptop slept say): try again and join once it is up. Only once: a second failure is shown.
     if (error instanceof ConnectError && via === 'online' && !retried && !benchMode) {
       status.textContent = '';
       watchLobbyRooms();

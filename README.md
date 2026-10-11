@@ -150,8 +150,9 @@ docs/            Gameplay, architecture and development guides
   the shared rules and publishes one packed frame per room, which clients interpolate.
 - **Validated movement.** Clients predict their own movement and report it; the server checks every
   report against speed, collision and vehicle rules and corrects anything out of bounds.
-- **Cheap when idle.** The game server sleeps when nobody is playing and wakes on the first visit
-  (about two seconds); the lobby shows that it is waking rather than offline.
+- **Cheap when idle.** The default game server (Taipei) is always on. The optional Singapore server
+  sleeps when nobody is playing and wakes on the first visit (about two seconds); the lobby shows that
+  it is waking rather than offline.
 
 The full design — validation, performance budgets and known trade-offs — is in
 [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md).

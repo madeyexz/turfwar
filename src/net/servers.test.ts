@@ -1,7 +1,7 @@
 import { afterEach, describe, expect, it } from 'vitest';
 import { setLang, t } from '../ui/i18n';
 import { serverIdentityKey } from './ping';
-import { MAINCLOUD, SERVER_KEY, SINGAPORE, US_EAST, buildServer, chooseServer, gameServers, rememberServer, type KeyValue } from './servers';
+import { MAINCLOUD, SERVER_KEY, SINGAPORE, US_EAST, buildServer, chooseServer, gameServers, rememberServer, serverSleeps, type KeyValue } from './servers';
 
 const TAIPEI = { uri: 'wss://tw.turfwar.ianhsiao.me', database: 'turfwar' };
 const page = (search = '', host = 'turfwar.ianhsiao.me', protocol = 'https:') => ({ search, host, protocol });
@@ -108,5 +108,22 @@ describe('choosing a server', () => {
 
   it('chooses nothing when the build offers no server', () => {
     expect(chooseServer([], '?server=us', memory({ [SERVER_KEY]: 'us' }))).toBeUndefined();
+  });
+});
+
+describe('which servers scale to zero', () => {
+  it('flags Singapore alone, in every build that offers it', () => {
+    expect(gameServers(TAIPEI).map(s => [s.id, s.scalesToZero])).toEqual([['tw', false], ['sg', true], ['us', false]]);
+    expect(gameServers(SINGAPORE).map(s => [s.id, s.scalesToZero])).toEqual([['sg', true], ['us', false]]);
+    expect(gameServers({ uri: 'ws://localhost:5217/stdb/', database: 'lawbreaker' }).every(s => !s.scalesToZero)).toBe(true);
+    expect(gameServers({ uri: MAINCLOUD, database: 'lawbreaker-dev' }).every(s => !s.scalesToZero)).toBe(true);
+  });
+
+  it('serverSleeps matches a server by host and database, ignoring a trailing slash and case', () => {
+    expect(serverSleeps(SINGAPORE)).toBe(true);
+    expect(serverSleeps({ uri: 'WSS://play.turfwar.ianhsiao.me/', database: 'turfwar' })).toBe(true);
+    expect(serverSleeps(TAIPEI)).toBe(false);
+    expect(serverSleeps(US_EAST)).toBe(false);
+    expect(serverSleeps({ uri: SINGAPORE.uri, database: 'other' })).toBe(false);
   });
 });

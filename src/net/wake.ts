@@ -1,25 +1,28 @@
 /**
- * Waking the game server. The production SpacetimeDB host scales to zero: after a quiet spell its
- * machine stops, and the next request (HTTP or websocket) boots it, the container first and then the
- * database. That takes from a few seconds to a minute or two, and meanwhile the edge answers
- * 502/503/504, holds the request or times out. The lobby and /admin show this as "waking" (the
- * server is asleep, not down) and keep trying gently until it answers, giving up after 3 minutes.
+ * Reaching the game server, and waking it when it sleeps. Of our servers only Singapore (InstaCloud)
+ * scales to zero (`scalesToZero` in servers.ts): after a quiet spell its machine stops, and the next
+ * request (HTTP or websocket) boots it, the container first and then the database. That takes from a
+ * few seconds to a minute or two, and meanwhile the edge answers 502/503/504, holds the request or
+ * times out. For such a server the lobby and /admin show "waking" (asleep, not down) and keep trying
+ * gently until it answers, giving up after 3 minutes. Taipei, Maincloud and a local dev server are
+ * always on: a failed ping or connect there only means "can't reach it" (a bad network, a restart),
+ * so the screen keeps saying "connecting", retries for 30 s and then says unreachable. `sleeps` in the
+ * limits picks the behaviour (`ALWAYS_ON` is the second set).
  *
- *   idle → probing → ready                 a warm server: nothing extra is shown (a slow one only says "connecting")
+ *   idle → probing → ready                 a reachable server: nothing extra is shown (a slow one only says "connecting")
  *            │ a failed ping or connect
- *            ▼
+ *            ▼  (sleeping servers only)
  *          waking → ready                  it booted; a play action pressed meanwhile runs now, once
- *            │ 3 minutes without an answer
+ *            │ 3 minutes (always-on: 30 s) without an answer
  *            ▼
  *          unreachable → probing           Retry (or pressing play) starts over
  *
  * A live connection that drops goes back to probing. `step` is the pure state machine; `WakeDriver`
- * runs it with one `/v1/ping` in flight at a time (every 2–3 s while waking) and one connection in
+ * runs it with one `/v1/ping` in flight at a time (every 2–3 s while failing) and one connection in
  * flight at a time, opened at once, then after the host answers a ping (or every 15 s regardless).
  * Nothing retries on its own once unreachable: a server that is really down is left alone, and a
  * sleeping one is not woken by a forgotten tab.
  */
-
 export type WakePhase = 'idle' | 'probing' | 'waking' | 'ready' | 'unreachable';
 
 export interface WakeState<A> {
@@ -57,6 +60,8 @@ export const WAKE = {
    * quarter of visitors (phones, a lazy chunk, cold TLS), and "asleep" copy for that was wrong.
    */
   slowMs: 6000,
+  /** True: a failed ping or connect means the server is asleep (`waking`); false: it only means unreachable. */
+  sleeps: true,
   /** Give up (unreachable) after this long. */
   giveUpMs: 180_000,
   /** How long a wake usually takes: the copy says "about 30 s" and the bar fills by then. */
@@ -69,6 +74,8 @@ export const WAKE = {
   connectEveryMs: 15_000,
 };
 export type WakeLimits = typeof WAKE;
+/** For a server that never sleeps: failures are not "asleep", and unreachable comes after 30 s of trying. */
+export const ALWAYS_ON: WakeLimits = { ...WAKE, sleeps: false, giveUpMs: 30_000 };
 
 export const idleWake = <A>(): WakeState<A> => ({ phase: 'idle', since: 0, failures: 0, hostUp: false, woke: false, slow: false });
 
@@ -87,7 +94,8 @@ export function step<A>(s: WakeState<A>, e: WakeEvent<A>, now: number, limits: W
       // A failed connect while the host answers pings: the machine is up, the database is still loading.
       const hostUp = e.from === 'connect' && s.hostUp;
       if (now - s.since >= limits.giveUpMs) return { state: { ...s, phase: 'unreachable', failures, hostUp: false } };
-      return { state: { ...s, phase: 'waking', woke: true, failures, hostUp } };
+      // A server that never sleeps is not "waking": it stays probing (counting failures) until it answers or we give up.
+      return { state: limits.sleeps ? { ...s, phase: 'waking', woke: true, failures, hostUp } : { ...s, failures, hostUp } };
     }
     case 'hostUp': return { state: trying && !s.hostUp ? { ...s, hostUp: true } : s };
     case 'up': {
@@ -146,6 +154,8 @@ export interface WakeTimings {
 export interface WakeDeps {
   /** One `/v1/ping`: true when the host answered 200 (false or a rejection: not up). */
   ping(signal: AbortSignal): Promise<boolean>;
+  /** Whether the server being reached scales to zero (asked afresh at every event: the lobby can switch servers). */
+  sleeps?(): boolean;
   /** Open the real connection; `lost` is called if it drops after being live. */
   connect(lost: () => void): WakeLink;
   now?: () => number;
@@ -191,12 +201,16 @@ export class WakeDriver<A> {
   /** Stop trying and close the connection. */
   stop() { this.dispatch({ type: 'stop' }); }
 
+  /** The limits for the server in play: the given ones, or ALWAYS_ON when it never sleeps (and no limits were given for a test). */
+  private limitsNow(): WakeLimits {
+    return this.deps.sleeps && !this.deps.sleeps() ? { ...this.limits, sleeps: false, giveUpMs: ALWAYS_ON.giveUpMs } : this.limits;
+  }
   private now() { return this.deps.now ? this.deps.now() : performance.now(); }
   private trying() { return this.s.phase === 'probing' || this.s.phase === 'waking'; }
 
   private dispatch(e: WakeEvent<A>) {
     const before = this.s;
-    const { state, run } = step(before, e, this.now(), this.limits);
+    const { state, run } = step(before, e, this.now(), this.limitsNow());
     this.s = state;
     this.effects(before, state);
     if (state !== before || (e.type === 'tick' && this.trying())) this.onChange(state);

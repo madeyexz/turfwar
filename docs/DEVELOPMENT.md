@@ -144,12 +144,19 @@ the image built; `sudo docker builder prune -af && sudo docker image prune -af` 
 The Singapore server (`deploy/instacloud/`, InstaCloud project `5ad5aa00-…`, compute service `stdb`)
 is a slim container with SpacetimeDB's two binaries and a 10 GiB `/data` volume. It **scales to zero**:
 with no traffic it suspends (or stops), and the next request wakes it, ~2 s from a suspend; the
-lobby shows a "waking up" state meanwhile. Traffic on an already-open WebSocket does not count as
+lobby shows a "waking up" state meanwhile. It is the only server that does (`scalesToZero` in
+`src/net/servers.ts`; Taipei is always on, Maincloud is managed, a local server is ours): the wake states
+in `src/net/wake.ts`, the in-match `keepAwake` ping and the "asleep" copy apply to it alone, while a failed
+ping or connect on any other server just means "can't reach it" (normal "connecting" copy, retries for
+30 s, then unreachable with Retry). Real visitors now rarely reach Singapore: it is only
+reached by choosing it in Settings (or `?server=sg`, or a saved choice from before Taipei). In PostHog's
+first week 52 people loaded the lobby on it on 2026-10-07 before Taipei became the default (11:28 UTC),
+and only 5 after (one Philippines player is most of those 21 lobby views); none saw a wait over 10 s since. Traffic on an already-open WebSocket does not count as
 activity (only requests through the router do), and a match runs entirely on one, so the platform
 used to suspend the server mid-match, 5–13 minutes in, dropping everyone (2026-10-07). Since then a
-client in a room requests `/v1/ping` once a minute (`keepAwake` in `src/net/ping.ts`); it stops once
-the player is out of the room, so the server still sleeps when nobody plays. The lobby pings every
-4 s while visible. With the data volume attached, idle means a stop rather than a suspend, so a wake
+client in a room on that server requests `/v1/ping` once a minute (`keepAwake` in `src/net/ping.ts`); it
+stops once the player is out of the room, so the server still sleeps when nobody plays. The lobby's ping
+chip pings the chosen server every 4 s while visible (which also keeps a chosen Singapore awake). With the data volume attached, idle means a stop rather than a suspend, so a wake
 takes ~20–30 s. `cd deploy/instacloud && insta --agent compute logs stdb --deploy` lists the
 platform's suspends and wakes. `start.sh` supervises the server: SpacetimeDB never
 deletes its commitlog (100 players write ~12 GB an hour, ~3x smaller once sealed), so once the data
@@ -233,7 +240,7 @@ whenever what is collected changes. These answer "how many players, and from whe
   the country from the IP on its side. Events: `lobby_view`, `play_clicked`, `match_joined`,
   `match_left` (also on tab close, by beacon; `exit` says how: `menu_button`, `end_screen`, `leave_key`,
   `removed`, `lost` (the connection dropped and the room could not be rejoined), `rejoined` (it dropped and we came straight back to the same room; `lost` counted these too until 2026-10-11) or `close`), `round_ended`, `vehicle_entered`, `store_purchase`,
-  `share_card_opened` / `share_card_shared` (`method`: `native` card + link through the share sheet, `link` link only through it, `copy`, `download`), `duel_clicked` (約朋友單挑, `via` `room` or `link`), `challenge_link_opened` / `challenge_started` / `challenge_completed`, `callsign_asked` (a new player was asked for a callsign; `play_clicked` follows only when they answer), `language_changed`, `error_shown`, `server_woke` (the lobby's connection took over 6 s, or a ping or connect failed first: `seconds`, `queued`, `woke` (true: a failure showed the "server asleep" screen; false: only slow, the screen said "connecting"), `failures`, `reconnect`, and the split of the wait: `ping_ms`/`ping_ok` (first ping), `connect_ms`, `import_ms` (SDK chunk load)), `net_sample`, `client_error` (the page's own failures:
+  `share_card_opened` / `share_card_shared` (`method`: `native` card + link through the share sheet, `link` link only through it, `copy`, `download`), `duel_clicked` (約朋友單挑, `via` `room` or `link`), `challenge_link_opened` / `challenge_started` / `challenge_completed`, `callsign_asked` (a new player was asked for a callsign; `play_clicked` follows only when they answer), `language_changed`, `error_shown`, `server_woke` (a server that scales to zero, i.e. Singapore, was found asleep and the "waking" screen showed) and `connect_slow` (the lobby's connection to any other server, or a sleeping one that was only slow, took over 6 s or needed a retry; before 2026-10-12 `server_woke` meant this too, and the first week's ~860 Taipei "wakes" were slow connects); both carry `seconds`, `queued`, `failures`, `reconnect` and the split of the wait: `ping_ms`/`ping_ok` (first ping), `connect_ms`, `import_ms` (SDK chunk load), `net_sample`, `client_error` (the page's own failures:
   uncaught errors, promises nobody caught and a lost WebGL context, at most 5 a page, `src/errors.ts`; a "Script error." the browser gives no details of is sent once a page apart from those 5, with `source: opaque`, `uptime_s`, `standalone` and `visible`), (`match_joined` also says `private` (the room has a code) and `hosted` (we opened it with 約朋友單挑); rooms that found an opponent: hosted `room` codes with a second person's `match_joined` on the same code), with super properties `lang`, `app_version` (git SHA),
   `online_db`, `screen` and (`src/visit.ts`, `src/game/device.ts`) `in_app` (the app whose built-in browser it is: Threads, Instagram, Messenger, Facebook, LINE, TikTok…), `visit_n`, `has_prior_storage`, `storage_ok`, the first-touch `first_utm_*` / `first_referrer` / `first_touch_at` / `first_gclid` / `first_fbclid` and this visit's `visit_utm_*` / `visit_referrer` (UTM naming rules and links to post: [UTM.md](UTM.md); `withUtm` in `src/utm.ts` tags the links the game makes). Online, the person property `stdb_identity` links a PostHog person to
   a SpacetimeDB profile. Nothing is sent without a key, under `?bench`, `?trailer`, `?capture`,

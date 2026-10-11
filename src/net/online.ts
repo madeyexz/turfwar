@@ -17,6 +17,7 @@ import { setPerson, track } from '../analytics';
 import { NetReporter, SAMPLE_EVERY_MS, type NetFields, type NetReport } from '../../shared/netstats';
 import type { WakeLink } from './wake';
 import { keepAwake, pingUrl, serverIdentityKey } from './ping';
+import { serverSleeps } from './servers';
 import { currentServer } from './servers';
 import { currentDeviceKind } from '../game/device';
 
@@ -488,8 +489,8 @@ export function watchRooms(onChange: (rooms: PublicRoom[]) => void, lost: () => 
 }
 
 /**
- * The server could not be reached (refused, timed out, dropped before we were in a room): asleep or
- * restarting, not a refusal by the game. The lobby wakes the server and tries once more.
+ * The server could not be reached (refused, timed out, dropped before we were in a room): asleep (a server
+ * that scales to zero) or restarting, not a refusal by the game. The lobby tries once more.
  */
 export class ConnectError extends Error {}
 
@@ -526,7 +527,8 @@ export async function connectOnline(name: string, team: Team | undefined, how: O
         // PostHog people can be matched to SpacetimeDB profiles by this property (never identify()).
         setPerson({ stdb_identity: identity.toHexString() });
         link = new OnlineLink(connection, identity);
-        const awake = pingUrl(uri);
+        // Only a server that scales to zero (Singapore) needs a request now and then to stay up under the match.
+        const awake = serverSleeps({ uri, database }) ? pingUrl(uri) : undefined;
         if (awake) link.keepServerAwake(awake);
         connection.subscriptionBuilder()
           .onApplied(async () => {

@@ -26,6 +26,13 @@ export type Exit = 'menu_button' | 'end_screen' | 'leave_key' | 'removed' | 'los
 /** The page's own failures: an uncaught error, a promise nobody caught, the graphics (WebGL) context lost. */
 export type ClientErrorKind = 'error' | 'rejection' | 'webgl_lost' | 'webgl_restored';
 
+/**
+ * How long the lobby took to reach a server (`seconds`; `queued`: a play button was waiting). `failures`: pings and connects that failed first.
+ * `reconnect`: connected before on this page (a dropped connection, not a first load). The split of the wait: `ping_ms` and `ping_ok` (the first ping),
+ * `connect_ms` (the connection that went live, from dialling) and `import_ms` (the part of it spent loading the SDK chunk).
+ */
+export interface ConnectTiming { seconds: number; queued: boolean; failures: number; reconnect: boolean; ping_ms?: number; ping_ok?: boolean; connect_ms?: number; import_ms?: number }
+
 /** Every event and its properties (kept small and typed). */
 export interface Events {
   lobby_view: Record<string, never>;
@@ -47,12 +54,15 @@ export interface Events {
   /** The page's own failures (src/errors.ts: at most 5 a page, each message once); `source`: file:line:column, or `opaque` for a "Script error." the browser gave no details of (then with `uptime_s`, `standalone`, `visible`). */
   client_error: { kind: ClientErrorKind; message: string; source?: string; in_match: boolean; uptime_s?: number; standalone?: boolean; visible?: boolean };
   /**
-   * The lobby's connection took over 6 s (`slow`) or a ping or connect failed first (`woke`: the "server asleep" screen; src/net/wake.ts); it came up after
-   * `seconds` (`queued`: a play button was waiting). `failures`: pings and connects that failed first. `reconnect`: connected before on this page (a dropped
-   * connection, not a first load). The split of the wait: `ping_ms` and `ping_ok` (the first ping), `connect_ms` (the connection that went live, from
-   * dialling) and `import_ms` (the part of it spent loading the SDK chunk).
+   * A server that scales to zero (Singapore) was found asleep: a ping or connect failed first and the lobby showed "waking"; it came up after `seconds`
+   * (src/net/wake.ts). Same fields as `connect_slow`.
    */
-  server_woke: { seconds: number; queued: boolean; failures: number; reconnect: boolean; woke: boolean; ping_ms?: number; ping_ok?: boolean; connect_ms?: number; import_ms?: number };
+  server_woke: ConnectTiming;
+  /**
+   * The lobby's connection to a server took over 6 s, or needed a retry after a failed ping or connect, without the "asleep" screen: always-on servers
+   * (Taipei, Maincloud, local), and a sleeping one that was only slow. Before 2026-10-12 `server_woke` meant this too.
+   */
+  connect_slow: ConnectTiming;
   /** Every 5 minutes of a long online match: connection quality over those minutes (`seconds` in a room). */
   net_sample: NetFields;
   /** The callsign question a new player gets before the first game (src/ui/callsign.ts); `play_clicked` follows only if they answer, so asked minus play_clicked is who left at it. */
