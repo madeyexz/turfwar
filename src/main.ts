@@ -237,7 +237,7 @@ const rotate = document.createElement('div');
 rotate.id = 'rotate';
 rotate.setAttribute('role', 'alert');
 const renderRotate = () => {
-  rotate.innerHTML = `<svg viewBox="0 0 48 48" aria-hidden="true"><rect x="15" y="6" width="18" height="36" rx="3"/><path d="M21 37h6"/></svg><b>${esc(t('rot.title'))}</b><small>${esc(t('rot.sub'))}</small>`;
+  rotate.innerHTML = `<svg viewBox="0 0 48 48" aria-hidden="true"><rect x="15" y="6" width="18" height="36" rx="3"/><path d="M21 37h6"/></svg><b>${esc(t('rot.title'))}</b>`;
 };
 renderRotate();
 document.body.appendChild(rotate);
@@ -595,7 +595,7 @@ function renderStart() {
   }
   renderDeploy($<HTMLButtonElement>('#start-go'), 'start', t('lobby.starting'), online.ok);
   $('#start-summary').textContent = ready ? `${sizeOf(size).label} · ${t(isPublic ? 'start.public' : 'start.private')}` : '';
-  renderLine('start', 'start', `${t(isPublic ? 'start.hintPublic' : 'start.hintPrivate')}${bots ? '' : ` ${t('start.hintBotsOff')}`}`);
+  renderLine('start', 'start', t(isPublic ? 'start.hintPublic' : 'start.hintPrivate'));
 }
 
 /** A room list's header totals: every public room and everyone in them (whatever filters show). */
