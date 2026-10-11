@@ -9,8 +9,9 @@ import { describe, expect, it } from 'vitest';
  */
 const ROOT = join(__dirname, '..');
 const SITE = 'https://turfwar.ianhsiao.me';
-/** The author's personal site, as the owner asked for it (it redirects to ianhsiao.me/about). */
-const OWNER_SITE = 'https://www.ianhsiao.me';
+/** The author's personal site (served directly; www. redirects to it). Its own JSON-LD names the Person `about#person`, and so do we, so the two entities match. */
+const OWNER_SITE = 'https://ianhsiao.me';
+const OWNER_ID = `${OWNER_SITE}/about#person`;
 const read = (file: string) => readFileSync(join(ROOT, file), 'utf8');
 
 /** The public routes: URL path → the HTML file Vite builds for it. */
@@ -171,13 +172,13 @@ describe('the author', () => {
     for (const file of ['index.html', 'about/index.html', 'en/about/index.html']) {
       const html = read(file), graph = jsonLd(html);
       const person = graph.find(n => n['@type'] === 'Person')!;
-      expect(person, file).toMatchObject({ '@id': `${OWNER_SITE}/#person`, name: 'Ian Hsiao', url: `${OWNER_SITE}/`, sameAs: ['https://github.com/madeyexz'] });
+      expect(person, file).toMatchObject({ '@id': OWNER_ID, name: 'Ian Hsiao', url: `${OWNER_SITE}/`, sameAs: ['https://github.com/madeyexz'] });
       const credited = graph.filter(n => ['VideoGame', 'WebSite', 'WebPage'].includes(String(n['@type']))).filter(n => JSON.stringify(n).includes('#person'));
       expect(credited.map(n => n['@type']).sort(), file).toEqual(file === 'index.html' ? ['VideoGame', 'WebSite'] : ['WebPage']);
     }
     const game = jsonLd(read('index.html')).find(n => n['@type'] === 'VideoGame')!;
-    expect(game.author).toEqual({ '@id': `${OWNER_SITE}/#person` });
-    expect(game.creator).toEqual({ '@id': `${OWNER_SITE}/#person` });
+    expect(game.author).toEqual({ '@id': OWNER_ID });
+    expect(game.creator).toEqual({ '@id': OWNER_ID });
   });
 
   it('is credited with a plain link, no tracking parameters, on both about pages and in llms files', () => {
