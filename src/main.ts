@@ -327,6 +327,8 @@ const phase = () => wake.state.phase;
 let wakeKey = '';
 /** "Server unreachable" is reported to analytics once per page, not on every attempt. */
 let unreachableReported = false;
+/** The lobby has been connected once on this page (a later wake is a reconnect after a drop). */
+let wasReady = false;
 function onWake(s: WakeState<Queued>) {
   pings.setActive(pingOn && s.phase === 'ready');
   const key = `${s.phase}|${s.hostUp}|${s.queued?.action ?? ''}`;
@@ -336,7 +338,15 @@ function onWake(s: WakeState<Queued>) {
   // A new attempt (or a dropped connection): the old room list is stale. (Stopping keeps it: the
   // room being joined stays on screen while the game connects.)
   if (s.phase !== was && s.phase !== 'ready' && s.phase !== 'idle') rooms = [];
-  if (s.phase === 'ready' && was !== 'ready' && s.woke) track('server_woke', { seconds: wakeSeconds(s, performance.now()), queued: !!queued });
+  if (s.phase === 'ready' && was !== 'ready' && (s.woke || s.slow)) {
+    const tm = wake.timings;
+    track('server_woke', {
+      seconds: wakeSeconds(s, performance.now()), queued: !!queued, failures: s.failures, reconnect: wasReady, woke: s.woke,
+      ...(tm.pingMs !== undefined ? { ping_ms: tm.pingMs, ping_ok: !!tm.pingOk } : {}),
+      ...(tm.connectMs !== undefined ? { connect_ms: tm.connectMs } : {}), ...(tm.importMs !== undefined ? { import_ms: tm.importMs } : {}),
+    });
+  }
+  if (s.phase === 'ready') wasReady = true;
   if (s.phase === 'unreachable' && !unreachableReported) { unreachableReported = true; track('error_shown', { where: 'rooms', message: 'server unreachable' }); }
   refresh();
 }
@@ -1083,8 +1093,16 @@ function acceptChallenge() {
 /** In a challenge's match: the end screen names the challenger; a room nobody else is in falls back to the bot double. */
 function startedDuel(duel: Duel, link: GameLink) {
   if (duel.kind === 'host') {
-    const code = link.roomInfo?.()?.code;
-    if (code) void game?.share({ summary: duel.summary, room: code });
+    // The room's code arrives a moment after the join (its own subscription): wait for it, so the dialog always opens.
+    const hosting = game;
+    let tries = 0;
+    const open = () => {
+      if (game !== hosting) return;
+      const code = link.roomInfo?.()?.code;
+      if (code) void game?.share({ summary: duel.summary, room: code });
+      else if (++tries < 40) setTimeout(open, 250);
+    };
+    open();
     return;
   }
   const ref = duel.c.ref ?? '';
@@ -1119,6 +1137,7 @@ function run(action: Action, room = -1, retried = false) {
   if (action === 'code' && roomCode.value.length < 4) { roomCode.focus(); return; }
   // Still on the lobby's made-up callsign: ask for a name first, then play from that same tap.
   if (needsCallsign()) {
+    track('callsign_asked', {});
     askCallsign(callsign.value, name => { callsign.value = name; store.set('name', name); run(action, room, retried); });
     return;
   }
@@ -1245,7 +1264,8 @@ async function start(action: Action, retried = false) {
 
 function launch(link: GameLink, map: string) {
   game = new Game(assets, renderer, link, map, audio, app);
-  if (online.ok && !benchMode) game.onDuel(openDuelRoom);
+  // 約朋友單挑: our own 1v1 room where online play is available, else a challenge link the bot double answers.
+  if (!benchMode) game.onDuel(online.ok ? openDuelRoom : undefined);
   if (benchMode && !bench) startBench(game);
   game.onMapChange = next => { game?.stop(true); launch(link, next); };
   game.onExit = how => backToLobby('menu', '', how);
@@ -1297,7 +1317,7 @@ function joined(link: GameLink, map: string, serverChoice: ServerId | undefined,
 }
 
 /** Tries to reconnect, waiting for the page to be visible first (a backgrounded app cannot connect). */
-const REJOIN_TRIES = 3;
+const REJOIN_TRIES = 5;
 const visible = () => new Promise<void>(resolve => {
   if (document.visibilityState === 'visible') { resolve(); return; }
   const on = () => { if (document.visibilityState === 'visible') { document.removeEventListener('visibilitychange', on); resolve(); } };
@@ -1326,7 +1346,7 @@ async function rejoinAfterDrop(old: OnlineLink) {
         const team = old.entry.team === 0 || old.entry.team === 1 ? old.entry.team as Team : undefined;
         const link = await connectOnline(old.entry.name, team, how, () => undefined);
         if (game !== playing) { link.dispose(); return; }
-        leftMatch('disconnect', 'lost');
+        leftMatch('disconnect', 'rejoined');
         playing.stop(); game = undefined;
         const map = link.state()?.mapId ?? playing.mapId;
         launch(link, map);

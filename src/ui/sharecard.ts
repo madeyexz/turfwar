@@ -204,7 +204,17 @@ export const cardBlob = (canvas: HTMLCanvasElement) => new Promise<Blob>((resolv
 export async function shareNative(file: File, text: string, url: string): Promise<'native' | 'cancel' | 'unsupported'> {
   const data: ShareData = { files: [file], text: `${text}\n${url}` };
   if (!navigator.canShare?.(data) || !navigator.share) return 'unsupported';
-  try { await navigator.share(data); return 'native'; } catch (error) { return (error as Error)?.name === 'AbortError' ? 'cancel' : 'unsupported'; }
+  return share(data);
+}
+
+/** Shares just the text and the link (browsers with Web Share but no file sharing). Same results as `shareNative`. */
+export async function shareLink(text: string, url: string): Promise<'native' | 'cancel' | 'unsupported'> {
+  if (!navigator.share) return 'unsupported';
+  return share({ text, url });
+}
+
+async function share(data: ShareData) {
+  try { await navigator.share(data); return 'native' as const; } catch (error) { return (error as Error)?.name === 'AbortError' ? 'cancel' as const : 'unsupported' as const; }
 }
 
 /** Saves the picture as a file (desktops; phones keep the press-and-hold on the preview). */

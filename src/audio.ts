@@ -183,7 +183,9 @@ export class Audio {
   musicVolume = 0.6;
 
   start() {
-    if (this.ctx) { void (this.ctx as AudioContext).resume(); return; }
+    // A browser that cannot open the audio device (Threads' in-app browser on iOS: "Failed to start the audio
+    // device") rejects here on every gesture; the game plays on silent and tries again at the next one.
+    if (this.ctx) { (this.ctx as AudioContext).resume().catch(() => undefined); return; }
     const ctx = new AudioContext();
     this.build(ctx);
     const comp = this.comp = ctx.createDynamicsCompressor(); comp.threshold.value = -14; comp.ratio.value = 4;

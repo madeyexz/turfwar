@@ -29,7 +29,7 @@ import { VehiclesView, vehicleName } from '../render/vehicles';
 import { BuyMenu } from '../ui/buymenu';
 import { SettingsMenu } from '../ui/settingsmenu';
 import { Hud, weaponLabel } from '../ui/hud';
-import { kbd } from '../ui/keys';
+import { kbd, keyOf } from '../ui/keys';
 import { mapName, roundReason, t, teamName } from '../ui/i18n';
 import { Input } from './input';
 import type { GameLink } from './link';
@@ -46,7 +46,7 @@ import { TouchControls, type TouchInfo } from '../ui/touchcontrols';
 import { holdAimMode } from './holdfire';
 import { onTouchLayout, touchActive, touchAimAssist, type TouchContext } from './touchlayout';
 import { ASSIST, aimAssist, anglesTo } from './aimassist';
-import { GOALS, levelOf, loadProgress, recordProgress, type ProgressEvent } from './progress';
+import { GOALS, NUDGE_ROUNDS, levelOf, loadProgress, recordProgress, type ProgressEvent } from './progress';
 import { smokeBlocks } from '../../shared/match/combat';
 
 type Sample = { x: number; y: number; z: number; vx: number; vy: number; vz: number; yaw: number; pitch: number; crouch: number };
@@ -631,7 +631,9 @@ export class Game {
       const buyLeft = free ? -1 : Math.max(0, state.config.buyTime - state.roundClock);
       this.buymenu.update(me, buyWindow, buyLeft, free);
       const showBuy = !!me && buyWindow && (free || !me.alive || inBase(me, this.map.def, side)) && !this.buymenu.open;
-      this.hud.buyHint(showBuy ? (free ? t('hud.store', { key: kbd('store') }) : t('hud.storeLeft', { key: kbd('store'), n: Math.ceil(buyLeft) })) : undefined);
+      // On a phone there is no key to press: the cart button pulses and the hint says to tap it.
+      const touch = this.input.touch;
+      this.hud.buyHint(showBuy ? (free ? (touch ? t('hud.storeTap') : t('hud.store', { key: kbd('store') })) : (touch ? t('hud.storeTapLeft', { n: Math.ceil(buyLeft) }) : t('hud.storeLeft', { key: kbd('store'), n: Math.ceil(buyLeft) }))) : undefined);
       this.hud.prompt(this.promptText(state, me, site, myJob));
       this.hud.vehicle(this.vehicleInfo(state));
       const bomb = state.bomb;
@@ -720,19 +722,19 @@ export class Game {
 
   /**
    * 分享戰績: the card over a frame of this view, carrying the 單挑我 link. `summary`: an earlier
-   * match's (the 1v1 room opened from its end screen); `room`: the code of the room we wait in.
+   * match's (the 1v1 room opened from its end screen); `room`: the code of the room we wait in;
+   * `source`: which kind of link it is for the UTM tags (a room's is always `duel`).
    */
-  async share(o: { summary?: MatchSummary; room?: string } = {}) {
+  async share(o: { summary?: MatchSummary; room?: string; source?: 'share' | 'challenge' } = {}) {
     const summary = o.summary ?? this.summary;
     if (!summary) return;
-    let storage: Storage | undefined;
-    try { storage = localStorage; } catch { /* storage disabled: a fresh code */ }
-    const ref = shareRef(storage);
-    const url = challengeUrl(location.origin, { name: summary.name, room: o.room, map: summary.mapId, beat: summary.kills, ref });
+    const ref = this.shareCode();
+    const source = o.room ? 'duel' : o.source ?? 'share';
+    const url = challengeUrl(location.origin, { name: summary.name, room: o.room, map: summary.mapId, beat: summary.kills, ref }, { source, medium: 'share_card' });
     this.input.release();
     track('share_card_opened', { ref, solo: summary.solo, result: summary.result, room: !!o.room });
     await openSharePanel({
-      summary, url, backdrop: this.renderer.snapshot(), meme: MEME_SKINS,
+      summary, url, backdrop: this.renderer.snapshot(), meme: MEME_SKINS, room: !!o.room,
       note: o.room ? t('chal.room', { code: o.room }) : undefined,
       onShared: method => track('share_card_shared', { ref, method, room: !!o.room }),
       // Closed mid-match (the 1v1 room): back to play, the close tap capturing the mouse again.
@@ -740,15 +742,23 @@ export class Game {
     });
   }
 
-  /** 單挑我 from the end screen (main.ts opens the 1v1 room); only where online play is available. */
-  onDuel(open: (summary: MatchSummary) => void) {
+  /** This browser's share code (src/game/challenge.ts). */
+  private shareCode() {
+    let storage: Storage | undefined;
+    try { storage = localStorage; } catch { /* storage disabled: a fresh code */ }
+    return shareRef(storage);
+  }
+
+  /**
+   * 約朋友單挑 on the end screen. With `open` (main.ts, where online play is available) the 1v1 room is
+   * opened and its link shared; without it the card carries a link whose bot double answers.
+   */
+  onDuel(open?: (summary: MatchSummary) => void) {
     this.hud.onDuel = () => {
       const summary = this.summary;
       if (!summary) return;
-      let storage: Storage | undefined;
-      try { storage = localStorage; } catch { /* storage disabled */ }
-      track('duel_clicked', { ref: shareRef(storage), solo: summary.solo, result: summary.result });
-      open(summary);
+      track('duel_clicked', { ref: this.shareCode(), solo: summary.solo, result: summary.result, via: open ? 'room' : 'link' });
+      if (open) open(summary); else void this.share({ summary, source: 'challenge' });
     };
   }
 
@@ -760,6 +770,17 @@ export class Game {
     this.challenge = c;
     this.hud.rival = c.name;
   }
+
+  /**
+   * A new player's first rounds end with cash they have never spent (nine in ten of those who quit
+   * after one round never opened the store): say so once, with how to open it.
+   */
+  private nudgeStore() {
+    if (this.nudged || loadProgress().rounds > NUDGE_ROUNDS) return;
+    this.nudged = true;
+    this.hud.toast(this.input.touch ? t('hud.storeNudgeTouch') : t('hud.storeNudge', { key: keyOf('store') }), 7000);
+  }
+  private nudged = false;
 
   /** XP, the level and the day's goal (progress.ts): a finished goal or a new level is announced. */
   private progress(e: ProgressEvent) {
@@ -1186,7 +1207,7 @@ export class Game {
           const won = e.winner === -1 ? undefined : e.winner === this.myTeam;
           this.audio.roundEnd(won);
           roundEnded({ won: e.winner === (me?.team ?? this.myTeam), mode: modeOf(state, this.map.def), map: this.mapId });
-          if (me && !state.config.practice) this.progress({ type: 'round', won: e.winner === me.team });
+          if (me && !state.config.practice) { this.progress({ type: 'round', won: e.winner === me.team }); this.nudgeStore(); }
           const title = e.winner === -1 ? t('hud.roundDraw') : t('hud.winsRound', { team: teamName(e.winner).toUpperCase() });
           this.hud.announce(title, roundReason(e.reason), e.winner === -1 ? 'var(--ink)' : e.winner === 0 ? 'var(--aegis)' : 'var(--crimson)');
         }

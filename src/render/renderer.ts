@@ -243,7 +243,12 @@ export class Renderer {
    */
   warm() {
     const r = this.renderer;
-    for (const [scene, camera] of [[this.scene, this.camera], [this.viewScene, this.viewCamera]] as const) r.compileAsync(scene, camera).catch(() => undefined);
+    // `compile` starts every program linking (in parallel where the browser can) and is all we need: the
+    // promise `compileAsync` returns went unused, and its polling timer throws, uncaught, when a material's
+    // program is gone by then (client_error "reading 'isReady'", about 1 player in 25 in the first week).
+    for (const [scene, camera] of [[this.scene, this.camera], [this.viewScene, this.viewCamera]] as const) {
+      try { r.compile(scene, camera); } catch { /* a lost context or a half-built scene: shaders compile on first draw instead */ }
+    }
     const textures = new Set<THREE.Texture>();
     for (const scene of [this.scene, this.viewScene]) scene.traverse(o => {
       const material = (o as THREE.Mesh).material;
@@ -295,6 +300,9 @@ export class Renderer {
 
   private draw(time: number) {
     this.lastTime = time;
+    // While the browser holds the graphics context (a phone app in the background) every GL call fails;
+    // the composer's own passes would throw "shaderSource ... must be an instance of WebGLShader".
+    if (this.renderer.getContext().isContextLost()) return;
     this.renderer.info.reset();
     this.placeShadow();
     const sm = this.renderer.shadowMap;
