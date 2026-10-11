@@ -32,7 +32,7 @@ export interface Events {
   play_clicked: { kind: PlayKind; size: string; mode: Mode | ''; map: string; server_choice?: ServerId };
   /** `device`: our own phone/tablet/desktop (src/game/device.ts), which, unlike PostHog's `$device_type`, counts an iPad posing as a Mac as a tablet. */
   /** `rejoin`: back in the same room after the connection dropped (main.ts rejoinAfterDrop). */
-  /** `private`: the room has a 4-letter code (a private room, hosted or joined by code); `hosted`: we opened it with 發起單挑 (pair with the other persons' `room` to count rooms that found an opponent). */
+  /** `private`: the room has a 4-letter code (a private room, hosted or joined by code); `hosted`: we opened it with 約朋友單挑 (pair with the other persons' `room` to count rooms that found an opponent). */
   /** How it is played (phones): `touch` controls, the screen `upright` at the start (a touch match then plays turned sideways), the `in_app` browser's app, touch `aim_assist` on. */
   match_joined: { online: boolean; room?: string; map: string; mode: Mode; size: string; team: 'swat' | 'militia'; server_choice?: ServerId; device: DeviceKind; rejoin?: boolean; touch?: boolean; upright?: boolean; in_app?: string; aim_assist?: boolean; private?: boolean; hosted?: boolean };
   /** Online, also the match's connection quality (shared/netstats.ts): ping percentiles over the newest ≤600 samples, totals for the rest. */
@@ -54,11 +54,14 @@ export interface Events {
   server_woke: { seconds: number; queued: boolean; failures: number; reconnect: boolean; woke: boolean; ping_ms?: number; ping_ok?: boolean; connect_ms?: number; import_ms?: number };
   /** Every 5 minutes of a long online match: connection quality over those minutes (`seconds` in a room). */
   net_sample: NetFields;
+  /** The callsign question a new player gets before the first game (src/ui/callsign.ts); `play_clicked` follows only if they answer, so asked minus play_clicked is who left at it. */
+  callsign_asked: Record<string, never>;
   /** The share card (src/ui/sharepanel.ts). `ref`: this browser's random share code (src/game/challenge.ts); `room`: the link names a live 1v1 room. */
   share_card_opened: { ref: string; solo: boolean; result: 'win' | 'loss' | 'draw'; room: boolean };
-  share_card_shared: { ref: string; method: 'native' | 'download' | 'copy'; room: boolean };
-  /** 發起單挑 pressed on the end screen (`ref`: this browser's share code; `solo`/`result`: the match it was pressed after). */
-  duel_clicked: { ref: string; solo: boolean; result: 'win' | 'loss' | 'draw' };
+  /** `method`: `native` = the card with its link through the share sheet, `link` = only the text and link through it, `copy` = the clipboard (also the fallback of the other two), `download` = the picture saved. */
+  share_card_shared: { ref: string; method: 'native' | 'link' | 'download' | 'copy'; room: boolean };
+  /** 約朋友單挑 pressed on the end screen (`ref`: this browser's share code; `solo`/`result`: the match it was pressed after; `via`: it opened a private 1v1 `room`, or, with no online play available, shared a `link` the challenger's bot double answers). */
+  duel_clicked: { ref: string; solo: boolean; result: 'win' | 'loss' | 'draw'; via: 'room' | 'link' };
   /** A 單挑我 link opened (`ref`: the sharer's code, `has_room`: it names their room). */
   challenge_link_opened: { ref: string; has_room: boolean };
   /** The challenge began: in the sharer's room, or against their bot double (`fallback`) and why. */

@@ -317,9 +317,14 @@ the rotor chop are synthesized.
 The end screen has **分享戰績 / Share**: a 1080×1920 card (`src/ui/sharecard.ts`) over a frame of the match with
 the result, one brag line picked from the match (`src/game/matchstats.ts`: beating a challenger, slipper kills, a
 multi-kill round, kills on the map, headshots…), the numbers, the callsign and **單挑我 →** with a QR code and link.
-Phones share the picture through the share sheet (IG Stories, LINE, Threads); elsewhere it is saved and the link
-copied. Solo cards say "vs bots". **發起單挑** (online) opens a private 1v1 room on the match's map, without bots, and
-shares that room's link from inside it. A friend who opens a challenge link sees 「<name> 向你下戰帖！」 in the lobby and
+Phones share the picture and link through the share sheet (IG Stories, LINE, Threads); a browser with Web Share
+but no file sharing sends just the text and link; elsewhere the link is copied and the picture can be saved
+(`src/ui/sharechoice.ts` picks the buttons and the fallbacks). Solo cards say "vs bots". **約朋友單挑 / Challenge a
+friend** is the end screen's wide first button: online it opens a private 1v1 room on the match's map, without bots,
+and offers that room's link (a big Send challenge button first) from inside it; with no online play it shares a link
+that plays against the challenger's bot double. In a 1v1 against a friend the end screen counts down to a rematch (the
+room starts the next match by itself). Every link we hand out carries `utm_source` (`share`: a card, `challenge`: a
+link without a room, `duel`: a link to our room) and `utm_medium` (`share_card`). A friend who opens a challenge link sees 「<name> 向你下戰帖！」 in the lobby and
 is one tap from the room; if it is gone, full or empty they play a Solo 1v1 against a bot carrying the challenger's
 name, and either way the end screen says who won and offers their own card.
 

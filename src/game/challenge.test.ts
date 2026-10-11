@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { challengeMap, challengeUrl, cleanName, parseChallenge, shareRef } from './challenge';
+import { challengeMap, challengeUrl, cleanName, parseChallenge, shareRef, tagLink } from './challenge';
 import { bragLine, MatchTally, nationalDay, type MatchSummary } from './matchstats';
 
 describe('單挑我 links', () => {
@@ -7,6 +7,25 @@ describe('單挑我 links', () => {
     const url = challengeUrl('https://turfwar.ianhsiao.me', { name: 'Raven', room: 'ABCD', map: 'taipei', beat: 23, ref: 'k3x9q2ab' });
     expect(url).toBe('https://turfwar.ianhsiao.me/?c=1&room=ABCD&ch=Raven&map=taipei&beat=23&ref=k3x9q2ab');
     expect(parseChallenge(new URL(url).search)).toEqual({ name: 'Raven', room: 'ABCD', map: 'taipei', beat: 23, ref: 'k3x9q2ab' });
+  });
+
+  it('tags a link with where it came from and still opens the same room', () => {
+    const c = { name: '阿明 小隊', room: 'ABCD', map: 'taipei', beat: 12, ref: 'k3x9q2ab' };
+    const plain = challengeUrl('https://turfwar.ianhsiao.me', c);
+    const tagged = challengeUrl('https://turfwar.ianhsiao.me', c, { source: 'duel', medium: 'share_card', campaign: 'room' });
+    expect(tagged).toBe(`${plain}&utm_source=duel&utm_medium=share_card&utm_campaign=room`);
+    expect(parseChallenge(new URL(tagged).search)).toEqual(parseChallenge(new URL(plain).search));
+    expect(parseChallenge(new URL(tagged).search)?.room).toBe('ABCD');
+  });
+
+  it('tags without clobbering what the link already carries', () => {
+    const url = 'https://x.test/?room=ABCD&autostart=1&utm_source=threads';
+    const tagged = new URL(tagLink(url, { source: 'share', medium: 'end_screen' }));
+    expect(tagged.searchParams.get('room')).toBe('ABCD');
+    expect(tagged.searchParams.get('autostart')).toBe('1');
+    expect(tagged.searchParams.get('utm_source')).toBe('threads');
+    expect(tagged.searchParams.get('utm_medium')).toBe('end_screen');
+    expect(tagged.searchParams.has('utm_campaign')).toBe(false);
   });
 
   it('keeps Chinese callsigns and encodes them', () => {

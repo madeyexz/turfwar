@@ -29,16 +29,20 @@
 :where(.view-narrow) .share-panel .sp-body { flex-direction: column; align-items: center; }
 :where(.view-narrow) .share-panel .sp-card { height: min(520px, calc(100 * var(--vh) - 300px)); }
 :where(.view-narrow) .share-panel .sp-acts { width: 100%; }
+/* A room's challenge: the send button first, so it is under the thumb without scrolling past the card. */
+:where(.view-narrow) .share-panel.sp-room .sp-acts { order: -1; }
+:where(.view-narrow) .share-panel.sp-room .sp-card { height: min(520px, calc(100 * var(--vh) - 420px)); }
 :where(.view-short) .share-panel .sp-box { padding: 8px 12px 10px; gap: 6px; }
 :where(.view-short) .share-panel .sp-card { height: calc(100 * var(--vh) - 90px); }
 :where(.view-short) .share-panel .sp-acts { gap: 6px; }
 :where(.view-short) .share-panel .sp-acts button { min-height: 44px; font-size: 14px; }
 
 /* ---------- The end screen's share row, and the challenge banner in the lobby ---------- */
-#hud .end .share-row { display: flex; gap: 10px; justify-content: center; margin: 10px 0 4px; }
-#hud .end .share-row button { min-height: 44px; padding: 0 18px; font: inherit; font-weight: 700; letter-spacing: 0.16em; text-transform: uppercase; cursor: pointer; }
+#hud .end .share-row { display: flex; flex-wrap: wrap; gap: 10px; justify-content: center; margin: 10px 0 4px; }
+#hud .end .share-row button { flex: 1 1 140px; min-height: 48px; padding: 0 18px; font: inherit; font-weight: 700; letter-spacing: 0.16em; text-transform: uppercase; cursor: pointer; touch-action: manipulation; }
 #hud .end .share-row .share { color: #031013; background: var(--accent); border: 0; }
-#hud .end .share-row .duel { color: var(--ink); background: rgba(255, 85, 68, 0.2); border: 1px solid var(--crimson); }
+/* The one-tap action is the wide one, and first. */
+#hud .end .share-row .duel { flex: 2 1 220px; color: #fff; background: var(--crimson); border: 0; }
 #hud .end .rival { margin: 4px 0 0; font-size: 20px; font-weight: 800; letter-spacing: 0.06em; }
 #hud .end .rival.won { color: var(--cash); }
 #hud .end .rival.lost { color: var(--crimson); }

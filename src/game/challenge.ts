@@ -42,15 +42,37 @@ export function parseChallenge(search: string): Challenge | undefined {
   return c;
 }
 
-/** The link for a challenge, on `origin` (this site's, so a preview shares preview links). */
-export function challengeUrl(origin: string, c: Challenge) {
+/**
+ * Where a link we hand out came from, as UTM parameters (so a visit it brings is attributed):
+ * `source` is the kind of link, `medium` the screen it came from. `share`: the brag card, no room;
+ * `challenge`: a 單挑我 link with no room (the bot double answers); `duel`: a link to the private
+ * 1v1 room we opened (約朋友單挑). `end_screen`: the end-of-match buttons; `share_card`: the share
+ * dialog (its link, copy, QR and share sheet); `lobby`: the lobby.
+ */
+export interface LinkOrigin {
+  source: 'share' | 'challenge' | 'duel';
+  medium: 'end_screen' | 'share_card' | 'lobby';
+  campaign?: string;
+}
+
+/** `url` with the origin's UTM parameters appended (never replacing one already there; every other parameter stays as it was). */
+export function tagLink(url: string, o: LinkOrigin) {
+  const u = new URL(url);
+  const add = (k: string, v: string | undefined) => { if (v && !u.searchParams.has(k)) u.searchParams.set(k, v); };
+  add('utm_source', o.source); add('utm_medium', o.medium); add('utm_campaign', o.campaign);
+  return u.toString();
+}
+
+/** The link for a challenge, on `origin` (this site's, so a preview shares preview links); `origin` tags it with where it was handed out. */
+export function challengeUrl(origin: string, c: Challenge, from?: LinkOrigin) {
   const p = new URLSearchParams({ c: '1' });
   if (c.room) p.set('room', c.room);
   p.set('ch', cleanName(c.name) || 'Operator');
   if (c.map && MAP.test(c.map)) p.set('map', c.map);
   if (c.beat !== undefined) p.set('beat', String(Math.max(0, Math.min(999, Math.round(c.beat)))));
   if (c.ref && REF.test(c.ref)) p.set('ref', c.ref);
-  return `${origin}/?${p}`;
+  const url = `${origin}/?${p}`;
+  return from ? tagLink(url, from) : url;
 }
 
 /** The challenge's map if a 1v1 can be played there, else the first that can. */

@@ -51,7 +51,7 @@ export class Hud {
   readonly root: HTMLElement;
   crosshairStyle: CrosshairStyle = savedCrosshair();
   onRestart?: () => void;
-  /** The end screen's 分享戰績 and 發起單挑 (share.ts); 發起單挑 only where online play is available. */
+  /** The end screen's 分享戰績 and 約朋友單挑 (share.ts); the latter opens a 1v1 room where online play is available, else shares a link the bot double answers. */
   onShare?: () => void;
   onDuel?: () => void;
   /** A 單挑我 match: the challenger, for the end screen's "you beat …" line. */
@@ -746,14 +746,16 @@ export class Hud {
     if (!show) return;
     const w = state.winner;
     const top = [...state.soldiers].sort((a, b) => b.score - a.score || b.kills - a.kills).slice(0, 5);
+    // A 1v1 against a friend (their room, or their bot double) starts again by itself: say it is a rematch.
+    const rematch = state.config.teamSize === 1 && (!!this.rival || state.soldiers.filter(s => !s.bot).length > 1);
     this.set('end', `<small>${w === -1 ? t('hud.matchDrawn') : t('hud.winMatch', { team: teamName(w).toUpperCase() })}</small>
       <h2 style="color:${w === -1 ? 'var(--ink)' : TEAM_CSS[w]}">${t(w === -1 ? 'hud.draw' : w === myTeam ? 'hud.victory' : 'hud.defeat')}</h2>
       <div class="final"><b class="t0">${teamShort(0)} ${state.scores[0]}</b><span>—</span><b class="t1">${state.scores[1]} ${teamShort(1)}</b></div>
       ${this.rival ? `<p class="rival ${w === myTeam ? 'won' : 'lost'}">${escape(t(w === myTeam ? 'chal.won' : 'chal.lost', { name: this.rival }))}</p>` : ''}
-      ${this.onShare ? `<div class="share-row"><button data-act="share" class="share">${t('share.button')}</button>${this.onDuel ? `<button data-act="duel" class="duel">${t('share.challenge')}</button>` : ''}</div>` : ''}
+      ${this.onShare ? `<div class="share-row">${this.onDuel ? `<button data-act="duel" class="duel">${t('share.challenge')}</button>` : ''}<button data-act="share" class="share">${t('share.button')}</button></div>` : ''}
       <table><tr><th></th><th>${t('hud.player')}</th><th>${t('hud.k')}</th><th>${t('hud.d')}</th><th>${t('hud.a')}</th><th>${t('hud.score')}</th></tr>${top.map((s, i) => `<tr${s.team === myTeam ? ' class="mine"' : ''}><td>${i + 1}</td><td class="t${s.team}">${escape(s.name)}</td><td>${s.kills}</td><td>${s.deaths}</td><td>${s.assists}</td><td>${s.score}</td></tr>`).join('')}</table>
       ${career?.length ? this.careerTable(career) : ''}
-      <p>${t('hud.newMatchIn', { n: Math.ceil(state.phaseLeft) })}</p>
+      <p>${t(rematch ? 'hud.rematchIn' : 'hud.newMatchIn', { n: Math.ceil(state.phaseLeft) })}</p>
       <div class="actions">${this.onRestart ? `<button data-act="restart">${t('hud.playAgain')}</button>` : ''}<button data-act="menu">${t('hud.leaveMatch')}</button></div>`, 'html');
   }
 
