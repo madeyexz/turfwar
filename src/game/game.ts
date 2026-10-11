@@ -38,6 +38,7 @@ import { LocalPlayer } from './player';
 import { isMagnified, settings } from './settings';
 import { ownedOf, purchaseOf, type BuyRequest, type Owned } from './purchases';
 import { matchNote, roundEnded, track } from '../analytics';
+import { noteDuel, noteKill, noteShare } from '../growth';
 import { challengeUrl, shareRef } from './challenge';
 import { MatchTally, type MatchSummary } from './matchstats';
 import { openSharePanel } from '../ui/sharepanel';
@@ -736,7 +737,7 @@ export class Game {
     await openSharePanel({
       summary, url, backdrop: this.renderer.snapshot(), meme: MEME_SKINS, room: !!o.room,
       note: o.room ? t('chal.room', { code: o.room }) : undefined,
-      onShared: method => track('share_card_shared', { ref, method, room: !!o.room }),
+      onShared: method => { noteShare(); track('share_card_shared', { ref, method, room: !!o.room }); },
       // Closed mid-match (the 1v1 room): back to play, the close tap capturing the mouse again.
       onClose: () => { if (this.running && this.link.state()?.phase !== 'ended') { this.menu.hide(); this.resume(); } },
     });
@@ -757,6 +758,7 @@ export class Game {
     this.hud.onDuel = () => {
       const summary = this.summary;
       if (!summary) return;
+      noteDuel();
       track('duel_clicked', { ref: this.shareCode(), solo: summary.solo, result: summary.result, via: open ? 'room' : 'link' });
       if (open) open(summary); else void this.share({ summary, source: 'challenge' });
     };
@@ -1181,7 +1183,7 @@ export class Game {
         this.tally.kill(e, myId);
         this.hud.killfeed(killer, victim, e.weapon, e.head, e.killer === myId || e.victim === myId);
         if (e.killer === myId && e.victim !== myId && e.weapon === 'knife') matchNote('knife_kill');
-        if (e.killer === myId && e.victim !== myId) { this.hud.hit('kill'); this.audio.hitmarker(e.head, true); this.progress({ type: 'kill', head: e.head }); }
+        if (e.killer === myId && e.victim !== myId) { noteKill(this.link.mode === 'online'); this.hud.hit('kill'); this.audio.hitmarker(e.head, true); this.progress({ type: 'kill', head: e.head }); }
         if (e.victim === myId) this.hud.announce(t('hud.youDied'), killer && killer.id !== myId ? `${killer.name} · ${weaponLabel(e.weapon)}` : '', 'var(--crimson)');
         break;
       }

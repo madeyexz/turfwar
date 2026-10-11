@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { sha256Hex } from '../../shared/sha256';
 import {
   ADMIN_KEY_SHA256, ADMIN_MAX_FAILURES, ADMIN_WINDOW_MICROS, AdminError, adminLogin, adminLogout, adminRevokeAll, dailyRows, DAY_MICROS,
-  dailyNetRows, dailyTimeRows, forAdmin, keyMatches, playerDayNetRows, playerDayRows, playerDayTimeRows, playerHourRows, playerDeviceRows, playerNetRows, playerRows, playTimeRows, shortId, bumpPeak, onlineBySide, type AdminAttempts, type AdminStore,
+  dailyNetRows, dailyTimeRows, forAdmin, keyMatches, playerMilestoneRows, playerPerfRows, playerSourceRows, playerDayNetRows, playerDayRows, playerDayTimeRows, playerHourRows, playerDeviceRows, playerNetRows, playerRows, playTimeRows, shortId, bumpPeak, onlineBySide, type AdminAttempts, type AdminStore,
 } from '../src/admin';
 import { foldNetDay, type NetDay } from '../../shared/netstats';
 import { acceptDevice } from '../../shared/devicekind';
@@ -274,5 +274,29 @@ describe('peak online', () => {
     expect(bumpPeak(prev, 500, { all: 5, phone: 3, computer: 2 }, 20n)).toBeUndefined();
     expect(bumpPeak(prev, 500, { all: 6, phone: 2, computer: 3 }, 20n)).toEqual({ hour: 500, peak: 6, phone: 4, computer: 3, at: 10n });
     expect(bumpPeak(prev, 500, { all: 7, phone: 5, computer: 1 }, 30n)).toEqual({ hour: 500, peak: 7, phone: 5, computer: 2, at: 30n });
+  });
+});
+
+describe('growth metric views', () => {
+  it('averages frame rate over seconds and load times over loads', () => {
+    const [row] = playerPerfRows([{ identity: 'aa', seconds: 100, fpsSum: 5000, lowSum: 3000, lastFps: 70, lastLow: 50, waits: 2, waitMsSum: 7000, boots: 0, bootMsSum: 0, lastAt: 5n }]);
+    expect(row).toEqual({ id: shortId('aa'), fps: 50, low: 30, seconds: 100, waitMs: 3500, waits: 2, bootMs: 0, boots: 0, lastAt: 5n });
+    // Only load times so far: the latest frame rate (none).
+    expect(playerPerfRows([{ identity: 'bb', seconds: 0, fpsSum: 0, lowSum: 0, lastFps: 0, lastLow: 0, waits: 1, waitMsSum: 900, boots: 1, bootMsSum: 4000, lastAt: 5n }])[0])
+      .toMatchObject({ fps: 0, waitMs: 900, bootMs: 4000 });
+  });
+  it('turns share codes into counts and never returns them', () => {
+    const base = { medium: '', campaign: '', inApp: '', shares: 0, duels: 0, firstAt: 1n };
+    const rows = playerSourceRows([
+      { ...base, identity: 'sharer', source: 'direct', refBy: '', ref: 'aaaa1111', shares: 4, duels: 1, played: true },
+      { ...base, identity: 'friend1', source: 'share', refBy: 'aaaa1111', ref: 'bbbb2222', played: true },
+      { ...base, identity: 'friend2', source: 'share', refBy: 'aaaa1111', ref: '', played: false },
+    ]);
+    expect(rows[0]).toMatchObject({ id: shortId('sharer'), referred: false, shares: 4, duels: 1, invited: 2, invitedPlayed: 1 });
+    expect(rows[1]).toMatchObject({ referred: true, invited: 0 });
+    expect(JSON.stringify(rows, (_k, v: unknown) => (typeof v === 'bigint' ? String(v) : v))).not.toContain('aaaa1111');
+  });
+  it('keeps milestones by short id', () => {
+    expect(playerMilestoneRows([{ identity: 'aa', room: 1n, round: 2n, kill: 0n, match: 0n }])).toEqual([{ id: shortId('aa'), room: 1n, round: 2n, kill: 0n, match: 0n }]);
   });
 });

@@ -21,6 +21,7 @@ import { PING_WINDOW, PingMonitor, hostAnswers, pingAllowed, pingTone, pingUrl, 
 import { currentServer, gameServerList, onServer, type GameServer, type ServerId } from './net/servers';
 import { ConnectDriver, connectSeconds, type ConnectState } from './net/connect';
 import { matchJoined, matchLeft, matchNote, setSuper, startAnalytics, track, type PlayKind, type Exit, type Reason } from './analytics';
+import { frameTook, lobbyReady, matchFrameStats, matchStarted, noteArrival, playFailed, playPressed } from './growth';
 import { LevelView } from './render/level';
 import { THEMES } from './render/materials';
 import { QUALITY, Renderer } from './render/renderer';
@@ -1039,6 +1040,7 @@ type Duel = { kind: 'join'; c: Challenge; mapId: string }
 let special: Duel | undefined;
 /** The challenge this page was opened with. */
 const challenge = parseChallenge(location.search);
+if (challenge) noteArrival(challenge.ref);
 if (challenge) track('challenge_link_opened', { ref: challenge.ref ?? '', has_room: !!challenge.room }, { setOnce: { ref_by: challenge.ref ?? '' } });
 
 /** 「<name> 向你下戰帖！」 over the lobby: one tap (with the callsign asked for if needed) and you're in. */
@@ -1128,6 +1130,7 @@ function run(action: Action, room = -1, retried = false) {
     return;
   }
   if (modeOf(action) === 'online' && phase() !== 'ready') {
+    playPressed();
     // Still inside the tap: full screen now, as starting would (a queued start runs without a gesture).
     fullscreenForTouch();
     // (A lobby that let go of the server in a background tab reconnects first.)
@@ -1136,6 +1139,7 @@ function run(action: Action, room = -1, retried = false) {
     return;
   }
   if (action === 'room' && !rooms.some(r => r.room === room)) return;
+  playPressed();
   joiningRoom = room;
   void start(action, retried);
 }
@@ -1224,6 +1228,7 @@ async function start(action: Action, retried = false) {
       lobbyConn.queue({ action, room, retried: true });
       return;
     }
+    playFailed();
     status.textContent = t('lobby.couldNotJoin', { error: serverError((error as Error).message) });
     track('error_shown', { where: 'join', message: String((error as Error)?.message ?? error).slice(0, 120) });
     watchLobbyRooms(); refresh();
@@ -1284,12 +1289,14 @@ function joined(link: GameLink, map: string, serverChoice: ServerId | undefined,
   const state = link.state(), me = state?.soldiers.find(s => s.id === link.myId());
   const config = state?.config;
   const info = link.roomInfo?.();
+  // The wait from pressing Play (a rejoin or a map change has none); the match's frame count starts over.
+  const wait = matchStarted();
   matchJoined({
     online: link.mode === 'online', ...(info ? { room: info.code || `public-${info.room}`, private: !!info.code } : {}), ...(hosted ? { hosted: true } : {}), map,
     mode: config?.mode ?? 'elimination', size: config?.practice ? 'practice' : sizeLabel(config?.teamSize ?? perTeam()), team: me?.team === 1 ? 'militia' : 'swat',
     ...(serverChoice ? { server_choice: serverChoice } : {}), device: currentDeviceKind(), ...(rejoin ? { rejoin: true } : {}),
     // How it is played (phones): touch, an upright screen (the match then turns sideways), which app's browser, aim assist.
-    touch: touchActive(), upright: innerHeight > innerWidth && !isSideways(), ...playContext(),
+    touch: touchActive(), upright: innerHeight > innerWidth && !isSideways(), ...playContext(), ...(wait !== undefined && !rejoin ? { wait_ms: wait } : {}),
   });
   if (isSideways()) matchNote('sideways');
   // The server removed us (it stopped hearing from this client) or the connection dropped: back to
@@ -1347,7 +1354,7 @@ async function rejoinAfterDrop(old: OnlineLink) {
 function leftMatch(reason: Reason, exit?: Exit) {
   const link = game?.link, me = link?.state()?.soldiers.find(s => s.id === link.myId());
   // Online: the match's connection quality, and its last report to the server.
-  matchLeft(reason, { kills: me?.kills ?? 0, deaths: me?.deaths ?? 0 }, link instanceof OnlineLink ? link.netLeft() : undefined, exit);
+  matchLeft(reason, { kills: me?.kills ?? 0, deaths: me?.deaths ?? 0 }, link instanceof OnlineLink ? link.netLeft() : undefined, exit, matchFrameStats());
 }
 // Closing the tab mid-match: match_left goes out by beacon.
 addEventListener('pagehide', () => leftMatch('close', 'close'));
@@ -1474,6 +1481,7 @@ async function boot() {
   assets = await loadAssets(f => { loadFraction = f; renderQuick(); renderStart(); renderOthers(); renderChallenge(); }, { renderer: renderer.renderer, quality });
   await fonts;
   ready = true;
+  if (!benchMode) lobbyReady();
   warmServiceWorker();
   refresh();
   renderChallenge();
@@ -1504,6 +1512,7 @@ async function boot() {
     const t0 = performance.now();
     if (bench && !bench.done && game) bench.drive(dt);
     step(dt, now);
+    if (game && !fixed) frameTook(interval);
     if (bench && !bench.done) {
       bench.record(interval, performance.now() - t0);
       const left = Math.ceil(bench.remaining);

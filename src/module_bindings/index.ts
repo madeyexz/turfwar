@@ -53,6 +53,7 @@ import JoinPublicReducer from "./join_public_reducer";
 import JoinRoomReducer from "./join_room_reducer";
 import LeaveReducer from "./leave_reducer";
 import NetStatsReducer from "./net_stats_reducer";
+import PerfStatsReducer from "./perf_stats_reducer";
 import QuickAnyReducer from "./quick_any_reducer";
 import QuickJoinReducer from "./quick_join_reducer";
 import QuickPlayReducer from "./quick_play_reducer";
@@ -65,6 +66,7 @@ import StartRoomReducer from "./start_room_reducer";
 import SwitchSlotReducer from "./switch_slot_reducer";
 import UseCrateReducer from "./use_crate_reducer";
 import VehicleReportReducer from "./vehicle_report_reducer";
+import VisitReducer from "./visit_reducer";
 
 // Import all procedure arg schemas
 
@@ -79,9 +81,13 @@ import AdminPlayerDayNetRow from "./admin_player_day_net_table";
 import AdminPlayerDayTimeRow from "./admin_player_day_time_table";
 import AdminPlayerDeviceRow from "./admin_player_device_table";
 import AdminPlayerHourRow from "./admin_player_hour_table";
+import AdminPlayerMilestoneRow from "./admin_player_milestone_table";
 import AdminPlayerNetRow from "./admin_player_net_table";
+import AdminPlayerPerfRow from "./admin_player_perf_table";
+import AdminPlayerSourceRow from "./admin_player_source_table";
 import AdminPlayerTimeRow from "./admin_player_time_table";
 import AdminPlayersRow from "./admin_players_table";
+import AdminRoomHourRow from "./admin_room_hour_table";
 import AdminRoomsRow from "./admin_rooms_table";
 import AdminStatusRow from "./admin_status_table";
 import BodyRow from "./body_table";
@@ -280,6 +286,13 @@ const tablesSchema = __schema({
     constraints: [
     ],
   }, AdminPlayerHourRow),
+  adminPlayerMilestone: __table({
+    name: 'admin_player_milestone',
+    indexes: [
+    ],
+    constraints: [
+    ],
+  }, AdminPlayerMilestoneRow),
   adminPlayerNet: __table({
     name: 'admin_player_net',
     indexes: [
@@ -287,6 +300,20 @@ const tablesSchema = __schema({
     constraints: [
     ],
   }, AdminPlayerNetRow),
+  adminPlayerPerf: __table({
+    name: 'admin_player_perf',
+    indexes: [
+    ],
+    constraints: [
+    ],
+  }, AdminPlayerPerfRow),
+  adminPlayerSource: __table({
+    name: 'admin_player_source',
+    indexes: [
+    ],
+    constraints: [
+    ],
+  }, AdminPlayerSourceRow),
   adminPlayerTime: __table({
     name: 'admin_player_time',
     indexes: [
@@ -301,6 +328,13 @@ const tablesSchema = __schema({
     constraints: [
     ],
   }, AdminPlayersRow),
+  adminRoomHour: __table({
+    name: 'admin_room_hour',
+    indexes: [
+    ],
+    constraints: [
+    ],
+  }, AdminRoomHourRow),
   adminRooms: __table({
     name: 'admin_rooms',
     indexes: [
@@ -345,6 +379,7 @@ const reducersSchema = __reducers(
   __reducerSchema("join_room", JoinRoomReducer),
   __reducerSchema("leave", LeaveReducer),
   __reducerSchema("net_stats", NetStatsReducer),
+  __reducerSchema("perf_stats", PerfStatsReducer),
   __reducerSchema("quick_any", QuickAnyReducer),
   __reducerSchema("quick_join", QuickJoinReducer),
   __reducerSchema("quick_play", QuickPlayReducer),
@@ -357,6 +392,7 @@ const reducersSchema = __reducers(
   __reducerSchema("switch_slot", SwitchSlotReducer),
   __reducerSchema("use_crate", UseCrateReducer),
   __reducerSchema("vehicle_report", VehicleReportReducer),
+  __reducerSchema("visit", VisitReducer),
 );
 
 /** The schema information for all procedures in this module. This is defined the same way as the procedures would have been defined in the server. */
