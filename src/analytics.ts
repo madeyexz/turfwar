@@ -54,13 +54,8 @@ export interface Events {
   /** The page's own failures (src/errors.ts: at most 5 a page, each message once); `source`: file:line:column, or `opaque` for a "Script error." the browser gave no details of (then with `uptime_s`, `standalone`, `visible`). */
   client_error: { kind: ClientErrorKind; message: string; source?: string; in_match: boolean; uptime_s?: number; standalone?: boolean; visible?: boolean };
   /**
-   * A server that scales to zero (Singapore) was found asleep: a ping or connect failed first and the lobby showed "waking"; it came up after `seconds`
-   * (src/net/wake.ts). Same fields as `connect_slow`.
-   */
-  server_woke: ConnectTiming;
-  /**
-   * The lobby's connection to a server took over 6 s, or needed a retry after a failed ping or connect, without the "asleep" screen: always-on servers
-   * (Taipei, Maincloud, local), and a sleeping one that was only slow. Before 2026-10-12 `server_woke` meant this too.
+   * The lobby's connection to a server took over 6 s, or needed a retry after a failed ping or connect. (Until 2026-10-12 this was `server_woke`, which
+   * also fired for Singapore waking from sleep; Singapore is no longer a choice and the event is gone.)
    */
   connect_slow: ConnectTiming;
   /** Every 5 minutes of a long online match: connection quality over those minutes (`seconds` in a room). */
@@ -154,7 +149,7 @@ function devTestId() {
  * Load posthog-js and start sending; call once the lobby has rendered. `base` are the super
  * properties every event carries (the app version is added here): the language, the SpacetimeDB
  * database and its host (`server_host`, e.g. play.turfwar.ianhsiao.me) and the player's choice of
- * server (`server_choice`: sg or us), so events can be told apart by server. The lobby updates the
+ * server (`server_choice`: tw or us), so events can be told apart by server. The lobby updates the
  * three with `setSuper` when the player chooses another server.
  */
 export function startAnalytics(base: { lang: string; online_db: string; server_host: string; server_choice: string }) {

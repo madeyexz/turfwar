@@ -112,7 +112,7 @@ spacetime generate --lang typescript --out-dir src/module_bindings --module-path
 
 - Source of truth: `https://github.com/madeyexz/turfwar` (renamed from `madeyexz/lawbreaker`; private
   until the owner makes it public). Never change its visibility or settings without the owner.
-- Branches: **`main` = production** (Vercel production, game servers `turfwar` in Taipei (default) and Singapore); **`dev` =
+- Branches: **`main` = production** (Vercel production, game server `turfwar` in Taipei, plus Singapore and legacy Maincloud, which players are no longer offered); **`dev` =
   development** (every push is a Vercel preview wired to Maincloud `lawbreaker-dev`). Branch features
   off `dev`, commit, and merge back into `dev` with git (no pull requests). A release is merging `dev`
   into `main` and pushing, after publishing the module to the production database (see below); nothing
@@ -124,10 +124,13 @@ spacetime generate --lang typescript --out-dir src/module_bindings --module-path
 - Pushing `main` triggers Vercel production deployment. Do not push or
   publish merely to test; obtain authorization for releases and shared-state changes.
 - Frontend: `https://turfwar.ianhsiao.me` (production; `https://lawbreaker.vercel.app` still works, DNS for ianhsiao.me is on Cloudflare); `dev` previews are listed by `vercel ls`.
-- Production game servers, both database **`turfwar`**: **Taipei**, the default — SpacetimeDB on a GCP VM in
-  Taiwan, `wss://tw.turfwar.ianhsiao.me` (`deploy/gcp-taipei/`, always on) — and **Singapore** on InstaCloud,
-  `wss://play.turfwar.ianhsiao.me` (`deploy/instacloud/`; it scales to zero and wakes on the next request).
-  Taipei began as a copy of Singapore (signing keys included). The owner identity is in `~/.config/turfwar/`
+- Production game servers, both database **`turfwar`**: **Taipei**, the only one players are offered (Settings →
+  Server, with US East) — SpacetimeDB on a GCP VM in Taiwan, `wss://tw.turfwar.ianhsiao.me`
+  (`deploy/gcp-taipei/`, always on) — and **Singapore** on InstaCloud, `wss://play.turfwar.ianhsiao.me`
+  (`deploy/instacloud/`; it scales to zero and wakes on the next request). Singapore is no longer a choice in
+  the game (2026-10-12) but stays published and readable in `/admin` (it holds the players of 2026-10-07);
+  the game has no wake/"asleep" code, since every server it offers is always on. Decommissioning Singapore
+  is the owner's call. Taipei began as a copy of Singapore (signing keys included). The owner identity is in `~/.config/turfwar/`
   on the Mac, outside the repo; `bun run publish:prod` publishes to Taipei, Singapore and legacy Maincloud.
   InstaCloud's CLI is driven as `insta --agent …` from `deploy/instacloud/` (the linked directory).
 - Maincloud databases, URI `wss://maincloud.spacetimedb.com`: legacy production **`3d-game-c4lhd`**

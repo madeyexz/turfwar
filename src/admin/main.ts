@@ -16,8 +16,7 @@ import { releasesByDay, releaseTitle, type Release } from './releases';
 import { activeByDay, GROUPS, niceStep, pingByDay, sideOf, SIDES, splitBySide, sumByDay, type DayNet as DayNetOf, type GroupId, type Side } from './groups';
 import { formatPlayTime, liveSeconds } from '../../shared/playtime';
 import { hostAnswers, pingUrl, serverIdentityKey } from '../net/ping';
-import { WakeDriver, wakeProgress, wakeSeconds, type WakeLink } from '../net/wake';
-import { serverSleeps } from '../net/servers';
+import { WAKE, WakeDriver, type WakeLink } from '../net/wake';
 import { adminServers, chosenServer, regionName, rememberServer, type AdminServer } from './servers';
 import './admin.css';
 
@@ -30,7 +29,7 @@ import './admin.css';
  * A switcher picks the server (src/admin/servers.ts): the build's own (production: the Taipei
  * server) or the others that stay published (Singapore, legacy Maincloud production, dev). Each has its own
  * admin table, so the login, the identity and the "logged in" flag are per server. The Singapore
- * server sleeps when idle: opening this page wakes it, shown as "waking" (src/net/wake.ts).
+ * server sleeps when idle and is read-only here (players are no longer offered it): the page just waits up to 3 minutes for it (src/net/wake.ts).
  */
 type Room = Infer<typeof AdminRoomsRow>;
 type Overview = Infer<typeof AdminOverviewRow>;
@@ -726,51 +725,32 @@ function render() {
     renderConn();
     if (conn && isAdmin()) { logoutBtn.hidden = false; dashboard(); return; }
     logoutBtn.hidden = true;
-    if (p === 'waking' || p === 'unreachable') { wakeCard(); return; }
+    if (p === 'unreachable') { unreachableCard(); return; }
     // Remembered as logged in, but the server says no (revoked, or a new key): back to the login.
     if (conn && status() && store.get(flagKey())) store.del(flagKey());
-    if (!conn && p !== 'ready') { body.innerHTML = `<div class="empty">Connecting to ${esc(server.name)}…</div>`; return; }
+    if (!conn && p !== 'ready') { body.innerHTML = `<div class="empty">Connecting to ${esc(server.name)}…${server.sleeps ? '<br><small>This server sleeps when idle: the first connection can take up to a minute.</small>' : ''}</div>`; return; }
     renderLogin();
   });
 }
 
-/** The header's dot: connected, connecting or waking (amber), or not reachable. */
+/** The header's dot: connected, connecting (amber), or not reachable. */
 function renderConn() {
   const p = driver.state.phase;
   if (p === 'ready') setConn(conn ? 'live' : 'off', conn ? 'Connected' : 'Connected, but this database has no admin views');
   else if (p === 'probing') setConn('wait', 'Connecting');
-  else if (p === 'waking') setConn('wait', 'Waking the server');
   else setConn('off', p === 'unreachable' ? "Can't reach the server" : 'Not connected');
 }
 
-/**
- * While a server that scales to zero (Singapore) boots: it is asleep (not down), the time so far and a bar.
- * After 3 minutes (30 seconds for an always-on server, which is never "waking"): "Can't reach" with Retry. Redrawn whole only when that changes; the timer ticks in place.
- */
-let wakeShown = '';
-function wakeCard() {
-  const s = driver.state, down = s.phase === 'unreachable';
-  const key = `${s.phase}|${server.id}`;
-  if (wakeShown !== key || !body.querySelector('.wake')) {
-    wakeShown = key;
-    body.innerHTML = down
-      ? `<section class="wake down"><h2><i class="dot off"></i>Can't reach the server</h2>
-          <p role="status">${serverSleeps(server) ? 'It did not wake up within 3 minutes. Check the server on InstaCloud, or try again.' : 'It did not answer within 30 seconds. Check that the server is running, or try again.'}</p>
-          <button type="button" class="btn primary" id="wake-retry">Retry</button></section>`
-      : `<section class="wake"><h2><i class="dot wait"></i>Waking the server</h2>
-          <p role="status">The server is asleep to save costs — waking it up (about 30 s). Opening this page woke it.</p>
-          <p class="note" id="wake-note"></p>
-          <div class="wake-meter" aria-hidden="true"><span class="wake-bar"><i id="wake-fill"></i></span><span class="wake-time" id="wake-time"></span></div></section>`;
-    body.querySelector('#wake-retry')?.addEventListener('click', () => driver.retry());
-  }
-  if (down) return;
-  const secs = wakeSeconds(s, performance.now());
-  body.querySelector<HTMLElement>('#wake-fill')!.style.width = `${(wakeProgress(secs * 1000) * 100).toFixed(1)}%`;
-  body.querySelector('#wake-time')!.textContent = `${secs} s`;
-  const note = s.hostUp ? 'Almost there: the machine is up and loading the database.' : secs >= 60 ? 'Taking a little longer than usual — still trying.' : '';
-  const noteEl = body.querySelector<HTMLElement>('#wake-note')!;
-  if (noteEl.textContent !== note) noteEl.textContent = note;
-  noteEl.hidden = !note;
+/** "Can't reach the server" with Retry, after 30 s of trying (3 minutes for a server that sleeps). Redrawn whole only when the server changes. */
+let unreachableShown = '';
+function unreachableCard() {
+  const key = server.id;
+  if (unreachableShown === key && body.querySelector('.wake')) return;
+  unreachableShown = key;
+  body.innerHTML = `<section class="wake down"><h2><i class="dot off"></i>Can't reach the server</h2>
+      <p role="status">${server.sleeps ? 'It did not answer within 3 minutes. Check the server on InstaCloud, or try again.' : 'It did not answer within 30 seconds. Check that the server is running, or try again.'}</p>
+      <button type="button" class="btn primary" id="wake-retry">Retry</button></section>`;
+  body.querySelector('#wake-retry')?.addEventListener('click', () => driver.retry());
 }
 
 logoutBtn.addEventListener('click', () => {
@@ -780,7 +760,7 @@ logoutBtn.addEventListener('click', () => {
 });
 
 /**
- * One connection to a server's admin views (the wake driver retries and says when it is waking).
+ * One connection to a server's admin views (the connection driver retries until it answers).
  * `live` once the views have arrived, or once the server answered but has no admin views (an older
  * module: there is nothing to retry, the login form says so).
  */
@@ -838,12 +818,11 @@ function makeDriver() {
   return new WakeDriver<never>({
     ping: signal => ping ? hostAnswers(ping, signal) : Promise.resolve(false),
     connect: lost => adminLink(s, lost),
-    sleeps: () => serverSleeps(s),
-  }, () => render(), () => undefined);
+  }, () => render(), () => undefined, s.sleeps ? { ...WAKE, giveUpMs: 180_000 } : WAKE);
 }
 let driver = makeDriver();
 
-/** Show another server: drop this connection, remember the choice, connect (and wake) the other. */
+/** Show another server: drop this connection, remember the choice, connect to the other. */
 function switchServer(next: AdminServer) {
   if (next.id === server.id) return;
   driver.stop();

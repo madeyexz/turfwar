@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { ALWAYS_ON, WAKE, WakeDriver, idleWake, retryDelay, step, wakeProgress, wakeSeconds, type WakeEvent, type WakeLink, type WakeState } from './wake';
+import { WAKE, WakeDriver, idleWake, retryDelay, step, wakeSeconds, type WakeEvent, type WakeLink, type WakeState } from './wake';
 
 /** Feed events through the pure machine, collecting what it asks to run. */
 function machine<A>() {
@@ -9,40 +9,37 @@ function machine<A>() {
   return { send, runs, get state() { return s; } };
 }
 
-describe('wake state machine', () => {
-  it('a warm server goes straight to ready without waking', () => {
+describe('connection state machine', () => {
+  it('a reachable server goes straight to ready', () => {
     const m = machine<string>();
     expect(m.send({ type: 'start' }, 0).phase).toBe('probing');
-    m.send({ type: 'hostUp' }, 150);
-    expect(m.send({ type: 'up' }, 400)).toMatchObject({ phase: 'ready', woke: false });
+    expect(m.send({ type: 'up' }, 400)).toMatchObject({ phase: 'ready', slow: false, failures: 0 });
   });
 
-  it('a 503 (or any failed ping) shows waking, and recovery is ready', () => {
+  it('a failed ping or connect never says "asleep": it stays probing and counts failures, then recovery is ready', () => {
     const m = machine<string>();
     m.send({ type: 'start' }, 0);
-    expect(m.send({ type: 'cold', from: 'ping' }, 200)).toMatchObject({ phase: 'waking', woke: true, failures: 1 });
-    expect(m.send({ type: 'cold', from: 'connect' }, 2500).phase).toBe('waking');
-    expect(m.send({ type: 'hostUp' }, 24_000)).toMatchObject({ phase: 'waking', hostUp: true });
-    // A connect that fails while the host answers: still up, the database is loading.
-    expect(m.send({ type: 'cold', from: 'connect' }, 25_000)).toMatchObject({ phase: 'waking', hostUp: true });
-    expect(m.send({ type: 'up' }, 27_000)).toMatchObject({ phase: 'ready', woke: true });
+    expect(m.send({ type: 'cold', from: 'ping' }, 200)).toMatchObject({ phase: 'probing', failures: 1 });
+    expect(m.send({ type: 'cold', from: 'connect' }, 2500)).toMatchObject({ phase: 'probing', failures: 2 });
+    expect(m.send({ type: 'up' }, 27_000)).toMatchObject({ phase: 'ready', failures: 2 });
   });
 
-  it('no answer within 6 s is only slow: still "probing", never "asleep" without a failure', () => {
+  it('no answer within 6 s is only slow: still "probing"', () => {
     const m = machine<string>();
     m.send({ type: 'start' }, 1000);
     expect(m.send({ type: 'tick' }, 6999)).toMatchObject({ phase: 'probing', slow: false });
-    expect(m.send({ type: 'tick' }, 7000)).toMatchObject({ phase: 'probing', slow: true, woke: false });
+    expect(m.send({ type: 'tick' }, 7000)).toMatchObject({ phase: 'probing', slow: true });
     expect(m.send({ type: 'tick' }, 30_000).phase).toBe('probing');
-    expect(m.send({ type: 'up' }, 31_000)).toMatchObject({ phase: 'ready', woke: false, slow: true });
+    expect(m.send({ type: 'up' }, 31_000)).toMatchObject({ phase: 'ready', slow: true });
   });
 
-  it('gives up after 3 minutes, and Retry starts over', () => {
+  it('gives up after 30 s, and Retry starts over', () => {
     const m = machine<string>();
     m.send({ type: 'start' }, 0);
     m.send({ type: 'cold', from: 'ping' }, 100);
-    expect(m.send({ type: 'tick' }, WAKE.giveUpMs - 1).phase).toBe('waking');
+    expect(m.send({ type: 'tick' }, WAKE.giveUpMs - 1).phase).toBe('probing');
     expect(m.send({ type: 'tick' }, WAKE.giveUpMs).phase).toBe('unreachable');
+    expect(WAKE.giveUpMs).toBe(30_000);
     // Late answers from the abandoned attempt change nothing.
     expect(m.send({ type: 'up' }, WAKE.giveUpMs + 10).phase).toBe('unreachable');
     expect(m.send({ type: 'retry' }, 200_000)).toMatchObject({ phase: 'probing', since: 200_000, failures: 0 });
@@ -52,21 +49,6 @@ describe('wake state machine', () => {
     const m = machine<string>();
     m.send({ type: 'start' }, 0);
     expect(m.send({ type: 'cold', from: 'connect' }, WAKE.giveUpMs + 1).phase).toBe('unreachable');
-  });
-
-  it('an always-on server is never "asleep": failures keep it probing, then it is unreachable after 30 s', () => {
-    let s = idleWake<string>();
-    const send = (e: WakeEvent<string>, now: number) => { s = step(s, e, now, ALWAYS_ON).state; return s; };
-    send({ type: 'start' }, 0);
-    expect(send({ type: 'cold', from: 'ping' }, 200)).toMatchObject({ phase: 'probing', woke: false, failures: 1 });
-    expect(send({ type: 'cold', from: 'connect' }, 2500)).toMatchObject({ phase: 'probing', woke: false, failures: 2 });
-    expect(send({ type: 'tick' }, ALWAYS_ON.giveUpMs - 1).phase).toBe('probing');
-    expect(send({ type: 'tick' }, ALWAYS_ON.giveUpMs).phase).toBe('unreachable');
-    expect(ALWAYS_ON.giveUpMs).toBe(30_000);
-    // Retry starts over, and a good connection then is plain "ready" (no wake to report).
-    send({ type: 'retry' }, 40_000);
-    send({ type: 'cold', from: 'ping' }, 40_100);
-    expect(send({ type: 'up' }, 41_000)).toMatchObject({ phase: 'ready', woke: false, failures: 1 });
   });
 
   it('runs a queued action once, when the server is up', () => {
@@ -83,7 +65,7 @@ describe('wake state machine', () => {
     expect(m.state.queued).toBeUndefined();
   });
 
-  it('runs at once when already connected, and the last press wins while waking', () => {
+  it('runs at once when already connected, and the last press wins while connecting', () => {
     const m = machine<string>();
     m.send({ type: 'start' }, 0);
     m.send({ type: 'queue', action: 'quick' }, 100);
@@ -92,17 +74,6 @@ describe('wake state machine', () => {
     expect(m.runs).toEqual(['start']);
     m.send({ type: 'queue', action: 'code' }, 400);
     expect(m.runs).toEqual(['start', 'code']);
-  });
-
-  it('cancel drops the queued action', () => {
-    const m = machine<string>();
-    m.send({ type: 'start' }, 0);
-    m.send({ type: 'cold', from: 'ping' }, 100);
-    m.send({ type: 'queue', action: 'quick' }, 1000);
-    m.send({ type: 'cancel' }, 2000);
-    m.send({ type: 'up' }, 9000);
-    expect(m.runs).toEqual([]);
-    expect(m.state.phase).toBe('ready');
   });
 
   it('pressing play after giving up retries and keeps the action', () => {
@@ -126,14 +97,9 @@ describe('wake state machine', () => {
     expect(m.runs).toEqual([]);
   });
 
-  it('counts seconds, fills the bar by the expected time and backs off to 3 s', () => {
-    const s = { ...idleWake<string>(), phase: 'waking' as const, since: 1000 };
+  it('counts seconds and backs off to 3 s', () => {
+    const s = { ...idleWake<string>(), phase: 'probing' as const, since: 1000 };
     expect(wakeSeconds(s, 13_999)).toBe(12);
-    expect(wakeProgress(0)).toBe(0);
-    expect(wakeProgress(15_000)).toBeCloseTo(0.45);
-    expect(wakeProgress(30_000)).toBeCloseTo(0.9);
-    expect(wakeProgress(180_000)).toBeLessThan(0.99);
-    expect(wakeProgress(90_000)).toBeGreaterThan(wakeProgress(60_000));
     expect([1, 2, 3, 10].map(retryDelay)).toEqual([2000, 2500, 3000, 3000]);
   });
 });
@@ -169,7 +135,7 @@ function fakeServer() {
 describe('WakeDriver', () => {
   afterEach(() => { vi.useRealTimers(); });
 
-  it('wakes a sleeping server, then runs the queued action once', async () => {
+  it('keeps connecting while the server is out of reach, then runs the queued action once', async () => {
     vi.useFakeTimers();
     const { server, deps } = fakeServer();
     const runs: string[] = [];
@@ -177,7 +143,8 @@ describe('WakeDriver', () => {
     const d = new WakeDriver<string>(deps, s => { if (phases.at(-1) !== s.phase) phases.push(s.phase); }, a => runs.push(a));
     d.start();
     await vi.advanceTimersByTimeAsync(1000);
-    expect(d.state.phase).toBe('waking');
+    expect(d.state).toMatchObject({ phase: 'probing' });
+    expect(d.state.failures).toBeGreaterThan(0);
     d.queue('quick');
     await vi.advanceTimersByTimeAsync(20_000);
     expect(runs).toEqual([]);
@@ -185,7 +152,7 @@ describe('WakeDriver', () => {
     await vi.advanceTimersByTimeAsync(4000);
     expect(d.state.phase).toBe('ready');
     expect(runs).toEqual(['quick']);
-    expect(phases).toEqual(['probing', 'waking', 'ready']);
+    expect(phases).toEqual(['probing', 'ready']);
     // Once ready, no more pings or connects.
     const { pings, connects } = server;
     await vi.advanceTimersByTimeAsync(30_000);
@@ -198,7 +165,8 @@ describe('WakeDriver', () => {
     vi.useFakeTimers();
     const { server, deps } = fakeServer();
     server.hold = true;
-    const d = new WakeDriver<string>(deps, () => undefined, () => undefined);
+    // (The admin page's longer window for the Singapore database, which sleeps.)
+    const d = new WakeDriver<string>(deps, () => undefined, () => undefined, { ...WAKE, giveUpMs: 180_000 });
     d.start();
     await vi.advanceTimersByTimeAsync(60_000);
     expect(server.maxOpen).toBe(1);
@@ -215,7 +183,7 @@ describe('WakeDriver', () => {
     expect(server.open).toBe(0);
   });
 
-  it('gives up after 3 minutes and stops trying until Retry', async () => {
+  it('gives up after 30 s and stops trying until Retry', async () => {
     vi.useFakeTimers();
     const { server, deps } = fakeServer();
     const d = new WakeDriver<string>(deps, () => undefined, () => undefined);
@@ -245,9 +213,9 @@ describe('WakeDriver', () => {
     const d = new WakeDriver<string>(slow, () => undefined, () => undefined);
     d.start();
     await vi.advanceTimersByTimeAsync(WAKE.slowMs + 100);
-    expect(d.state).toMatchObject({ phase: 'probing', slow: true, woke: false, failures: 0 });
+    expect(d.state).toMatchObject({ phase: 'probing', slow: true, failures: 0 });
     await vi.advanceTimersByTimeAsync(1500);
-    expect(d.state).toMatchObject({ phase: 'ready', slow: true, woke: false });
+    expect(d.state).toMatchObject({ phase: 'ready', slow: true });
     expect(d.timings).toMatchObject({ pingMs: 3500, pingOk: true, importMs: 1234 });
     d.stop();
   });
@@ -265,45 +233,21 @@ describe('WakeDriver', () => {
     d.stop();
   });
 
-  it('a driver for an always-on server never shows waking, gives up after 30 s, and still runs a queued action once it is up', async () => {
-    vi.useFakeTimers();
-    const { server, deps } = fakeServer();
-    const phases: string[] = [];
-    const runs: string[] = [];
-    const d = new WakeDriver<string>({ ...deps, sleeps: () => false }, s => { if (phases.at(-1) !== s.phase) phases.push(s.phase); }, a => runs.push(a));
-    d.start();
-    d.queue('quick');
-    await vi.advanceTimersByTimeAsync(10_000);
-    expect(d.state).toMatchObject({ phase: 'probing', woke: false });
-    expect(d.state.failures).toBeGreaterThan(0);
-    server.up = true;
-    await vi.advanceTimersByTimeAsync(4000);
-    expect(d.state.phase).toBe('ready');
-    expect(runs).toEqual(['quick']);
-    expect(phases).not.toContain('waking');
-    d.stop();
-    // Down for good: unreachable after 30 s, not 3 minutes.
-    server.up = false;
-    const down = new WakeDriver<string>({ ...deps, sleeps: () => false }, () => undefined, () => undefined);
-    down.start();
-    await vi.advanceTimersByTimeAsync(ALWAYS_ON.giveUpMs + 1000);
-    expect(down.state.phase).toBe('unreachable');
-    down.stop();
-  });
-
-  it('cancel keeps the action from running', async () => {
+  it('gives up after 30 s with an unreachable server and plays the queued action after Retry once it is up', async () => {
     vi.useFakeTimers();
     const { server, deps } = fakeServer();
     const runs: string[] = [];
     const d = new WakeDriver<string>(deps, () => undefined, a => runs.push(a));
     d.start();
-    await vi.advanceTimersByTimeAsync(5000);
-    d.queue('start');
-    d.cancel();
-    server.up = true;
-    await vi.advanceTimersByTimeAsync(5000);
-    expect(d.state.phase).toBe('ready');
+    d.queue('quick');
+    await vi.advanceTimersByTimeAsync(WAKE.giveUpMs + 1000);
+    expect(d.state.phase).toBe('unreachable');
     expect(runs).toEqual([]);
+    server.up = true;
+    d.retry();
+    await vi.advanceTimersByTimeAsync(3000);
+    expect(d.state.phase).toBe('ready');
+    expect(runs).toEqual(['quick']);
     d.stop();
   });
 
@@ -319,7 +263,8 @@ describe('WakeDriver', () => {
     server.links.at(-1)!.lost();
     expect(d.state.phase).toBe('probing');
     await vi.advanceTimersByTimeAsync(3000);
-    expect(d.state.phase).toBe('waking');
+    expect(d.state).toMatchObject({ phase: 'probing' });
+    expect(d.state.failures).toBeGreaterThan(0);
     server.up = true;
     await vi.advanceTimersByTimeAsync(4000);
     expect(d.state.phase).toBe('ready');

@@ -2,13 +2,13 @@
  * Round-trip time from this browser to each game server, for the lobby.
  *
  * A "server" is a SpacetimeDB host (its websocket URI). Every room lives in one database today (the
- * self-hosted server in Singapore in production), so every room shows the same ping; rooms carry
+ * self-hosted server in Taipei in production), so every room shows the same ping; rooms carry
  * their server's URI so a second server gets its own column value without changes here.
  *
  * Measured with SpacetimeDB's own HTTP `GET /v1/ping` on that host: it is answered by the host
  * without touching the database (no reducer, no subscription, nothing queued behind the match
  * tick), SpacetimeDB allows it cross-origin (`Access-Control-Allow-Origin: *`) and a plain GET needs
- * no preflight. The same request tells a sleeping server from a running one (src/net/wake.ts). The browser websocket API cannot send ping frames, and the SDK has no one-off
+ * no preflight. The same request tells whether the host is reachable (src/net/wake.ts). The browser websocket API cannot send ping frames, and the SDK has no one-off
  * query, so the open websocket offers nothing cheaper that does not load the database.
  *
  * The first sample pays for the TCP + TLS handshake (about 3× the RTT to Maincloud) and is
@@ -40,7 +40,7 @@ export const SERVER_REGIONS: Record<string, Key> = {
   // under its own name and its IP's sslip.io name.
   'tw.turfwar.ianhsiao.me': 'server.region.taipei',
   '34-81-41-144.sslip.io': 'server.region.taipei',
-  // Singapore: SpacetimeDB on InstaCloud compute (ap-southeast).
+  // Singapore (InstaCloud, ap-southeast): no longer a choice for players, but /admin still reads it and names it.
   'play.turfwar.ianhsiao.me': 'server.region.singapore',
   localhost: 'server.region.local',
   '127.0.0.1': 'server.region.local',
@@ -90,24 +90,6 @@ export async function hostAnswers(url: string, signal: AbortSignal, fetcher: Fet
   } catch {
     return false;
   }
-}
-
-/** How often a match in progress requests its game server's `/v1/ping` (see `keepAwake`). */
-export const KEEP_AWAKE_MS = 60_000;
-
-/**
- * Keeps a scale-to-zero game server up under a match: every `every` ms while `active()` (we are in a
- * room), one `/v1/ping`. The host sleeps once no request has reached it for a few minutes, and a
- * match's traffic all rides its already-open WebSocket, which does not count: on 2026-10-07 the
- * platform suspended the Singapore server 5 and 13 minutes into play, dropping everyone in it. Only
- * while in a room, so a forgotten tab never holds the server awake. Returns the function that stops it.
- */
-export function keepAwake(url: string, active: () => boolean, fetcher: Fetch = (u, i) => fetch(u, i), every = KEEP_AWAKE_MS): () => void {
-  const timer = setInterval(() => {
-    if (!active()) return;
-    void fetcher(url, { cache: 'no-store' }).then(res => res.arrayBuffer()).catch(() => undefined);
-  }, every);
-  return () => clearInterval(timer);
 }
 
 export function median(xs: readonly number[]): number | undefined {
