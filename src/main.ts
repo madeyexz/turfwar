@@ -542,7 +542,7 @@ function renderLine(id: string, action: Action, liveText: string) {
     : p === 'unreachable' ? ['down', t('connect.downHead')]
     : ['wait', queuedAction() === action ? t('connect.queued') : t('lobby.connecting')];
   el.querySelector('.conn')!.className = `conn ${state}`;
-  el.title = p === 'ready' ? t('lobby.liveTitle', { db: server?.database ?? 'online' }) : '';
+  el.title = p === 'ready' ? t('lobby.liveTitle') : '';
   setText($(`#${id}-hint`), text);
 }
 
