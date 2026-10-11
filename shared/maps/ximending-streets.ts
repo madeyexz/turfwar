@@ -112,7 +112,7 @@ export const LANE_CHICANES: { alongX: boolean; at: ([c: number, lo: number, hi: 
   // West, Hanzhong and East streets: [c, lo, hi] with lo and hi in x.
   { alongX: false, at: [[-45, -47.5, -37.5], [-20, -47.5, -37.5], [20, -47.5, -37.5], [43, -47.5, -37.5]] },
   // (Past lane S, Hanzhong St runs on beside the Red House: its last chicane fills only the slot east of the octagon.)
-  { alongX: false, at: [[-43, -5, 5], [-22, -5, 5, true], [20, -5, 5], [43, -0.9, 5]] },
+  { alongX: false, at: [[-43, -5, 5], [-22, -5, 5, true], [20, -5, 5], [43, -0.6, 5]] },
   { alongX: false, at: [[-45, 37.5, 47.5], [-20, 37.5, 47.5], [20, 37.5, 47.5], [43, 37.5, 47.5]] },
 ];
 

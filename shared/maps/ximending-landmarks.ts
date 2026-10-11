@@ -315,10 +315,11 @@ export function yard(t: Ximen) {
   t.hoarding([51.5, 12.3, 58, 12.7], 'n', undefined, 0x4a6a3a);
   // Mixer, rebar piles, pallets of bricks, a crane's base.
   t.b.cylinder(58.5, 0, -10.5, 1.0, 1.9, 'steel', 'y', 0xd8a838);
-  t.box([55, 10.5, 58.5, 12.2], 0, 1.0, 'steel', 0x6a5a4a);
+  // (Nothing low stands against the baffles or the screens: no stepping up onto them to see over the base's screens.)
+  t.box([55, 8.6, 58.5, 10.3], 0, 1.0, 'steel', 0x6a5a4a);
   t.box([60, 9, 63, 11.2], 0, 1.3, 'brick', 0xb8683e);
-  t.box([60.6, -11.9, 63.2, -10.1], 0, 1.4, 'crate', 0xa07848);
-  t.box([56.5, -14.6, 58.5, -12.9], 0, 1.1, 'crate', 0xb08a5a);
+  t.box([60.6, -10.6, 63.2, -8.8], 0, 1.4, 'crate', 0xa07848);
+  t.box([56.5, -15, 58.5, -14.2], 0, 1.1, 'crate', 0xb08a5a);
   t.box([66, 11, 67.6, 12.6], 0, 2.6, 'painted', 0x3f6a9a);
   // The crane's mast (solid: cover, and nobody walks through it) and its jib.
   t.box([x1 - 3, z0 + 0.2, x1 - 1, z0 + 2.2], 0, 28, 'steel', 0xd8a838);
@@ -334,8 +335,11 @@ export function yard(t: Ximen) {
  * high enough to jump onto their tops from, so nobody stands up there and looks down a lane.
  */
 export function galleries(t: Ximen) {
-  const roof = (r: R, color: number) => {
+  const roof = (band: R, color: number) => {
     const [under, top] = GALLERY;
+    // Its north and south edges stand 1.1 m off the buildings' faces there, clear of the AC units and
+    // blade signs on them.
+    const r: R = [band[0], band[1] + 1.1, band[2], band[3] - 1.1];
     t.box(r, under, top, 'roof', color);
     const [x0, z0, x1, z1] = r;
     // Posts along the long edges, a lit tube under the eaves.
