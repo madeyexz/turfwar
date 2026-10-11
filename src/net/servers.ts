@@ -27,6 +27,11 @@ export interface GameServer {
   database: string;
   /** Where it runs ("Taipei", "Singapore", "US East", "Local") when its host is a known one. */
   region?: Key;
+  /**
+   * It stops when idle and the next request boots it (Singapore on InstaCloud): only for such a server
+   * does a failed ping or connect mean "asleep" (src/net/wake.ts), and a match keeps it awake (`keepAwake`).
+   */
+  scalesToZero: boolean;
 }
 
 export const MAINCLOUD = 'wss://maincloud.spacetimedb.com';
@@ -38,6 +43,9 @@ export const US_EAST = { uri: MAINCLOUD, database: '3d-game-c4lhd' } as const;
 const trimUri = (uri: string) => uri.replace(/\/+$/, '').toLowerCase();
 export const sameServer = (a: { uri: string; database: string }, b: { uri: string; database: string }) =>
   a.database === b.database && trimUri(a.uri) === trimUri(b.uri);
+
+/** Whether this server scales to zero: today only Singapore. (Taipei is always on, Maincloud is managed, a local server is ours.) */
+export const serverSleeps = (target: { uri: string; database: string }) => sameServer(target, SINGAPORE);
 
 type Env = Record<string, string | undefined>;
 export interface BuildServer { uri?: string; database?: string }
@@ -63,12 +71,12 @@ export function buildServer(env: Env, page: { search: string; protocol: string; 
  */
 export function gameServers(build: BuildServer): GameServer[] {
   if (!build.uri || !build.database) return [];
-  const us: GameServer = { id: 'us', label: 'server.region.usEast', uri: US_EAST.uri, database: US_EAST.database, region: 'server.region.usEast' };
+  const us: GameServer = { id: 'us', label: 'server.region.usEast', uri: US_EAST.uri, database: US_EAST.database, region: 'server.region.usEast', scalesToZero: false };
   if (sameServer({ uri: build.uri, database: build.database }, US_EAST)) return [{ ...us, uri: build.uri }];
-  const sg: GameServer = { id: 'sg', label: 'server.region.singapore', uri: SINGAPORE.uri, database: SINGAPORE.database, region: 'server.region.singapore' };
+  const sg: GameServer = { id: 'sg', label: 'server.region.singapore', uri: SINGAPORE.uri, database: SINGAPORE.database, region: 'server.region.singapore', scalesToZero: true };
   if (sameServer({ uri: build.uri, database: build.database }, SINGAPORE)) return [{ ...sg, uri: build.uri }, us];
   const region = serverRegionKey(build.uri);
-  const own: GameServer = { id: 'tw', label: region === 'server.region.taipei' ? region : 'server.choice.dev', uri: build.uri, database: build.database, region };
+  const own: GameServer = { id: 'tw', label: region === 'server.region.taipei' ? region : 'server.choice.dev', uri: build.uri, database: build.database, region, scalesToZero: false };
   return region === 'server.region.taipei' ? [own, sg, us] : [own, us];
 }
 
@@ -79,7 +87,7 @@ export interface KeyValue { getItem(key: string): string | null; setItem(key: st
 
 /**
  * The server to use: `?server=sg|us` (this visit only, never saved), else the saved choice, else the
- * first (Singapore). An id that is not on the list (an old value, a typo) is skipped.
+ * first (the build's own: Taipei in production). An id that is not on the list (an old value, a typo) is skipped.
  */
 export function chooseServer(list: readonly GameServer[], search: string, storage: KeyValue | undefined): GameServer | undefined {
   const asked = new URLSearchParams(search).get('server')?.trim().toLowerCase();

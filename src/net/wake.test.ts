@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { WAKE, WakeDriver, idleWake, retryDelay, step, wakeProgress, wakeSeconds, type WakeEvent, type WakeLink, type WakeState } from './wake';
+import { ALWAYS_ON, WAKE, WakeDriver, idleWake, retryDelay, step, wakeProgress, wakeSeconds, type WakeEvent, type WakeLink, type WakeState } from './wake';
 
 /** Feed events through the pure machine, collecting what it asks to run. */
 function machine<A>() {
@@ -52,6 +52,21 @@ describe('wake state machine', () => {
     const m = machine<string>();
     m.send({ type: 'start' }, 0);
     expect(m.send({ type: 'cold', from: 'connect' }, WAKE.giveUpMs + 1).phase).toBe('unreachable');
+  });
+
+  it('an always-on server is never "asleep": failures keep it probing, then it is unreachable after 30 s', () => {
+    let s = idleWake<string>();
+    const send = (e: WakeEvent<string>, now: number) => { s = step(s, e, now, ALWAYS_ON).state; return s; };
+    send({ type: 'start' }, 0);
+    expect(send({ type: 'cold', from: 'ping' }, 200)).toMatchObject({ phase: 'probing', woke: false, failures: 1 });
+    expect(send({ type: 'cold', from: 'connect' }, 2500)).toMatchObject({ phase: 'probing', woke: false, failures: 2 });
+    expect(send({ type: 'tick' }, ALWAYS_ON.giveUpMs - 1).phase).toBe('probing');
+    expect(send({ type: 'tick' }, ALWAYS_ON.giveUpMs).phase).toBe('unreachable');
+    expect(ALWAYS_ON.giveUpMs).toBe(30_000);
+    // Retry starts over, and a good connection then is plain "ready" (no wake to report).
+    send({ type: 'retry' }, 40_000);
+    send({ type: 'cold', from: 'ping' }, 40_100);
+    expect(send({ type: 'up' }, 41_000)).toMatchObject({ phase: 'ready', woke: false, failures: 1 });
   });
 
   it('runs a queued action once, when the server is up', () => {
@@ -248,6 +263,32 @@ describe('WakeDriver', () => {
     expect(d.state.phase).toBe('ready');
     expect(d.timings).toMatchObject({ connectMs: 50, importMs: 42, pingOk: true });
     d.stop();
+  });
+
+  it('a driver for an always-on server never shows waking, gives up after 30 s, and still runs a queued action once it is up', async () => {
+    vi.useFakeTimers();
+    const { server, deps } = fakeServer();
+    const phases: string[] = [];
+    const runs: string[] = [];
+    const d = new WakeDriver<string>({ ...deps, sleeps: () => false }, s => { if (phases.at(-1) !== s.phase) phases.push(s.phase); }, a => runs.push(a));
+    d.start();
+    d.queue('quick');
+    await vi.advanceTimersByTimeAsync(10_000);
+    expect(d.state).toMatchObject({ phase: 'probing', woke: false });
+    expect(d.state.failures).toBeGreaterThan(0);
+    server.up = true;
+    await vi.advanceTimersByTimeAsync(4000);
+    expect(d.state.phase).toBe('ready');
+    expect(runs).toEqual(['quick']);
+    expect(phases).not.toContain('waking');
+    d.stop();
+    // Down for good: unreachable after 30 s, not 3 minutes.
+    server.up = false;
+    const down = new WakeDriver<string>({ ...deps, sleeps: () => false }, () => undefined, () => undefined);
+    down.start();
+    await vi.advanceTimersByTimeAsync(ALWAYS_ON.giveUpMs + 1000);
+    expect(down.state.phase).toBe('unreachable');
+    down.stop();
   });
 
   it('cancel keeps the action from running', async () => {

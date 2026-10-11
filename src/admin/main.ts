@@ -17,6 +17,7 @@ import { activeByDay, GROUPS, niceStep, pingByDay, sideOf, SIDES, splitBySide, s
 import { formatPlayTime, liveSeconds } from '../../shared/playtime';
 import { hostAnswers, pingUrl, serverIdentityKey } from '../net/ping';
 import { WakeDriver, wakeProgress, wakeSeconds, type WakeLink } from '../net/wake';
+import { serverSleeps } from '../net/servers';
 import { adminServers, chosenServer, regionName, rememberServer, type AdminServer } from './servers';
 import './admin.css';
 
@@ -743,8 +744,8 @@ function renderConn() {
 }
 
 /**
- * While the server boots: it is asleep (not down), the time so far and a bar. After 3 minutes:
- * "Can't reach" with Retry. Redrawn whole only when that changes; the timer ticks in place.
+ * While a server that scales to zero (Singapore) boots: it is asleep (not down), the time so far and a bar.
+ * After 3 minutes (30 seconds for an always-on server, which is never "waking"): "Can't reach" with Retry. Redrawn whole only when that changes; the timer ticks in place.
  */
 let wakeShown = '';
 function wakeCard() {
@@ -754,7 +755,7 @@ function wakeCard() {
     wakeShown = key;
     body.innerHTML = down
       ? `<section class="wake down"><h2><i class="dot off"></i>Can't reach the server</h2>
-          <p role="status">It did not wake up within 3 minutes. Check the server on InstaCloud, or try again.</p>
+          <p role="status">${serverSleeps(server) ? 'It did not wake up within 3 minutes. Check the server on InstaCloud, or try again.' : 'It did not answer within 30 seconds. Check that the server is running, or try again.'}</p>
           <button type="button" class="btn primary" id="wake-retry">Retry</button></section>`
       : `<section class="wake"><h2><i class="dot wait"></i>Waking the server</h2>
           <p role="status">The server is asleep to save costs — waking it up (about 30 s). Opening this page woke it.</p>
@@ -837,6 +838,7 @@ function makeDriver() {
   return new WakeDriver<never>({
     ping: signal => ping ? hostAnswers(ping, signal) : Promise.resolve(false),
     connect: lost => adminLink(s, lost),
+    sleeps: () => serverSleeps(s),
   }, () => render(), () => undefined);
 }
 let driver = makeDriver();
