@@ -3,12 +3,13 @@ import { loadMap, loadNav } from './index';
 import { findPath, nearestNode, type NavGraph } from '../match/nav';
 import { mapsFor } from '../match/rooms';
 import { rng } from '../math';
-import { MOVE } from '../movement';
+import { MOVE, createMoveState, idleInput, stepMovement } from '../movement';
+import { LADDER_DIRS } from '../collision';
 import { TICK_RATE, addSoldier, createContext, createMatch, resetMatch, tickMatch } from '../match/sim';
 import { ATTACKERS, SABOTAGE, type MatchEvent } from '../match/state';
 import { clearLine, longSightlines } from './sightlines';
 import { AMMO, SPAWNS, VEHICLES, XIMENDING_NAME_ZH } from './ximending';
-import { BALCONY, PAD, ROOF } from './ximending-plan';
+import { ARCADE_HALL, BALCONY, GALLERY, LADDERS, PAD, RED_HOUSE, ROOF, YARD } from './ximending-plan';
 
 const ID = 'taipei';
 const EYE = 1.55;
@@ -91,8 +92,8 @@ describe('taipei: Ximending (西門町), our own layout', () => {
       ['Hanzhong St, north', 0, -32.5, 0], ['Hanzhong St, south', 0, 25, 0], ['West St', -42.5, 0, 0], ['East St', 42.5, 0, 0],
       // The night market, the arcade and its roof, the skybridge and the hotel roof.
       ['night market', -22.5, 0, 0], ['arcade hall', 24, -16, 0], ['arcade, east door', 37, -16, 0], ['mall passage', -56.5, -43.5, 0],
-      ['arcade roof, by the west ladder', 7, -11.4, ROOF], ['beside the helipad', PAD[2] + 1.5, (PAD[1] + PAD[3]) / 2, ROOF],
-      ['skybridge', 28.75, 0, ROOF], ['hotel roof', 25, 15, ROOF], ['hotel roof, by its ladder', 28.6, 26, ROOF],
+      ['arcade roof, by the west ladder', LADDERS[0][0] + 2, LADDERS[0][1], ROOF], ['beside the helipad', PAD[2] + 1.5, (PAD[1] + PAD[3]) / 2, ROOF],
+      ['skybridge', 28.75, 0, ROOF], ['hotel roof', 25, 15, ROOF], ['hotel roof, by its ladder', LADDERS[2][0], LADDERS[2][1] - 1.5, ROOF],
       // Site B: the Red House square, between the octagon and the cross wing.
       ['Red House square', -8.5, 31, 0], ['between the octagon and the cross wing', -19, 42, 0], ['Red House, Hanzhong side', 0, 37.5, 0],
       // The bases and their alleys.
@@ -187,5 +188,88 @@ describe('taipei: Ximending (西門町), our own layout', () => {
       expect(near.length, `scooters at base ${team}`).toBeGreaterThanOrEqual(3);
     }
     expect(def.vehicles!.filter(v => v.kind === 'car').every(v => Math.abs(v.x) > 70 || Math.abs(v.z) > 54)).toBe(true);
+  });
+
+  it('climbs every ladder head-on with the shared controller, each on a blank wall with its foot clear', () => {
+    const { world } = loadMap(ID);
+    expect(world.ladders.length).toBe(LADDERS.length);
+    for (const l of world.ladders) {
+      const [nx, nz] = LADDER_DIRS[l.dir], at = `${l.x},${l.z}`;
+      // Solid wall behind the rungs all the way up (no door under a ladder: walking through one would climb it).
+      for (let y = 0.3; y < l.y1 - 0.3; y += 0.5) {
+        expect(world.raycast({ x: l.x - nx * 0.5, y, z: l.z - nz * 0.5 }, { x: nx, y: 0, z: nz }, 1.2), `${at} wall at ${y}`).not.toBeNull();
+      }
+      // Nothing stands at its foot, and walking at it from two metres out climbs it to the landing.
+      expect(world.overlapsSolid({ x: l.x - nx * 0.6, y: 0, z: l.z - nz * 0.6 }, MOVE.radius + 0.1, MOVE.standHeight), at).toBe(false);
+      const s = createMoveState(l.x - nx * 2, l.y0, l.z - nz * 2);
+      let top = false;
+      for (let t = 0; t < 30 * 10 && !top; t++) {
+        const input = idleInput(Math.atan2(-nx, -nz)); input.forward = 1;
+        stepMovement(world, s, input, 1 / 30);
+        top = s.grounded && Math.abs(s.y - l.y1) < 0.1;
+      }
+      expect(top, at).toBe(true);
+    }
+  });
+
+  it('collides with the Red House where it is drawn: its brick faces stop soldiers and shots', () => {
+    const { world } = loadMap(ID);
+    const { x, z, r } = RED_HOUSE, face = r * Math.cos(Math.PI / 8);
+    // Round every face, in its middle and near its corners: a body touching the drawn wall is held
+    // within a few centimetres of it, and a point just inside the wall is solid.
+    for (let k = 0; k < 8; k++) for (const along of [-0.35, 0, 0.35]) {
+      const a = (k * Math.PI) / 4, ux = Math.cos(a), uz = Math.sin(a), half = face * Math.tan(Math.PI / 8);
+      const px = x + ux * face - uz * along * 2 * half, pz = z + uz * face + ux * along * 2 * half;
+      const where = `face ${k} ${along}`;
+      expect(world.overlapsSolid({ x: px - ux * 0.25, y: 0, z: pz - uz * 0.25 }, 0.05, 1.8), where).toBe(true);
+      expect(world.overlapsSolid({ x: px + ux * (MOVE.radius + 0.12), y: 0, z: pz + uz * (MOVE.radius + 0.12) }, MOVE.radius, 1.8), where).toBe(false);
+    }
+  });
+
+  it('gives the yard crane, the street gantries and the trees colliders where they are drawn, tall enough that nobody stands on a trunk', () => {
+    const { def, world } = loadMap(ID);
+    const solidAt = (px: number, y: number, pz: number) => world.overlapsSolid({ x: px, y, z: pz }, 0.05, 0.1);
+    expect(solidAt(YARD[2] - 2, 1, YARD[1] + 1.2)).toBe(true); // the crane's mast
+    for (const [gx, gz] of [[-5, -50.1], [5, -50.1], [-47.5, -50.1], [-37.5, -50.1], [37.5, -50.1], [47.5, -50.1], [-5, 50.1], [5, 50.1]]) expect(solidAt(gx, 1, gz), `gantry post ${gx},${gz}`).toBe(true);
+    for (const d of def.decor) if (d.kind === 'instances' && d.model === 'tree:camphor') for (let i = 0; i < d.data.length; i += 8) {
+      const [tx, , tz, , scale] = d.data.slice(i, i + 5);
+      if (Math.abs(tx) > 81 || Math.abs(tz) > 66) continue;
+      let top = 0;
+      world.forSolidsIn(tx, tz, tx, tz, s => { if (tx >= s.minX && tx <= s.maxX && tz >= s.minZ && tz <= s.maxZ) top = Math.max(top, s.maxY); });
+      expect(top, `tree at ${tx},${tz}`).toBeGreaterThan(4.6 * scale);
+    }
+  });
+
+  it('keeps every gallery roof out of a jump from anything near it, so nobody looks down a lane from one', () => {
+    const { world } = loadMap(ID);
+    const [under, top] = GALLERY;
+    const roofs = world.solids.filter(s => Math.abs(s.minY - under) < 0.01 && Math.abs(s.maxY - top) < 0.01);
+    expect(roofs.length).toBe(6);
+    for (const g of roofs) world.forSolidsIn(g.minX - 3, g.minZ - 3, g.maxX + 3, g.maxZ + 3, s => {
+      // Anything standable within 3 m of the roof (other than the roof and its posts, and tops under
+      // a ceiling, like an arcade's columns) tops out more than a jump below it.
+      if (s === g || s.maxY >= under) return;
+      if (Math.max(g.minX - s.maxX, s.minX - g.maxX, g.minZ - s.maxZ, s.minZ - g.maxZ) > 3) return;
+      const cx = (s.minX + s.maxX) / 2, cz = (s.minZ + s.maxZ) / 2;
+      let covered = false;
+      world.forSolidsIn(cx, cz, cx, cz, o => { if (o !== s && o.minY >= s.maxY - 0.01 && o.minY < s.maxY + MOVE.crouchHeight && cx >= o.minX && cx <= o.maxX && cz >= o.minZ && cz <= o.maxZ) covered = true; });
+      if (covered) return;
+      expect(top - s.maxY, `${JSON.stringify(s)} under ${JSON.stringify(g)}`).toBeGreaterThan(1.7);
+    });
+  });
+
+  it('keeps the arcade\'s doors clear: a soldier walks in through every one of them', () => {
+    const { world } = loadMap(ID); const nav = loadNav(ID);
+    const [x0, z0, x1, z1] = ARCADE_HALL;
+    const doors: [number, number, number, number][] = [[x0, -20, -1, 0], [x0, -12, -1, 0], [x1, -16, 1, 0], [10, z1, 0, 1], [21, z1, 0, 1], [32, z1, 0, 1], [21, z0, 0, -1]];
+    for (const [dx, dz, ox, oz] of doors) {
+      const out = { x: dx + ox * 2.2, y: 0, z: dz + oz * 2.2 }, inside = { x: dx - ox * 2.2, y: 0, z: dz - oz * 2.2 };
+      expect(world.overlapsSolid(out, MOVE.radius + 0.3, 1.8), `outside ${dx},${dz}`).toBe(false);
+      const path = findPath(nav, nearestNode(nav, out.x, 0, out.z), nearestNode(nav, inside.x, 0, inside.z));
+      expect(path.length, `through ${dx},${dz}`).toBeGreaterThan(0);
+      let length = 0;
+      for (let i = 1; i < path.length; i++) length += Math.hypot(nav.x[path[i]] - nav.x[path[i - 1]], nav.z[path[i]] - nav.z[path[i - 1]]);
+      expect(length, `straight through ${dx},${dz}`).toBeLessThan(8);
+    }
   });
 });

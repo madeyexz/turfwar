@@ -21,6 +21,7 @@ import { wrapAngle } from '../shared/math';
 import { createMoveState, stepMovement, type MoveState } from '../shared/movement';
 import { eyeHeight } from '../shared/movement';
 import { LADDER_DIRS } from '../shared/collision';
+import { LADDERS } from '../shared/maps/ximending-plan';
 import { deepestOverlap } from '../shared/obstacles';
 import { VEHICLES, exitSpot, forwardOf, idleVehicleInput, obstaclesOf, seatPosition, slipAngle, speedOf, stepVehicle, type Vehicle, type VehicleInput } from '../shared/vehicles';
 
@@ -251,7 +252,7 @@ const walker = await leave(carIndex);
 const heli0 = vehicleNow(heliIndex);
 // The helicopter stands on the arcade's roof: walk to the foot of its west ladder, climb it, walk on over the roof.
 {
-  const ladder = ladderOf(5, -11.4), [nx, nz] = LADDER_DIRS[ladder.dir];
+  const ladder = ladderOf(LADDERS[0][0], LADDERS[0][1]), [nx, nz] = LADDER_DIRS[ladder.dir];
   await walkTo(walker, { x: ladder.x - nx * 1.2, y: ladder.y0, z: ladder.z - nz * 1.2 });
   const yaw = Math.atan2(-nx, -nz);
   for (let t = 0; t < 30 && !(walker.y > ladder.y1 - 0.05 && walker.grounded); t += 0.05) {

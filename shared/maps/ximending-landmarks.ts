@@ -1,5 +1,5 @@
 import { C, Ximen, shadeHex, type R } from './ximending-kit';
-import { ARCADE_HALL, BALCONY, CINEMA, CROSS_WING, HOTEL, PAD, PLAZA, RED_HOUSE, ROOF, YARD } from './ximending-plan';
+import { ARCADE_HALL, BALCONY, CINEMA, CROSS_WING, GALLERY, HOTEL, LADDERS, PAD, PLAZA, RED_HOUSE, ROOF, YARD } from './ximending-plan';
 
 /**
  * Ximending's set pieces (ximending.ts): the cinema on lane N with its marquee balcony (site A),
@@ -39,6 +39,14 @@ function parapet(t: Ximen, r: R, y: number, gaps: { side: 'n' | 's' | 'e' | 'w';
     }
   };
   run('n', x0, x1); run('s', x0, x1); run('w', z0 + th, z1 - th); run('e', z0 + th, z1 - th);
+}
+
+/** A sign on a roof facing south: the panel on two steel legs standing on the roof at `y` (the legs are cover). */
+function roofSign(t: Ximen, x: number, y: number, z: number, w: number, h: number, text: string, bg: string, fg: string, sub: string, style: 'billboard' | 'gate' = 'billboard') {
+  const lift = 1.0;
+  t.sign(style, x, y + lift + h / 2, z, Math.PI, w, h, text, bg, fg, sub);
+  for (const lx of [x - w / 2 + 0.4, x + w / 2 - 0.4]) t.box([lx - 0.09, z - 0.12, lx + 0.09, z + 0.06], y, y + lift + h, 'steel', C.iron);
+  t.shape([x - w / 2 + 0.3, z - 0.1, x + w / 2 - 0.3, z - 0.04], y + lift - 0.12, y + lift, 'steel', C.iron);
 }
 
 /** The cinema: a lobby open to the lane, a back door to the north sidewalk, a marquee balcony over the lane with a stair at each end. */
@@ -113,10 +121,12 @@ export function arcade(t: Ximen) {
   t.sign('screen', 12, 9, z1 + 0.1, Math.PI, 6, 3.4, '', '#000000', '#ffffff');
   // The roof: a solid parapet with gaps at the three ladders and the skybridge, the pad, and some rooftop cover.
   const roof: R = [x0, z0, x1, z1];
-  parapet(t, roof, ROOF, [{ side: 'w', from: -12, to: -10.8 }, { side: 'e', from: -21.8, to: -20.6 }, { side: 's', from: 26, to: 31 }]);
+  const [west, east, south] = LADDERS;
+  parapet(t, roof, ROOF, [{ side: 'w', from: west[1] - 0.6, to: west[1] + 0.6 }, { side: 'e', from: east[1] - 0.6, to: east[1] + 0.6 }, { side: 's', from: 26, to: 31 }]);
+  void south;
   helipad(t);
   // AC units and a water tank in the corners (cover on the roof).
-  for (const [ax, az] of [[7, -26], [10, -26], [7, -7], [36, -7], [36, -26]]) t.box([ax, az, ax + 1.6, az + 1.0], ROOF, ROOF + 1.2, 'painted', 0xe4e4de);
+  for (const [ax, az] of [[7, -26], [10, -26], [7, -7], [35.6, -7], [35.6, -26]]) t.box([ax, az, ax + 1.6, az + 1.0], ROOF, ROOF + 1.2, 'painted', 0xe4e4de);
   t.box([12, -25, 15, -22], ROOF, ROOF + 0.9, 'steel', C.iron);
   t.raw({ kind: 'cylinder', x: 13.5, y: ROOF + 0.9, z: -23.5, radius: 1.3, height: 1.8, axis: 'y', style: 'painted', color: C.steel, sides: 12 });
   t.box([8, -14, 11, -11], ROOF, ROOF + 2.6, 'painted', 0xc8c0b0);
@@ -126,9 +136,8 @@ export function arcade(t: Ximen) {
   t.box([19.5, -13, 23.5, -11.6], ROOF, ROOF + 1.3, 'steel', C.iron);
   t.box([34, -14, 36, -11.6], ROOF, ROOF + 1.6, 'painted', 0xe4e4de);
   // Ladders: from Hanzhong St up the west face, from East St up the east face.
-  t.b.ladder(x0, -11.4, 0, ROOF, 0);
-  t.b.ladder(x1, -21.2, 0, ROOF, 2);
-  t.sign('billboard', 10, ROOF + 2.5, z1 - 0.4, Math.PI, 8, 3, '電玩', '#2c2c54', '#ffd24a', 'ARCADE');
+  for (const [lx, lz, dir] of [west, east]) t.b.ladder(lx, lz, 0, ROOF, dir);
+  roofSign(t, 10, ROOF, z1 - 0.4, 8, 3, '電玩', '#2c2c54', '#ffd24a', 'ARCADE');
 }
 
 /** The helicopter's pad on the arcade roof: an H in a square, lamps at the corners. */
@@ -137,7 +146,8 @@ function helipad(t: Ximen) {
   const mark = (dx: number, dz: number, w: number, d: number) => t.raw({ kind: 'marking', x: cx + dx, y, z: cz + dz, w, d, color: PAINT });
   for (const s of [-1, 1]) { mark(s * 4.2, 0, 0.3, 8.7); mark(0, s * 4.2, 8.7, 0.3); mark(s * 1.3, 0, 0.45, 3.6); }
   mark(0, 0, 2.6, 0.45);
-  for (const [lx, lz] of [[x0, z0], [x1, z0], [x0, z1], [x1, z1]]) t.shape([lx - 0.12, lz - 0.12, lx + 0.12, lz + 0.12], ROOF, ROOF + 0.4, 'neon', 0x5aff8a);
+  // Flush lamps at the corners (nothing to trip on or walk through).
+  for (const [lx, lz] of [[x0, z0], [x1, z0], [x0, z1], [x1, z1]]) t.shape([lx - 0.16, lz - 0.16, lx + 0.16, lz + 0.16], ROOF, ROOF + 0.06, 'neon', 0x5aff8a);
 }
 
 /** The hotel across lane M: a four-storey block whose roof the skybridge reaches, with a ladder down its south face. */
@@ -145,11 +155,12 @@ export function hotel(t: Ximen) {
   const [x0, z0, x1, z1] = HOTEL;
   const h = t.apartment(HOTEL, 4, 0xe2c0b0, 91, { street: ['n', 's', 'e', 'w'], addon: false, tanks: 0, blades: 2 });
   for (const s of ['n', 's', 'e'] as const) t.fascia(HOTEL, s, 700 + s.charCodeAt(0), { roof: h });
-  parapet(t, HOTEL, h, [{ side: 'n', from: 26, to: 31 }, { side: 's', from: 28, to: 29.2 }]);
-  t.sign('gate', 28, h + 2.5, z1 - 0.4, Math.PI, 9, 1.6, '旅館', '#8a1a3a', '#ffd0e0', 'HOTEL');
+  const [lx, lz, dir] = LADDERS[2];
+  parapet(t, HOTEL, h, [{ side: 'n', from: 26, to: 31 }, { side: 's', from: lx - 0.6, to: lx + 0.6 }]);
+  roofSign(t, 31, h, z1 - 0.4, 9, 1.6, '旅館', '#8a1a3a', '#ffd0e0', 'HOTEL', 'gate');
   for (const [ax, az] of [[21, 7], [33, 7], [21, 24], [35, 24]]) t.box([ax, az, ax + 1.6, az + 1.0], h, h + 1.2, 'painted', 0xe4e4de);
   t.box([29, 12, 33, 16], h, h + 2.6, 'painted', 0xc8c0b0);
-  t.b.ladder(28.6, z1, 0, h, 3);
+  t.b.ladder(lx, lz, 0, h, dir);
   // The skybridge: a deck with solid rails and a truss under it, from the arcade's roof to the hotel's.
   const bx0 = 26, bx1 = 31, y = ROOF;
   t.box([bx0, -5.05, bx1, 5.05], y - 0.35, y, 'floor');
@@ -162,11 +173,30 @@ export function hotel(t: Ximen) {
   void z0; void x0; void shadeHex;
 }
 
+/**
+ * Collision for an upright octagon (faces square to the axes, `apothem` from its centre to each
+ * face): `n` boxes stepping along the diagonal faces, each corner on the face, so the stairstep
+ * stays within a few centimetres of the drawn wall.
+ */
+function octagonBlock(t: Ximen, cx: number, cz: number, apothem: number, y0: number, y1: number, n = 12) {
+  const half = apothem * Math.tan(Math.PI / 8);
+  for (let j = 0; j < n; j++) {
+    const k = j / (n - 1), hx = half + (apothem - half) * k, hz = apothem - (apothem - half) * k;
+    t.block([cx - hx, cz - hz, cx + hx, cz + hz], y0, y1, 'concrete');
+  }
+}
+
 /** The Red House (西門紅樓): an octagonal brick hall with a lantern and a cross-shaped wing behind it, on a brick square. */
 export function redHouse(t: Ximen) {
   const { x, z, r } = RED_HOUSE, RED = 0xffffff, STONE = 0xf0e8dc, TILE = 0x6a7a70;
-  // Collision: the inscribed fan, under the octagon's faces.
-  t.b.cylinder(x, 0, z, r * 0.92, 11, 'invisible', 'y');
+  // Collision: stepped boxes that fill each storey's octagon out to its faces (a fan of boxes
+  // inscribed in a circle left a metre of brick to walk and shoot through at the diagonal faces).
+  const apothem = (radius: number) => radius * Math.cos(Math.PI / 8);
+  octagonBlock(t, x, z, apothem(r), 0, 4.6);
+  octagonBlock(t, x, z, apothem(r + 0.3), 4.6, 5.3);
+  octagonBlock(t, x, z, apothem(r - 0.2), 5.3, 10.4);
+  octagonBlock(t, x, z, apothem(r + 0.5), 10.4, 11.6, 8);
+  octagonBlock(t, x, z, apothem(3.7), 11.6, 16.1, 6);
   const oct = (radius: number, y0: number, y1: number, style: 'brick' | 'plaster' | 'slab' | 'steel', color: number, top = radius) =>
     t.raw({ kind: 'cylinder', x, y: y0, z, radius, height: y1 - y0, axis: 'y', style, color, sides: 8, top });
   oct(r, 0, 4.6, 'brick', RED); oct(r + 0.3, 4.6, 5.3, 'plaster', STONE);
@@ -206,7 +236,7 @@ export function redHouse(t: Ximen) {
     t.shape([tx - 0.04, tz - 0.04, tx + 0.04, tz + 0.04], 0.8, 2.3, 'steel', C.iron);
   }
   t.raw({ kind: 'instances', model: 'tree:camphor', data: [-34, 0, 48, 0.4, 1.0, 0, 0xffffff, 0, 3, 0, 48, 0.2, 1.1, 0, 0xffffff, 0] });
-  t.box([-34.4, 47.6, -33.6, 48.4], 0, 3.2, 'invisible'); t.box([2.6, 47.6, 3.4, 48.4], 0, 3.2, 'invisible');
+  t.trunk(-34, 48, 1.0); t.trunk(3, 48, 1.1);
   t.sign('gate', -14, 8, 27.5 + 0.1, 0, 11, 1.6, '西門紅樓廣場', '#5a1a14', '#ffd890', 'RED HOUSE SQUARE');
   void HOTEL;
 }
@@ -228,8 +258,15 @@ export function nightMarket(t: Ximen) {
     if (skip) continue;
     const z0 = side < 0 ? -5 : 4, z1 = side < 0 ? -4 : 5;
     t.tarpStall([x, z0, x + 3.8, z1], [0xc8322a, 0x2f5fa8, 0xe8b830, 0x3f9a50][seed++ % 4], seed);
-    // Goods hang from the stall's back rail: a shelf wall from the counter up to head height.
-    t.block(side < 0 ? [x, z0, x + 3.8, z0 + 0.4] : [x, z1 - 0.4, x + 3.8, z1], 0.95, 2.3);
+    // Goods hang from the stall's back rail: a shelf wall from the counter up to head height, drawn
+    // as what it is (it stops shots), with rows of stock on it.
+    const shelf: R = side < 0 ? [x, z0, x + 3.8, z0 + 0.4] : [x, z1 - 0.4, x + 3.8, z1];
+    t.box(shelf, 0.95, 2.3, 'wood', 0x6a4a32);
+    const front = side < 0 ? shelf[3] : shelf[1], out = side < 0 ? 1 : -1;
+    for (const [k, y] of [[0, 1.25], [1, 1.75]] as const) for (let i = 0; i < 4; i++) {
+      const gx = x + 0.15 + i * 0.92;
+      t.shape([gx, Math.min(front, front + out * 0.12), gx + 0.75, Math.max(front, front + out * 0.12)], y, y + 0.32, 'painted', [0xd84a2a, 0xe8c040, 0x7ab040, 0xf0ece0, 0x2a6ab8][(seed + i + k) % 5]);
+    }
   }
   t.sign('gate', -6.2, 4.4, 0, Math.PI / 2, 8, 0.9, '西門夜市', '#14306a', '#ffd24a', 'NIGHT MARKET');
 }
@@ -250,13 +287,14 @@ export function stationPlaza(t: Ximen) {
   for (let i = 0; i < 6; i++) t.shape([x0 + 0.8 + i * 0.6, -3.2, x0 + 1.1 + i * 0.6, 3.2], 0.04, 0.07, 'steel', 0x6a7078);
   t.sign('gate', x0 + 5.7, 4.6, 0, Math.PI / 2, 7, 1.1, '捷運西門站', '#14306a', '#ffffff', 'XIMEN STATION');
   // A bus shelter and a bike dock row on the north edge, planters on the south.
-  t.shelter(-53.5, -14.8, 4.4, true, -1);
+  t.shelter(-54.8, -14.8, 3.2, true, -1);
   for (let i = 0; i < 8; i++) t.shape([-63.8 + i * 0.55, -14.6, -63.5 + i * 0.55, -13.2], 0, 0.9, 'steel', i & 1 ? 0xffb02a : 0x6a7078);
+  t.block([-63.8, -14.6, -59.65, -13.2], 0, 0.9, 'metal');
   // Hedge baffles in front of the two alley mouths, so nobody sees from alley to alley across the plaza.
   t.planter([-61.5, -10.5, -53.5, -9.5], 0, 2.4);
   t.planter([-61.5, 9.5, -53.5, 10.5], 0, 2.4);
   t.raw({ kind: 'instances', model: 'tree:camphor', data: [-66, 0, 12, 0, 0.9, 0, 0xffffff, 0, -66, 0, -12, 1, 0.9, 0, 0xffffff, 0] });
-  t.box([-66.4, 11.6, -65.6, 12.4], 0, 3.2, 'invisible'); t.box([-66.4, -12.4, -65.6, -11.6], 0, 3.2, 'invisible');
+  t.trunk(-66, 12, 0.9); t.trunk(-66, -12, 0.9);
   t.sign('billboard', -57.5, 9.2, z0 + 0.4, 0, 8, 3, '西門町', '#c8141e', '#ffffff', 'XIMENDING');
   void z1; void x1;
 }
@@ -274,15 +312,16 @@ export function yard(t: Ximen) {
   t.hoarding([x1 - 0.5, -5.5, x1, z1], 'w', undefined, 0x4a6a3a);
   // Baffles inside the yard, in front of the two alley mouths: nobody sees from alley to alley across the base.
   t.hoarding([56, -12.7, 63, -12.3], 's', undefined, 0x4a6a3a);
-  t.hoarding([51, 12.3, 58, 12.7], 'n', undefined, 0x4a6a3a);
+  t.hoarding([51.5, 12.3, 58, 12.7], 'n', undefined, 0x4a6a3a);
   // Mixer, rebar piles, pallets of bricks, a crane's base.
   t.b.cylinder(58.5, 0, -10.5, 1.0, 1.9, 'steel', 'y', 0xd8a838);
   t.box([55, 10.5, 58.5, 12.2], 0, 1.0, 'steel', 0x6a5a4a);
   t.box([60, 9, 63, 11.2], 0, 1.3, 'brick', 0xb8683e);
-  t.box([60.6, -13, 63.2, -11.2], 0, 1.4, 'crate', 0xa07848);
-  t.box([56.5, -14.2, 58.5, -12.6], 0, 1.1, 'crate', 0xb08a5a);
+  t.box([60.6, -11.9, 63.2, -10.1], 0, 1.4, 'crate', 0xa07848);
+  t.box([56.5, -14.6, 58.5, -12.9], 0, 1.1, 'crate', 0xb08a5a);
   t.box([66, 11, 67.6, 12.6], 0, 2.6, 'painted', 0x3f6a9a);
-  t.shape([x1 - 3, z0 + 0.2, x1 - 1, z0 + 2.2], 0, 28, 'steel', 0xd8a838);
+  // The crane's mast (solid: cover, and nobody walks through it) and its jib.
+  t.box([x1 - 3, z0 + 0.2, x1 - 1, z0 + 2.2], 0, 28, 'steel', 0xd8a838);
   t.shape([x1 - 14, z0 + 0.8, x1 - 1, z0 + 1.4], 27, 28.4, 'steel', 0xd8a838);
   t.sign('billboard', x1 - 4, 4.6, z1 - 0.3, Math.PI, 8, 2.4, '鴻運建設', '#f2c400', '#1a1a1a', 'CONSTRUCTION');
   void x0;
@@ -290,26 +329,36 @@ export function yard(t: Ximen) {
 
 /**
  * Covered galleries: roofed stretches over the ends of the lanes and the stations' mouths (a steel
- * frame under a sheet roof at 3.4 m, open at the sides). Nobody on a roof sees into them, which
- * keeps both bases and the lanes' far ends out of the roofs' long views.
+ * frame under a sheet roof at GALLERY, open at the sides). Nobody on a roof sees into them, which
+ * keeps both bases and the lanes' far ends out of the roofs' long views; and nothing near them is
+ * high enough to jump onto their tops from, so nobody stands up there and looks down a lane.
  */
 export function galleries(t: Ximen) {
   const roof = (r: R, color: number) => {
-    t.box(r, 3.35, 3.7, 'roof', color);
+    const [under, top] = GALLERY;
+    t.box(r, under, top, 'roof', color);
     const [x0, z0, x1, z1] = r;
     // Posts along the long edges, a lit tube under the eaves.
     const alongX = x1 - x0 >= z1 - z0, len = alongX ? x1 - x0 : z1 - z0, n = Math.max(1, Math.round(len / 7));
-    // (Never in an alley's mouth.)
+    // (Never in an alley's mouth, and never through a container, a van or a scooter already
+    // standing there: a post steps along the edge to the nearest clear spot, or is left out.)
     const alleys = [[-60.6, -54.4], [51.4, 62.6]];
+    const post = (a: number, e: number): R => alongX ? [a - 0.15, e - 0.15, a + 0.15, e + 0.15] : [e - 0.15, a - 0.15, e + 0.15, a + 0.15];
+    const free = ([px0, pz0, px1, pz1]: R) => !t.b.solids.some(s => s.minY < under && s.maxY > 0.1 && s.minX < px1 + 0.05 && s.maxX > px0 - 0.05 && s.minZ < pz1 + 0.05 && s.maxZ > pz0 - 0.05);
     for (let i = 0; i <= n; i++) {
       const p = (alongX ? x0 : z0) + (len * i) / n;
       if (alongX && alleys.some(([a, b]) => p > a && p < b)) continue;
       for (const e of alongX ? [z0 + 0.25, z1 - 0.25] : [x0 + 0.25, x1 - 0.25]) {
-        const a = Math.min(Math.max(p, (alongX ? x0 : z0) + 0.2), (alongX ? x1 : z1) - 0.2);
-        t.box(alongX ? [a - 0.15, e - 0.15, a + 0.15, e + 0.15] : [e - 0.15, a - 0.15, e + 0.15, a + 0.15], 0, 3.35, 'steel', C.iron);
+        for (const shift of [0, 0.6, -0.6, 1.2, -1.2, 1.8, -1.8]) {
+          const a = Math.min(Math.max(p + shift, (alongX ? x0 : z0) + 0.2), (alongX ? x1 : z1) - 0.2);
+          if (alongX && alleys.some(([l, h]) => a > l && a < h)) continue;
+          if (!free(post(a, e))) continue;
+          t.box(post(a, e), 0, under, 'steel', C.iron);
+          break;
+        }
       }
     }
-    t.shape(alongX ? [x0 + 0.5, (z0 + z1) / 2 - 0.1, x1 - 0.5, (z0 + z1) / 2 + 0.1] : [(x0 + x1) / 2 - 0.1, z0 + 0.5, (x0 + x1) / 2 + 0.1, z1 - 0.5], 3.29, 3.35, 'neon', 0xf4f0e0);
+    t.shape(alongX ? [x0 + 0.5, (z0 + z1) / 2 - 0.1, x1 - 0.5, (z0 + z1) / 2 + 0.1] : [(x0 + x1) / 2 - 0.1, z0 + 0.5, (x0 + x1) / 2 + 0.1, z1 - 0.5], under - 0.06, under, 'neon', 0xf4f0e0);
   };
   // The lane ends of N and S, west and east of the cross streets.
   roof([-68, -37.5, -47.5, -27.5], 0x7ab0c8); roof([47.5, -37.5, 68, -27.5], 0xc8b070);

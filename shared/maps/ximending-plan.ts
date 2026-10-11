@@ -37,3 +37,15 @@ export const RED_HOUSE = { x: -8, z: 42, r: 7.5 } as const;
 export const CROSS_WING: [R, R] = [[-36, 40, -22, 46], [-31, 34, -25, 50]];
 /** SWAT's plaza and Militia's yard. */
 export const PLAZA: R = [-68, -15, -47.5, 15], YARD: R = [47.5, -15, 68, 15];
+/**
+ * Ladders: [x, z, dir] at the foot of each, on a blank stretch of wall (never over a door, never
+ * where a chicane or a scooter row stands at its foot): the arcade's west face (from Hanzhong St,
+ * between its two doors), its east face (from East St) and the hotel's south face (from lane S).
+ */
+export const LADDERS: [x: number, z: number, dir: 0 | 1 | 2 | 3][] = [[ARCADE_HALL[0], -16, 0], [ARCADE_HALL[2], -21.2, 2], [24, HOTEL[3], 3]];
+/**
+ * The galleries' sheet roofs over the lanes' ends and the bases' mouths, underside and top: above
+ * the shop signs, and higher than a soldier can jump from anything near them (a container, a
+ * planter, a screen), so their tops are never a sniper's perch.
+ */
+export const GALLERY = [4.45, 4.75] as const;
