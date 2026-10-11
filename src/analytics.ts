@@ -19,9 +19,9 @@ export type Reason = 'menu' | 'disconnect' | 'close';
 /**
  * How a match ended for us, finer than `reason`: the in-game menu's Leave button, the end screen's
  * menu button, the leave key (M, after its confirmation), removed by the server (idle), the
- * connection lost, or the tab closing.
+ * connection lost (and not recovered), the connection lost and the same room rejoined at once (`rejoined`: the next `match_joined` has `rejoin`), or the tab closing.
  */
-export type Exit = 'menu_button' | 'end_screen' | 'leave_key' | 'removed' | 'lost' | 'close';
+export type Exit = 'menu_button' | 'end_screen' | 'leave_key' | 'removed' | 'lost' | 'rejoined' | 'close';
 /** The page's own failures: an uncaught error, a promise nobody caught, the graphics (WebGL) context lost. */
 export type ClientErrorKind = 'error' | 'rejection' | 'webgl_lost' | 'webgl_restored';
 
@@ -43,10 +43,15 @@ export interface Events {
   store_purchase: { item: string; price: number };
   language_changed: { to: string };
   error_shown: { where: string; message: string };
-  /** The page's own failures (src/errors.ts: at most 5 a page, each message once); `source`: file:line:column. */
-  client_error: { kind: ClientErrorKind; message: string; source?: string; in_match: boolean };
-  /** The lobby found the game server asleep and it came up after `seconds` (`queued`: a play button was waiting). */
-  server_woke: { seconds: number; queued: boolean };
+  /** The page's own failures (src/errors.ts: at most 5 a page, each message once); `source`: file:line:column, or `opaque` for a "Script error." the browser gave no details of (then with `uptime_s`, `standalone`, `visible`). */
+  client_error: { kind: ClientErrorKind; message: string; source?: string; in_match: boolean; uptime_s?: number; standalone?: boolean; visible?: boolean };
+  /**
+   * The lobby's connection took over 6 s (`slow`) or a ping or connect failed first (`woke`: the "server asleep" screen; src/net/wake.ts); it came up after
+   * `seconds` (`queued`: a play button was waiting). `failures`: pings and connects that failed first. `reconnect`: connected before on this page (a dropped
+   * connection, not a first load). The split of the wait: `ping_ms` and `ping_ok` (the first ping), `connect_ms` (the connection that went live, from
+   * dialling) and `import_ms` (the part of it spent loading the SDK chunk).
+   */
+  server_woke: { seconds: number; queued: boolean; failures: number; reconnect: boolean; woke: boolean; ping_ms?: number; ping_ok?: boolean; connect_ms?: number; import_ms?: number };
   /** Every 5 minutes of a long online match: connection quality over those minutes (`seconds` in a room). */
   net_sample: NetFields;
   /** The share card (src/ui/sharepanel.ts). `ref`: this browser's random share code (src/game/challenge.ts); `room`: the link names a live 1v1 room. */

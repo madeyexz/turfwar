@@ -71,6 +71,12 @@ export type OnlineEntry =
 
 /** How long our player row may be missing (the transparent rejoin's window) before we leave the match. */
 export const DROP_GRACE_MS = 8000;
+/**
+ * After the page comes back to the foreground, frames (30 a second) must resume within this long, else
+ * the socket is dead (a phone that slept, a network change: the browser never reports a close) and the
+ * link is treated as dropped, which reconnects and rejoins the same room.
+ */
+export const FOREGROUND_PROBE_MS = 3000;
 
 /** A match hosted by the SpacetimeDB module; this client renders it and sends validated intents. */
 export class OnlineLink implements GameLink {
@@ -90,6 +96,10 @@ export class OnlineLink implements GameLink {
   private stopAwake?: () => void;
   private reportsInFlight = 0;
   private disconnected = false;
+  /** When the room's newest frame arrived (ms on the page's clock; -Infinity = none yet). */
+  private lastFrameAt = -Infinity;
+  private probing = false;
+  private readonly lifetime = new AbortController();
   private rejoining = false;
   /** We have had a soldier in a room on this link (so losing it means the server dropped us). */
   private joinedOnce = false;
@@ -122,12 +132,42 @@ export class OnlineLink implements GameLink {
       const decoded = decodeFrame(row.data);
       if (!decoded) return;
       this.frame = decoded; this.frameMap = row.mapId; this.dirty = true;
-      const now = performance.now();
+      const now = this.lastFrameAt = performance.now();
       for (const shot of decoded.shots) { this.events.push(shot); this.lastShot.set(shot.shooter, now); }
     };
     db.frame.onInsert((_ctx, row) => onFrame(row));
     db.frame.onUpdate((_ctx, _old, row) => onFrame(row));
     db.matchEvent.onInsert((_ctx, row) => { if (row.room === this.room) try { this.events.push(JSON.parse(row.json)); } catch { /* malformed event */ } });
+    // Back in the foreground (a phone app returning, a tab shown, the back-forward cache): check the socket is alive.
+    if (typeof document !== 'undefined') {
+      const back = () => { if (document.visibilityState === 'visible') this.probeAlive(); };
+      document.addEventListener('visibilitychange', back, { signal: this.lifetime.signal });
+      addEventListener('pageshow', back, { signal: this.lifetime.signal });
+    }
+  }
+
+  /**
+   * The page just came back: if no frame arrives within FOREGROUND_PROBE_MS the connection is dead without
+   * the browser saying so, so drop it ourselves (`dropReason` 'lost', which main.ts answers by reconnecting
+   * and rejoining the same room). Reducers and server validation are untouched: this only ends a link
+   * that is hearing nothing.
+   */
+  probeAlive(delay = FOREGROUND_PROBE_MS) {
+    if (this.disconnected || !this.joinedOnce || this.probing) return;
+    this.probing = true;
+    const since = performance.now();
+    setTimeout(() => {
+      this.probing = false;
+      if (this.disconnected || document.visibilityState !== 'visible') return;
+      if (this.lastFrameAt < since) this.drop();
+    }, delay);
+  }
+  /** End this link as lost (the socket is dead or the page has given up on it). */
+  private drop() {
+    if (this.disconnected) return;
+    if (!this.dropReason) this.dropReason = 'lost';
+    try { this.conn.disconnect(); } catch { /* already closed */ }
+    this.markDisconnected();
   }
 
   /** Called once when the connection drops (or after we leave). */
@@ -135,6 +175,7 @@ export class OnlineLink implements GameLink {
   markDisconnected() {
     if (this.disconnected) return;
     this.disconnected = true;
+    this.lifetime.abort();
     clearInterval(this.netTimer);
     this.stopAwake?.();
     this.onDrop?.();
@@ -331,6 +372,7 @@ export class OnlineLink implements GameLink {
   keepServerAwake(url: string) { this.stopAwake = keepAwake(url, () => this.inMatch()); }
 
   dispose() {
+    this.lifetime.abort();
     this.stopAwake?.();
     this.netLeft();
     // Already dropped by the server: there is nothing to leave (it would only answer "Not joined").
@@ -396,6 +438,9 @@ export function watchRooms(onChange: (rooms: PublicRoom[]) => void, lost: () => 
   const live = new Promise<void>((resolve, reject) => { settle = { resolve, reject }; });
   live.catch(() => undefined);
   const stop = () => { stopped = true; try { conn?.disconnect(); } catch { /* already closed */ } };
+  /** How long the lazy SDK chunk took to load (for `server_woke`: code or network?). */
+  let importMs: number | undefined;
+  const importMsOf = () => importMs;
   /** The connection failed (before live) or dropped (after): reported once. */
   const end = (error: Error) => {
     if (ended || stopped) return;
@@ -403,7 +448,7 @@ export function watchRooms(onChange: (rooms: PublicRoom[]) => void, lost: () => 
     stop();
     if (isLive) lost(); else settle.reject(error);
   };
-  if (!uri || !database) { settle.reject(new Error('No SpacetimeDB server configured.')); return { live, stop }; }
+  if (!uri || !database) { settle.reject(new Error('No SpacetimeDB server configured.')); return { live, stop, importMs: importMsOf }; }
   const emit = () => {
     if (!conn || stopped) return;
     const rooms: PublicRoom[] = [];
@@ -418,7 +463,9 @@ export function watchRooms(onChange: (rooms: PublicRoom[]) => void, lost: () => 
     }
     onChange(rooms.sort((a, b) => b.humans - a.humans || a.room - b.room));
   };
+  const importStart = performance.now();
   void import('../module_bindings').then(({ DbConnection }) => {
+    importMs = performance.now() - importStart;
     if (stopped) return;
     conn = DbConnection.builder().withUri(uri).withDatabaseName(database)
       .onConnect(c => {
@@ -437,7 +484,7 @@ export function watchRooms(onChange: (rooms: PublicRoom[]) => void, lost: () => 
       .onDisconnect(() => end(new Error('Disconnected.')))
       .build();
   }, (error: unknown) => end(error instanceof Error ? error : new Error(String(error))));
-  return { live, stop };
+  return { live, stop, importMs: importMsOf };
 }
 
 /**

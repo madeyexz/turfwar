@@ -169,3 +169,23 @@ describe('Audio voices', () => {
     expect(plugged(ctx, nodes, mix())).toBe(permanent);
   });
 });
+
+describe('Audio start without an audio device', () => {
+  afterEach(() => vi.unstubAllGlobals());
+
+  it('swallows a rejected resume() (Threads\' in-app browser: "Failed to start the audio device")', async () => {
+    const C = class extends FakeContext { resume() { return Promise.reject(new DOMException('Failed to start the audio device', 'NotAllowedError')); } };
+    vi.stubGlobal('AudioContext', C);
+    vi.stubGlobal('fetch', () => Promise.resolve({ ok: true, arrayBuffer: () => Promise.resolve(new ArrayBuffer(8)) }));
+    const unhandled: unknown[] = [];
+    const record = (reason: unknown) => { unhandled.push(reason); };
+    process.on('unhandledRejection', record);
+    try {
+      const audio = new Audio();
+      audio.start();
+      expect(() => { audio.start(); audio.start(); }).not.toThrow();
+      await new Promise(resolve => setTimeout(resolve, 20));
+      expect(unhandled).toEqual([]);
+    } finally { process.off('unhandledRejection', record); }
+  });
+});

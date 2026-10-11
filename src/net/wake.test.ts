@@ -28,11 +28,13 @@ describe('wake state machine', () => {
     expect(m.send({ type: 'up' }, 27_000)).toMatchObject({ phase: 'ready', woke: true });
   });
 
-  it('no answer within 3 s counts as waking', () => {
+  it('no answer within 6 s is only slow: still "probing", never "asleep" without a failure', () => {
     const m = machine<string>();
     m.send({ type: 'start' }, 1000);
-    expect(m.send({ type: 'tick' }, 3999).phase).toBe('probing');
-    expect(m.send({ type: 'tick' }, 4000).phase).toBe('waking');
+    expect(m.send({ type: 'tick' }, 6999)).toMatchObject({ phase: 'probing', slow: false });
+    expect(m.send({ type: 'tick' }, 7000)).toMatchObject({ phase: 'probing', slow: true, woke: false });
+    expect(m.send({ type: 'tick' }, 30_000).phase).toBe('probing');
+    expect(m.send({ type: 'up' }, 31_000)).toMatchObject({ phase: 'ready', woke: false, slow: true });
   });
 
   it('gives up after 3 minutes, and Retry starts over', () => {
@@ -212,6 +214,39 @@ describe('WakeDriver', () => {
     d.retry();
     await vi.advanceTimersByTimeAsync(1000);
     expect(d.state.phase).toBe('ready');
+    d.stop();
+  });
+
+  it('a slow server that never fails stays "probing" (neutral copy), then comes up, with timings', async () => {
+    vi.useFakeTimers();
+    const { server, deps } = fakeServer();
+    server.hold = true; // the connection is dialled and just takes its time
+    const slow = {
+      ...deps,
+      // The host answers 200 after 3.5 s (inside the 4 s ping limit) and the database is ready at 6.5 s.
+      ping: async () => { await new Promise(r => setTimeout(r, 3500)); setTimeout(() => { server.up = true; }, 3000); return true; },
+      connect(lost: () => void): WakeLink { return { ...deps.connect(lost), importMs: () => 1234 }; },
+    };
+    const d = new WakeDriver<string>(slow, () => undefined, () => undefined);
+    d.start();
+    await vi.advanceTimersByTimeAsync(WAKE.slowMs + 100);
+    expect(d.state).toMatchObject({ phase: 'probing', slow: true, woke: false, failures: 0 });
+    await vi.advanceTimersByTimeAsync(1500);
+    expect(d.state).toMatchObject({ phase: 'ready', slow: true, woke: false });
+    expect(d.timings).toMatchObject({ pingMs: 3500, pingOk: true, importMs: 1234 });
+    d.stop();
+  });
+
+  it('records the connection time and the code-loading part of it', async () => {
+    vi.useFakeTimers();
+    const { server, deps } = fakeServer();
+    server.up = true;
+    const withImport = { ...deps, connect(lost: () => void): WakeLink { return { ...deps.connect(lost), importMs: () => 41.6 }; } };
+    const d = new WakeDriver<string>(withImport, () => undefined, () => undefined);
+    d.start();
+    await vi.advanceTimersByTimeAsync(500);
+    expect(d.state.phase).toBe('ready');
+    expect(d.timings).toMatchObject({ connectMs: 50, importMs: 42, pingOk: true });
     d.stop();
   });
 
