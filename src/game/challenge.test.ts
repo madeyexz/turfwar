@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
-import { challengeMap, challengeUrl, cleanName, parseChallenge, shareRef, tagLink } from './challenge';
+import { challengeMap, challengeUrl, cleanName, parseChallenge, shareRef } from './challenge';
+import { withUtm } from '../utm';
 import { bragLine, MatchTally, nationalDay, type MatchSummary } from './matchstats';
 
 describe('單挑我 links', () => {
@@ -20,7 +21,7 @@ describe('單挑我 links', () => {
 
   it('tags without clobbering what the link already carries', () => {
     const url = 'https://x.test/?room=ABCD&autostart=1&utm_source=threads';
-    const tagged = new URL(tagLink(url, { source: 'share', medium: 'end_screen' }));
+    const tagged = new URL(withUtm(url, { source: 'share', medium: 'end_screen' }));
     expect(tagged.searchParams.get('room')).toBe('ABCD');
     expect(tagged.searchParams.get('autostart')).toBe('1');
     expect(tagged.searchParams.get('utm_source')).toBe('threads');
