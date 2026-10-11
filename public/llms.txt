@@ -20,7 +20,7 @@ Two names, one game: 角頭械鬥 (Traditional Chinese) and Turf War: Taipei (En
 
 ## Pages
 
-- [Play the game](https://turfwar.ianhsiao.me/): the lobby (Quick play, Start a server, Join a server, Solo vs bots, Practice)
+- [Play the game](https://turfwar.ianhsiao.me/): the lobby (Quick play, Create room, Join room, Solo vs bots, Practice)
 - [About, how to play and FAQ (繁體中文)](https://turfwar.ianhsiao.me/about): modes, maps, weapons, controls and FAQ in Traditional Chinese
 - [About, how to play and FAQ (English)](https://turfwar.ianhsiao.me/en/about): the same in English
 - [Privacy](https://turfwar.ianhsiao.me/privacy): no accounts; what is stored in the browser, what the server keeps, and the anonymous analytics

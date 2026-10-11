@@ -16,8 +16,8 @@ A browser game: no install, no account, no ads, free. Two teams, SWAT (navy tact
 ## Ways to play
 
 - Quick play: joins the fullest open public room of any size, map or mode, or opens a public 6v6 with bots on a random map and mode. Full and private rooms are never chosen.
-- Start a server: choose the mode (Elimination or Sabotage), size (1v1, 6v6, 24v24), map, public or private (a 4-letter code) and bots on or off.
-- Join a server: lists every live room with its map, mode, size, players and ping; private rooms are joined with their code.
+- Create room: choose the mode (Elimination or Sabotage), size (1v1, 6v6, 24v24), map, public or private (a 4-letter code) and bots on or off.
+- Join room: lists every live room with its map, mode, size, players and ping; private rooms are joined with their code.
 - Solo vs bots: offline, with bots at three difficulties (recruit, veteran, elite).
 - Practice: a range with a free store and no bots.
 - 單挑我 / 發起單挑 (duel challenge): after an online match a player can open a private 1v1 room on the same map and share a link; a friend who opens it joins the room, or plays a Solo 1v1 against a bot carrying the challenger's name if the room is gone.

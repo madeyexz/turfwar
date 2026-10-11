@@ -1096,7 +1096,7 @@ function startedDuel(duel: Duel, link: GameLink) {
   const ref = duel.c.ref ?? '';
   game?.setChallenge({ name: duel.c.name, ref, via: duel.kind === 'join' ? 'room' : 'fallback' });
   track('challenge_started', { ref, via: duel.kind === 'join' ? 'room' : 'fallback', ...(duel.kind === 'fallback' ? { reason: duel.reason } : {}) });
-  if (duel.kind === 'fallback') { if (duel.reason !== 'no_room') game?.notice(t('chal.double', { name: duel.c.name }), 8000); return; }
+  if (duel.kind === 'fallback') { game?.notice(t('chal.double', { name: duel.c.name }), 8000); return; }
   // The room was there but the challenger has left it: play their double rather than wait alone.
   const playing = game;
   setTimeout(() => {
