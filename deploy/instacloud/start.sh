@@ -2,9 +2,8 @@
 # Run SpacetimeDB on the persistent /data volume and keep the volume from filling.
 #
 # The server compresses sealed commitlog segments (~3x for this game) but never deletes them, and
-# 100 players write ~12 GB of log an hour, so the 10 GiB volume needs pruning while the machine is
-# up (an idle machine is usually suspended, not restarted). prune-commitlog.sh only runs on a
-# stopped server, so this script supervises it:
+# 100 players write ~12 GB of log an hour, so the data disk needs pruning while the machine is
+# up. prune-commitlog.sh only runs on a stopped server, so this script supervises it:
 #   - at boot: prune, then start;
 #   - every 30 s: once the data passes PRUNE_IDLE_MB and nothing has been written for
 #     IDLE_SECONDS (no room is ticking), restart the server around a prune (a few seconds; the

@@ -5,13 +5,10 @@
 #   bun run publish:prod          # both
 #   bun run publish:prod -- tw    # Taipei only
 #
-# - The Singapore server (InstaCloud, deploy/instacloud) was retired on 2026-10-11 and is no longer
-#   published to; see docs/DEVELOPMENT.md to start it again.
 # - Every publish uses --delete-data=never: a change that would need deleting data stops here
 #   instead. Nothing in this script can reset a database.
 # - The owner identity lives in ~/.config/turfwar (made once by deploy/instacloud/owner.sh <server-url>,
-#   the profile is still named `instacloud-cli.toml`). Taipei began as a copy of the Singapore server
-#   with its signing keys, so that same owner login publishes to it.
+#   the profile is still named `instacloud-cli.toml`, from the retired InstaCloud server it was made for).
 set -euo pipefail
 cd "$(dirname "$0")/.."
 TW_URL="${TW_URL:-https://tw.turfwar.ianhsiao.me}"
