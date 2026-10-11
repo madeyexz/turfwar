@@ -3,6 +3,7 @@ import type { VehicleKind } from '../shared/vehicles';
 import type { NetFields } from '../shared/netstats';
 import type { DeviceKind } from '../shared/devicekind';
 import type { ServerId } from './net/servers';
+import { currentVisitProps, dropClickIds } from './visit';
 
 /**
  * Product analytics (PostHog, US cloud): how many players, from where (PostHog derives the country
@@ -19,11 +20,18 @@ export type Reason = 'menu' | 'disconnect' | 'close';
 /**
  * How a match ended for us, finer than `reason`: the in-game menu's Leave button, the end screen's
  * menu button, the leave key (M, after its confirmation), removed by the server (idle), the
- * connection lost, or the tab closing.
+ * connection lost (and not recovered), the connection lost and the same room rejoined at once (`rejoined`: the next `match_joined` has `rejoin`), or the tab closing.
  */
-export type Exit = 'menu_button' | 'end_screen' | 'leave_key' | 'removed' | 'lost' | 'close';
+export type Exit = 'menu_button' | 'end_screen' | 'leave_key' | 'removed' | 'lost' | 'rejoined' | 'close';
 /** The page's own failures: an uncaught error, a promise nobody caught, the graphics (WebGL) context lost. */
 export type ClientErrorKind = 'error' | 'rejection' | 'webgl_lost' | 'webgl_restored';
+
+/**
+ * How long the lobby took to reach a server (`seconds`; `queued`: a play button was waiting). `failures`: pings and connects that failed first.
+ * `reconnect`: connected before on this page (a dropped connection, not a first load). The split of the wait: `ping_ms` and `ping_ok` (the first ping),
+ * `connect_ms` (the connection that went live, from dialling) and `import_ms` (the part of it spent loading the SDK chunk).
+ */
+export interface ConnectTiming { seconds: number; queued: boolean; failures: number; reconnect: boolean; ping_ms?: number; ping_ok?: boolean; connect_ms?: number; import_ms?: number }
 
 /** Every event and its properties (kept small and typed). */
 export interface Events {
@@ -32,8 +40,9 @@ export interface Events {
   play_clicked: { kind: PlayKind; size: string; mode: Mode | ''; map: string; server_choice?: ServerId };
   /** `device`: our own phone/tablet/desktop (src/game/device.ts), which, unlike PostHog's `$device_type`, counts an iPad posing as a Mac as a tablet. */
   /** `rejoin`: back in the same room after the connection dropped (main.ts rejoinAfterDrop). */
+  /** `private`: the room has a 4-letter code (a private room, hosted or joined by code); `hosted`: we opened it with 約朋友單挑 (pair with the other persons' `room` to count rooms that found an opponent). */
   /** How it is played (phones): `touch` controls, the screen `upright` at the start (a touch match then plays turned sideways), the `in_app` browser's app, touch `aim_assist` on. */
-  match_joined: { online: boolean; room?: string; map: string; mode: Mode; size: string; team: 'swat' | 'militia'; server_choice?: ServerId; device: DeviceKind; rejoin?: boolean; touch?: boolean; upright?: boolean; in_app?: string; aim_assist?: boolean };
+  match_joined: { online: boolean; room?: string; map: string; mode: Mode; size: string; team: 'swat' | 'militia'; server_choice?: ServerId; device: DeviceKind; rejoin?: boolean; touch?: boolean; upright?: boolean; in_app?: string; aim_assist?: boolean; private?: boolean; hosted?: boolean };
   /** Online, also the match's connection quality (shared/netstats.ts): ping percentiles over the newest ≤600 samples, totals for the rest. */
   /** `sideways`: the page was turned at some point (an upright phone); `knife_kills` (the 藍白拖) and `bobas_drunk` (珍奶) over the stay. */
   match_left: { seconds: number; kills: number; deaths: number; rounds_played: number; reason: Reason; exit?: Exit; sideways?: boolean; knife_kills?: number; bobas_drunk?: number } & Partial<Omit<NetFields, 'seconds'>>;
@@ -42,15 +51,23 @@ export interface Events {
   store_purchase: { item: string; price: number };
   language_changed: { to: string };
   error_shown: { where: string; message: string };
-  /** The page's own failures (src/errors.ts: at most 5 a page, each message once); `source`: file:line:column. */
-  client_error: { kind: ClientErrorKind; message: string; source?: string; in_match: boolean };
-  /** The lobby found the game server asleep and it came up after `seconds` (`queued`: a play button was waiting). */
-  server_woke: { seconds: number; queued: boolean };
+  /** The page's own failures (src/errors.ts: at most 5 a page, each message once); `source`: file:line:column, or `opaque` for a "Script error." the browser gave no details of (then with `uptime_s`, `standalone`, `visible`). */
+  client_error: { kind: ClientErrorKind; message: string; source?: string; in_match: boolean; uptime_s?: number; standalone?: boolean; visible?: boolean };
+  /**
+   * The lobby's connection to a server took over 6 s, or needed a retry after a failed ping or connect. (Until 2026-10-12 this was `server_woke`, which
+   * also fired for Singapore waking from sleep; Singapore is no longer a choice and the event is gone.)
+   */
+  connect_slow: ConnectTiming;
   /** Every 5 minutes of a long online match: connection quality over those minutes (`seconds` in a room). */
   net_sample: NetFields;
+  /** The callsign question a new player gets before the first game (src/ui/callsign.ts); `play_clicked` follows only if they answer, so asked minus play_clicked is who left at it. */
+  callsign_asked: Record<string, never>;
   /** The share card (src/ui/sharepanel.ts). `ref`: this browser's random share code (src/game/challenge.ts); `room`: the link names a live 1v1 room. */
   share_card_opened: { ref: string; solo: boolean; result: 'win' | 'loss' | 'draw'; room: boolean };
-  share_card_shared: { ref: string; method: 'native' | 'download' | 'copy'; room: boolean };
+  /** `method`: `native` = the card with its link through the share sheet, `link` = only the text and link through it, `copy` = the clipboard (also the fallback of the other two), `download` = the picture saved. */
+  share_card_shared: { ref: string; method: 'native' | 'link' | 'download' | 'copy'; room: boolean };
+  /** 約朋友單挑 pressed on the end screen (`ref`: this browser's share code; `solo`/`result`: the match it was pressed after; `via`: it opened a private 1v1 `room`, or, with no online play available, shared a `link` the challenger's bot double answers). */
+  duel_clicked: { ref: string; solo: boolean; result: 'win' | 'loss' | 'draw'; via: 'room' | 'link' };
   /** A 單挑我 link opened (`ref`: the sharer's code, `has_room`: it names their room). */
   challenge_link_opened: { ref: string; has_room: boolean };
   /** The challenge began: in the sharer's room, or against their bot double (`fallback`) and why. */
@@ -131,8 +148,8 @@ function devTestId() {
 /**
  * Load posthog-js and start sending; call once the lobby has rendered. `base` are the super
  * properties every event carries (the app version is added here): the language, the SpacetimeDB
- * database and its host (`server_host`, e.g. play.turfwar.ianhsiao.me) and the player's choice of
- * server (`server_choice`: sg or us), so events can be told apart by server. The lobby updates the
+ * database and its host (`server_host`, e.g. tw.turfwar.ianhsiao.me) and the player's choice of
+ * server (`server_choice`: tw or us), so events can be told apart by server. The lobby updates the
  * three with `setSuper` when the player chooses another server.
  */
 export function startAnalytics(base: { lang: string; online_db: string; server_host: string; server_choice: string }) {
@@ -149,21 +166,26 @@ export function startAnalytics(base: { lang: string; online_db: string; server_h
       // No flags and no remote config: everything is set here, and no extra scripts or requests.
       advanced_disable_flags: true, disable_external_dependency_loading: true,
       persistence: 'localStorage+cookie', person_profiles: 'always', respect_dnt: true,
-      ...(guard.test ? {
-        bootstrap: { distinctID: devTestId() },
+      // posthog-js would send the ad click ids it finds in the URL (fbclid, gclid…); only their presence is kept (src/visit.ts).
+      before_send: event => {
+        if (!event) return event;
+        event.properties = dropClickIds(event.properties);
+        event.$set = dropClickIds(event.$set);
+        event.$set_once = dropClickIds(event.$set_once);
         // Dev test events are printed as sent (our properties, PostHog's own `$…` ones left out).
-        before_send: event => {
-          if (event) {
-            const own = Object.fromEntries(Object.entries(event.properties ?? {}).filter(([k]) => !k.startsWith('$') || k === '$current_url' || k === '$set'));
-            console.debug('[analytics]', JSON.stringify({ event: event.event, distinct_id: event.properties?.distinct_id, properties: own, $set: event.$set, $set_once: event.$set_once }));
-          }
-          return event;
-        },
-      } : {}),
+        if (guard.test) {
+          const own = Object.fromEntries(Object.entries(event.properties ?? {}).filter(([k]) => !k.startsWith('$') || k === '$current_url' || k === '$set'));
+          console.debug('[analytics]', JSON.stringify({ event: event.event, distinct_id: event.properties?.distinct_id, properties: own, $set: event.$set, $set_once: event.$set_once }));
+        }
+        return event;
+      },
+      ...(guard.test ? { bootstrap: { distinctID: devTestId() } } : {}),
       loaded: ph => {
         ph.register({
           lang: base.lang, app_version: version, online_db: base.online_db, server_host: base.server_host, server_choice: base.server_choice,
           screen: screenBucket(screen.width, screen.height), ...(guard.test ? { test: true } : {}),
+          // Not even counted (or kept in storage) when the player has opted out (Do Not Track).
+          ...(ph.has_opted_out_capturing() ? {} : currentVisitProps()),
         });
       },
     });

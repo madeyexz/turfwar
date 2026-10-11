@@ -1,7 +1,7 @@
-import { installHint, openInBrowserUrl, readEnv, type InstallHint } from '../game/device';
+import { installHint, isAndroid, isIOS, openInBrowserUrl, readEnv, type InstallHint } from '../game/device';
 import { onTouchLayout, touchActive } from '../game/touchlayout';
 import { canPromptInstall, onInstallChange, promptInstall } from '../pwa';
-import { onLang, t } from './i18n';
+import { onLang, t, type Key } from './i18n';
 import './touch.css';
 
 const KEY = 'lawbreaker.installHint';
@@ -47,8 +47,13 @@ export class InstallBanner {
     this.el.hidden = !kind && !tip;
     this.el.classList.toggle('tip-only', !kind);
     if (this.el.hidden) return;
-    const chrome = kind === 'browser' ? openInBrowserUrl(readEnv(), location.href) : undefined;
-    const how = kind === 'ios' ? t('inst.ios', { share: '\u0000' }).split('\u0000').map(esc).join(SHARE) : kind ? esc(t(`inst.${kind}`)) : '';
+    const env = readEnv();
+    const chrome = kind === 'browser' ? openInBrowserUrl(env, location.href) : undefined;
+    // With the Chrome button the actions need their own row.
+    this.el.classList.toggle('in-app', !!chrome);
+    // In an app's browser, say which real browser to use (Safari on iOS, Chrome on Android).
+    const key = kind === 'browser' ? (isIOS(env) ? 'inst.browserIos' : isAndroid(env) ? 'inst.browserAndroid' : 'inst.browser') : `inst.${kind}`;
+    const how = kind === 'ios' ? t('inst.ios', { share: '\u0000' }).split('\u0000').map(esc).join(SHARE) : kind ? esc(t(key as Key)) : '';
     this.el.setAttribute('aria-label', kind ? t('inst.title') : t('inst.tipTitle'));
     // In an app's own browser the game still plays (sideways); the real browser gives full screen and installing.
     const title = kind === 'browser' ? t('inst.inAppTitle') : t('inst.title');

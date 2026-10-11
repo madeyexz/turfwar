@@ -1,0 +1,53 @@
+<!doctype html>
+<!--
+  The 1200×630 social preview (public/og/og-zh-TW.jpg, og-en.jpg). Built from the game's own
+  screenshot (docs/media) and fonts (public/fonts, OFL). Regenerate with `bun tools/og/make.ts`
+  (needs agent-browser and ImageMagick); `?lang=en` renders the English one.
+-->
+<html>
+<head>
+<meta charset="utf-8">
+<style>
+  @font-face { font-family: 'Rajdhani'; font-weight: 700; src: url('../../public/fonts/rajdhani-700.woff2') format('woff2'); }
+  @font-face { font-family: 'Rajdhani'; font-weight: 600; src: url('../../public/fonts/rajdhani-600.woff2') format('woff2'); }
+  @font-face { font-family: 'Noto Sans TC'; font-weight: 500 900; src: url('../../public/fonts/noto-sans-tc.woff2') format('woff2'); }
+  * { box-sizing: border-box; margin: 0; }
+  html, body { width: 1200px; height: 630px; overflow: hidden; background: #05090c; }
+  body { position: relative; font-family: 'Rajdhani', 'Noto Sans TC', sans-serif; color: #e9f3f5; }
+  .shot { position: absolute; inset: 0; background: url('../../docs/media/screenshot-ximending-fight.jpg') 62% 40% / auto 118% no-repeat; }
+  .shade { position: absolute; inset: 0; background: linear-gradient(90deg, rgba(5,9,12,.96) 0%, rgba(5,9,12,.88) 38%, rgba(5,9,12,.25) 72%, rgba(5,9,12,.05) 100%); }
+  .edge { position: absolute; inset: 0; box-shadow: inset 0 0 0 6px #29d3ff; opacity: .0; }
+  .logo { position: absolute; left: 64px; top: 56px; width: 96px; height: 96px; border-radius: 16px; }
+  .copy { position: absolute; left: 64px; top: 186px; width: 1000px; }
+  .en .copy { top: 176px; }
+  .name { font-weight: 700; line-height: .98; letter-spacing: .04em; text-transform: uppercase; }
+  .name em { font-style: normal; color: #7ff6ff; }
+  .zh .name { font-family: 'Noto Sans TC', sans-serif; font-weight: 900; font-size: 150px; letter-spacing: .06em; text-transform: none; }
+  .zh .alt { font-size: 52px; letter-spacing: .14em; margin-top: 18px; text-transform: uppercase; font-weight: 700; }
+  .en .name { font-size: 108px; white-space: nowrap; }
+  .en .alt { font-family: 'Noto Sans TC', sans-serif; font-weight: 800; font-size: 46px; letter-spacing: .3em; margin-top: 12px; color: #bfeef3; }
+  .tag { margin-top: 26px; font-size: 34px; line-height: 1.35; color: #e9f3f5; font-weight: 600; }
+  .zh .tag { font-family: 'Noto Sans TC', sans-serif; font-weight: 700; font-size: 34px; }
+  .bar { position: absolute; left: 0; right: 0; bottom: 0; height: 64px; display: flex; align-items: center; justify-content: space-between; padding: 0 64px; background: rgba(5,9,12,.82); border-top: 2px solid rgba(127,246,255,.5); font-size: 28px; letter-spacing: .08em; font-weight: 700; }
+  .bar b { color: #7ff6ff; }
+  .zh .bar { font-family: 'Noto Sans TC', sans-serif; font-weight: 700; font-size: 26px; }
+  .url { font-family: 'Rajdhani', sans-serif; letter-spacing: .1em; }
+</style>
+</head>
+<body>
+<div class="shot"></div><div class="shade"></div>
+<img class="logo" src="../../public/icons/icon-192.png" alt="">
+<div class="copy" id="copy"></div>
+<div class="bar" id="bar"></div>
+<script>
+  const en = new URLSearchParams(location.search).get('lang') === 'en';
+  document.body.className = en ? 'en' : 'zh';
+  document.getElementById('copy').innerHTML = en
+    ? `<div class="name">Turf War<em>: Taipei</em></div><div class="alt">角頭械鬥</div><div class="tag">Free round-based team shooter.<br>Play in your browser, no install.</div>`
+    : `<div class="name">角頭<em>械鬥</em></div><div class="alt">Turf War: Taipei</div><div class="tag">免費網頁多人射擊遊戲<br>免下載，開瀏覽器就能玩</div>`;
+  document.getElementById('bar').innerHTML = en
+    ? `<span>SOLO · <b>1v1</b> · <b>6v6</b> · <b>24v24</b> · ELIMINATION &amp; SABOTAGE</span><span class="url">turfwar.ianhsiao.me</span>`
+    : `<span>單機 · <b>1v1</b> · <b>6v6</b> · <b>24v24</b> · 殲滅戰與爆破戰</span><span class="url">turfwar.ianhsiao.me</span>`;
+</script>
+</body>
+</html>

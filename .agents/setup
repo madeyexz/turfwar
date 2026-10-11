@@ -23,10 +23,3 @@ if ! "$SPACETIME" --version | grep -q "/$SPACETIME_VERSION/"; then
   "$SPACETIME" version install "$SPACETIME_VERSION" --use
 fi
 done_
-
-# InstaCloud CLI for the Singapore server (deploy/instacloud).
-step "insta"
-if ! command -v insta >/dev/null; then
-  curl -fsSL https://raw.githubusercontent.com/InsForge/instacloud-cli/main/install.sh | sh
-fi
-done_

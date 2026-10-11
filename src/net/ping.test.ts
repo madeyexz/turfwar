@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { setLang } from '../ui/i18n';
-import { KEEP_AWAKE_MS, PING_INTERVAL_MS, PingMonitor, PingSamples, hostAnswers, keepAwake, median, pingAllowed, pingTone, pingUrl, serverIdentityKey, serverRegion } from './ping';
+import { PING_INTERVAL_MS, PingMonitor, PingSamples, hostAnswers, median, pingAllowed, pingTone, pingUrl, serverIdentityKey, serverRegion } from './ping';
 
 afterEach(() => { setLang('en', false); vi.useRealTimers(); });
 
@@ -30,15 +30,10 @@ describe('serverRegion', () => {
     setLang('zh-TW', false);
     expect(serverRegion('wss://maincloud.spacetimedb.com')).toBe('美東');
   });
-  it('puts the production server and every InstaCloud compute host in Singapore', () => {
-    const hosts = ['wss://play.turfwar.ianhsiao.me', 'https://prod-main-stdb-2b7636-205bvw6d002.compute.instacloud-edge.com', 'wss://Other-Branch.compute.instacloud-edge.com/'];
-    for (const uri of hosts) expect(serverRegion(uri), uri).toBe('Singapore');
-    // Only real subdomains: a look-alike host is shown by its name.
-    expect(serverRegion('wss://compute.instacloud-edge.com.evil.example')).toBe('compute.instacloud-edge.com.evil.example');
-    expect(serverRegion('wss://turfwar.ianhsiao.me')).toBe('turfwar.ianhsiao.me');
-    setLang('zh-TW', false);
-    for (const uri of hosts) expect(serverRegion(uri), uri).toBe('新加坡');
-    expect(serverRegion('wss://maincloud.spacetimedb.com')).toBe('美東');
+  it('shows a host it does not know by its name', () => {
+    for (const uri of ['wss://turfwar.ianhsiao.me', 'wss://game.example.org', 'wss://tw.turfwar.ianhsiao.me.evil.example']) {
+      expect(serverRegion(uri), uri).toBe(new URL(uri).hostname);
+    }
   });
 });
 
@@ -47,16 +42,10 @@ describe('serverIdentityKey', () => {
     for (const uri of ['wss://tw.turfwar.ianhsiao.me', 'wss://34-81-41-144.sslip.io/']) expect(serverRegion(uri), uri).toBe('Taipei');
   });
 
-  it('keeps one identity across Taipei and Singapore (Taipei began as a copy, signing keys included)', () => {
-    for (const uri of ['wss://tw.turfwar.ianhsiao.me', 'wss://34-81-41-144.sslip.io/', 'wss://play.turfwar.ianhsiao.me']) {
+  it('keeps one identity for Taipei under each of its names, the one players got on the retired Singapore server (same signing keys)', () => {
+    for (const uri of ['wss://tw.turfwar.ianhsiao.me', 'wss://34-81-41-144.sslip.io/']) {
       expect(serverIdentityKey(uri), uri).toBe('instacloud-singapore');
     }
-  });
-
-  it('keeps one identity for the Singapore server under either hostname', () => {
-    const edge = serverIdentityKey('wss://prod-main-stdb-2b7636-205bvw6d002.compute.instacloud-edge.com');
-    expect(edge).toBe(serverIdentityKey('wss://play.turfwar.ianhsiao.me'));
-    expect(edge).toBe('instacloud-singapore');
   });
   it('leaves every other server keyed by its URI, so saved identities keep working', () => {
     expect(serverIdentityKey('wss://maincloud.spacetimedb.com')).toBe('wss://maincloud.spacetimedb.com');
@@ -167,53 +156,19 @@ describe('PingMonitor', () => {
     const calls: string[] = [];
     const fetcher = async (url: string) => { calls.push(url); clock += 120; return { ok: true, arrayBuffer: async () => new ArrayBuffer(0) } as Response; };
     const m = new PingMonitor(() => undefined, fetcher);
-    const sg = 'wss://play.turfwar.ianhsiao.me', us = 'wss://maincloud.spacetimedb.com';
-    m.track(sg);
+    const tw = 'wss://tw.turfwar.ianhsiao.me', us = 'wss://maincloud.spacetimedb.com';
+    m.track(tw);
     m.setActive(true);
     for (let i = 0; i < 20; i++) await vi.advanceTimersByTimeAsync(1);
-    expect(m.get(sg)).toBe(120);
-    m.untrack(sg);
+    expect(m.get(tw)).toBe(120);
+    m.untrack(tw);
     m.track(us);
     calls.length = 0;
     for (let i = 0; i < 3; i++) { clock += PING_INTERVAL_MS; await vi.advanceTimersByTimeAsync(PING_INTERVAL_MS); }
     expect(calls.length).toBeGreaterThan(2);
     expect(calls.every(u => u === 'https://maincloud.spacetimedb.com/v1/ping')).toBe(true);
-    expect(m.get(sg)).toBeUndefined();
+    expect(m.get(tw)).toBeUndefined();
     expect(m.get(us)).toBe(120);
   });
 });
 
-describe('keepAwake (a match holds the scale-to-zero server up)', () => {
-  afterEach(() => { vi.useRealTimers(); });
-
-  it('requests /v1/ping once a minute while in a room, well inside the host\'s idle window', () => {
-    vi.useFakeTimers();
-    const urls: string[] = [];
-    let inRoom = true;
-    const stop = keepAwake('https://play.example/v1/ping', () => inRoom, async url => { urls.push(url); return new Response('ok'); });
-    // The platform suspended the server 5 minutes after the last request: a minute leaves room for a few misses.
-    expect(KEEP_AWAKE_MS).toBeLessThanOrEqual(60_000);
-    vi.advanceTimersByTime(KEEP_AWAKE_MS * 3);
-    expect(urls).toEqual(Array(3).fill('https://play.example/v1/ping'));
-    // Out of the room (left, or dropped by the server): nothing, so a forgotten tab lets it sleep.
-    inRoom = false;
-    vi.advanceTimersByTime(KEEP_AWAKE_MS * 5);
-    expect(urls).toHaveLength(3);
-    inRoom = true;
-    vi.advanceTimersByTime(KEEP_AWAKE_MS);
-    expect(urls).toHaveLength(4);
-    stop();
-    vi.advanceTimersByTime(KEEP_AWAKE_MS * 5);
-    expect(urls).toHaveLength(4);
-  });
-
-  it('a failed request (the server already asleep, offline) is swallowed', async () => {
-    vi.useFakeTimers();
-    let calls = 0;
-    const stop = keepAwake('https://play.example/v1/ping', () => true, async () => { calls++; throw new TypeError('Failed to fetch'); });
-    vi.advanceTimersByTime(KEEP_AWAKE_MS * 2);
-    await vi.runOnlyPendingTimersAsync();
-    expect(calls).toBeGreaterThanOrEqual(2);
-    stop();
-  });
-});

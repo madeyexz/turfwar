@@ -1,0 +1,33 @@
+# 角頭械鬥 · Turf War: Taipei — https://turfwar.ianhsiao.me
+# Public pages (the game, /about, /en/about, /privacy, /llms.txt) may be crawled by search engines and AI
+# search and answer assistants. The owner's dashboard is not for crawlers. A crawler that has its own group
+# below uses only that group, so each repeats the /admin rule.
+
+User-agent: *
+Disallow: /admin
+
+# Classic search (Google, Bing; Yahoo Taiwan is powered by Bing)
+User-agent: Googlebot
+Disallow: /admin
+
+User-agent: Bingbot
+Disallow: /admin
+
+# AI search and answer engines
+User-agent: GPTBot
+Disallow: /admin
+
+User-agent: OAI-SearchBot
+Disallow: /admin
+
+User-agent: PerplexityBot
+Disallow: /admin
+
+User-agent: ClaudeBot
+Disallow: /admin
+
+# Controls whether Google's Gemini models may use the site (does not affect Search ranking)
+User-agent: Google-Extended
+Disallow: /admin
+
+Sitemap: https://turfwar.ianhsiao.me/sitemap.xml

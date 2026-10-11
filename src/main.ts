@@ -1,3 +1,5 @@
+// First: it notes whether localStorage was populated before any other module writes to it.
+import './visit';
 import { inject } from '@vercel/analytics';
 import { RETIRED_MAPS, loadMap, mapSummaries } from '../shared/maps/index';
 import { cleanCode, hasSites, listOrder, mapsFor, pickAnyRoom, ROOM_SIZES, roomFull, sizeLabel } from '../shared/match/rooms';
@@ -17,7 +19,7 @@ import { Bench, BENCH_SECONDS, benchReport, type BenchResult } from './game/benc
 import { onlineAvailable, connectOnline, watchRooms, ConnectError, OnlineLink, type OnlineEntry, type PublicRoom } from './net/online';
 import { PING_WINDOW, PingMonitor, hostAnswers, pingAllowed, pingTone, pingUrl, serverHost, serverRegion } from './net/ping';
 import { currentServer, gameServerList, onServer, type GameServer, type ServerId } from './net/servers';
-import { WakeDriver, wakeProgress, wakeSeconds, type WakeState } from './net/wake';
+import { ConnectDriver, connectSeconds, type ConnectState } from './net/connect';
 import { matchJoined, matchLeft, matchNote, setSuper, startAnalytics, track, type PlayKind, type Exit, type Reason } from './analytics';
 import { LevelView } from './render/level';
 import { THEMES } from './render/materials';
@@ -92,6 +94,8 @@ const GITHUB = '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 .3a12 1
 const REPO_URL = 'https://github.com/madeyexz/turfwar';
 /** The privacy page in the lobby's language (a `?lang=` visit passes it on; otherwise the page reads the saved choice). */
 const privacyHref = () => `/privacy${params.get('lang') ? `?lang=${lang()}` : ''}`;
+/** The static about page (how to play, modes, maps, FAQ; crawlable text for search engines, docs/SEO.md) in the lobby's language. */
+const aboutHref = () => isZh() ? '/about' : '/en/about';
 const LOCK = '<svg class="lock" viewBox="0 0 24 24" aria-hidden="true"><rect x="5" y="11" width="14" height="10" rx="2"/><path d="M8 11V8a4 4 0 0 1 8 0v3"/></svg>';
 const TAB_ICONS: Record<Tab, string> = {
   quick: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M13 2 4 14h7l-1 8 9-12h-7z"/></svg>',
@@ -113,7 +117,7 @@ const field = (label: Key, body: string) => `<div class="frow">${L(label, 'span'
 /** The line under a big button: a status dot, what it will do, and the ping (or `tail` in its place). */
 const line = (id: string, tail = `<span class="ping" id="${id}-ping"></span>`) =>
   `<p class="rooms-line" id="${id}-line"><span class="conn"><i></i></span><span class="line-text" id="${id}-hint"></span>${tail}</p>`;
-/** "Server · Singapore · 110 ms ▾": which server the lobby shows; with a choice of servers it opens Settings on it. */
+/** "Server · Taipei · 30 ms ▾": which server the lobby shows; with a choice of servers it opens Settings on it. */
 const serverChip = (id: string) => `<button type="button" class="server-chip" id="${id}"${choosable ? ' aria-haspopup="dialog"' : ' disabled'} hidden></button>`;
 const deploy = (id: string, label: Key, right = '', title?: Key) =>
   `<button type="button" class="deploy" id="${id}"${title ? ` title="${t(title)}" data-i18n-title="${title}"` : ''} disabled><span class="deploy-l">${PLAY}<span class="deploy-t" data-label="${label}">${t('lobby.loading')}</span></span><span class="deploy-r">${right}</span></button>`;
@@ -140,15 +144,12 @@ menu.innerHTML = `
       <button type="button" class="tab" role="tab" id="tab-${id}" data-tab="${id}" aria-controls="view-${id}">${TAB_ICONS[id]}<span>${L(`tab.${id}`, 'b')}${L(`tab.${id}Sub`, 'small')}</span></button>`).join('')}
     </div>
 
-    <div class="wake" id="wake" hidden>
-      <div class="wake-say" role="status" aria-live="polite">
-        <b class="wake-head"><span class="conn wait" id="wake-dot"><i></i></span><span id="wake-title"></span></b>
-        <p id="wake-body"></p>
-        <p class="wake-note" id="wake-note" hidden></p>
+    <div class="unreachable" id="unreachable" hidden>
+      <div class="unreachable-say" role="status" aria-live="polite">
+        <b class="unreachable-head"><span class="conn down"><i></i></span><span id="unreachable-title"></span></b>
+        <p id="unreachable-body"></p>
       </div>
-      <div class="wake-meter" id="wake-meter" aria-hidden="true"><span class="wake-bar"><i id="wake-fill"></i></span><span class="wake-time" id="wake-time"></span></div>
-      <div class="wake-queued" id="wake-queued" hidden><span id="wake-queued-text"></span><button type="button" class="link" id="wake-cancel"></button></div>
-      <button type="button" class="sub wake-retry" id="wake-retry" hidden></button>
+      <button type="button" class="sub unreachable-retry" id="unreachable-retry"></button>
     </div>
 
     <div class="view" id="view-quick" role="tabpanel" aria-labelledby="tab-quick">
@@ -210,6 +211,8 @@ menu.innerHTML = `
   </section>
   <footer class="site-links" aria-label="${t('lobby.siteLinks')}" data-i18n-aria-label="lobby.siteLinks">
     <a href="${REPO_URL}" target="_blank" rel="noopener" title="${t('lobby.openSourceTitle')}" data-i18n-title="lobby.openSourceTitle">${GITHUB}${L('lobby.openSource')}</a>
+    <span class="dot" aria-hidden="true">·</span>
+    <a href="${aboutHref()}" id="about-link">${L('lobby.about')}</a>
     <span class="dot" aria-hidden="true">·</span>
     <a href="${privacyHref()}" id="privacy-link">${L('lobby.privacy')}</a>
   </footer>
@@ -310,50 +313,58 @@ if (!mapOk(map)) map = firstMap();
 
 // ---- Live rooms: a light subscription to the server's room rows while the lobby is open. ----
 /*
- * The server sleeps when nobody plays and boots on the next request (src/net/wake.ts). The wake
- * driver owns the rooms connection: it pings, connects, shows "waking" while the server boots and
- * gives up after 3 minutes. Play buttons pressed meanwhile are queued and run once it is up.
+ * The connection driver (src/net/connect.ts) owns the rooms connection: it pings and connects, and gives
+ * up (unreachable, Retry) after 30 s. Play buttons pressed meanwhile are queued and run once it is up.
  */
 /** A play action held until the server is up; `retried`: it already failed to reach the server once. */
 interface Queued { action: Action; room: number; retried: boolean }
 let rooms: PublicRoom[] = [];
 /** Pings and connects reach the chosen server (choosing another stops the driver and starts it again). */
-const wake = new WakeDriver<Queued>({
+const lobbyConn = new ConnectDriver<Queued>({
   ping: signal => { const url = server && pingUrl(server.uri); return url ? hostAnswers(url, signal) : Promise.resolve(false); },
   connect: lost => watchRooms(list => { rooms = list; refresh(); }, lost),
-}, s => onWake(s), q => run(q.action, q.room, q.retried));
-const phase = () => wake.state.phase;
-/** What the screen last showed of the wake state: a change redraws everything, a tick only the timer. */
-let wakeKey = '';
+}, s => onLobbyConn(s), q => run(q.action, q.room, q.retried));
+const phase = () => lobbyConn.state.phase;
+/** What the screen last showed of the connection state: a change redraws everything, a tick only the timer. */
+let connKey = '';
 /** "Server unreachable" is reported to analytics once per page, not on every attempt. */
 let unreachableReported = false;
-function onWake(s: WakeState<Queued>) {
+/** The lobby has been connected once on this page (a later connect is a reconnect after a drop). */
+let wasReady = false;
+function onLobbyConn(s: ConnectState<Queued>) {
   pings.setActive(pingOn && s.phase === 'ready');
-  const key = `${s.phase}|${s.hostUp}|${s.queued?.action ?? ''}`;
-  if (key === wakeKey) { renderWake(); renderQuick(); renderStart(); return; }
-  const [was, , queued] = wakeKey.split('|');
-  wakeKey = key;
+  const key = `${s.phase}|${s.queued?.action ?? ''}`;
+  if (key === connKey) { renderQuick(); renderStart(); return; }
+  const [was, queued] = connKey.split('|');
+  connKey = key;
   // A new attempt (or a dropped connection): the old room list is stale. (Stopping keeps it: the
   // room being joined stays on screen while the game connects.)
   if (s.phase !== was && s.phase !== 'ready' && s.phase !== 'idle') rooms = [];
-  if (s.phase === 'ready' && was !== 'ready' && s.woke) track('server_woke', { seconds: wakeSeconds(s, performance.now()), queued: !!queued });
+  if (s.phase === 'ready' && was !== 'ready' && (s.slow || s.failures > 0)) {
+    const tm = lobbyConn.timings;
+    track('connect_slow', {
+      seconds: connectSeconds(s, performance.now()), queued: !!queued, failures: s.failures, reconnect: wasReady,
+      ...(tm.pingMs !== undefined ? { ping_ms: tm.pingMs, ping_ok: !!tm.pingOk } : {}),
+      ...(tm.connectMs !== undefined ? { connect_ms: tm.connectMs } : {}), ...(tm.importMs !== undefined ? { import_ms: tm.importMs } : {}),
+    });
+  }
+  if (s.phase === 'ready') wasReady = true;
   if (s.phase === 'unreachable' && !unreachableReported) { unreachableReported = true; track('error_shown', { where: 'rooms', message: 'server unreachable' }); }
   refresh();
 }
 function watchLobbyRooms() {
   if (!online.ok || benchMode) { refresh(); return; }
   // A server chosen during a match applies now.
-  if (followServer()) wake.stop();
-  wake.start();
+  if (followServer()) lobbyConn.stop();
+  lobbyConn.start();
   refresh();
 }
-/** Analytics super properties for the lobby's server: its database, host and the choice (sg/us). */
+/** Analytics super properties for the lobby's server: its database, host and the choice (tw/us). */
 const serverProps = () => ({
   online_db: online.ok ? server?.database ?? '' : '', server_host: online.ok && server ? serverHost(server.uri) : '', server_choice: server?.id ?? '',
 });
 /**
- * The lobby follows the chosen server: pings (the old server is no longer pinged, which would keep
- * it awake), the room list, the chips and the analytics super properties. True when it changed.
+ * The lobby follows the chosen server: pings (the old server is no longer pinged), the room list, the chips and the analytics super properties. True when it changed.
  */
 function followServer() {
   const next = currentServer();
@@ -367,32 +378,32 @@ function followServer() {
 }
 /**
  * A server chosen in Settings: in the lobby, the room list, chips and ping switch at once, and the
- * new server is woken if it sleeps (a play action waiting for the old one is dropped). In a match,
+ * new server is woken if it scales to zero (a play action waiting for the old one is dropped). In a match,
  * or while joining one, the lobby picks it up when it is back on screen.
  */
 onServer(() => {
   if (game || starting || !inMenu) return;
   const watching = phase() !== 'idle';
   if (!followServer()) return;
-  wake.stop();
+  lobbyConn.stop();
   if (watching) watchLobbyRooms(); else refresh();
 });
 function unwatchRooms() {
-  wake.stop();
+  lobbyConn.stop();
   pings.setActive(false);
 }
 /**
- * A lobby left in a background tab lets the server sleep (an open connection keeps it awake, and
- * that costs money): after 5 minutes hidden it disconnects, and on coming back it reconnects,
- * waking the server if need be. Not while a play action waits for the server.
+ * A lobby left in a background tab lets go of the server: after 5 minutes hidden it disconnects, and
+ * on coming back it reconnects with a fresh socket (a phone's may have died meanwhile), and a lobby nobody is
+ * looking at holds no connection. Not while a play action waits.
  */
-const LET_SLEEP_HIDDEN_MS = 5 * 60_000;
+const HIDDEN_LOBBY_MS = 5 * 60_000;
 let hiddenTimer: ReturnType<typeof setTimeout> | undefined;
 document.addEventListener('visibilitychange', () => {
   clearTimeout(hiddenTimer);
   if (!online.ok || benchMode || !inMenu) return;
   if (document.visibilityState === 'hidden') {
-    hiddenTimer = setTimeout(() => { if (inMenu && document.visibilityState === 'hidden' && !wake.state.queued) unwatchRooms(); }, LET_SLEEP_HIDDEN_MS);
+    hiddenTimer = setTimeout(() => { if (inMenu && document.visibilityState === 'hidden' && !lobbyConn.state.queued) unwatchRooms(); }, HIDDEN_LOBBY_MS);
   } else if (phase() === 'idle') watchLobbyRooms();
 });
 
@@ -402,7 +413,7 @@ const pingOn = online.ok && !benchMode && pingAllowed(location.search);
 if (pingOn) pings.track(server?.uri);
 /**
  * Every server choice's ping beside it in Settings: measured only while that dialog is open in the
- * lobby. (US East never sleeps; a sleeping Singapore server wakes for it while the dialog is open.)
+ * lobby.
  */
 const choicePings = new PingMonitor(() => options.refreshPings());
 if (pingOn && choosable) for (const s of gameServerList()) choicePings.track(s.uri);
@@ -412,14 +423,13 @@ function pingHtml(uri: string | undefined) {
   return ms === undefined ? '—' : `${ms}<small> ms</small>`;
 }
 const pingClass = (uri: string | undefined) => { const ms = pings.get(uri); return `ping${ms === undefined ? '' : ` ${pingTone(ms)}`}`; };
-/** The chosen server by its name in Settings ("Singapore", "US East", "Dev server"); any other by its region. */
+/** The chosen server by its name in Settings ("Taipei", "US East", "Dev server"); any other by its region. */
 const serverName = (uri: string) => server && uri === server.uri ? t(server.label) : serverRegion(uri);
 const pingTitle = (uri: string | undefined) => uri ? t('server.pingTitle', { server: serverName(uri), n: PING_WINDOW }) : '';
-/** "Server · Singapore · 110 ms ▾" for the chips; "Server · Singapore · waking" while it boots. */
+/** "Server · Taipei · 30 ms ▾" for the chips; "unreachable" instead of the ping when the server cannot be reached. */
 function chipHtml(uri: string) {
   const ms = pings.get(uri), p = phase();
-  const value = p === 'waking' ? `<span class="ping waking">${esc(t('wake.chip'))}</span>`
-    : p === 'unreachable' ? `<span class="ping">${esc(t('wake.downChip'))}</span>`
+  const value = p === 'unreachable' ? `<span class="ping">${esc(t('connect.downChip'))}</span>`
     : `<span class="${pingClass(uri)}">${ms === undefined ? '—' : esc(t('server.ms', { n: ms }))}</span>`;
   return `<span class="server-word">${esc(t('server.label'))} · </span>${esc(serverName(uri))} · ${value}${choosable ? CARET : ''}`;
 }
@@ -428,7 +438,7 @@ function renderPings() {
   menu.querySelectorAll<HTMLElement>('#rooms [data-ping], #quick-rooms [data-ping]').forEach(el => { el.className = pingClass(el.dataset.ping); el.innerHTML = pingHtml(el.dataset.ping); });
   const live = pingOn && !!server && phase() === 'ready';
   // The chips show from the first connection attempt (so the server can be changed meanwhile) and
-  // say when the server is waking (or could not be reached), never an error.
+  // say when the server could not be reached, never an error.
   const chips = pingOn && !!server && phase() !== 'idle';
   for (const chip of [$('#rooms-server'), $('#quick-server')]) {
     chip.hidden = !chips;
@@ -505,61 +515,42 @@ function renderTabs() {
   menu.dataset.tab = tab;
 }
 
-/** The queued action (pressed while the server wakes), if any. */
-const queuedAction = () => wake.state.queued?.action;
-/** A big button's label: loading, the action under way, waiting for the server, or its name. It stays usable while the server wakes. */
+/** The queued action (pressed before the server answered), if any. */
+const queuedAction = () => lobbyConn.state.queued?.action;
+/** A big button's label: loading, the action under way, waiting for the server, or its name. It stays usable while connecting. */
 function renderDeploy(btn: HTMLButtonElement, action: Action, busyText: string, enabled: boolean) {
   const label = btn.querySelector<HTMLElement>('.deploy-t')!;
   const queued = queuedAction() === action;
-  label.textContent = !ready ? loadingText() : starting === action ? busyText : queued ? t('wake.waiting') : t(label.dataset.label as Key);
+  label.textContent = !ready ? loadingText() : starting === action ? busyText : queued ? t('connect.waiting') : t(label.dataset.label as Key);
   btn.disabled = !ready || !!starting || !enabled;
   btn.classList.toggle('queued', queued && !starting);
 }
 
-/** The status dot and text under a big button: connecting, waking (or waiting to join), unreachable, or what it will do. */
+/** The status dot and text under a big button: connecting (or waiting to join), unreachable, or what it will do. */
 function renderLine(id: string, action: Action, liveText: string) {
   const el = $(`#${id}-line`);
   el.hidden = !online.ok;
   if (!online.ok) return;
   const p = phase();
   const [state, text] = p === 'ready' ? ['live', liveText]
-    : p === 'waking' ? ['wait', queuedAction() === action ? t('wake.queued') : t('wake.line', { n: wakeSeconds(wake.state, performance.now()) })]
-    : p === 'unreachable' ? ['down', t('wake.downHead')]
-    : ['wait', queuedAction() === action ? t('wake.queued') : t('lobby.connecting')];
+    : p === 'unreachable' ? ['down', t('connect.downHead')]
+    : ['wait', queuedAction() === action ? t('connect.queued') : t('lobby.connecting')];
   el.querySelector('.conn')!.className = `conn ${state}`;
   el.title = p === 'ready' ? t('lobby.liveTitle', { db: server?.database ?? 'online' }) : '';
   setText($(`#${id}-hint`), text);
 }
 
-/** Text that only changes when it differs (the waking timer redraws every second; live regions should not re-announce). */
+/** Text that only changes when it differs (live regions should not re-announce). */
 function setText(el: HTMLElement, text: string) { if (el.textContent !== text) el.textContent = text; }
 
-/**
- * The waking card over the tabs' views: the server is asleep (not down), the time so far and a bar,
- * the queued play action with Cancel; after 3 minutes, "Can't reach the server" with Retry.
- */
-function renderWake() {
-  const box = $('#wake'), s = wake.state, p = s.phase;
-  box.hidden = !online.ok || (p !== 'waking' && p !== 'unreachable');
+/** The card over the tabs' views when the server cannot be reached (after 30 s of trying): "Can't reach the server" with Retry. */
+function renderUnreachable() {
+  const box = $('#unreachable');
+  box.hidden = !online.ok || phase() !== 'unreachable';
   if (box.hidden) return;
-  const down = p === 'unreachable';
-  const secs = wakeSeconds(s, performance.now());
-  box.classList.toggle('down', down);
-  $('#wake-dot').className = `conn ${down ? 'down' : 'wait'}`;
-  setText($('#wake-title'), t(down ? 'wake.downHead' : 'wake.head'));
-  setText($('#wake-body'), t(down ? 'wake.downBody' : 'wake.body'));
-  // The machine answers but the database is still loading; or it is slower than usual.
-  const note = down ? '' : s.hostUp ? t('wake.loading') : secs >= 60 ? t('wake.slow') : '';
-  $('#wake-note').hidden = !note;
-  setText($('#wake-note'), note);
-  $('#wake-meter').hidden = down;
-  ($('#wake-fill') as HTMLElement).style.width = `${(wakeProgress(secs * 1000) * 100).toFixed(1)}%`;
-  setText($('#wake-time'), t('wake.elapsed', { n: secs }));
-  $('#wake-queued').hidden = down || !s.queued;
-  setText($('#wake-queued-text'), t('wake.queued'));
-  setText($('#wake-cancel'), t('wake.cancel'));
-  $('#wake-retry').hidden = !down;
-  setText($('#wake-retry'), t('wake.retry'));
+  setText($('#unreachable-title'), t('connect.downHead'));
+  setText($('#unreachable-body'), t('connect.downBody'));
+  setText($('#unreachable-retry'), t('connect.retry'));
 }
 
 /** QUICK PLAY: where it would put you (or that it opens a 6v6 with bots) beside the server chip, and every live room to pick from. */
@@ -609,7 +600,7 @@ function roomTotals() {
 
 /**
  * A live room list: fixed-height rows, each with its ping and JOIN (Join a Server's filtered list,
- * Quick Play's full one). Without rooms it says why: no server, waking (Retry after 3 minutes),
+ * Quick Play's full one). Without rooms it says why: no server, unreachable (Retry),
  * connecting, else `none`. `target` marks the room Quick Play would put you in.
  */
 function renderRoomRows(list: HTMLElement, shown: PublicRoom[], none: string, target?: PublicRoom) {
@@ -619,10 +610,9 @@ function renderRoomRows(list: HTMLElement, shown: PublicRoom[], none: string, ta
   const focusRoom = focused && list.contains(focused) ? focused.dataset.joinroom : undefined;
   if (!shown.length) {
     const p = phase();
-    // While the server wakes the list says so (never an empty box); after 3 minutes it offers Retry.
+    // The list always says why it is empty (never an empty box); an unreachable server offers Retry.
     const html = !online.ok ? `<div class="empty">${esc(t('lobby.noServer'))}</div>`
-      : p === 'waking' ? `<div class="empty waking"><p><span class="conn wait"><i></i></span>${esc(t('wake.rooms'))}</p><small>${esc(t('wake.roomsSub'))}</small></div>`
-      : p === 'unreachable' ? `<div class="empty"><p>${esc(t('wake.downHead'))}</p><button type="button" class="sub" data-wake-retry>${esc(t('wake.retry'))}</button></div>`
+      : p === 'unreachable' ? `<div class="empty"><p>${esc(t('connect.downHead'))}</p><button type="button" class="sub" data-unreachable-retry>${esc(t('connect.retry'))}</button></div>`
       : p !== 'ready' ? `<div class="empty">${esc(t('lobby.connecting'))}</div>`
       : none;
     // (Unchanged markup is left alone, so a focused Retry keeps its focus.)
@@ -709,7 +699,7 @@ function renderOthers() {
 function refresh() {
   renderBrand();
   renderTabs();
-  renderWake();
+  renderUnreachable();
   renderQuick();
   renderStart();
   renderJoin();
@@ -772,9 +762,8 @@ onClick('team', v => { team = v; select('teams', 'team', team); });
 onClick('skill', v => { skill = v; select('skills', 'skill', skill); });
 onClick('joinroom', v => run('room', Number(v)));
 onClick('coderoom', v => askRoomCode(Number(v)));
-onClick('wake-retry', () => wake.retry());
-$('#wake-retry').addEventListener('click', () => { audio.ui(); wake.retry(); });
-$('#wake-cancel').addEventListener('click', () => { audio.ui(); wake.cancel(); });
+onClick('unreachable-retry', () => lobbyConn.retry());
+$('#unreachable-retry').addEventListener('click', () => { audio.ui(); lobbyConn.retry(); });
 roomCode.addEventListener('input', () => { roomCode.value = cleanCode(roomCode.value); renderJoin(); });
 $('#quick-go').addEventListener('click', () => { audio.ui(); run('quick'); });
 $('#start-go').addEventListener('click', () => { audio.ui(); run('start'); });
@@ -963,6 +952,7 @@ onLang(next => {
   track('language_changed', { to: next }, { set: { lang: next } });
   applyI18n(menu);
   $<HTMLAnchorElement>('#privacy-link').href = privacyHref();
+  $<HTMLAnchorElement>('#about-link').href = aboutHref();
   $('#quick-maps').dataset.key = '';
   if (benchPanel) { benchPanel.remove(); if (benchResult) showBenchResult(benchResult); }
   refresh();
@@ -1083,8 +1073,16 @@ function acceptChallenge() {
 /** In a challenge's match: the end screen names the challenger; a room nobody else is in falls back to the bot double. */
 function startedDuel(duel: Duel, link: GameLink) {
   if (duel.kind === 'host') {
-    const code = link.roomInfo?.()?.code;
-    if (code) void game?.share({ summary: duel.summary, room: code });
+    // The room's code arrives a moment after the join (its own subscription): wait for it, so the dialog always opens.
+    const hosting = game;
+    let tries = 0;
+    const open = () => {
+      if (game !== hosting) return;
+      const code = link.roomInfo?.()?.code;
+      if (code) void game?.share({ summary: duel.summary, room: code });
+      else if (++tries < 40) setTimeout(open, 250);
+    };
+    open();
     return;
   }
   const ref = duel.c.ref ?? '';
@@ -1110,7 +1108,7 @@ function openDuelRoom(summary: MatchSummary) {
 }
 
 /**
- * Run one way in. An online one pressed while the server is still waking is queued: it runs by
+ * Run one way in. An online one pressed while the server is still connecting is queued: it runs by
  * itself once the server is up (`retried`: it already failed to reach the server once).
  */
 function run(action: Action, room = -1, retried = false) {
@@ -1119,15 +1117,16 @@ function run(action: Action, room = -1, retried = false) {
   if (action === 'code' && roomCode.value.length < 4) { roomCode.focus(); return; }
   // Still on the lobby's made-up callsign: ask for a name first, then play from that same tap.
   if (needsCallsign()) {
+    track('callsign_asked', {});
     askCallsign(callsign.value, name => { callsign.value = name; store.set('name', name); run(action, room, retried); });
     return;
   }
   if (modeOf(action) === 'online' && phase() !== 'ready') {
     // Still inside the tap: full screen now, as starting would (a queued start runs without a gesture).
     fullscreenForTouch();
-    // (A lobby that let the server sleep in a background tab reconnects first.)
+    // (A lobby that let go of the server in a background tab reconnects first.)
     if (phase() === 'idle') watchLobbyRooms();
-    wake.queue({ action, room, retried });
+    lobbyConn.queue({ action, room, retried });
     return;
   }
   if (action === 'room' && !rooms.some(r => r.room === room)) return;
@@ -1211,12 +1210,12 @@ async function start(action: Action, retried = false) {
     const room = joiningRoom;
     starting = undefined; joiningRoom = -1;
     inMenu = !benchMode; menuMusic();
-    // The server could not be reached (it fell asleep under a lobby that still looked connected,
-    // after a laptop slept say): wake it and join once it is up. Only once: a second failure is shown.
+    // The server could not be reached (the network dropped under a lobby that still looked connected,
+    // after a laptop slept say): try again and join once it is up. Only once: a second failure is shown.
     if (error instanceof ConnectError && via === 'online' && !retried && !benchMode) {
       status.textContent = '';
       watchLobbyRooms();
-      wake.queue({ action, room, retried: true });
+      lobbyConn.queue({ action, room, retried: true });
       return;
     }
     status.textContent = t('lobby.couldNotJoin', { error: serverError((error as Error).message) });
@@ -1231,7 +1230,7 @@ async function start(action: Action, retried = false) {
   status.textContent = '';
   if (backdrop) { renderer.scene.remove(backdrop.group); backdrop = undefined; backdropMap = undefined; }
   launch(link, linkMap);
-  joined(link, linkMap, playServer);
+  joined(link, linkMap, playServer, false, duel?.kind === 'host');
   matchServer = playServer;
   if (duel) startedDuel(duel, link);
   // The map's own files have loaded by now: cache them too on a first visit.
@@ -1245,7 +1244,8 @@ async function start(action: Action, retried = false) {
 
 function launch(link: GameLink, map: string) {
   game = new Game(assets, renderer, link, map, audio, app);
-  if (online.ok && !benchMode) game.onDuel(openDuelRoom);
+  // 約朋友單挑: our own 1v1 room where online play is available, else a challenge link the bot double answers.
+  if (!benchMode) game.onDuel(online.ok ? openDuelRoom : undefined);
   if (benchMode && !bench) startBench(game);
   game.onMapChange = next => { game?.stop(true); launch(link, next); };
   game.onExit = how => backToLobby('menu', '', how);
@@ -1274,12 +1274,12 @@ function playContext() {
 onSideways(on => { if (on && game) matchNote('sideways'); });
 
 /** Analytics: we are in a match (once per link; online map rotations keep the same session). */
-function joined(link: GameLink, map: string, serverChoice: ServerId | undefined, rejoin = false) {
+function joined(link: GameLink, map: string, serverChoice: ServerId | undefined, rejoin = false, hosted = false) {
   const state = link.state(), me = state?.soldiers.find(s => s.id === link.myId());
   const config = state?.config;
   const info = link.roomInfo?.();
   matchJoined({
-    online: link.mode === 'online', ...(info ? { room: info.code || `public-${info.room}` } : {}), map,
+    online: link.mode === 'online', ...(info ? { room: info.code || `public-${info.room}`, private: !!info.code } : {}), ...(hosted ? { hosted: true } : {}), map,
     mode: config?.mode ?? 'elimination', size: config?.practice ? 'practice' : sizeLabel(config?.teamSize ?? perTeam()), team: me?.team === 1 ? 'militia' : 'swat',
     ...(serverChoice ? { server_choice: serverChoice } : {}), device: currentDeviceKind(), ...(rejoin ? { rejoin: true } : {}),
     // How it is played (phones): touch, an upright screen (the match then turns sideways), which app's browser, aim assist.
@@ -1297,7 +1297,7 @@ function joined(link: GameLink, map: string, serverChoice: ServerId | undefined,
 }
 
 /** Tries to reconnect, waiting for the page to be visible first (a backgrounded app cannot connect). */
-const REJOIN_TRIES = 3;
+const REJOIN_TRIES = 5;
 const visible = () => new Promise<void>(resolve => {
   if (document.visibilityState === 'visible') { resolve(); return; }
   const on = () => { if (document.visibilityState === 'visible') { document.removeEventListener('visibilitychange', on); resolve(); } };
@@ -1326,7 +1326,7 @@ async function rejoinAfterDrop(old: OnlineLink) {
         const team = old.entry.team === 0 || old.entry.team === 1 ? old.entry.team as Team : undefined;
         const link = await connectOnline(old.entry.name, team, how, () => undefined);
         if (game !== playing) { link.dispose(); return; }
-        leftMatch('disconnect', 'lost');
+        leftMatch('disconnect', 'rejoined');
         playing.stop(); game = undefined;
         const map = link.state()?.mapId ?? playing.mapId;
         launch(link, map);
@@ -1509,7 +1509,7 @@ async function boot() {
   let simNow = 0;
   /** Advance n fixed frames (capture mode). Returns once the frames are rendered. */
   const stepFrames = (n: number, render = true) => { for (let i = 0; i < n; i++) { simNow += 1000 / 30; step(1 / 30, simNow, render && i === n - 1); } return n; };
-  // An online ?autostart waits for a sleeping server like a pressed button does.
+  // An online ?autostart waits for the connection like a pressed button does.
   const startNow = () => { const action = startAction(); return modeOf(action) === 'online' ? run(action) : start(action); };
   if (params.get('autostart') || benchMode) void startNow();
   if (import.meta.env.DEV) Object.assign(window, { __lb: { get game() { return game; }, get bench() { return bench; }, renderer, assets, step: stepFrames, start: startNow } });

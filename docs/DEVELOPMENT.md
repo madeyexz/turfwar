@@ -38,9 +38,9 @@ Lobby URL flags: `?tab=quick|start|join` (the open tab), `?mode=offline|online|l
 starts: Solo, Quick Play or Practice), `&game=elimination|sabotage`, `&size=duel|squad|war` and `&map=<id>`
 (the Start a Server form; a 24v24 map picks 24v24 unless `size` says otherwise), `&room=CODE` (opens Join a
 server with the code filled in; with `autostart` joins it), `&team=0|1|auto`, `&skill=0.25…0.75`, `&name=…`,
-`&autostart=1`, `&server=sg|us` (the game server for this visit; Settings → Server saves a choice).
+`&autostart=1`, `&server=tw|us` (the game server for this visit; Settings → Server saves a choice).
 單挑我 challenge links (`src/game/challenge.ts`): `?c=1&ch=<callsign>&map=<id>&beat=<kills>&ref=<share code>`
-and `&room=CODE` when the challenger opened a private 1v1 room. The lobby shows 「<callsign> 向你下戰帖！」; accepting joins
+and `&room=CODE` when the challenger opened a private 1v1 room, plus `&utm_source=share|challenge|duel&utm_medium=share_card` (`tagLink`; unknown parameters never change what the link opens). The lobby shows 「<callsign> 向你下戰帖！」; accepting joins
 the room, or plays a Solo 1v1 on that map against a bot named after the challenger when there is no room or it is
 gone, full or empty. `?classic=1` turns off the 藍白拖 knife reskin (`src/game/memeskins.ts`, `DEFAULT` there
 turns it off for everyone).
@@ -115,22 +115,23 @@ preview wired to the development database `lawbreaker-dev`. Releases are maintai
 | Use | Server | Database |
 | --- | --- | --- |
 | Production, the default | SpacetimeDB 2.10.2 self-hosted on **GCP, Taiwan** (`asia-east1-b`, `wss://tw.turfwar.ianhsiao.me`) | `turfwar` |
-| Singapore (production before Taipei; a choice in Settings → Server) | SpacetimeDB 2.10.2 self-hosted on **InstaCloud, Singapore** (`wss://play.turfwar.ianhsiao.me`) | `turfwar` |
 | US East (the previous production; still published, a choice in Settings → Server, read by `/admin`) | Maincloud, US East | `3d-game-c4lhd` |
 | Development (`dev` previews) | Maincloud, US East | `lawbreaker-dev` |
 
-Players pick their server in **Settings → Server** (`src/net/servers.ts`; `?server=tw|sg|us` for one
-visit): Taipei, the build's own server and the default; Singapore; or US East, where players from
-before Singapore keep their saved identity and career. Taipei began on 2026-10-07 as a copy of
-Singapore, signing keys included, so a player has one identity on both (the client keys both
-servers' saved token alike) and kept their career; from then on each server keeps its own stats.
+Players pick their server in **Settings → Server** (`src/net/servers.ts`; `?server=tw|us` for one
+visit): Taipei, the build's own server and the default; or US East, where players from before
+Singapore keep their saved identity and career. A `sg` saved in a browser (from when Singapore was a
+choice) silently falls back to the default and is rewritten, and `?server=sg` is ignored (`?stdb=` /
+`?db=` can still point a build at any server, for development). Taipei began on 2026-10-07 as a copy
+of Singapore, signing keys included, so a player's identity is the same on Taipei; each server keeps
+its own stats.
 The lobby switches at once, a match in progress stays on its server, and `play_clicked` /
 `match_joined` carry `server_choice`. A `dev` preview's own server is `lawbreaker-dev` (offered with
-US East, not Singapore).
+US East).
 
 The Taipei server (`deploy/gcp-taipei/`, GCP project `game-turfwar-ianhsiao-me`, VM `turfwar-tw`, an
-e2-small with 2 GB of swap and a 20 GB disk, static IP 34.81.41.144) runs the same container as
-Singapore (`deploy/instacloud/Dockerfile`, with `start.sh`'s pruning) on `/var/lib/turfwar`, behind
+e2-small with 2 GB of swap and a 20 GB disk, static IP 34.81.41.144) runs the container built from
+`deploy/instacloud/Dockerfile` (with `start.sh`'s pruning) on `/var/lib/turfwar`, behind
 Caddy (HTTPS from Let's Encrypt for `tw.turfwar.ianhsiao.me`, a Cloudflare DNS-only A record, and
 `34-81-41-144.sslip.io`). It is always on (no scale-to-zero): roughly US$18–20 a month plus
 traffic, under the project's NT$1000 budget alert. Request round trip from Taipei ~12–35 ms
@@ -141,17 +142,12 @@ The disk has a daily snapshot schedule (`turfwar-daily`, 19:00 UTC, kept 7 days)
 before risky work with `gcloud compute disks snapshot turfwar-tw --zone asia-east1-b`. `setup.sh` leaves
 the image built; `sudo docker builder prune -af && sudo docker image prune -af` frees the build layers.
 
-The Singapore server (`deploy/instacloud/`, InstaCloud project `5ad5aa00-…`, compute service `stdb`)
-is a slim container with SpacetimeDB's two binaries and a 10 GiB `/data` volume. It **scales to zero**:
-with no traffic it suspends (or stops), and the next request wakes it, ~2 s from a suspend; the
-lobby shows a "waking up" state meanwhile. Traffic on an already-open WebSocket does not count as
-activity (only requests through the router do), and a match runs entirely on one, so the platform
-used to suspend the server mid-match, 5–13 minutes in, dropping everyone (2026-10-07). Since then a
-client in a room requests `/v1/ping` once a minute (`keepAwake` in `src/net/ping.ts`); it stops once
-the player is out of the room, so the server still sleeps when nobody plays. The lobby pings every
-4 s while visible. With the data volume attached, idle means a stop rather than a suspend, so a wake
-takes ~20–30 s. `cd deploy/instacloud && insta --agent compute logs stdb --deploy` lists the
-platform's suspends and wakes. `start.sh` supervises the server: SpacetimeDB never
+Singapore (InstaCloud, production before Taipei) was retired and deleted on 2026-10-11, and its data is gone.
+The game has no code for a sleeping or stopped server: every server it offers is always on, so a
+failed ping or connect is just "can't reach it" (normal "connecting" copy, retries for 30 s, then
+"Can't reach the server" with Retry; `src/net/connect.ts`). The Taipei container is built from
+`deploy/instacloud/` (a slim image with SpacetimeDB's two binaries; the folder keeps its old name).
+`start.sh` supervises the server: SpacetimeDB never
 deletes its commitlog (100 players write ~12 GB an hour, ~3x smaller once sealed), so once the data
 passes 4 GB and nothing has been written for 2 minutes it restarts the server around
 `prune-commitlog.sh` (a few seconds), and past 8 GB it does so even mid-match. Measured before
@@ -159,27 +155,25 @@ launch: 100 headless players in nine 6v6 rooms held 30 ticks/s; reducer round tr
 ~112 ms (Maincloud ~206 ms); ~21 KB/s down per player.
 
 The owner identity lives outside the repo in `~/.config/turfwar/` (made once with
-`deploy/instacloud/owner.sh <server-url>`, in its own CLI profile so the Maincloud login is untouched;
-its servers `taipei` and `instacloud`). Back that folder up: the identity that published `turfwar`
-is the only one that can update it, on Taipei and Singapore alike.
-To rebuild or reconfigure the container: `cd deploy/instacloud && insta --agent deploy . --group stdb --port 8080 --websocket`.
+`deploy/instacloud/owner.sh <server-url>`, in its own CLI profile `instacloud-cli.toml` so the Maincloud
+login is untouched; its server `taipei` is added by `deploy/publish-prod.sh`). Back that folder up: the
+identity that published `turfwar` is the only one that can update it. To rebuild or reconfigure the
+container, see `deploy/gcp-taipei/` above.
 
 Vercel production build variables are `VITE_SPACETIMEDB_URI=wss://tw.turfwar.ianhsiao.me` (Taipei) and
-`VITE_SPACETIMEDB_DATABASE=turfwar`; Singapore's address is in the code (`SINGAPORE` in `src/net/servers.ts`).
-Singapore's custom domain went live on 2026-10-07 (check it with
-`cd deploy/instacloud && insta --agent domain check play.turfwar.ianhsiao.me --group stdb`). The platform's own
-`wss://prod-main-stdb-2b7636-205bvw6d002.compute.instacloud-edge.com` reaches the same server; the client keys
-saved identities by server (`serverIdentityKey` in `src/net/ping.ts`), so either hostname keeps every player.
+`VITE_SPACETIMEDB_DATABASE=turfwar`. The client keys saved identities by server (`serverIdentityKey` in
+`src/net/ping.ts`; the key is still named `instacloud-singapore`, because Taipei took over Singapore's
+identities), so both of Taipei's hostnames (`tw.turfwar.ianhsiao.me` and its sslip.io name) keep every player.
 `scripts/wsping.ts` measures the round trip but registers a `probe` player (its `hello`): delete that row after
 running it against production. Do not use `same-origin` on Vercel; that proxy exists only in the
 development server.
 
 For module updates, run tests and module type checks, then publish non-destructively to production
-(Taipei, then Singapore, woken first, then the legacy Maincloud database):
+(Taipei, then the legacy Maincloud database; `deploy/publish-prod.sh`):
 
 ```sh
 bun run test && bun run build && bun run typecheck:module
-bun run publish:prod                 # or: bun run publish:prod -- tw   (Taipei only; -- sg: Singapore only)
+bun run publish:prod                 # or: bun run publish:prod -- tw   (Taipei only)
 ```
 
 The dev database is published by hand:
@@ -193,7 +187,7 @@ Verify the production URL and two separate Online clients after each release.
 ### Orb credentials
 
 Amp orbs get the deploy credentials as Amp secrets. `.agents/setup` installs the clients (bun
-dependencies, `spacetime` 2.10.2, `insta`) into the shared snapshot, which never holds a credential;
+dependencies, `spacetime` 2.10.2) into the shared snapshot, which never holds a credential;
 `.agents/resume` logs them in from the secrets each time an orb starts. A missing secret just skips
 its tool. Releases still need the owner's go-ahead (see AGENTS.md).
 
@@ -203,15 +197,21 @@ its tool. Releases still need the owner's go-ahead (see AGENTS.md).
 | `TURFWAR_OWNER_TOKEN` | personal | `~/.config/turfwar/instacloud-cli.toml`, so `bun run publish:prod` works unchanged |
 | `TURFWAR_TW_SSH_KEY` | personal | `ssh turfwar-tw` (user `amp`, sudo, instance metadata of VM `turfwar-tw`) |
 | `VERCEL_TOKEN`, `VERCEL_ORG_ID`, `VERCEL_PROJECT_ID` | project | not set (optional): `bunx vercel ls` and friends, no login or link needed. Without them, `gh api repos/madeyexz/turfwar/deployments` lists preview URLs |
-| `INSTA_TOKEN` | project | `insta login --api-key`; run `insta project link 5ad5aa00-045d-4015-bdbd-ef74f558dec6` in `deploy/instacloud` once per orb before `insta --agent …`. The current key is an account-wide agent key from `insta login --claim ian.xiao@hotmail.com` (the owner approves a code). Agents may not mint keys; a project-only one comes from a normal terminal: `insta tokens create amp-orb-turfwar --project 5ad5aa00-045d-4015-bdbd-ef74f558dec6 --expires 1y` |
 | `TURFWAR_ADMIN_KEY` | project | the `/admin` login |
 | `POSTHOG_PERSONAL_API_KEY` | project | read-only queries on PostHog project 649207 |
 
 Set or rotate one with `amp secrets set NAME --user|--project ianhsiao/turfwar --secret --data-file -`
 (value on stdin), or in Amp Settings; never paste a value into a thread. Read-only checks: `spacetime list
 --server maincloud`, `spacetime --config-path ~/.config/turfwar/instacloud-cli.toml login show`,
-`ssh turfwar-tw 'sudo docker ps'`, `bunx vercel ls`, `insta status`, and
+`ssh turfwar-tw 'sudo docker ps'`, `bunx vercel ls`, and
 `curl -H "Authorization: Bearer $POSTHOG_PERSONAL_API_KEY" https://us.posthog.com/api/projects/649207/`.
+
+## Search and AI-answer visibility
+
+`/about` and `/en/about` (static pages, built like `/privacy`), the head tags and JSON-LD in `index.html`,
+`public/robots.txt`, `sitemap.xml`, `llms.txt`, `llms-full.txt` and the previews in `public/og/` (`bun tools/og/make.ts`)
+make the game findable and correctly described; `src/seo.test.ts` checks them. What was done, how to verify it,
+the keyword list and the owner's checklist (Search Console, Bing Webmaster Tools, mentions) are in [SEO.md](SEO.md).
 
 ## Players, analytics and the admin page
 
@@ -225,10 +225,10 @@ whenever what is collected changes. These answer "how many players, and from whe
   recordings are off; `$pageview` / `$pageleave` stay on; Do Not Track is respected; PostHog derives
   the country from the IP on its side. Events: `lobby_view`, `play_clicked`, `match_joined`,
   `match_left` (also on tab close, by beacon; `exit` says how: `menu_button`, `end_screen`, `leave_key`,
-  `removed`, `lost` or `close`), `round_ended`, `vehicle_entered`, `store_purchase`,
-  `language_changed`, `error_shown`, `server_woke`, `net_sample`, `client_error` (the page's own failures:
-  uncaught errors, promises nobody caught and a lost WebGL context, at most 5 a page, `src/errors.ts`), with super properties `lang`, `app_version` (git SHA),
-  `online_db` and `screen`. Online, the person property `stdb_identity` links a PostHog person to
+  `removed`, `lost` (the connection dropped and the room could not be rejoined), `rejoined` (it dropped and we came straight back to the same room; `lost` counted these too until 2026-10-11) or `close`), `round_ended`, `vehicle_entered`, `store_purchase`,
+  `share_card_opened` / `share_card_shared` (`method`: `native` card + link through the share sheet, `link` link only through it, `copy`, `download`), `duel_clicked` (約朋友單挑, `via` `room` or `link`), `challenge_link_opened` / `challenge_started` / `challenge_completed`, `callsign_asked` (a new player was asked for a callsign; `play_clicked` follows only when they answer), `language_changed`, `error_shown`, `connect_slow` (the lobby's connection took over 6 s or needed a retry after a failed ping or connect: `seconds`, `queued`, `failures`, `reconnect` and the split of the wait, `ping_ms`/`ping_ok` (first ping), `connect_ms`, `import_ms` (SDK chunk load). Until 2026-10-12 this was called `server_woke` and the lobby also showed an "asleep" screen for it; Singapore is gone from the game, so the event and screen are gone. The first week's ~920 `server_woke` events are therefore slow connects, almost all on Taipei, which is always on, plus 7 Oct's real Singapore wake-ups, and a query for the whole period should read both names), `net_sample`, `client_error` (the page's own failures:
+  uncaught errors, promises nobody caught and a lost WebGL context, at most 5 a page, `src/errors.ts`; a "Script error." the browser gives no details of is sent once a page apart from those 5, with `source: opaque`, `uptime_s`, `standalone` and `visible`), (`match_joined` also says `private` (the room has a code) and `hosted` (we opened it with 約朋友單挑); rooms that found an opponent: hosted `room` codes with a second person's `match_joined` on the same code), with super properties `lang`, `app_version` (git SHA),
+  `online_db`, `screen` and (`src/visit.ts`, `src/game/device.ts`) `in_app` (the app whose built-in browser it is: Threads, Instagram, Messenger, Facebook, LINE, TikTok…), `visit_n`, `has_prior_storage`, `storage_ok`, the first-touch `first_utm_*` / `first_referrer` / `first_touch_at` / `first_gclid` / `first_fbclid` and this visit's `visit_utm_*` / `visit_referrer` (UTM naming rules and links to post: [UTM.md](UTM.md); `withUtm` in `src/utm.ts` tags the links the game makes). Online, the person property `stdb_identity` links a PostHog person to
   a SpacetimeDB profile. Nothing is sent without a key, under `?bench`, `?trailer`, `?capture`,
   `?fixeddt`, in headless browsers (`navigator.webdriver`), or from the dev server unless the URL
   has `?analytics`; dev events then carry `test: true` and a `dev-test-…` distinct id (and are
