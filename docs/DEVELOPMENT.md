@@ -213,6 +213,13 @@ Set or rotate one with `amp secrets set NAME --user|--project ianhsiao/turfwar -
 `ssh turfwar-tw 'sudo docker ps'`, `bunx vercel ls`, `insta status`, and
 `curl -H "Authorization: Bearer $POSTHOG_PERSONAL_API_KEY" https://us.posthog.com/api/projects/649207/`.
 
+## Search and AI-answer visibility
+
+`/about` and `/en/about` (static pages, built like `/privacy`), the head tags and JSON-LD in `index.html`,
+`public/robots.txt`, `sitemap.xml`, `llms.txt`, `llms-full.txt` and the previews in `public/og/` (`bun tools/og/make.ts`)
+make the game findable and correctly described; `src/seo.test.ts` checks them. What was done, how to verify it,
+the keyword list and the owner's checklist (Search Console, Bing Webmaster Tools, mentions) are in [SEO.md](SEO.md).
+
 ## Players, analytics and the admin page
 
 Players stay anonymous (no login). The player-facing summary is the privacy page (`privacy/index.html`,

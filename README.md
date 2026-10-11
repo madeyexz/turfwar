@@ -136,6 +136,7 @@ src/             The browser game: rendering, HUD, input, audio, lobby, online c
   module_bindings/  Generated client bindings for the module
 public/          Models, textures, sounds, fonts, icons and the PWA manifest
 admin/ privacy/  The owner's dashboard and the privacy page
+about/ en/about/ The static about pages (繁體中文, English) with the FAQ, for search and AI answers (docs/SEO.md)
 deploy/          The self-hosted SpacetimeDB container and its release scripts
 tools/           Asset import and conversion tools (their own dependencies)
 docs/            Gameplay, architecture and development guides

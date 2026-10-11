@@ -535,6 +535,8 @@
     padding: 0 0 max(4px, var(--safe-b)); letter-spacing: 0.1em;
   }
   #menu .site-links a { min-height: 44px; padding: 0 6px; }
+  /* The narrow footer here has room for two links; the about page stays one tap away in the other layouts and in the sitemap. */
+  #menu .site-links #about-link, #menu .site-links #about-link + .dot { display: none; }
   #menu .view {
     grid-column: 2; grid-row: 2 / 6; min-height: 0; overflow-y: auto; overscroll-behavior: contain; gap: 8px;
     padding: 0 4px max(12px, var(--safe-b)) 0;

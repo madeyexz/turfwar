@@ -94,6 +94,8 @@ const GITHUB = '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 .3a12 1
 const REPO_URL = 'https://github.com/madeyexz/turfwar';
 /** The privacy page in the lobby's language (a `?lang=` visit passes it on; otherwise the page reads the saved choice). */
 const privacyHref = () => `/privacy${params.get('lang') ? `?lang=${lang()}` : ''}`;
+/** The static about page (how to play, modes, maps, FAQ; crawlable text for search engines, docs/SEO.md) in the lobby's language. */
+const aboutHref = () => isZh() ? '/about' : '/en/about';
 const LOCK = '<svg class="lock" viewBox="0 0 24 24" aria-hidden="true"><rect x="5" y="11" width="14" height="10" rx="2"/><path d="M8 11V8a4 4 0 0 1 8 0v3"/></svg>';
 const TAB_ICONS: Record<Tab, string> = {
   quick: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M13 2 4 14h7l-1 8 9-12h-7z"/></svg>',
@@ -212,6 +214,8 @@ menu.innerHTML = `
   </section>
   <footer class="site-links" aria-label="${t('lobby.siteLinks')}" data-i18n-aria-label="lobby.siteLinks">
     <a href="${REPO_URL}" target="_blank" rel="noopener" title="${t('lobby.openSourceTitle')}" data-i18n-title="lobby.openSourceTitle">${GITHUB}${L('lobby.openSource')}</a>
+    <span class="dot" aria-hidden="true">·</span>
+    <a href="${aboutHref()}" id="about-link">${L('lobby.about')}</a>
     <span class="dot" aria-hidden="true">·</span>
     <a href="${privacyHref()}" id="privacy-link">${L('lobby.privacy')}</a>
   </footer>
@@ -975,6 +979,7 @@ onLang(next => {
   track('language_changed', { to: next }, { set: { lang: next } });
   applyI18n(menu);
   $<HTMLAnchorElement>('#privacy-link').href = privacyHref();
+  $<HTMLAnchorElement>('#about-link').href = aboutHref();
   $('#quick-maps').dataset.key = '';
   if (benchPanel) { benchPanel.remove(); if (benchResult) showBenchResult(benchResult); }
   refresh();

@@ -82,7 +82,7 @@ const en = {
   'lobby.ways': 'Ways to play online', 'lobby.offline': 'Offline',
   // The footer links: the source on GitHub and the privacy page.
   'lobby.openSource': 'Open source', 'lobby.openSourceTitle': 'The source code on GitHub (opens in a new tab)',
-  'lobby.privacy': 'Privacy', 'lobby.siteLinks': 'About this game',
+  'lobby.privacy': 'Privacy', 'lobby.about': 'How to play', 'lobby.siteLinks': 'About this game',
   'tab.quick': 'Quick play', 'tab.quickSub': 'No setup', 'tab.start': 'Start a server', 'tab.startSub': 'Your rules',
   'tab.join': 'Join a server', 'tab.joinSub': 'Rooms · code',
   'quick.tag': 'Any room',
@@ -416,7 +416,7 @@ const zhTW: Record<Key, string> = {
   'wake.downChip': '無法連線', 'wake.retry': '重試',
   'lobby.ways': '線上玩法', 'lobby.offline': '離線',
   'lobby.openSource': '開放原始碼', 'lobby.openSourceTitle': 'GitHub 上的原始碼（在新分頁開啟）',
-  'lobby.privacy': '隱私權', 'lobby.siteLinks': '關於本遊戲',
+  'lobby.privacy': '隱私權', 'lobby.about': '玩法介紹', 'lobby.siteLinks': '關於本遊戲',
   'tab.quick': '快速遊戲', 'tab.quickSub': '免設定', 'tab.start': '開設房間', 'tab.startSub': '自訂規則',
   'tab.join': '加入房間', 'tab.joinSub': '房間列表 · 代碼',
   'quick.tag': '任意房間',
