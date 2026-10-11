@@ -37,7 +37,7 @@ native code`;
     const frames = parseStack(v8, ORIGIN);
     expect(frames.map(f => [f.function, f.filename, f.lineno, f.colno, f.in_app])).toEqual([
       ['Game.frame', `${ORIGIN}/assets/main-AAA.js`, 10, 200, true],
-      [undefined, `${ORIGIN}/assets/three-BBB.js`, 3, 4, true],
+      ['?', `${ORIGIN}/assets/three-BBB.js`, 3, 4, true],
       ['boot', `${ORIGIN}/assets/main-AAA.js`, 7, 8, true],
     ]);
     expect(frames.every(f => f.platform === 'web:javascript')).toBe(true);
@@ -49,6 +49,25 @@ native code`;
     expect(frames[1].filename).toBe(`${ORIGIN}/assets/main-AAA.js`);
     expect(parseStack('    at e (https://cdn.other.test/inject.js:1:2)', ORIGIN)[0].in_app).toBe(false);
     expect(parseStack(`    at e (${ORIGIN}.evil.test/inject.js:1:2)`, ORIGIN)[0].in_app).toBe(false);
+  });
+
+  it('names every frame with a string, "?" when the browser gives no name (PostHog rejects a frame without one)', () => {
+    const anonymous = [
+      `    at ${ORIGIN}/assets/main-AAA.js:1:2`, // V8 anonymous
+      `    at async ${ORIGIN}/assets/main-AAA.js:3:4`, // V8 async anonymous
+      `    at new Game (${ORIGIN}/assets/main-AAA.js:5:6)`, // V8 constructor
+      `    at new (${ORIGIN}/assets/main-AAA.js:7:8)`, // V8 empty constructor name
+      `    at async  (${ORIGIN}/assets/main-AAA.js:9:10)`, // V8 async with an empty name
+      `@${ORIGIN}/assets/main-AAA.js:11:12`, // Firefox/Safari anonymous
+      `frame/<@${ORIGIN}/assets/main-AAA.js:13:14`, // Firefox nested closure
+      `   @${ORIGIN}/assets/main-AAA.js:15:16`, // whitespace-only name
+    ].join('\n');
+    const frames = parseStack(anonymous, ORIGIN);
+    expect(frames.map(f => f.function)).toEqual(['?', '?', 'Game', '?', '?', '?', 'frame/<', '?']);
+    const serialized = JSON.parse(JSON.stringify(exceptionList({ name: 'Error', message: 'x', stack: anonymous }, 'onerror', new Map(), ORIGIN)));
+    const sent = serialized[0].stacktrace.frames as { function: unknown }[];
+    expect(sent).toHaveLength(8);
+    for (const frame of sent) expect(typeof frame.function === 'string' && frame.function.length > 0).toBe(true);
   });
 
   it('copes with a missing stack and caps the frames', () => {
