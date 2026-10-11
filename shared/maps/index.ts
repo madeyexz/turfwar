@@ -11,7 +11,7 @@ import { ochreQuarter } from './ochre';
 import { pipeline } from './pipeline';
 import { railyard } from './railyard';
 import { skylineRooftops } from './skyline';
-import { taipei } from './taipei';
+import { ximending } from './ximending';
 import { taipei101 } from './taipei101';
 import { xinyi } from './xinyi';
 import { memorialHall } from './memorial';
@@ -22,7 +22,7 @@ import { verdantDivide } from './verdant';
 import { warehouse } from './warehouse';
 import type { MapDef } from './types';
 
-/** BeGone's six maps first (in their release order), then the original battlefields, then Taipei's Ximending and Xinyi (from 臺北狂飆), then the office floor high up Taipei 101, then Memorial Hall (中正紀念堂), then Sanchong (三重) across the river. */
+/** BeGone's six maps first (in their release order), then the original battlefields, then Taipei's Ximending and Xinyi, then the office floor high up Taipei 101, then Memorial Hall (中正紀念堂), then Sanchong (三重) across the river. */
 export const MAP_IDS = ['crane', 'tower', 'warehouse', 'pipeline', 'courtyard', 'timbertown', 'cinder', 'frostline', 'verdant', 'ochre', 'citadel', 'railyard', 'skyline', 'meridian', 'taipei', 'xinyi', 'taipei101', 'memorial', 'sanchong'] as const;
 export type MapId = (typeof MAP_IDS)[number];
 /**
@@ -34,7 +34,7 @@ export const RETIRED_MAPS: ReadonlySet<string> = new Set<MapId>(['crane', 'tower
 export const PLAYABLE_MAP_IDS: readonly MapId[] = MAP_IDS.filter(id => !RETIRED_MAPS.has(id));
 const factories: Record<string, () => MapDef> = {
   cinder: cinderBasin, frostline: frostlineReach, verdant: verdantDivide, ochre: ochreQuarter, citadel: citadelKeep, railyard, skyline: skylineRooftops, meridian: meridianDistrict,
-  crane, tower, warehouse, pipeline, courtyard, timbertown, taipei, xinyi, taipei101,
+  crane, tower, warehouse, pipeline, courtyard, timbertown, taipei: ximending, xinyi, taipei101,
   memorial: memorialHall, sanchong,
 };
 

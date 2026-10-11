@@ -1,8 +1,14 @@
 import { describe, expect, it } from 'vitest';
-import { analyticsGuard, screenBucket } from './analytics';
+import { analyticsGuard, privateErrorProperties, screenBucket } from './analytics';
 
 const KEY = 'phc_test';
 const prod = { key: KEY, dev: false, search: '', webdriver: false };
+
+it('error reports exclude inherited player and attribution fields, but preserve anonymous SDK IDs', () => {
+  const distinct_id = 'ab12'.repeat(16);
+  expect(privateErrorProperties({ token: 'phc_public_ingestion_key' })).toEqual({ token: 'phc_public_ingestion_key' });
+  expect(privateErrorProperties({ distinct_id, callsign: 'Ian', room: 'ABCD', first_utm_source: 'private', $set: { name: 'Ian' }, $current_url: 'https://a.test/?room=ABCD#secret', message: 'bad token=secret', app_version: '123abc', test: true })).toEqual({ distinct_id, $current_url: 'https://a.test/', message: 'bad token=[x]', app_version: '123abc', test: true });
+});
 
 describe('analytics guard', () => {
   it('sends in a production build with a key', () => {

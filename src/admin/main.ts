@@ -144,6 +144,7 @@ let sortDir: 1 | -1 = -1;
  * one refuses only that subscription, and the page shows "—" where it would be used.
  */
 const OPTIONAL = {
+  errors: ['SELECT * FROM admin_errors'],
   net: ['SELECT * FROM admin_player_net'],
   device: ['SELECT * FROM admin_player_device'],
   days: ['SELECT * FROM admin_player_day'],
@@ -157,7 +158,7 @@ const OPTIONAL = {
   roomHours: ['SELECT * FROM admin_room_hour'],
 };
 type ViewState = 'wait' | 'on' | 'missing';
-const freshViews = (): Record<keyof typeof OPTIONAL, ViewState> => ({ net: 'wait', device: 'wait', days: 'wait', dayTime: 'wait', dayNet: 'wait', hours: 'wait', peak: 'wait', perf: 'wait', source: 'wait', firsts: 'wait', roomHours: 'wait' });
+const freshViews = (): Record<keyof typeof OPTIONAL, ViewState> => ({ errors: 'wait', net: 'wait', device: 'wait', days: 'wait', dayTime: 'wait', dayNet: 'wait', hours: 'wait', peak: 'wait', perf: 'wait', source: 'wait', firsts: 'wait', roomHours: 'wait' });
 let views = freshViews();
 /** Which players the list shows. */
 let playerGroup: GroupId = 'all';
@@ -347,7 +348,7 @@ const group = (id: string, title: string, sub: string, tiles: string[], cards: s
 const card = (title: string, sub: string, content: string, cls = '') => `<section class="card${cls ? ` ${cls}` : ''}"><h3>${title} <small>${sub}</small></h3>${content}</section>`;
 const SECTIONS: [string, string][] = [
   ['scorecard', 'Score'], ['now', 'Now'], ['growth', 'Acquisition'], ['activation', 'Activation'], ['retention', 'Retention'], ['play', 'Engagement'],
-  ['virality', 'Virality'], ['health', 'Health'], ['connection', 'Quality'], ['benchmarks', 'Benchmarks'], ['players', 'Players'],
+  ['virality', 'Virality'], ['health', 'Health'], ['errors', 'Errors'], ['connection', 'Quality'], ['benchmarks', 'Benchmarks'], ['players', 'Players'],
 ];
 const SIDE_LABEL: Record<Side, string> = { phone: 'Phone', computer: 'Computer' };
 const dateOf = (day: number) => new Date(day * DAY_MS).toISOString().slice(0, 10);
@@ -461,6 +462,7 @@ function dashboard() {
     ${group('play', 'Engagement', 'how much they play, and how big the core is', [...playTiles, ...g.engagementTiles], `<div class="grid2">${card('Over time', `online play time ${rangeText()}`, playChart(G))}${card('Players by rounds played', `career rounds; ${CORE_ROUNDS}+ is the core`, roundsPanel(G.all))}</div>`)}
     ${group('virality', 'Virality', 'do players bring players?', g.viralityTiles, viralityCard(G.all))}
     ${group('health', 'Server health', 'do rooms feel alive, and do connections hold?', g.healthTiles, card('Rooms', `human share of seats (bars) and drops per join (tick) ${rangeText()}`, healthChart()))}
+    ${group('errors', 'Errors', 'latest 200 host reports; raw logs stay on the VM', [], card('Server errors', 'requires the optional host watcher', views.errors !== 'on' ? '<p>Error view unavailable on this module.</p>' : [...db.adminErrors.iter()].length === 0 ? '<p>No reports. This does not confirm that the watcher is active.</p>' : `<table><thead><tr><th>Time</th><th>Source</th><th>Message</th></tr></thead><tbody>${[...db.adminErrors.iter()].sort((a, b) => a.id > b.id ? -1 : 1).map(e => `<tr><td>${esc(e.at.toDate().toISOString())}</td><td>${esc(e.reducer)}</td><td>${esc(e.message)}</td></tr>`).join('')}</tbody></table>`))}
     ${group('connection', 'Quality', 'frame rate, load times, ping, what players play on', [...g.qualityTiles, ...netTiles], `
       <div class="grid2 even">${card('Frame rate', 'players by their typical fps, last 7 days', fpsPanel(G, now))}${card('By browser', 'in-app browsers against plain browsers, last 7 days, slowest first', browserTable(G.all, now))}</div>
       <div class="grid2">${card('Ping', `median of players' p50 (tick: p95) ${rangeText()}`, pingChart(G))}${card('Ping by country', 'median typical p50, time zone → country', countryPing(G))}</div>
@@ -1206,7 +1208,7 @@ function adminLink(s: AdminServer, lost: () => void): ConnectLink {
       for (const t of [
         cc.db.adminStatus, cc.db.adminOverview, cc.db.adminRooms, cc.db.adminPlayers, cc.db.adminPlayerTime, cc.db.adminDailyTime, cc.db.adminPlayerNet,
         cc.db.adminPlayerDevice, cc.db.adminPlayerDay, cc.db.adminPlayerDayTime, cc.db.adminPlayerDayNet, cc.db.adminPlayerHour, cc.db.adminPeakHour,
-        cc.db.adminPlayerPerf, cc.db.adminPlayerSource, cc.db.adminPlayerMilestone, cc.db.adminRoomHour,
+        cc.db.adminPlayerPerf, cc.db.adminPlayerSource, cc.db.adminPlayerMilestone, cc.db.adminRoomHour, cc.db.adminErrors,
       ]) {
         t.onInsert(render); t.onDelete(render);
       }

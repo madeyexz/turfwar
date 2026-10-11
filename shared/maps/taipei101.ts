@@ -1,14 +1,13 @@
 import { MapBuilder } from './builder';
-import { TOWER, TOWER_CYLINDERS, TOWER_LAMPS, TOWER_LOFTS, TOWER_ORNAMENTS } from './xinyi-data';
+import { GLASS, TOWER, heightAtHalf, towerBeacons, towerLofts, towerNeedle, towerOrnaments } from './tower101';
 import type { BlockStyle, MapDef, SignStyle } from './types';
 
 /**
  * Taipei 101 · 88F (台北101・高樓辦公層): a close-quarters fight on an office floor near the top of
  * Taipei 101, built for 1v1 and 6v6 (Elimination and Sabotage). The floor plate is the tower's
- * notched square (its sawtooth corners), 50 m across at the glass, set at the height the xinyi map's
- * tower loft reaches that width in its top segment (about 383 m), so the segments below the glass
- * and the city around it (the shared Taipei skyline, the Xinyi lots and a procedural fill of blocks,
- * all client-side dressing) lie where they would.
+ * notched square (its sawtooth corners), 50 m across at the glass, set at the height the tower's
+ * top module (shared/maps/tower101.ts) reaches that width (about 385 m), so the modules below the
+ * glass and the city around it (a procedural skyline, client-side dressing) lie where they would.
  *
  * The plan is a 3 × 3 grid round a stone core:
  *   north   the Chairman's suite (NW) · the Sky Lobby where SWAT steps out of the lifts · the CEO's suite (NE)
@@ -27,7 +26,7 @@ import type { BlockStyle, MapDef, SignStyle } from './types';
  */
 export const TAIPEI101_NAME_ZH = '台北101・高樓辦公層';
 
-/** Half-size of the floor plate at the glass and the step of its sawtooth corners (the xinyi tower's 1.6 m). */
+/** Half-size of the floor plate at the glass and the step of its sawtooth corners (the tower's 1.6 m). */
 export const H = 25, NOTCH = 1.6;
 /** 88F's ceiling, 89F's floor (the gallery), 89F's ceiling and the top of the damper shaft. */
 export const CEIL = 4.2, F2 = 4.8, CEIL2 = 9, SHAFT_TOP = 15;
@@ -44,12 +43,8 @@ const RAIL = 1.25;
 /** Damper: the sphere's centre and radius, and its pedestal. */
 export const DAMPER = { y: 5.6, r: 2.9, base: 3.3, baseTop: 1.6 };
 
-/** Height of 88F above the street: where the top segment's flare reaches half-size H. */
-export const FLOOR_Y = (() => {
-  const top = TOWER.baseTop + (TOWER.segCount - 1) * TOWER.segH;
-  for (const [y0, y1, h0, , h1] of TOWER_LOFTS) if (y0 >= top - 0.01 && y1 > y0 && h0 <= H && h1 >= H) return y0 + (y1 - y0) * (H - h0) / (h1 - h0);
-  return 382.7;
-})();
+/** Height of 88F above the street: where the top module's flare reaches half-size H. */
+export const FLOOR_Y = heightAtHalf(H);
 
 // ---- Palette ---------------------------------------------------------------------------------
 const WHITE_WALL = 0xe9e4da, STONE = 0xc9bba4, STONE_DARK = 0x7a7068, WALNUT = 0x5e3c28, OAK = 0xc49a6a;
@@ -666,27 +661,26 @@ function renovation(b: B) {
  * beacons (seen out of the windows looking down, and from outside in the menu's backdrop).
  */
 function towerOutside(b: B) {
-  const glass = 0x8cc8b4, head = FLOOR_Y + CEIL + 0.05;
+  const head = FLOOR_Y + CEIL + 0.05, glass = 0x8cc8b4;
   const section = (y0: number, y1: number, h0: number, n0: number, h1: number, n1: number, color: number, glow: number) => {
-    const lit = glow >= 2.5, isGlass = color === 0xe6fbf6;
+    const lit = glow >= 2.5, isGlass = color === GLASS;
     const style: BlockStyle = lit ? 'neon' : isGlass ? 'curtain' : 'steel';
     b.loft(0, 0, y0 - FLOOR_Y, y1 - FLOOR_Y, h0, n0, h1, n1, style, lit ? 0xffe0a0 : isGlass ? glass : color, y1 === TOWER.crownTop);
   };
   const at = (y0: number, y1: number, h0: number, h1: number, y: number) => h0 + (h1 - h0) * (y - y0) / (y1 - y0);
-  for (const [y0, y1, h0, n0, h1, n1, color, glow] of TOWER_LOFTS) {
+  for (const [y0, y1, h0, n0, h1, n1, color, glow] of towerLofts()) {
     if (y0 < FLOOR_Y) section(y0, Math.min(y1, FLOOR_Y - 0.02), h0, n0, y1 > FLOOR_Y ? at(y0, y1, h0, h1, FLOOR_Y) : h1, n1, color, glow);
     if (y1 > head) section(Math.max(y0, head), y1, y0 < head ? at(y0, y1, h0, h1, head) : h0, n0, h1, n1, color, glow);
   }
-  for (const [x, y, z, nx, ny, nz, rx, ry, depth, color] of TOWER_ORNAMENTS) {
+  for (const [x, y, z, nx, ny, nz, rx, ry, depth] of towerOrnaments()) {
     if (y > FLOOR_Y - 3 && y < head + 3) continue;
-    const gold = color === 15252309;
-    b.disc(x - TOWER.cx, y - FLOOR_Y, z - TOWER.cz, nx, ny, nz, rx, ry, depth, gold ? 'neon' : 'steel', gold ? 0x8a6a2a : 0x4a5a5a);
+    b.disc(x, y - FLOOR_Y, z, nx, ny, nz, rx, ry, depth, 'neon', 0x8a6a2a);
   }
-  for (const [x, z, r0, r1, y0, y1, color, glow] of TOWER_CYLINDERS) {
+  for (const [r0, r1, y0, y1, color, glow] of towerNeedle()) {
     if (y0 < head) continue;
-    b.raw({ kind: 'cylinder', x: x - TOWER.cx, y: y0 - FLOOR_Y, z: z - TOWER.cz, radius: r0, top: r1, height: y1 - y0, axis: 'y', style: glow >= 2 ? 'neon' : 'steel', color: glow >= 2 ? 0xfff0c8 : color });
+    b.raw({ kind: 'cylinder', x: 0, y: y0 - FLOOR_Y, z: 0, radius: r0, top: r1, height: y1 - y0, axis: 'y', style: glow >= 2 ? 'neon' : 'steel', color: glow >= 2 ? 0xfff0c8 : color });
   }
-  for (const [x, y, z, r] of TOWER_LAMPS) if (y > FLOOR_Y + SHAFT_TOP + 1) b.raw({ kind: 'ball', x: x - TOWER.cx, y: y - FLOOR_Y, z: z - TOWER.cz, radius: r, style: 'neon', color: 0xff3020 });
+  for (const [dx, y, dz, r] of towerBeacons()) if (y > FLOOR_Y + SHAFT_TOP + 1) b.raw({ kind: 'ball', x: dx, y: y - FLOOR_Y, z: dz, radius: r, style: 'neon', color: 0xff3020 });
 }
 
 export function taipei101(): MapDef {
@@ -715,8 +709,8 @@ export function taipei101(): MapDef {
   renovation(b);
   towerOutside(b);
   for (const [model, data] of Object.entries(plants)) b.raw({ kind: 'instances', model, data });
-  // The city round the tower, 383 m down (client dressing: the Taipei skyline, Xinyi's lots and a fill of blocks).
-  b.raw({ kind: 'dressing', set: 'taipei101', x: TOWER.cx, z: TOWER.cz, y: -FLOOR_Y });
+  // The city round the tower, 383 m down (client dressing: a procedural skyline).
+  b.raw({ kind: 'dressing', set: 'taipei101', x: 0, z: 0, y: -FLOOR_Y });
 
   // ---- Bases, sites, landmarks and ammo ------------------------------------------------------
   // SWAT steps out of the lifts into the Sky Lobby; Militia comes up the fire stairs onto the renovation floor.

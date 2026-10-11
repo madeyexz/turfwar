@@ -4,7 +4,7 @@ import type { VehicleSpot } from '../vehicles';
 
 /**
  * Dusk (low sun), twilight (blue hour), steppe (dry midday) and meadow light the BeGone maps under Earth skies;
- * taipei is a humid city evening over asphalt; xinyi is the same city after dark, lit by its towers;
+ * taipei is a humid city evening over asphalt (Ximending); xinyi is the same city after dark, lit by its towers;
  * highrise is golden hour seen from an office floor 380 m up Taipei 101.
  * memorial is golden hour over Memorial Hall's white marble and its gardens.
  * sanchong is a warm, hazy late afternoon over Sanchong's walk-ups and the river.
@@ -104,10 +104,10 @@ export type Decor =
   /** Road paint (lane lines, crossings): a flat w × d quad at height y (decorative). */
   | { kind: 'marking'; x: number; y: number; z: number; w: number; d: number; color: number }
   /**
-   * A dressing set the renderer loads on demand (src/render/dressing.ts): street furniture and the
-   * skyline past the map, in its own coordinates less (x, z). Purely visual; its colliders are solids.
+   * A dressing set the renderer builds on demand (src/render/dressing.ts): the skyline past the map,
+   * in the map's own coordinates less (x, z). Purely visual.
    */
-  | { kind: 'dressing'; set: string; x: number; z: number; cut?: number[]; clear?: number[];
+  | { kind: 'dressing'; set: string; x: number; z: number;
       /** Height of the set's ground (default 0): a map high up a tower sets the city far below it. */
       y?: number }
   /**

@@ -57,6 +57,9 @@ export const AdminDayTimeRow = __t.object("AdminDayTimeRow", {
 });
 export type AdminDayTimeRow = __Infer<typeof AdminDayTimeRow>;
 
+export const AdminErrors = __t.object("AdminErrors", {});
+export type AdminErrors = __Infer<typeof AdminErrors>;
+
 export const AdminOverview = __t.object("AdminOverview", {});
 export type AdminOverview = __Infer<typeof AdminOverview>;
 
@@ -612,6 +615,14 @@ export const Roster = __t.object("Roster", {
   gearJson: __t.string(),
 });
 export type Roster = __Infer<typeof Roster>;
+
+export const ServerError = __t.object("ServerError", {
+  id: __t.u64(),
+  at: __t.timestamp(),
+  reducer: __t.string(),
+  message: __t.string(),
+});
+export type ServerError = __Infer<typeof ServerError>;
 
 export const Soldier = __t.object("Soldier", {
   id: __t.u32(),

@@ -84,7 +84,7 @@ function unify(list: THREE.BufferGeometry[]) {
  * `userData.casterRadius`, and a merged mesh keeps the leading name of its parts.
  */
 export const SMALL_CASTER = 1.2;
-export const LEAN_CASTERS = /^(level:hedge|lots:|street:props)/;
+export const LEAN_CASTERS = /^(level:hedge)/;
 
 const sphere = new THREE.Sphere();
 /** World radius of a mesh as a shadow caster: its own `userData.casterRadius` (set for merged or baked parts) or its bounds. */

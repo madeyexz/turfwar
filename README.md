@@ -16,11 +16,7 @@
 [![SpacetimeDB](https://img.shields.io/badge/SpacetimeDB-2.10-6e56cf?style=flat-square)](https://spacetimedb.com)
 [![Bun](https://img.shields.io/badge/Bun-1.3-f9f1e1?style=flat-square&logo=bun&logoColor=black)](https://bun.sh)
 
-[**Play**](https://turfwar.ianhsiao.me/?utm_source=github&utm_medium=readme&utm_campaign=repo) · [Trailer](https://turfwar.ianhsiao.me/media/turfwar-trailer-30s.mp4) · [中文預告片](https://turfwar.ianhsiao.me/media/turfwar-trailer-30s.zh-TW.mp4) · [Gameplay guide](docs/GAMEPLAY.md) · [Contributing](CONTRIBUTING.md)
-
-<a href="https://turfwar.ianhsiao.me/media/turfwar-trailer-30s.mp4"><img src="docs/media/trailer-preview.gif" width="720" alt="Trailer preview: a helicopter over Ximending, Taipei 101 through binoculars and Cinema Street"></a>
-
-<sub>Click the preview to watch the 30-second trailer.</sub>
+[**Play**](https://turfwar.ianhsiao.me/?utm_source=github&utm_medium=readme&utm_campaign=repo) · [Gameplay guide](docs/GAMEPLAY.md) · [Contributing](CONTRIBUTING.md)
 
 </div>
 
@@ -81,19 +77,11 @@ browser shooter *BeGone*. It runs on TypeScript and Three.js in the browser and 
 <table>
   <tr>
     <td width="50%"><img src="docs/media/screenshot-taipei101-88f.jpg" alt="Taipei 101 · 88F: the tuned mass damper hanging in the core of the office floor"><br><sub><b>Taipei 101 · 88F</b>: the damper hall in the tower's core</sub></td>
-    <td width="50%"><img src="docs/media/screenshot-ximending-fight.jpg" alt="A firefight on Cinema Street in Ximending"><br><sub><b>Ximending</b>: a firefight on Cinema Street (電影街)</sub></td>
+    <td width="50%"><img src="docs/media/screenshot-ximending-fight.jpg" alt="The authored Ximending map's storefronts and covered street"><br><sub><b>Ximending</b>: storefronts and covered streets</sub></td>
   </tr>
   <tr>
     <td><img src="docs/media/screenshot-memorial-hall.jpg" alt="Memorial Hall: the white hall and its grand staircase seen from Liberty Square"><br><sub><b>Memorial Hall</b> (中正紀念堂): the grand staircase from Liberty Square</sub></td>
-    <td><img src="docs/media/screenshot-helicopter.jpg" alt="Flying the helicopter low over Ximending in the chase camera"><br><sub><b>Vehicles</b>: the helicopter over Ximending (cars and scooters too)</sub></td>
-  </tr>
-  <tr>
-    <td><img src="docs/media/screenshot-store.jpg" alt="The store's attachments page with a holographic sight previewed on the MP5"><br><sub><b>Store</b>: weapons and attachments with BeGone's prices and stats</sub></td>
-    <td><img src="docs/media/screenshot-lobby.jpg" alt="The lobby with Quick play, Start a server and Join a server"><br><sub><b>Lobby</b>: Quick play, Start a server, Join a server</sub></td>
-  </tr>
-  <tr>
-    <td><img src="docs/media/screenshot-zh-tw.jpg" alt="The game in Traditional Chinese: the bomb has been planted on Cinema Street"><br><sub><b>繁體中文</b>: every screen in Traditional Chinese (炸彈已安裝)</sub></td>
-    <td></td>
+    <td><img src="docs/media/screenshot-xinyi.jpg" alt="Taipei 101 seen from the authored Xinyi plaza"><br><sub><b>Xinyi</b>: the plaza beside Taipei 101</sub></td>
   </tr>
 </table>
 
@@ -193,7 +181,6 @@ servers, email **ian@rippling.computer**.
 ## Acknowledgements
 
 - [**BeGone**](https://begone.fandom.com) by nPlay — the rules, numbers and maps this game pays homage to.
-- [**臺北狂飆 / TAIPEI RUSH**](https://taipei-gta.vercel.app/) by [@aicodewithme](https://www.threads.com/share/DhdOGqUWh/) — the Ximending and Xinyi layouts.
 - [Quaternius](https://quaternius.com), [Poly Haven](https://polyhaven.com) and the authors of
   *The Free Firearm Sound Library* — CC0 models, textures and sounds.
 - [Three.js](https://threejs.org), [SpacetimeDB](https://spacetimedb.com), [Vite](https://vite.dev) and [Bun](https://bun.sh).
@@ -257,18 +244,11 @@ texture, sound and line of code here is original or CC0/OFL.
   common characters from `tools/font/edu-standard-4808.txt`, CJK punctuation, Bopomofo and full-width forms):
   `public/fonts/noto-sans-tc.woff2`, about 1.4 MB and 5,084 glyphs, loaded only for Chinese text
   (`unicode-range`). `src/ui/font.test.ts` fails when the source uses a character the font lacks.
-- Taipei map layout: the Ximending quarter of [*臺北狂飆 / TAIPEI RUSH*](https://taipei-gta.vercel.app/) by
-  [@aicodewithme](https://www.threads.com/share/DhdOGqUWh/) — its streets, buildings, signs and landmarks — extracted by
-  `tools/import-taipei.ts` into `shared/maps/taipei-data.ts`. Its shop names are that game's own parody
-  brands. Its district meshes and atlas, street furniture, prop meshes (scooter, YouBike, trees,
-  plants, signal heads) and skyline are that game's too, exported by the same tool.
-- Taipei 101 · Xinyi map layout: the Xinyi district of the same game — Taipei 101's sections and
-  ornaments, its plaza and mall, the Xinyi Plaza Malls, the Xinyi Skywalk, Four Four South Village, the
-  streets, hills and lots — extracted by `tools/import-xinyi.ts`
-  into `shared/maps/xinyi-data.ts`. Its mall and shop names are that game's own parodies. The mall's
-  interior, the sunken garden and the curtain-wall detailing are this project's own.
-- Taipei 101 · 88F: the tower's sections below the floor and the city's skyline and lots reuse the two
-  imports above; the floor's plan, fit-out and the damper are this project's own.
+- The Taipei maps (Ximending, Taipei 101 · Xinyi, Taipei 101 · 88F), the Taipei 101 outline and the
+  other city maps' layouts are this project's own, drawn from public knowledge of the real places
+  (`shared/maps/ximending*.ts`, `xinyi*.ts`, `taipei101.ts`, `tower101.ts`); the city past each map is a
+  procedural skyline (`src/render/cityscape.ts`); the props (scooters, trees, plants) and cars are built
+  in code (`src/render/props.ts`, `dressing.ts`). No data from another game or from a map database is used.
 - Sky, terrain, architecture, effects and the remaining audio (knife, casings, footsteps,
   explosions, heartbeat, bomb, round and cash cues, UI, and the fallback weapon voices used before
   the recordings load) are procedural.

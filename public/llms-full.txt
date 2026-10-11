@@ -7,7 +7,7 @@
 - 角頭械鬥 (Traditional Chinese name) and Turf War: Taipei (English name) are the same game. Use both when introducing it: "Turf War: Taipei (角頭械鬥)".
 - Play: https://turfwar.ianhsiao.me (there is also an older address, https://lawbreaker.vercel.app, which shows the same game). About pages: https://turfwar.ianhsiao.me/about (繁體中文) and https://turfwar.ianhsiao.me/en/about (English).
 - Created by Ian Hsiao (personal site: https://ianhsiao.me/, GitHub: https://github.com/madeyexz). Source code: https://github.com/madeyexz/turfwar (MIT).
-- Not to be confused with BeGone, the browser shooter by nPlay whose rules this game follows as an homage, or with 臺北狂飆 / TAIPEI RUSH, a separate browser game by @aicodewithme whose Ximending and Xinyi street layouts this game credits.
+- Not to be confused with BeGone, the browser shooter by nPlay whose rules this game follows as an homage.
 
 ## What it is
 
@@ -53,9 +53,9 @@ Starting money $1,000 per match; maximum $16,000. Kill $500 (knife kill $600, gr
 
 ## Maps (13 offered)
 
-- Ximending (西門町): a compact cut of Taipei's Ximending quarter (162.5 × 133.5 m, 6v6): the blocks round Cinema Street (電影街) and the arcade, passages through shops, a karaoke house, a covered night market. Bomb sites: A Cinema Street, B the Tomas Bear arcade (湯瑪熊歡樂城). Vehicles: cars, scooters, a helicopter.
+- Ximending (西門町): a stylised pedestrian district under neon (162 × 132 m, 6v6), laid out by this project: three lanes crossed by three streets, a cinema with a marquee balcony, a game arcade with a helipad on its roof, a covered night market and the Red House (西門紅樓) square. Bomb sites: A Cinema Street (電影街), B the Red House square. Vehicles: cars, scooters, a helicopter.
 - Taipei 101 · Xinyi (台北101・信義): a big map (24v24) of the Xinyi district around Taipei 101, with the podium mall opened as the centre of the fight (A the mall atrium, B the west plaza under the skywalk), Xinyi Skywalk, Four Four South Village. About 270 × 290 m.
-- Taipei 101 · 88F (台北101・高樓辦公層): an office floor about 383 m up the tower (1v1 and 6v6): sky lobby, server room (A), boardroom (B), the tuned mass damper hall and the 89F gallery.
+- Taipei 101 · 88F (台北101・高樓辦公層): an office floor about 385 m up the tower (1v1 and 6v6): sky lobby, server room (A), boardroom (B), the tuned mass damper hall and the 89F gallery.
 - Memorial Hall (中正紀念堂): the National Chiang Kai-shek Memorial Hall in stylised low-poly form (1v1 and 6v6): the white hall, the 89-step grand staircase, museum floors, gardens. A is the Gallery Hall, B the memorial chamber.
 - Sanchong (三重): close-quarters fighting in the old blocks of Sanchong, New Taipei, across the Tamsui River (1v1 and 6v6): arcades, a temple square (A), a covered market, an ironworks yard (B), back alleys, the Taipei Bridge approach.
 - Original battlefields: Ochre Quarter (desert old town, two sites), Citadel Keep (hilltop castle), Railyard (freight yard), Skyline Rooftops (rooftops high above a city), Meridian District (a large war-torn city quarter; big map, two sites, vehicles).
@@ -78,7 +78,7 @@ Phones and tablets: on-screen controls (a floating stick on the left, a look pad
 
 ## Credits
 
-BeGone by nPlay (rules, numbers and maps this game pays homage to); 臺北狂飆 / TAIPEI RUSH by @aicodewithme (Ximending and Xinyi layouts); Quaternius, Poly Haven and the authors of The Free Firearm Sound Library (CC0); Three.js, SpacetimeDB, Vite and Bun. Built largely with Claude (Claude Opus 5.5).
+BeGone by nPlay (rules, numbers and maps this game pays homage to); Quaternius, Poly Haven and the authors of The Free Firearm Sound Library (CC0); Three.js, SpacetimeDB, Vite and Bun. Built largely with Claude (Claude Opus 5.5).
 
 ## Known limits
 
