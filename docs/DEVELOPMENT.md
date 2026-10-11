@@ -183,6 +183,7 @@ publication. On an existing empty starter database, the first valid join initial
 atomically; subsequent joins preserve its state. Publish the compatible module before pushing
 the matching commit to `main`, which triggers Vercel's GitHub deployment.
 Verify the production URL and two separate Online clients after each release.
+Then run `bun run seo:ping` (sitemap to Google and Bing, the public pages to IndexNow; docs/SEO.md, "Search data").
 
 ### Orb credentials
 
@@ -199,6 +200,8 @@ its tool. Releases still need the owner's go-ahead (see AGENTS.md).
 | `VERCEL_TOKEN`, `VERCEL_ORG_ID`, `VERCEL_PROJECT_ID` | project | not set (optional): `bunx vercel ls` and friends, no login or link needed. Without them, `gh api repos/madeyexz/turfwar/deployments` lists preview URLs |
 | `TURFWAR_ADMIN_KEY` | project | the `/admin` login |
 | `POSTHOG_PERSONAL_API_KEY` | project | read-only queries on PostHog project 649207 |
+| `GSC_SERVICE_ACCOUNT_JSON` | project | `bun run seo:report` / `seo:ping`: Google Search Console API on `sc-domain:ianhsiao.me` (service account of Google Cloud project `turfwar-seo`, Full user) |
+| `BING_WEBMASTER_API_KEY` | project | the same scripts' Bing Webmaster Tools API (site `https://turfwar.ianhsiao.me/`) |
 
 Set or rotate one with `amp secrets set NAME --user|--project ianhsiao/turfwar --secret --data-file -`
 (value on stdin), or in Amp Settings; never paste a value into a thread. Read-only checks: `spacetime list
