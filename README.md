@@ -6,7 +6,7 @@
 
 **A round-based SWAT vs Militia shooter set in the streets of Taipei — free in your browser, nothing to install.**
 
-[![Play now](https://img.shields.io/badge/▶_play_now-turfwar.ianhsiao.me-29d3ff?style=flat-square)](https://turfwar.ianhsiao.me)
+[![Play now](https://img.shields.io/badge/▶_play_now-turfwar.ianhsiao.me-29d3ff?style=flat-square)](https://turfwar.ianhsiao.me/?utm_source=github&utm_medium=readme&utm_campaign=repo)
 [![CI](https://github.com/madeyexz/turfwar/actions/workflows/ci.yml/badge.svg)](https://github.com/madeyexz/turfwar/actions/workflows/ci.yml)
 [![License: MIT](https://img.shields.io/badge/license-MIT-blue?style=flat-square)](LICENSE)
 [![PRs welcome](https://img.shields.io/badge/PRs-welcome-brightgreen?style=flat-square)](CONTRIBUTING.md)
@@ -16,7 +16,7 @@
 [![SpacetimeDB](https://img.shields.io/badge/SpacetimeDB-2.10-6e56cf?style=flat-square)](https://spacetimedb.com)
 [![Bun](https://img.shields.io/badge/Bun-1.3-f9f1e1?style=flat-square&logo=bun&logoColor=black)](https://bun.sh)
 
-[**Play**](https://turfwar.ianhsiao.me) · [Trailer](https://turfwar.ianhsiao.me/media/turfwar-trailer-30s.mp4) · [中文預告片](https://turfwar.ianhsiao.me/media/turfwar-trailer-30s.zh-TW.mp4) · [Gameplay guide](docs/GAMEPLAY.md) · [Contributing](CONTRIBUTING.md)
+[**Play**](https://turfwar.ianhsiao.me/?utm_source=github&utm_medium=readme&utm_campaign=repo) · [Trailer](https://turfwar.ianhsiao.me/media/turfwar-trailer-30s.mp4) · [中文預告片](https://turfwar.ianhsiao.me/media/turfwar-trailer-30s.zh-TW.mp4) · [Gameplay guide](docs/GAMEPLAY.md) · [Contributing](CONTRIBUTING.md)
 
 <a href="https://turfwar.ianhsiao.me/media/turfwar-trailer-30s.mp4"><img src="docs/media/trailer-preview.gif" width="720" alt="Trailer preview: a helicopter over Ximending, Taipei 101 through binoculars and Cinema Street"></a>
 

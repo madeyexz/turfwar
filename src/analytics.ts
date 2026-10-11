@@ -3,6 +3,7 @@ import type { VehicleKind } from '../shared/vehicles';
 import type { NetFields } from '../shared/netstats';
 import type { DeviceKind } from '../shared/devicekind';
 import type { ServerId } from './net/servers';
+import { currentVisitProps, dropClickIds } from './visit';
 
 /**
  * Product analytics (PostHog, US cloud): how many players, from where (PostHog derives the country
@@ -160,21 +161,26 @@ export function startAnalytics(base: { lang: string; online_db: string; server_h
       // No flags and no remote config: everything is set here, and no extra scripts or requests.
       advanced_disable_flags: true, disable_external_dependency_loading: true,
       persistence: 'localStorage+cookie', person_profiles: 'always', respect_dnt: true,
-      ...(guard.test ? {
-        bootstrap: { distinctID: devTestId() },
+      // posthog-js would send the ad click ids it finds in the URL (fbclid, gclid…); only their presence is kept (src/visit.ts).
+      before_send: event => {
+        if (!event) return event;
+        event.properties = dropClickIds(event.properties);
+        event.$set = dropClickIds(event.$set);
+        event.$set_once = dropClickIds(event.$set_once);
         // Dev test events are printed as sent (our properties, PostHog's own `$…` ones left out).
-        before_send: event => {
-          if (event) {
-            const own = Object.fromEntries(Object.entries(event.properties ?? {}).filter(([k]) => !k.startsWith('$') || k === '$current_url' || k === '$set'));
-            console.debug('[analytics]', JSON.stringify({ event: event.event, distinct_id: event.properties?.distinct_id, properties: own, $set: event.$set, $set_once: event.$set_once }));
-          }
-          return event;
-        },
-      } : {}),
+        if (guard.test) {
+          const own = Object.fromEntries(Object.entries(event.properties ?? {}).filter(([k]) => !k.startsWith('$') || k === '$current_url' || k === '$set'));
+          console.debug('[analytics]', JSON.stringify({ event: event.event, distinct_id: event.properties?.distinct_id, properties: own, $set: event.$set, $set_once: event.$set_once }));
+        }
+        return event;
+      },
+      ...(guard.test ? { bootstrap: { distinctID: devTestId() } } : {}),
       loaded: ph => {
         ph.register({
           lang: base.lang, app_version: version, online_db: base.online_db, server_host: base.server_host, server_choice: base.server_choice,
           screen: screenBucket(screen.width, screen.height), ...(guard.test ? { test: true } : {}),
+          // Not even counted (or kept in storage) when the player has opted out (Do Not Track).
+          ...(ph.has_opted_out_capturing() ? {} : currentVisitProps()),
         });
       },
     });
