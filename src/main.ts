@@ -1,3 +1,5 @@
+// First: it notes whether localStorage was populated before any other module writes to it.
+import './visit';
 import { inject } from '@vercel/analytics';
 import { RETIRED_MAPS, loadMap, mapSummaries } from '../shared/maps/index';
 import { cleanCode, hasSites, listOrder, mapsFor, pickAnyRoom, ROOM_SIZES, roomFull, sizeLabel } from '../shared/match/rooms';
@@ -92,6 +94,8 @@ const GITHUB = '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 .3a12 1
 const REPO_URL = 'https://github.com/madeyexz/turfwar';
 /** The privacy page in the lobby's language (a `?lang=` visit passes it on; otherwise the page reads the saved choice). */
 const privacyHref = () => `/privacy${params.get('lang') ? `?lang=${lang()}` : ''}`;
+/** The static about page (how to play, modes, maps, FAQ; crawlable text for search engines, docs/SEO.md) in the lobby's language. */
+const aboutHref = () => isZh() ? '/about' : '/en/about';
 const LOCK = '<svg class="lock" viewBox="0 0 24 24" aria-hidden="true"><rect x="5" y="11" width="14" height="10" rx="2"/><path d="M8 11V8a4 4 0 0 1 8 0v3"/></svg>';
 const TAB_ICONS: Record<Tab, string> = {
   quick: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M13 2 4 14h7l-1 8 9-12h-7z"/></svg>',
@@ -211,6 +215,8 @@ menu.innerHTML = `
   <footer class="site-links" aria-label="${t('lobby.siteLinks')}" data-i18n-aria-label="lobby.siteLinks">
     <a href="${REPO_URL}" target="_blank" rel="noopener" title="${t('lobby.openSourceTitle')}" data-i18n-title="lobby.openSourceTitle">${GITHUB}${L('lobby.openSource')}</a>
     <span class="dot" aria-hidden="true">·</span>
+    <a href="${aboutHref()}" id="about-link">${L('lobby.about')}</a>
+    <span class="dot" aria-hidden="true">·</span>
     <a href="${privacyHref()}" id="privacy-link">${L('lobby.privacy')}</a>
   </footer>
   ${pop('map-pop', 'lobby.chooseMap', `<div class="pop-head"><b>${L('lobby.chooseMap')}</b><small id="map-pop-sub"></small></div><div class="map-grid" id="map-grid"></div>`)}
@@ -327,6 +333,8 @@ const phase = () => wake.state.phase;
 let wakeKey = '';
 /** "Server unreachable" is reported to analytics once per page, not on every attempt. */
 let unreachableReported = false;
+/** The lobby has been connected once on this page (a later wake is a reconnect after a drop). */
+let wasReady = false;
 function onWake(s: WakeState<Queued>) {
   pings.setActive(pingOn && s.phase === 'ready');
   const key = `${s.phase}|${s.hostUp}|${s.queued?.action ?? ''}`;
@@ -336,7 +344,15 @@ function onWake(s: WakeState<Queued>) {
   // A new attempt (or a dropped connection): the old room list is stale. (Stopping keeps it: the
   // room being joined stays on screen while the game connects.)
   if (s.phase !== was && s.phase !== 'ready' && s.phase !== 'idle') rooms = [];
-  if (s.phase === 'ready' && was !== 'ready' && s.woke) track('server_woke', { seconds: wakeSeconds(s, performance.now()), queued: !!queued });
+  if (s.phase === 'ready' && was !== 'ready' && (s.woke || s.slow)) {
+    const tm = wake.timings;
+    track('server_woke', {
+      seconds: wakeSeconds(s, performance.now()), queued: !!queued, failures: s.failures, reconnect: wasReady, woke: s.woke,
+      ...(tm.pingMs !== undefined ? { ping_ms: tm.pingMs, ping_ok: !!tm.pingOk } : {}),
+      ...(tm.connectMs !== undefined ? { connect_ms: tm.connectMs } : {}), ...(tm.importMs !== undefined ? { import_ms: tm.importMs } : {}),
+    });
+  }
+  if (s.phase === 'ready') wasReady = true;
   if (s.phase === 'unreachable' && !unreachableReported) { unreachableReported = true; track('error_shown', { where: 'rooms', message: 'server unreachable' }); }
   refresh();
 }
@@ -963,6 +979,7 @@ onLang(next => {
   track('language_changed', { to: next }, { set: { lang: next } });
   applyI18n(menu);
   $<HTMLAnchorElement>('#privacy-link').href = privacyHref();
+  $<HTMLAnchorElement>('#about-link').href = aboutHref();
   $('#quick-maps').dataset.key = '';
   if (benchPanel) { benchPanel.remove(); if (benchResult) showBenchResult(benchResult); }
   refresh();
@@ -1083,8 +1100,16 @@ function acceptChallenge() {
 /** In a challenge's match: the end screen names the challenger; a room nobody else is in falls back to the bot double. */
 function startedDuel(duel: Duel, link: GameLink) {
   if (duel.kind === 'host') {
-    const code = link.roomInfo?.()?.code;
-    if (code) void game?.share({ summary: duel.summary, room: code });
+    // The room's code arrives a moment after the join (its own subscription): wait for it, so the dialog always opens.
+    const hosting = game;
+    let tries = 0;
+    const open = () => {
+      if (game !== hosting) return;
+      const code = link.roomInfo?.()?.code;
+      if (code) void game?.share({ summary: duel.summary, room: code });
+      else if (++tries < 40) setTimeout(open, 250);
+    };
+    open();
     return;
   }
   const ref = duel.c.ref ?? '';
@@ -1119,6 +1144,7 @@ function run(action: Action, room = -1, retried = false) {
   if (action === 'code' && roomCode.value.length < 4) { roomCode.focus(); return; }
   // Still on the lobby's made-up callsign: ask for a name first, then play from that same tap.
   if (needsCallsign()) {
+    track('callsign_asked', {});
     askCallsign(callsign.value, name => { callsign.value = name; store.set('name', name); run(action, room, retried); });
     return;
   }
@@ -1245,7 +1271,8 @@ async function start(action: Action, retried = false) {
 
 function launch(link: GameLink, map: string) {
   game = new Game(assets, renderer, link, map, audio, app);
-  if (online.ok && !benchMode) game.onDuel(openDuelRoom);
+  // 約朋友單挑: our own 1v1 room where online play is available, else a challenge link the bot double answers.
+  if (!benchMode) game.onDuel(online.ok ? openDuelRoom : undefined);
   if (benchMode && !bench) startBench(game);
   game.onMapChange = next => { game?.stop(true); launch(link, next); };
   game.onExit = how => backToLobby('menu', '', how);
@@ -1297,7 +1324,7 @@ function joined(link: GameLink, map: string, serverChoice: ServerId | undefined,
 }
 
 /** Tries to reconnect, waiting for the page to be visible first (a backgrounded app cannot connect). */
-const REJOIN_TRIES = 3;
+const REJOIN_TRIES = 5;
 const visible = () => new Promise<void>(resolve => {
   if (document.visibilityState === 'visible') { resolve(); return; }
   const on = () => { if (document.visibilityState === 'visible') { document.removeEventListener('visibilitychange', on); resolve(); } };
@@ -1326,7 +1353,7 @@ async function rejoinAfterDrop(old: OnlineLink) {
         const team = old.entry.team === 0 || old.entry.team === 1 ? old.entry.team as Team : undefined;
         const link = await connectOnline(old.entry.name, team, how, () => undefined);
         if (game !== playing) { link.dispose(); return; }
-        leftMatch('disconnect', 'lost');
+        leftMatch('disconnect', 'rejoined');
         playing.stop(); game = undefined;
         const map = link.state()?.mapId ?? playing.mapId;
         launch(link, map);

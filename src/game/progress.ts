@@ -83,6 +83,8 @@ export function apply(prev: Progress, e: ProgressEvent, day = today()): { next: 
 }
 
 /** A new player: bots go easier on them (Solo; online the server decides from its career stats). */
+/** Until this many rounds are in the books, the first round's end points out the store (game.ts). */
+export const NUDGE_ROUNDS = 2;
 export const isRookie = (p: Progress) => p.rounds < ROOKIE_ROUNDS;
 
 // ---- Storage --------------------------------------------------------------------------------------

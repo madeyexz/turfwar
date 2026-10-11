@@ -4,17 +4,20 @@
  * clicks away from the game while open.
  */
 import type { MatchSummary } from '../game/matchstats';
-import { bragText, cardBlob, copyText, download, drawShareCard, shareNative } from './sharecard';
+import { bragText, cardBlob, copyText, download, drawShareCard, shareLink, shareNative } from './sharecard';
+import { shareActs, shareFlow, type ShareMethod } from './sharechoice';
 import { t } from './i18n';
 import './share.css';
 
-export type ShareMethod = 'native' | 'download' | 'copy';
+export type { ShareMethod };
 
 export interface ShareOptions {
   summary: MatchSummary;
   url: string;
   backdrop?: CanvasImageSource & { width: number; height: number };
   meme: boolean;
+  /** The code of the private 1v1 room the link opens (the dialog then speaks of sending a challenge). */
+  room?: boolean;
   /** A line over the card (e.g. the 1v1 room that is open). */
   note?: string;
   /** Opened, and each time the player shares (analytics). */
@@ -25,6 +28,7 @@ export interface ShareOptions {
 const canShareFiles = () => {
   try { return !!navigator.canShare?.({ files: [new File([new Uint8Array(1)], 'x.png', { type: 'image/png' })] }); } catch { return false; }
 };
+const canShareLink = () => typeof navigator.share === 'function';
 
 let open: HTMLElement | undefined;
 
@@ -32,19 +36,19 @@ let open: HTMLElement | undefined;
 export async function openSharePanel(o: ShareOptions) {
   open?.remove();
   const root = document.createElement('div');
-  root.className = 'share-panel';
+  root.className = o.room ? 'share-panel sp-room' : 'share-panel';
   root.setAttribute('role', 'dialog');
   root.setAttribute('aria-label', t('share.title'));
-  const native = canShareFiles();
+  const acts = shareActs({ files: canShareFiles(), link: canShareLink() }, !!o.room);
+  // The main button is the first; a room's is worded as sending the challenge.
+  const label = (a: ShareMethod) => (a === 'native' || a === 'link' ? t(o.room ? 'chal.send' : 'share.native') : t(a === 'download' ? 'share.download' : 'share.copy'));
   root.innerHTML = `<div class="sp-box">
     <header><b>${t('share.title')}</b><button type="button" class="sp-close" aria-label="${t('share.close')}">×</button></header>
     ${o.note ? `<p class="sp-note"></p>` : ''}
     <div class="sp-body">
       <div class="sp-card"><span>${t('share.making')}</span></div>
       <div class="sp-acts">
-        ${native ? `<button type="button" class="sp-go" data-act="native">${t('share.native')}</button>` : ''}
-        <button type="button" class="${native ? '' : 'sp-go'}" data-act="download">${t('share.download')}</button>
-        <button type="button" data-act="copy">${t('share.copy')}</button>
+        ${acts.map((a, i) => `<button type="button" class="${i ? '' : 'sp-go'}" data-act="${a}">${label(a)}</button>`).join('\n        ')}
         <input class="sp-url" readonly aria-label="${t('share.copy')}">
         <p class="sp-hold">${t('share.hold')}</p>
       </div>
@@ -76,21 +80,26 @@ export async function openSharePanel(o: ShareOptions) {
   }
   const file = () => new File([blob!], `turfwar-${o.summary.name.replace(/[^\p{L}\p{N}]+/gu, '') || 'card'}.png`, { type: 'image/png' });
   const text = bragText(o.summary, o.meme);
+  const copyButton = () => root.querySelector<HTMLButtonElement>('[data-act="copy"]')!;
+  const copied = () => {
+    const b = copyButton();
+    b.textContent = t('share.copied'); setTimeout(() => { b.textContent = label('copy'); }, 2000);
+  };
   root.querySelector('.sp-acts')!.addEventListener('click', async e => {
     const act = (e.target as HTMLElement).closest<HTMLElement>('[data-act]')?.dataset.act as ShareMethod | undefined;
     if (!act) return;
-    if (act === 'native' && blob) {
-      const r = await shareNative(file(), t('share.text', { brag: text }), o.url);
-      if (r === 'native') o.onShared?.('native');
-      if (r === 'unsupported') { download(blob, file().name); o.onShared?.('download'); }
-    } else if (act === 'download' && blob) {
-      download(blob, file().name); o.onShared?.('download');
-    } else if (act === 'copy') {
-      const ok = await copyText(o.url);
-      const b = e.target as HTMLButtonElement;
-      if (ok) { b.textContent = t('share.copied'); o.onShared?.('copy'); setTimeout(() => { b.textContent = t('share.copy'); }, 2000); }
-      else (root.querySelector('.sp-url') as HTMLInputElement).select();
-    }
+    if (act === 'download') { if (blob) { download(blob, file().name); o.onShared?.('download'); } return; }
+    // The share sheet needs the tap's own gesture: nothing is awaited before it.
+    const first = act === 'copy' ? 'copy' : act === 'link' || !blob ? 'link' : 'native';
+    const done = await shareFlow(first, {
+      shareFile: () => shareNative(file(), t('share.text', { brag: text }), o.url),
+      shareLink: () => shareLink(t('share.text', { brag: text }), o.url),
+      copy: () => copyText(o.url),
+    });
+    if (done === 'cancel') return;
+    if (done === 'failed') { (root.querySelector('.sp-url') as HTMLInputElement).select(); return; }
+    if (done === 'copy') copied();
+    o.onShared?.(done);
   });
   return { close };
 }

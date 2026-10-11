@@ -1,0 +1,34 @@
+/* The /about and /en/about pages: the privacy page's look, a wider column, tables and a Play button. No script runs on them. */
+@import '../privacy/privacy.css';
+
+/* Preloaded (vite.config.ts) and never swapped in late: a late swap would shift the headings (layout shift). */
+@font-face { font-family: 'Rajdhani'; font-weight: 600; font-display: optional; src: url('/fonts/rajdhani-600.woff2') format('woff2'); }
+@font-face { font-family: 'Rajdhani'; font-weight: 700; font-display: optional; src: url('/fonts/rajdhani-700.woff2') format('woff2'); }
+
+.bar, main { max-width: 860px; }
+.bar nav { display: flex; align-items: center; gap: 12px; }
+.bar nav a.alt-lang {
+  padding: 6px 12px; border: 1px solid var(--line); border-radius: 3px; color: var(--muted); text-decoration: none;
+  font: 700 13px var(--display); letter-spacing: 0.08em;
+}
+.bar nav a.alt-lang:hover { color: #fff; border-color: var(--accent); }
+.play {
+  display: inline-block; margin: 22px 0 0; padding: 12px 26px; border-radius: 3px; background: var(--accent); color: #05090c;
+  font: 700 18px var(--display); letter-spacing: 0.14em; text-transform: uppercase; text-decoration: none;
+}
+.play:hover { background: #fff; color: #05090c; }
+.facts { margin: 22px 0 0; padding: 0; display: grid; grid-template-columns: max-content 1fr; gap: 8px 18px; font-size: 15px; line-height: 1.55; }
+.facts dt { color: var(--muted); }
+.facts dd { margin: 0; }
+h3 { margin: 22px 0 6px; font-size: 17px; line-height: 1.4; }
+p, li { line-height: 1.7; }
+main ul, main ol { padding-left: 1.3em; }
+table { width: 100%; margin: 12px 0 0; border-collapse: collapse; font-size: 14.5px; line-height: 1.5; }
+th, td { padding: 7px 10px; text-align: left; vertical-align: top; border-bottom: 1px solid var(--line); }
+th { color: var(--muted); font-weight: 600; white-space: nowrap; }
+kbd { padding: 1px 6px; border: 1px solid var(--line); border-radius: 3px; background: rgba(255, 255, 255, 0.05); font: 600 0.9em var(--display); }
+.table-wrap { overflow-x: auto; }
+footer.site { max-width: 860px; margin: 40px auto 0; padding: 22px 24px 48px; border-top: 1px solid var(--line); color: var(--muted); font-size: 14px; line-height: 1.7; }
+footer.site a { margin-right: 14px; }
+@media (max-width: 560px) { .facts { grid-template-columns: 1fr; gap: 2px; } .facts dd { margin-bottom: 10px; } }
+h1 span { display: inline-block; }

@@ -27,12 +27,12 @@ function releases(): Release[] {
   return mergeReleases(snapshot, fromGit, building);
 }
 
-/** /admin and /privacy without the trailing slash serve their pages in the dev server too (Vercel rewrites them). */
+/** /admin, /privacy, /about and /en/about without the trailing slash serve their pages in the dev server too (Vercel rewrites them). */
 const pageRoutes: Plugin = {
   name: 'page-routes',
   configureServer(server) {
     server.middlewares.use((req, _res, next) => {
-      for (const page of ['/admin', '/privacy']) {
+      for (const page of ['/admin', '/privacy', '/about', '/en/about']) {
         if (req.url === page || req.url?.startsWith(`${page}?`)) req.url = `${page}/${req.url.slice(page.length)}`;
       }
       next();
@@ -46,6 +46,17 @@ const filesIn = (dir: string): string[] => readdirSync(dir).flatMap(name => {
   return statSync(full).isDirectory() ? filesIn(full).map(f => `${name}/${f}`) : [name];
 });
 const hash = (data: string | Buffer) => createHash('sha256').update(data).digest('hex').slice(0, 12);
+
+/**
+ * `<!--preload:rajdhani-600,rajdhani-700-->` in a page's head becomes preload links for those fonts with the
+ * versioned URLs the stylesheets ask for, so the font is already on its way when the first text paints
+ * (the lobby's text is drawn by script, so without it the fetch starts late and the swap shifts the layout).
+ */
+const fontPreload: Plugin = {
+  name: 'font-preload',
+  transformIndexHtml: { order: 'pre', handler: html => html.replace(/<!--preload:([a-z0-9,-]+)-->/, (_, names: string) => names.split(',')
+    .map(n => `<link rel="preload" as="font" type="font/woff2" crossorigin href="${versioned(`fonts/${n}.woff2`)}" />`).join('\n    ')) },
+};
 
 /**
  * The public/ files the service worker caches as static assets (models, textures, sounds, fonts, the
@@ -77,7 +88,8 @@ const pwa: Plugin = {
   name: 'pwa-service-worker',
   apply: 'build',
   writeBundle(options, bundle) {
-    const built = Object.keys(bundle).filter(f => f !== 'sw.js' && !f.startsWith('admin') && !f.includes('/admin') && !f.endsWith('.map'));
+    // The about pages are for search engines and links: the game does not need them offline.
+    const built = Object.keys(bundle).filter(f => f !== 'sw.js' && !f.startsWith('admin') && !f.includes('/admin') && !/^(en\/)?about\//.test(f) && !f.endsWith('.map'));
     const pub = filesIn(publicDir).sort();
     // Precached: the page, this build's scripts and styles, the manifest, the icons and the Latin fonts.
     const shell = [...built.map(f => `/${f}`), ...pub.filter(f => f === 'manifest.webmanifest' || f.startsWith('icons/') || /^fonts\/rajdhani-\d+\.woff2$/.test(f)).map(versioned)].sort();
@@ -91,7 +103,7 @@ const pwa: Plugin = {
 };
 
 export default defineConfig({
-  plugins: [pageRoutes, versionedCssUrls, pwa],
+  plugins: [pageRoutes, versionedCssUrls, fontPreload, pwa],
   define: { __APP_VERSION__: JSON.stringify(appVersion()), __ASSET_VERSIONS__: JSON.stringify(VERSIONS), __RELEASES__: JSON.stringify(releases()) },
   server: {
     allowedHosts: true,
@@ -102,8 +114,8 @@ export default defineConfig({
   build: {
     chunkSizeWarningLimit: 900,
     rollupOptions: {
-      // The game, the privacy notice at /privacy, the owner's admin dashboard at /admin (not linked from the game) and the service worker at /sw.js.
-      input: { main: resolve(__dirname, 'index.html'), privacy: resolve(__dirname, 'privacy/index.html'), admin: resolve(__dirname, 'admin/index.html'), sw: resolve(__dirname, 'src/pwa/sw.ts') },
+      // The game, the privacy notice at /privacy, the about pages at /about (繁體中文) and /en/about (English; static text for search and answer engines, docs/SEO.md), the owner's admin dashboard at /admin (not linked from the game) and the service worker at /sw.js.
+      input: { main: resolve(__dirname, 'index.html'), privacy: resolve(__dirname, 'privacy/index.html'), about: resolve(__dirname, 'about/index.html'), aboutEn: resolve(__dirname, 'en/about/index.html'), admin: resolve(__dirname, 'admin/index.html'), sw: resolve(__dirname, 'src/pwa/sw.ts') },
       output: { manualChunks: { three: ['three'] }, entryFileNames: chunk => chunk.name === 'sw' ? 'sw.js' : 'assets/[name]-[hash].js' },
     },
   },

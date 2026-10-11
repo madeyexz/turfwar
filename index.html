@@ -1,26 +1,90 @@
 <!doctype html>
-<html lang="en">
+<html lang="zh-TW">
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
     <meta name="theme-color" content="#05090c" />
-    <meta name="description" content="角頭械鬥 · Turf War: Taipei — round-based SWAT vs Militia browser shooter in the streets of Taipei: Elimination and Sabotage, cash, guns and attachments, solo with bots or online." />
-    <meta property="og:title" content="角頭械鬥 · Turf War: Taipei" />
+    <!-- Link previews (Threads, LINE, Facebook, Discord, X) read these without running the page, so one page carries one set:
+         Traditional Chinese first (the main audience), a short English line after it, and a 1200x630 card with the name (tools/og, docs/SEO.md). -->
+    <meta name="description" content="角頭械鬥（Turf War: Taipei）：免費網頁多人射擊遊戲，免下載、免註冊。特警對民兵的回合制殲滅戰與爆破戰，單機、1v1、6v6、24v24，西門町、台北101等台北地圖。Free browser team shooter, no install." />
+    <meta name="robots" content="index, follow, max-image-preview:large, max-snippet:-1" />
+    <!-- SEO/GEO (docs/SEO.md): the canonical, Open Graph and JSON-LD URLs are the clean one, never with utm_* or other query strings (src/seo.test.ts). -->
+    <link rel="canonical" href="https://turfwar.ianhsiao.me/" />
+    <meta property="og:title" content="角頭械鬥 Turf War: Taipei｜免費網頁射擊遊戲，免下載" />
+    <meta property="og:description" content="特警對民兵，回合制殲滅戰與爆破戰。單機、1v1、6v6、24v24，在台北街頭開打，打開瀏覽器就能玩。Free browser team shooter set in Taipei." />
     <meta property="og:type" content="website" />
-    <meta property="og:image" content="https://turfwar.ianhsiao.me/icons/icon-512.png" />
-    <meta property="og:image:width" content="512" />
-    <meta property="og:image:height" content="512" />
-    <meta property="og:image:alt" content="Turf War TW emblem with Taipei 101" />
-    <meta name="twitter:card" content="summary" />
+    <meta property="og:site_name" content="角頭械鬥 · Turf War: Taipei" />
+    <meta property="og:url" content="https://turfwar.ianhsiao.me/" />
+    <meta property="og:locale" content="zh_TW" />
+    <meta property="og:locale:alternate" content="en_US" />
+    <meta property="og:image" content="https://turfwar.ianhsiao.me/og/og-zh-TW.jpg" />
+    <meta property="og:image:type" content="image/jpeg" />
+    <meta property="og:image:width" content="1200" />
+    <meta property="og:image:height" content="630" />
+    <meta property="og:image:alt" content="角頭械鬥 Turf War: Taipei：台北西門町電影街的第一人稱槍戰畫面" />
+    <meta name="twitter:card" content="summary_large_image" />
+    <meta name="twitter:title" content="角頭械鬥 Turf War: Taipei｜免費網頁射擊遊戲，免下載" />
+    <meta name="twitter:description" content="特警對民兵，回合制殲滅戰與爆破戰。單機、1v1、6v6、24v24。Free browser team shooter set in Taipei." />
+    <meta name="twitter:image" content="https://turfwar.ianhsiao.me/og/og-zh-TW.jpg" />
+    <meta name="twitter:image:alt" content="角頭械鬥 Turf War: Taipei：台北西門町電影街的第一人稱槍戰畫面" />
+    <!--preload:rajdhani-600,rajdhani-700-->
     <link rel="manifest" href="/manifest.webmanifest" />
     <link rel="apple-touch-icon" href="/icons/apple-touch-icon.png" />
     <meta name="mobile-web-app-capable" content="yes" />
     <meta name="apple-mobile-web-app-capable" content="yes" />
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
     <meta name="apple-mobile-web-app-title" content="Turf War" />
-    <title>角頭械鬥 · Turf War: Taipei</title>
+    <title>角頭械鬥 Turf War: Taipei｜免費網頁射擊遊戲，免下載 FPS</title>
     <link rel="icon" type="image/png" sizes="16x16" href="/icons/favicon-16.png" />
     <link rel="icon" type="image/png" sizes="32x32" href="/icons/favicon-32.png" />
+    <script type="application/ld+json">
+    {
+      "@context": "https://schema.org",
+      "@graph": [
+        {
+          "@type": "WebSite",
+          "@id": "https://turfwar.ianhsiao.me/#website",
+          "url": "https://turfwar.ianhsiao.me/",
+          "name": "Turf War: Taipei",
+          "alternateName": ["角頭械鬥", "角頭械鬥 · Turf War: Taipei"],
+          "inLanguage": ["zh-TW", "en"],
+          "about": { "@id": "https://turfwar.ianhsiao.me/#game" }
+        },
+        {
+          "@type": "VideoGame",
+          "@id": "https://turfwar.ianhsiao.me/#game",
+          "url": "https://turfwar.ianhsiao.me/",
+          "name": "Turf War: Taipei",
+          "alternateName": ["角頭械鬥", "角頭械鬥 · Turf War: Taipei"],
+          "description": "Turf War: Taipei (角頭械鬥) is a free, round-based team first-person shooter that runs in the browser with nothing to install: SWAT versus Militia in Elimination and Sabotage, with cash, a store and weapon attachments, played solo against bots or online in 1v1, 6v6 and 24v24 rooms on maps of Taipei. 角頭械鬥是免費的網頁多人射擊遊戲，免下載、免註冊，規則向 BeGone 致敬。",
+          "genre": ["First-person shooter", "Tactical shooter", "Team shooter"],
+          "gamePlatform": "Web browser",
+          "applicationCategory": "GameApplication",
+          "operatingSystem": "Any",
+          "playMode": ["https://schema.org/MultiPlayer", "https://schema.org/SinglePlayer"],
+          "numberOfPlayers": { "@type": "QuantitativeValue", "minValue": 1, "maxValue": 48 },
+          "inLanguage": ["zh-TW", "en"],
+          "isAccessibleForFree": true,
+          "offers": { "@type": "Offer", "price": "0", "priceCurrency": "TWD", "availability": "https://schema.org/InStock", "url": "https://turfwar.ianhsiao.me/" },
+          "image": "https://turfwar.ianhsiao.me/og/og-zh-TW.jpg",
+          "screenshot": "https://turfwar.ianhsiao.me/og/og-en.jpg",
+          "trailer": [
+            { "@type": "VideoObject", "name": "Turf War: Taipei trailer (30 s)", "description": "A 30-second trailer for Turf War: Taipei.", "thumbnailUrl": "https://turfwar.ianhsiao.me/og/og-en.jpg", "contentUrl": "https://turfwar.ianhsiao.me/media/turfwar-trailer-30s.mp4", "uploadDate": "2026-10-10", "duration": "PT30S", "inLanguage": "en" },
+            { "@type": "VideoObject", "name": "角頭械鬥 30 秒預告片", "description": "角頭械鬥 Turf War: Taipei 的 30 秒中文預告片。", "thumbnailUrl": "https://turfwar.ianhsiao.me/og/og-zh-TW.jpg", "contentUrl": "https://turfwar.ianhsiao.me/media/turfwar-trailer-30s.zh-TW.mp4", "uploadDate": "2026-10-10", "duration": "PT30S", "inLanguage": "zh-TW" }
+          ],
+          "author": { "@type": "Person", "name": "Ian Hsiao", "url": "https://github.com/madeyexz" },
+          "sameAs": ["https://github.com/madeyexz/turfwar"]
+        }
+      ]
+    }
+    </script>
   </head>
-  <body><div id="app"></div><script type="module" src="/src/main.ts"></script></body>
+  <body><noscript>
+      <main style="max-width:720px;margin:0 auto;padding:32px 20px;color:#e9f3f5;background:#05090c;font:16px/1.7 system-ui,sans-serif">
+        <h1 style="font-size:28px">角頭械鬥 · Turf War: Taipei</h1>
+        <p lang="zh-TW">角頭械鬥是免費的網頁多人射擊遊戲，免下載、免註冊：特警對民兵的回合制殲滅戰與爆破戰，單機、1v1、6v6、24v24。遊戲需要啟用 JavaScript 才能執行。<a style="color:#7ff6ff" href="/about">玩法介紹</a></p>
+        <p lang="en">Turf War: Taipei (角頭械鬥) is a free multiplayer shooter that runs in your browser, with nothing to install: round-based SWAT vs Militia in Elimination and Sabotage, solo, 1v1, 6v6 and 24v24. The game needs JavaScript. <a style="color:#7ff6ff" href="/en/about">About the game</a></p>
+      </main>
+    </noscript>
+    <div id="app"></div><script type="module" src="/src/main.ts"></script></body>
 </html>
