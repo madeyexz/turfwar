@@ -11,7 +11,9 @@
  * the rider's aim in the frame. Finally one teleporting report must be rejected (1 correction).
  *
  *   bun scripts/vehiclecheck.ts ws://127.0.0.1:3400 <db>
+ * Needs owner SQL access to extend its disposable room's round for the full route.
  */
+import { spawnSync } from 'node:child_process';
 import { loadMap, loadNav } from '../shared/maps/index';
 import { decodeFrame, type DecodedFrame } from '../shared/match/frame';
 import { findPath, nearestNode } from '../shared/match/nav';
@@ -19,11 +21,13 @@ import { wrapAngle } from '../shared/math';
 import { createMoveState, stepMovement, type MoveState } from '../shared/movement';
 import { eyeHeight } from '../shared/movement';
 import { LADDER_DIRS } from '../shared/collision';
-import { VEHICLES, exitSpot, forwardOf, idleVehicleInput, seatPosition, slipAngle, speedOf, stepVehicle, type Vehicle, type VehicleInput } from '../shared/vehicles';
+import { deepestOverlap } from '../shared/obstacles';
+import { VEHICLES, exitSpot, forwardOf, idleVehicleInput, obstaclesOf, seatPosition, slipAngle, speedOf, stepVehicle, type Vehicle, type VehicleInput } from '../shared/vehicles';
 
 const uri = process.argv[2] ?? 'ws://127.0.0.1:3400';
 const db = process.argv[3] ?? 'vehiclecheck';
 if (!/^wss?:\/\/(127\.0\.0\.1|localhost)(:\d+)?\/?$/.test(uri)) throw new Error(`Refusing non-local server ${uri}`);
+setTimeout(() => { console.error('FAIL: vehicle check exceeded 600 seconds'); process.exit(1); }, 600_000).unref();
 if (typeof DecompressionStream === 'undefined') {
   const { gunzipSync } = await import('node:zlib');
   (globalThis as Record<string, unknown>).DecompressionStream = class {
@@ -50,6 +54,7 @@ const connect = (name: string, team: number) => new Promise<Conn>((resolve, reje
           const mine = conn.db.player.identity.find(conn.identity!);
           if (!mine) { setTimeout(ready, 50); return; }
           code.value ||= conn.db.match.id.find(mine.room)!.code || [...conn.db.myRoomCode.iter()].find(r => r.room === mine.room)?.code || '';
+          if (!code.value) { setTimeout(ready, 50); return; }
           conn.subscriptionBuilder().onApplied(() => resolve(conn))
             .subscribe([`SELECT * FROM roster WHERE room = ${mine.room}`, `SELECT * FROM frame WHERE id = ${mine.room}`]);
         };
@@ -60,6 +65,13 @@ const connect = (name: string, team: number) => new Promise<Conn>((resolve, reje
 });
 
 const a = await connect('Driver', 0);
+// This route takes longer than one normal round. Extend only this disposable private room,
+// before the second client joins and starts the round; never change the game's round rules.
+const room = a.db.player.identity.find(a.identity!)!.room;
+const config = JSON.parse(a.db.match.id.find(room)!.configJson);
+config.roundTime = config.roundTimeSingle = 600;
+const setup = spawnSync('spacetime', ['sql', db, `UPDATE match SET configJson = '${JSON.stringify(config).replaceAll("'", "''")}' WHERE id = ${room}`, '--server', uri.replace(/^ws/, 'http')], { encoding: 'utf8' });
+if (setup.status !== 0) throw new Error('Vehicle check needs owner SQL access to its disposable local room');
 const b = await connect('Watcher', 1);
 const me = () => a.db.player.identity.find(a.identity!)!;
 const frameOf = (c: Conn): DecodedFrame | undefined => {
@@ -97,6 +109,7 @@ const { world, def } = loadMap('taipei'), nav = loadNav('taipei');
 const start = pose()!;
 const spots = def.vehicles!;
 const vehicleNow = (i: number) => frameOf(a)!.vehicles[i];
+const bodies = (skip = -1) => obstaclesOf(frameOf(a)!.vehicles, skip);
 const carIndex = spots.map((s, i) => ({ s, i })).filter(({ s }) => s.kind === 'car')
   .sort((p, q) => Math.hypot(p.s.x - start.x, p.s.z - start.z) - Math.hypot(q.s.x - start.x, q.s.z - start.z))[0].i;
 const heliIndex = spots.findIndex(s => s.kind === 'heli');
@@ -115,19 +128,45 @@ function checkCorrection(label: string, snap: () => void, client: object) {
 
 /** Walk with the shared controller (nav path, then straight), reporting at 20 Hz. */
 async function walkTo(m: MoveState, target: { x: number; y: number; z: number }) {
-  const path = findPath(nav, nearestNode(nav, m.x, m.y, m.z), nearestNode(nav, target.x, target.y, target.z));
-  const points = [...path.map(n => ({ x: nav.x[n], z: nav.z[n] })), target];
+  // The static graph predates the car we just parked. Do not plan through its body.
+  const obstacles = bodies();
+  const clear = (a: { x: number; y: number; z: number }, b: typeof a) => {
+    const steps = Math.max(1, Math.ceil(Math.hypot(b.x - a.x, b.y - a.y, b.z - a.z) / 0.2));
+    for (let i = 0; i <= steps; i++) {
+      const t = i / steps;
+      if (deepestOverlap(obstacles, { x: a.x + (b.x - a.x) * t, y: a.y + (b.y - a.y) * t, z: a.z + (b.z - a.z) * t }, 0.4, 1.8).depth > 0) return false;
+    }
+    return true;
+  };
+  const point = (n: number) => ({ x: nav.x[n], y: nav.y[n], z: nav.z[n] });
+  const costs = nav.costs.slice();
+  for (let n = 0; n < nav.x.length; n++) for (let e = nav.offsets[n]; e < nav.offsets[n + 1]; e++) {
+    if (!clear(point(n), point(nav.edges[e]))) costs[e] = Infinity;
+  }
+  const columns = new Map([...nav.columns].map(([key, nodes]) => [key, nodes.filter(n => clear(point(n), point(n)))]));
+  const walkNav = { ...nav, costs, columns };
+  const starts = new Map([...columns].map(([key, nodes]) => [key, nodes.filter(n => clear(m, point(n)))]));
+  const path = findPath(walkNav, nearestNode({ ...walkNav, columns: starts }, m.x, m.y, m.z), nearestNode(walkNav, target.x, target.y, target.z));
+  if (!path.length) throw new Error('No clear vehicle-route walk');
+  const points = [...path.map(n => ({ x: nav.x[n], y: nav.y[n], z: nav.z[n] })), target];
   let k = 0;
-  for (let t = 0; t < 60 && Math.hypot(target.x - m.x, target.z - m.z) > 0.4; t += 0.05) {
-    while (k < points.length - 1 && Math.hypot(points[k].x - m.x, points[k].z - m.z) < 0.6) k++;
-    const p = points[k], yaw = Math.atan2(-(p.x - m.x), -(p.z - m.z));
+  for (let t = 0; t < 60 && Math.hypot(target.x - m.x, target.y - m.y, target.z - m.z) > 0.4; t += 0.05) {
+    while (k < points.length - 1 && Math.hypot(points[k].x - m.x, points[k].z - m.z) < 0.6 && Math.abs(points[k].y - m.y) < 0.7) k++;
+    const p = points[k];
+    let yaw = Math.atan2(-(p.x - m.x), -(p.z - m.z));
+    const ladder = world.ladderAt(m.x, m.y, m.z, 0.35);
+    if (ladder && Math.abs(p.y - m.y) > 0.7) {
+      const [nx, nz] = LADDER_DIRS[ladder.dir], direction = p.y > m.y ? 1 : -1;
+      yaw = Math.atan2(-nx * direction, -nz * direction);
+    }
     const near = Math.hypot(target.x - m.x, target.z - m.z) < 1.2;
-    for (let i = 0; i < 6; i++) stepMovement(world, m, { forward: near ? 0.4 : 1, strafe: 0, yaw, jump: false, crouch: false, sprint: !near, ads: false }, STEP, 0);
+    for (let i = 0; i < 6; i++) stepMovement(world, m, { forward: near ? 0.4 : 1, strafe: 0, yaw, jump: false, crouch: false, sprint: !near, ads: false }, STEP, 0, bodies());
     await wait(50);
     await a.reducers.report({ x: m.x, y: m.y, z: m.z, vx: m.vx, vy: m.vy, vz: m.vz, yaw, pitch: 0, crouch: m.crouch, grounded: m.grounded, sprint: !near, ads: false, slide: false, weapon: 0, use: false });
     reports++;
     checkCorrection('walk', () => { const sp = pose(); if (sp) { m.x = sp.x; m.y = sp.y; m.z = sp.z; m.vx = m.vy = m.vz = 0; } }, { x: m.x, y: m.y, z: m.z });
   }
+  if (Math.hypot(target.x - m.x, target.y - m.y, target.z - m.z) > 0.5) throw new Error(`Walk did not reach ${JSON.stringify(target)}: ${JSON.stringify({ x: m.x, y: m.y, z: m.z })}`);
 }
 
 async function board(index: number) {
@@ -153,7 +192,7 @@ async function pilot(v: Vehicle, seconds: number, control: (v: Vehicle, t: numbe
   let top = v.y, t = 0;
   for (; t < seconds && !done(v); t += 0.05) {
     const input = { ...idleVehicleInput(v.yaw, true), ...control(v, t) };
-    for (let i = 0; i < 6; i++) stepVehicle(world, v, input, STEP);
+    for (let i = 0; i < 6; i++) stepVehicle(world, v, input, STEP, bodies(v.id));
     top = Math.max(top, v.y);
     await wait(50);
     const look = aim(v);
@@ -177,6 +216,7 @@ const m = createMoveState(start.x, start.y, start.z);
 const car0 = vehicleNow(carIndex);
 await walkTo(m, exitSpot(world, { ...car0 }, 0));
 let car = await board(carIndex);
+console.log('Car boarded');
 const carStart = { x: car.x, z: car.z };
 const ladderOf = (x: number, z: number) => world.ladders.find(l => Math.hypot(l.x - x, l.z - z) < 1.5)!;
 // 2. Drive up the ring road's west side and east along its north side (the inner lane), a handbrake drift at the corner.
@@ -215,7 +255,7 @@ const heli0 = vehicleNow(heliIndex);
   await walkTo(walker, { x: ladder.x - nx * 1.2, y: ladder.y0, z: ladder.z - nz * 1.2 });
   const yaw = Math.atan2(-nx, -nz);
   for (let t = 0; t < 30 && !(walker.y > ladder.y1 - 0.05 && walker.grounded); t += 0.05) {
-    for (let i = 0; i < 6; i++) stepMovement(world, walker, { forward: 1, strafe: 0, yaw, jump: false, crouch: false, sprint: false, ads: false }, STEP, 0);
+    for (let i = 0; i < 6; i++) stepMovement(world, walker, { forward: 1, strafe: 0, yaw, jump: false, crouch: false, sprint: false, ads: false }, STEP, 0, bodies());
     await wait(50);
     await a.reducers.report({ x: walker.x, y: walker.y, z: walker.z, vx: walker.vx, vy: walker.vy, vz: walker.vz, yaw, pitch: 0, crouch: walker.crouch, grounded: walker.grounded, sprint: false, ads: false, slide: false, weapon: 0, use: false });
     reports++;
@@ -224,6 +264,7 @@ const heli0 = vehicleNow(heliIndex);
 }
 await walkTo(walker, exitSpot(world, { ...heli0 }, 0));
 const heli = await board(heliIndex);
+console.log('Helicopter boarded');
 const ground = heli.y;
 // 4. Spin up, climb to ~30 m, fly north 60 m (over Lane N and the north sidewalk), hover, turn and
 // fly back to the pad, descend and land.
@@ -247,6 +288,7 @@ const scooterIndex = spots.map((s, i) => ({ s, i })).filter(({ s }) => s.kind ==
   .sort((p, q) => Math.hypot(p.s.x - rider.x, p.s.z - rider.z) / 4 - openRoad(p.i) - (Math.hypot(q.s.x - rider.x, q.s.z - rider.z) / 4 - openRoad(q.i)))[0].i;
 await walkTo(rider, exitSpot(world, { ...vehicleNow(scooterIndex) }, 0));
 const scooter = await board(scooterIndex);
+console.log('Scooter boarded');
 await wait(1200); // the sidearm/SMG comes up
 // 6. Ride: up to speed, a handbrake drift right, counter-steer, a drift left, straighten; the rider
 // fires the weapon in hand to the bike's left every 0.25 s, aiming independently of the heading.
@@ -300,5 +342,11 @@ console.log(JSON.stringify({
   corrections: accepted, firstBad,
   teleport: { corrections: afterTeleport - accepted, serverStayed: Math.abs(scooterAfter.x - scooter.x) < 1 },
 }, null, 1));
+const ok = accepted === 0 && afterTeleport - accepted === 1 && Math.abs(scooterAfter.x - scooter.x) < 1
+  && carDistance > 20 && carShot.ammoBefore === carShot.ammoAfter && carShot.shotsSeen === 0
+  && climb.top > ground + 15 && heliEnd.grounded && Math.abs(heliEnd.y - ground) < 0.5
+  && topSpeed > 5 && riderShots.seenByWatcher > 0 && riderShots.fromClaimedMuzzle === riderShots.seenByWatcher
+  && riderShots.ammoAfter < riderShots.ammoBefore && aimSeen > 0;
+console.log(ok ? 'PASS' : 'FAIL');
 a.disconnect(); b.disconnect();
-process.exit(0);
+process.exit(ok ? 0 : 1);

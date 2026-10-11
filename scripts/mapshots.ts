@@ -74,11 +74,11 @@ function dataUrl(js: string) {
 mkdirSync(out, { recursive: true });
 const shots = tries.length ? tries : SHOTS.filter(s => !only.size || only.has(s.id));
 try {
+  browser('set', 'viewport', '1280', '720');
   for (const [i, s] of shots.entries()) {
     const q = new URLSearchParams({ map: s.id, cam: s.cam.join(','), look: s.look.join(','), q: 'high', shot: `${SIZE.w}x${SIZE.h}` });
     if (s.fov) q.set('fov', String(s.fov));
     browser('open', `${base}/dev/level.html?${q}`);
-    browser('set', 'viewport', '1280', '720', '2');
     browser('wait', '--fn', '!!window.__shot');
     let file: Buffer | undefined, quality = 0;
     for (quality of QUALITIES) {
