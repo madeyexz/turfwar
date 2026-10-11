@@ -20,7 +20,7 @@ import { beginPlay, endPlay, flushDue, flushPlay, type PlayStore } from '../../s
 import { acceptNetReport, foldNetDay } from '../../shared/netstats';
 import { acceptDevice } from '../../shared/devicekind';
 import * as Admin from './admin';
-import { AdminError, dailyNetRows, dailyRows, dailyTimeRows, dayOf, forAdmin, playerDayNetRows, playerDayRows, playerDayTimeRows, playerHourRows, playerDeviceRows, playerNetRows, playerRows, playTimeRows, type AdminStore } from './admin';
+import { AdminError, bumpPeak, dailyNetRows, dailyRows, dailyTimeRows, dayOf, forAdmin, playerDayNetRows, playerDayRows, playerDayTimeRows, playerHourRows, playerDeviceRows, playerNetRows, playerRows, playTimeRows, onlineBySide, type AdminStore } from './admin';
 
 /**
  * Authoritative multiplayer: the same shared match simulation the offline client runs, executed
@@ -224,6 +224,15 @@ const HOUR_MICROS = 3_600_000_000n;
 const hourOf = (micros: bigint) => Number(micros / HOUR_MICROS);
 
 /**
+ * The most players in rooms at once per hour (hours since the epoch): everyone, and Phone (phones and
+ * tablets) and Computer by each player's latest device report, with when the all-player peak was
+ * reached. Raised whenever someone enters a room (the only time the count can rise) and checked by
+ * each room's minute flush (so an hour that starts with players in rooms gets a row). Kept: 24 rows a
+ * day. Its own table so existing ones keep their columns. Private.
+ */
+const peakTable = table({ name: 'peak_hour' }, { hour: t.u32().primaryKey(), peak: t.u32(), phone: t.u32(), computer: t.u32(), at: t.timestamp() });
+
+/**
  * What each player plays on (shared/devicekind.ts), from `device` reports (one per connection, after
  * `hello`): the latest kind ('phone', 'tablet' or 'desktop'), connections reported per kind and the
  * latest report. Its own table so existing ones keep their columns. Private.
@@ -254,7 +263,7 @@ const spacetimedb = schema({
   matchEvent: eventTable, tickSchedule: tickTable, profile: profileTable, counter: counterTable,
   vehicle: vehicleTable, vehicleInbox: vehicleInboxTable, playerSeen: seenTable,
   playerDay: dayTable, admin: adminTable, adminAttempt: adminAttemptTable, playerTime: timeTable, playerDayTime: dayTimeTable,
-  playerNet: netTable, playerDayNet: dayNetTable, playerHour: hourTable, playerDevice: deviceTable, roomCode: roomCodeTable, privateRoom: privateRoomTable,
+  playerNet: netTable, playerDayNet: dayNetTable, playerHour: hourTable, peakHour: peakTable, playerDevice: deviceTable, roomCode: roomCodeTable, privateRoom: privateRoomTable,
 });
 export default spacetimedb;
 
@@ -680,6 +689,17 @@ function pruneHours(ctx: Ctx, now: bigint) {
   for (let h = cut - 48; h < cut; h++) for (const r of [...ctx.db.playerHour.hour.filter(h)]) ctx.db.playerHour.key.delete(r.key);
 }
 
+/** Raise this hour's `peak_hour` record to the players in rooms right now, if they are more. */
+function notePeak(ctx: Ctx) {
+  const now = micros(ctx), hour = hourOf(now);
+  const online = onlineBySide([...ctx.db.player.iter()].map(p => ctx.db.playerDevice.identity.find(p.identity)?.device));
+  const prev = ctx.db.peakHour.hour.find(hour);
+  const next = bumpPeak(prev ? { ...prev, at: prev.at.microsSinceUnixEpoch } : undefined, hour, online, now);
+  if (!next) return;
+  const row = { ...next, at: new Timestamp(next.at) };
+  if (prev) ctx.db.peakHour.hour.update(row); else ctx.db.peakHour.insert(row);
+}
+
 /** One `player_day` row per player per UTC day they were active. */
 function markDay(ctx: Ctx) {
   const day = dayOf(micros(ctx));
@@ -708,6 +728,7 @@ function enterRoom(ctx: Ctx, room: number, name: string, team: number) {
     else ctx.db.player.insert({ ...player, chatWindowMicros: 0n, chatCount: 0 });
   });
   beginPlay(playStore(ctx), ctx.sender, micros(ctx));
+  notePeak(ctx);
 }
 
 /**
@@ -845,6 +866,7 @@ export const tick = spacetimedb.reducer({ onSchedule: tickTable }, { arg: tickTa
       for (const p of ctx.db.player.iter()) if (p.room === room && humans.has(p.soldierId)) here.push(p.identity);
       flushPlay(playStore(ctx), here, now);
       pruneHours(ctx, now);
+      notePeak(ctx);
     }
     applyInputs(ctx, state, sim);
     if (state.phase === 'ended' && state.phaseLeft - dt <= 0) {
@@ -1266,6 +1288,13 @@ export const adminDailyNet = spacetimedb.view({ name: 'admin_daily_net', public:
     for (const r of ctx.db.playerNet.iter()) last = Math.max(last, dayOf(r.lastAt.microsSinceUnixEpoch));
     return dailyNetRows(last, day => ctx.db.playerDayNet.day.filter(day));
   }));
+
+// Peak online has a view of its own too.
+
+/** The most players in rooms at once per hour (from `peak_hour`, every hour recorded): everyone, Phone and Computer, and when the all-player peak was reached. */
+export const adminPeakHour = spacetimedb.view({ name: 'admin_peak_hour', public: true },
+  t.array(t.row('AdminPeakHourRow', { hour: t.u32(), peak: t.u32(), phone: t.u32(), computer: t.u32(), at: t.timestamp() })),
+  ctx => forAdmin(viewAdmins(ctx.db), ctx.sender.toHexString(), () => [...ctx.db.peakHour.iter()]));
 
 // What players play on has a view of its own too (joined to `admin_players` by id on the page).
 

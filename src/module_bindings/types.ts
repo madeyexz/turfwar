@@ -73,6 +73,18 @@ export const AdminOverviewRow = __t.object("AdminOverviewRow", {
 });
 export type AdminOverviewRow = __Infer<typeof AdminOverviewRow>;
 
+export const AdminPeakHour = __t.object("AdminPeakHour", {});
+export type AdminPeakHour = __Infer<typeof AdminPeakHour>;
+
+export const AdminPeakHourRow = __t.object("AdminPeakHourRow", {
+  hour: __t.u32(),
+  peak: __t.u32(),
+  phone: __t.u32(),
+  computer: __t.u32(),
+  at: __t.timestamp(),
+});
+export type AdminPeakHourRow = __Infer<typeof AdminPeakHourRow>;
+
 export const AdminPlayerDay = __t.object("AdminPlayerDay", {});
 export type AdminPlayerDay = __Infer<typeof AdminPlayerDay>;
 
@@ -326,6 +338,15 @@ export const MyRoomCodeRow = __t.object("MyRoomCodeRow", {
   code: __t.string(),
 });
 export type MyRoomCodeRow = __Infer<typeof MyRoomCodeRow>;
+
+export const PeakHour = __t.object("PeakHour", {
+  hour: __t.u32(),
+  peak: __t.u32(),
+  phone: __t.u32(),
+  computer: __t.u32(),
+  at: __t.timestamp(),
+});
+export type PeakHour = __Infer<typeof PeakHour>;
 
 export const Player = __t.object("Player", {
   identity: __t.identity(),

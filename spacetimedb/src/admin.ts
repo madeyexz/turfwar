@@ -293,3 +293,34 @@ export function playerHourRows(rows: Iterable<HourLike>): PlayerHourRow[] {
   }
   return out;
 }
+
+// ---- Peak online (players in rooms at once; a table and a view of their own) ------------------
+
+/** Players in rooms at one moment: everyone, and by the side of their latest device report (phones and tablets are Phone). */
+export interface Online { all: number; phone: number; computer: number }
+/** A `peak_hour` row: the most players in rooms at once in one hour (hours since the epoch), and when the all-player peak was reached (epoch microseconds). */
+export interface PeakHour { hour: number; peak: number; phone: number; computer: number; at: bigint }
+
+/** Count players in rooms from each one's latest device kind (undefined: no report, counted only in `all`). */
+export function onlineBySide(devices: Iterable<string | undefined>): Online {
+  const online = { all: 0, phone: 0, computer: 0 };
+  for (const d of devices) {
+    online.all++;
+    if (d === 'phone' || d === 'tablet') online.phone++;
+    else if (d === 'desktop') online.computer++;
+  }
+  return online;
+}
+
+/**
+ * `hour`'s record after counting `online` at `now`: each figure keeps its own maximum, and `at` moves
+ * only when the all-player peak rises. Undefined when nothing changes (no write needed).
+ */
+export function bumpPeak(prev: PeakHour | undefined, hour: number, online: Online, now: bigint): PeakHour | undefined {
+  if (!prev) return online.all > 0 ? { hour, peak: online.all, phone: online.phone, computer: online.computer, at: now } : undefined;
+  if (online.all <= prev.peak && online.phone <= prev.phone && online.computer <= prev.computer) return undefined;
+  return {
+    hour, peak: Math.max(prev.peak, online.all), phone: Math.max(prev.phone, online.phone), computer: Math.max(prev.computer, online.computer),
+    at: online.all > prev.peak ? now : prev.at,
+  };
+}

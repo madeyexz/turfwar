@@ -226,7 +226,7 @@ whenever what is collected changes. These answer "how many players, and from whe
   the country from the IP on its side. Events: `lobby_view`, `play_clicked`, `match_joined`,
   `match_left` (also on tab close, by beacon; `exit` says how: `menu_button`, `end_screen`, `leave_key`,
   `removed`, `lost` (the connection dropped and the room could not be rejoined), `rejoined` (it dropped and we came straight back to the same room; `lost` counted these too until 2026-10-11) or `close`), `round_ended`, `vehicle_entered`, `store_purchase`,
-  `share_card_opened` / `share_card_shared` (`method`: `native` card + link through the share sheet, `link` link only through it, `copy`, `download`), `duel_clicked` (約朋友單挑, `via` `room` or `link`), `challenge_link_opened` / `challenge_started` / `challenge_completed`, `callsign_asked` (a new player was asked for a callsign; `play_clicked` follows only when they answer), `language_changed`, `error_shown`, `connect_slow` (the lobby's connection took over 6 s or needed a retry after a failed ping or connect: `seconds`, `queued`, `failures`, `reconnect` and the split of the wait, `ping_ms`/`ping_ok` (first ping), `connect_ms`, `import_ms` (SDK chunk load). Until 2026-10-12 this was called `server_woke` and the lobby also showed an "asleep" screen for it; Singapore is gone from the game, so the event and screen are gone. The first week's ~920 `server_woke` events are therefore slow connects, almost all on Taipei, which is always on, plus 7 Oct's real Singapore wake-ups, and a query for the whole period should read both names), `net_sample`, `client_error` (the page's own failures:
+  `share_card_opened` / `share_card_shared` (`method`: `native` card + link through the share sheet, `link` link only through it, `copy`, `download`), `duel_clicked` (約朋友單挑, `via` `room` or `link`), `challenge_link_opened` / `challenge_started` / `challenge_completed`, `callsign_asked` (a new player was asked for a callsign; `play_clicked` follows only when they answer), `language_changed`, `discord_clicked` (the lobby's Discord button), `error_shown`, `connect_slow` (the lobby's connection took over 6 s or needed a retry after a failed ping or connect: `seconds`, `queued`, `failures`, `reconnect` and the split of the wait, `ping_ms`/`ping_ok` (first ping), `connect_ms`, `import_ms` (SDK chunk load). Until 2026-10-12 this was called `server_woke` and the lobby also showed an "asleep" screen for it; Singapore is gone from the game, so the event and screen are gone. The first week's ~920 `server_woke` events are therefore slow connects, almost all on Taipei, which is always on, plus 7 Oct's real Singapore wake-ups, and a query for the whole period should read both names), `net_sample`, `client_error` (the page's own failures:
   uncaught errors, promises nobody caught and a lost WebGL context, at most 5 a page, `src/errors.ts`; a "Script error." the browser gives no details of is sent once a page apart from those 5, with `source: opaque`, `uptime_s`, `standalone` and `visible`), (`match_joined` also says `private` (the room has a code) and `hosted` (we opened it with 約朋友單挑); rooms that found an opponent: hosted `room` codes with a second person's `match_joined` on the same code), with super properties `lang`, `app_version` (git SHA),
   `online_db`, `screen` and (`src/visit.ts`, `src/game/device.ts`) `in_app` (the app whose built-in browser it is: Threads, Instagram, Messenger, Facebook, LINE, TikTok…), `visit_n`, `has_prior_storage`, `storage_ok`, the first-touch `first_utm_*` / `first_referrer` / `first_touch_at` / `first_gclid` / `first_fbclid` and this visit's `visit_utm_*` / `visit_referrer` (UTM naming rules and links to post: [UTM.md](UTM.md); `withUtm` in `src/utm.ts` tags the links the game makes). Online, the person property `stdb_identity` links a PostHog person to
   a SpacetimeDB profile. Nothing is sent without a key, under `?bench`, `?trailer`, `?capture`,
@@ -271,12 +271,20 @@ whenever what is collected changes. These answer "how many players, and from whe
   `ADMIN_TEST_KEY=<test key> bun scripts/devicecheck.ts ws://127.0.0.1:<port> <db>`.
 
 **Admin page** (`/admin`, `admin/index.html`, not linked from the game, `noindex`): one section per
-question, linked from a sticky nav: **Now** (online, rooms, live rooms), **Growth** (players, new and
-active with the change from the period before, a 30-day chart of returning and new players per day,
+question, linked from a sticky nav: **Now** (online, rooms, live rooms, peak online), **Growth** (players, new and
+active with the change from the period before, active 30 days = MAU, a 30-day chart of returning and new players per day,
 countries), **Retention**, **Play time** (total, average and median per player, today, 7 days, a
-30-day chart), **Connection & devices** and **Players** (a sortable list: play time, active days,
+30-day chart), **Connection & devices**, **Benchmarks** and **Players** (a sortable list: play time, active days,
 rounds, matches, kills …, with an All / Phone / Computer switch), for the server picked at the top (the
-build's own by default). Days are UTC days. **Phone and Computer side by side**
+build's own by default). **Peak online** (peak CCU, `src/admin/peak.ts`): the private table `peak_hour` keeps, per
+hour since the epoch, the most players in rooms at once (all, and Phone and Computer by each player's latest device
+report) and when the all-player peak was reached; entering a room (the only time the count rises) and each room's
+minute flush raise it, and it is kept (24 rows a day). The view `admin_peak_hour` feeds the Peak today / 7 d / ever
+tiles and a chart of the peak per day or hour (tick: the average at once, from play time; dashed line: 12, one full
+6v6 room). Local check: `ADMIN_TEST_KEY=<test key> bun scripts/peakcheck.ts ws://127.0.0.1:<port> <db>`.
+**Benchmarks** (`src/admin/benchmarks.ts`): this server's MAU, DAU, peak CCU and lifetime players (all, and on a
+Taiwan time zone) against BeGone's estimated Taiwan peak, the estimate's funnel and evidence (nplay.com in the
+Wayback Machine), and Turf War's launch-week peaks rebuilt from PostHog before `peak_hour` existed. Days are UTC days. **Phone and Computer side by side**
 (`src/admin/groups.ts`): every figure shows All, Phone and Computer, and the 30-day charts draw a Phone
 and a Computer bar each day. A player's side is the device they last played on (`admin_player_device`;
 phones and tablets are Phone; players without a report count only in All), and per-day figures use it

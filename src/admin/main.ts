@@ -8,11 +8,14 @@ import type AdminDailyTimeRow from '../module_bindings/admin_daily_time_table';
 import type AdminPlayerNetRow from '../module_bindings/admin_player_net_table';
 import type AdminPlayerDeviceRow from '../module_bindings/admin_player_device_table';
 import type AdminPlayerDayRow from '../module_bindings/admin_player_day_table';
+import type AdminPeakHourRow from '../module_bindings/admin_peak_hour_table';
 import { countByCountry, countryOf } from '../../shared/tzcountry';
 import { fmtPing, fmtRate, medianCorrections, medianPing, pingByCountry, pingClass, type NetOf } from './net';
 import { deviceCounts, deviceLabel, deviceShare, fmtShare, type DeviceOf } from './devices';
 import { activeBetween, cameBack, change, cohorts, daysById, firstDayOf, fmtRetention, newBetween, RETENTION_DAYS, type Cell } from './retention';
 import { releasesByDay, releaseTitle, type Release } from './releases';
+import { peakBetween, peakFor, peaksBy, type PeakOf } from './peak';
+import { averageDaily, BEGONE_EVIDENCE, BEGONE_FUNNEL, BEGONE_TAIWAN, LAUNCH_PEAKS, versus } from './benchmarks';
 import { activeByDay, GROUPS, niceStep, pingByDay, sideOf, SIDES, splitBySide, sumByDay, type DayNet as DayNetOf, type GroupId, type Side } from './groups';
 import { formatPlayTime, liveSeconds } from '../../shared/playtime';
 import { hostAnswers, pingUrl, serverIdentityKey } from '../net/ping';
@@ -38,6 +41,7 @@ type DayTime = Infer<typeof AdminDailyTimeRow>;
 type PlayerNet = Infer<typeof AdminPlayerNetRow>;
 type PlayerDevice = Infer<typeof AdminPlayerDeviceRow>;
 type PlayerDay = Infer<typeof AdminPlayerDayRow>;
+type PeakHour = Infer<typeof AdminPeakHourRow>;
 /**
  * An `admin_players` row joined (by id) with its `admin_player_time` row (rounds, and play time
  * including a session in progress), its `admin_player_net` row, if any (connection quality:
@@ -129,9 +133,10 @@ const OPTIONAL = {
   dayTime: ['SELECT * FROM admin_player_day_time'],
   dayNet: ['SELECT * FROM admin_player_day_net'],
   hours: ['SELECT * FROM admin_player_hour'],
+  peak: ['SELECT * FROM admin_peak_hour'],
 };
 type ViewState = 'wait' | 'on' | 'missing';
-const freshViews = (): Record<keyof typeof OPTIONAL, ViewState> => ({ net: 'wait', device: 'wait', days: 'wait', dayTime: 'wait', dayNet: 'wait', hours: 'wait' });
+const freshViews = (): Record<keyof typeof OPTIONAL, ViewState> => ({ net: 'wait', device: 'wait', days: 'wait', dayTime: 'wait', dayNet: 'wait', hours: 'wait', peak: 'wait' });
 let views = freshViews();
 /** Which players the list shows. */
 let playerGroup: GroupId = 'all';
@@ -300,7 +305,7 @@ const group = (id: string, title: string, sub: string, tiles: string[], cards: s
   <section class="group" id="${id}" aria-labelledby="${id}-h"><h2 class="group-h" id="${id}-h">${title}<small>${sub}</small></h2>
     ${tiles.length ? `<div class="tiles">${tiles.join('')}</div>` : ''}${cards}</section>`;
 const card = (title: string, sub: string, content: string, cls = '') => `<section class="card${cls ? ` ${cls}` : ''}"><h3>${title} <small>${sub}</small></h3>${content}</section>`;
-const SECTIONS: [string, string][] = [['now', 'Now'], ['growth', 'Growth'], ['retention', 'Retention'], ['play', 'Play time'], ['connection', 'Connection'], ['players', 'Players']];
+const SECTIONS: [string, string][] = [['now', 'Now'], ['growth', 'Growth'], ['retention', 'Retention'], ['play', 'Play time'], ['connection', 'Connection'], ['benchmarks', 'Benchmarks'], ['players', 'Players']];
 const SIDE_LABEL: Record<Side, string> = { phone: 'Phone', computer: 'Computer' };
 const dateOf = (day: number) => new Date(day * DAY_MS).toISOString().slice(0, 10);
 
@@ -315,6 +320,7 @@ function dashboard() {
   const now = Date.now();
   const today = Math.floor(now / DAY_MS);
   const last = (p: Player) => p.lastSeen.toDate().getTime();
+  const peaks = peakRows();
   const hasDays = views.days === 'on';
   const sideNote = views.device === 'missing' ? 'Phone and Computer need the device view, which this server lacks' : '';
 
@@ -322,9 +328,17 @@ function dashboard() {
   const nowTiles = [
     tile('Online now', per((ps, g) => ({ v: num(g === 'all' ? o?.onlineNow ?? 0 : ps.filter(p => p.playing).length) })), 'players in rooms', true),
     tile('Active 24 h', per(ps => ({ v: num(ps.filter(p => last(p) >= now - DAY_MS).length) })), 'seen in the last 24 hours'),
+    tile('Peak today', per((_ps, g) => peakFig(peakBetween(peaks, today * 24, today * 24 + 23), g, 'time')), 'most in rooms at once, UTC day'),
+    tile('Peak 7 d', per((_ps, g) => {
+      const cur = peakBetween(peaks, (today - 6) * 24, today * 24 + 23), prev = peakBetween(peaks, (today - 13) * 24, (today - 6) * 24 - 1);
+      const fig = peakFig(cur, g, 'date');
+      return fig && cur && prev ? { ...fig, delta: [peakFor(cur, g), peakFor(prev, g)] } : fig;
+    }), 'vs the 7 days before'),
+    tile('Peak ever', per((_ps, g) => peakFig(peakBetween(peaks, 0, Infinity), g, 'date')), 'since peaks were recorded'),
   ];
   const roomRows = rooms.map(r => `<tr><td>${r.code ? `<span class="tag">#${esc(r.code)}</span>` : '<span class="tag">public</span>'}</td><td>${esc(titleCase(r.mapId))}</td><td>${esc(titleCase(r.mode))}</td>
     <td>${r.size}v${r.size}</td><td class="num">${r.humans}</td><td class="num">${r.bots}</td><td class="num">${r.round}</td><td><span class="tag${r.phase === 'live' ? ' live' : ''}">${esc(r.phase)}</span></td></tr>`).join('');
+  const peakCard = card('Peak online', `most players in rooms at once ${rangeText()}`, peakChart(G));
   const roomCard = card('Live rooms', rooms.length ? `${num(o?.humansInRooms ?? 0)} human${o?.humansInRooms === 1 ? '' : 's'} in ${rooms.length} room${rooms.length === 1 ? '' : 's'}` : 'none open',
     rooms.length ? `<div class="scroll"><table><thead><tr><th>Room</th><th>Map</th><th>Mode</th><th>Size</th><th class="num">Humans</th><th class="num">Bots</th><th class="num">Round</th><th>Phase</th></tr></thead><tbody>${roomRows}</tbody></table></div>` : '<div class="empty">No rooms open: nobody is playing online right now.</div>');
 
@@ -339,6 +353,11 @@ function dashboard() {
       const n = activeBetween(ps, today - 6, today);
       return { v: num(n), delta: [n, activeBetween(ps, today - 13, today - 7)] };
     }), hasDays ? 'vs the 7 days before' : ''),
+    tile('Active 30 d', per(ps => {
+      if (!hasDays) return { v: num(ps.filter(p => last(p) >= now - 30 * DAY_MS).length) };
+      const n = activeBetween(ps, today - 29, today);
+      return { v: num(n), delta: [n, activeBetween(ps, today - 59, today - 30)] };
+    }), `MAU${hasDays ? ' · vs the 30 days before' : ''}`),
   ];
   const growthCards = `<div class="grid2">${card('New and returning', `players active ${rangeText()}`, playersChart(G))}${card('Where from', 'time zone → country, estimate', countryList(G))}</div>`;
 
@@ -388,13 +407,14 @@ function dashboard() {
         <div class="seg" role="group" aria-label="Chart groups"><button type="button" data-combined="0" aria-pressed="${!charts.combined}">Split</button><button type="button" data-combined="1" aria-pressed="${charts.combined}">Combined</button></div>
       </div></nav>
     ${sideNote ? `<p class="notice">${sideNote}.</p>` : ''}
-    ${group('now', 'Now', 'live', nowTiles, roomCard)}
+    ${group('now', 'Now', 'live', nowTiles, roomCard + peakCard)}
     ${group('growth', 'Growth', 'new and active players', growthTiles, growthCards)}
     ${group('retention', 'Retention', 'do players come back?', retTiles, retCards)}
     ${group('play', 'Play time', 'online rooms only', playTiles, card('Over time', `online play time ${rangeText()}`, playChart(G)))}
     ${group('connection', 'Connection & devices', 'ping, corrections, what players play on', netTiles, `
       <div class="grid2">${card('Ping', `median of players' p50 (tick: p95) ${rangeText()}`, pingChart(G))}${card('Ping by country', 'median typical p50, time zone → country', countryPing(G))}</div>
       ${card('Devices', 'players by the device they last played on online, last 7 days', devicePanel(players, now))}`)}
+    ${group('benchmarks', 'Benchmarks', 'BeGone (nplay) in Taiwan at its peak, estimated', [], benchmarks(G.all, peaks, today))}
     ${group('players', 'Players', `${num(shown.length)} · sorted by ${sortLabel()}`, [], `<section class="card">${chips}${playerTable(shown)}</section>`)}
     <footer><p>Updates live. Players are identities that said hello or joined a room; ids are anonymous. <b>Phone</b> and <b>Computer</b> group players by
       the device they last played on online (phones and tablets are Phone); players who never reported a device count only in All, and per-day figures
@@ -610,13 +630,13 @@ interface Bar { stack: number[]; tick?: number; title: string }
  * Bars over the chosen range: per bucket one bar per group (Phone and Computer side by side, or
  * everyone), on one scale, with release flags. `value` gives a group's bar in a bucket (undefined: none).
  */
-function groupedChart(o: { aria: string; value: (key: number, g: GroupId) => Bar | undefined; axis: (v: number) => string; counts?: boolean; minMax?: number; shades?: string[]; legend: string; wide?: boolean; note?: string }) {
+function groupedChart(o: { aria: string; value: (key: number, g: GroupId) => Bar | undefined; axis: (v: number) => string; counts?: boolean; minMax?: number; shades?: string[]; legend: string; wide?: boolean; note?: string; refs?: { v: number; label: string }[] }) {
   const b = buckets(), groups = chartGroups();
   const data = b.keys.map(k => groups.map(g => o.value(k, g)));
   // Narrow screens draw a narrower chart, so its labels keep a readable size.
   const narrow = innerWidth < 600;
   const W = narrow ? 360 : o.wide ? 1100 : 600, H = narrow || !o.wide ? 230 : 200, L = 46, R = 8, T = 20, B = 26;
-  const max = Math.max(o.minMax ?? 1, ...data.flat().map(x => (x ? Math.max(x.stack.reduce((n, v) => n + v, 0), x.tick ?? 0) : 0)));
+  const max = Math.max(o.minMax ?? 1, ...(o.refs ?? []).map(r => r.v), ...data.flat().map(x => (x ? Math.max(x.stack.reduce((n, v) => n + v, 0), x.tick ?? 0) : 0)));
   const step = niceStep(max, o.counts), top = Math.ceil(max / step - 1e-9) * step;
   const col = (W - L - R) / data.length, bw = (col * (groups.length > 1 ? 0.84 : 0.7)) / groups.length;
   const y = (v: number) => T + (H - T - B) * (1 - v / top);
@@ -624,6 +644,7 @@ function groupedChart(o: { aria: string; value: (key: number, g: GroupId) => Bar
   const shades = o.shades ?? ['s0', 's1'];
   let svg = `<svg viewBox="0 0 ${W} ${H}" role="img" aria-label="${esc(o.aria)}">`;
   for (let v = 0; v <= top + 1e-9; v += step) svg += `<line class="grid" x1="${L}" x2="${W - R}" y1="${y(v)}" y2="${y(v)}"/><text x="${L - 6}" y="${y(v) + 4}" text-anchor="end">${o.axis(v)}</text>`;
+  for (const r of o.refs ?? []) svg += `<line class="ref" x1="${L}" x2="${W - R}" y1="${y(r.v)}" y2="${y(r.v)}"><title>${esc(r.label)}</title></line>`;
   data.forEach((bars, i) => {
     bars.forEach((x, j) => {
       if (!x) return;
@@ -715,6 +736,86 @@ function pingChart(G: Record<GroupId, Player[]>) {
   });
 }
 
+// ---- Peak online and benchmarks -----------------------------------------------------------
+
+/** This server's `admin_peak_hour` rows (none until the view is there). */
+function peakRows(): PeakOf[] {
+  if (views.peak !== 'on' || !conn) return [];
+  return [...conn.db.adminPeakHour.iter()].map((r: PeakHour) => ({ hour: r.hour, peak: r.peak, phone: r.phone, computer: r.computer, atMs: r.at.toDate().getTime() }));
+}
+
+/** A group's peak as a tile figure, with when the all-player peak was reached (local time or date); "—" without the view, 0 without records. */
+function peakFig(p: ReturnType<typeof peakBetween>, g: GroupId, when: 'time' | 'date'): Fig {
+  if (views.peak !== 'on') return undefined;
+  if (!p) return { v: '0' };
+  const at = new Date(p.atMs);
+  const sub = g !== 'all' ? undefined : when === 'time' ? `at ${pad2(at.getHours())}:${pad2(at.getMinutes())}` : `${pad2(at.getMonth() + 1)}-${pad2(at.getDate())} ${pad2(at.getHours())}:${pad2(at.getMinutes())}`;
+  return { v: num(peakFor(p, g)), sub, title: g === 'all' ? `reached ${at.toLocaleString()}` : undefined };
+}
+
+/** Under the peak chart: when peaks begin, if inside the range. */
+function peakNote(peaks: PeakOf[], b: Buckets): string | undefined {
+  if (!peaks.length) return 'Peaks are recorded from this version of the server on; nothing recorded yet. Launch-week peaks are under Benchmarks.';
+  const first = Math.min(...peaks.map(r => r.hour));
+  const key = b.hourly ? first : Math.floor(first / 24);
+  return key > b.keys[0] ? `Peaks are recorded from ${bucketName(b, key)} on; launch-week peaks are under Benchmarks.` : undefined;
+}
+
+/** The most players in rooms at once per bucket for each group (bars), with the average at once (tick: play time over the bucket's length). */
+function peakChart(G: Record<GroupId, Player[]>) {
+  const missing = needs('peak');
+  if (missing) return missing;
+  const b = buckets();
+  const peaks = peakRows();
+  const by = peaksBy(peaks, b.hourly);
+  const avgView = b.hourly ? 'hours' : 'dayTime';
+  const avg = Object.fromEntries(chartGroups().map(g => [g, views[avgView] === 'on' ? sumByDay(G[g].map(p => (b.hourly ? hourSeconds(p) : p.daySeconds))) : new Map<number, number>()])) as Record<GroupId, Map<number, number>>;
+  if (!b.keys.some(k => by.has(k))) return `<div class="empty">No players in rooms in this range.</div><p class="table-note">${peakNote(peaks, b) ?? ''}</p>`;
+  return groupedChart({
+    aria: `Most players in rooms at once ${rangeText()}`, counts: true, shades: ['mid'], refs: [{ v: 12, label: '12: one full 6v6 room' }],
+    value: (key, g) => {
+      const p = by.get(key);
+      if (!p || !peakFor(p, g)) return undefined;
+      const average = (avg[g].get(key) ?? 0) / b.unit;
+      const at = g === 'all' ? ` (${new Date(p.atMs).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })})` : '';
+      return { stack: [peakFor(p, g)], tick: average > 0 ? average : undefined, title: `${bucketName(b, key)} · ${GROUP_LABEL[g]}: peak ${peakFor(p, g)} at once${at}${average > 0 ? ` · average ${average.toFixed(1)} at once` : ''}` };
+    },
+    axis: v => String(v), legend: groupLegend('<span><i class="line"></i>average at once</span><span><i class="ref"></i>12: one full 6v6 room</span>'), note: peakNote(peaks, b),
+  });
+}
+
+/**
+ * Turf War on this server against BeGone's estimated Taiwan peak (src/admin/benchmarks.ts): MAU, DAU,
+ * peak CCU and lifetime players, then the estimate step by step and Turf War's launch-week peaks.
+ */
+function benchmarks(players: Player[], peaks: PeakOf[], today: number) {
+  const hasDays = views.days === 'on';
+  const taiwan = players.filter(p => countryOf(p.tz) === 'Taiwan');
+  const peak7 = peakBetween(peaks, (today - 6) * 24, today * 24 + 23);
+  const ours: Record<string, { all?: number; taiwan?: number }> = {
+    'MAU': hasDays ? { all: activeBetween(players, today - 29, today), taiwan: activeBetween(taiwan, today - 29, today) } : {},
+    'DAU': hasDays ? { all: Math.round(averageDaily(players, today - 7, today - 1)), taiwan: Math.round(averageDaily(taiwan, today - 7, today - 1)) } : {},
+    'Peak CCU': views.peak === 'on' ? { all: peak7?.all ?? 0 } : {},
+    'Lifetime players': { all: players.length, taiwan: taiwan.length },
+  };
+  const mark = { below: 'below its range', within: 'within its range', above: 'above its range' };
+  const rows = BEGONE_TAIWAN.map(b => {
+    const o = ours[b.metric], v = o.taiwan ?? o.all;
+    const where = v === undefined ? '' : versus(v, b);
+    return `<tr><td><b>${b.metric}</b><br><small class="muted">${b.how}</small></td>
+      <td class="num">${o.all === undefined ? '—' : num(o.all)}</td><td class="num">${o.taiwan === undefined ? (o.all === undefined ? '—' : '<small class="muted">all</small>') : num(o.taiwan)}</td>
+      <td class="num">${b.begone}<br><small class="muted">${num(b.low)}–${num(b.high)}</small></td><td>${where ? `<span class="tag vs ${where}">${mark[where]}</span>` : '—'}</td></tr>`;
+  }).join('');
+  const table = `<div class="scroll"><table class="bench"><thead><tr><th>Metric</th><th class="num">Turf War</th><th class="num">Taiwan only</th><th class="num">BeGone, Taiwan</th><th>Turf War is</th></tr></thead><tbody>${rows}</tbody></table></div>
+    <p class="table-note">Turf War: this server, all players and those on a Taiwan time zone (the comparison uses Taiwan where there is one; peak CCU counts everyone in rooms). Days are UTC days.
+    BeGone: estimated Taiwan figures at its peak (2012–14); each is good to about 2× either way.</p>`;
+  const launch = `<ul class="launch">${LAUNCH_PEAKS.map(d => `<li><span>${d.day}${d.partial ? ' <small class="muted">to 13:00</small>' : ''}</span><b>${d.peak}</b><small class="muted">at ${d.at}</small></li>`).join('')}</ul>
+    <p class="table-note">The most players in Online rooms at once per Taipei day, rebuilt from PostHog joins and leaves before the server recorded peaks (sessions without a leave event end at their last event, so these may read up to ~3 low).</p>`;
+  const how = `<pre class="funnel">${esc(BEGONE_FUNNEL)}</pre><ul class="evidence">${BEGONE_EVIDENCE.map(e => `<li>${esc(e)}</li>`).join('')}</ul>`;
+  return `${card('Turf War vs BeGone in Taiwan', 'MAU sizes the player base; DAU says how sticky it is; peak CCU says whether rooms fill', table)}
+    <div class="grid2">${card('How the BeGone estimate was made', 'from nplay.com in the Wayback Machine, 2026-10-11', how)}${card('Launch-week peaks', 'Turf War, Oct 7–11, Online rooms', launch)}</div>`;
+}
+
 // ---- Wiring ------------------------------------------------------------------------------
 
 let frame = 0;
@@ -783,7 +884,7 @@ function adminLink(s: AdminServer, lost: () => void): ConnectLink {
       store.set(key, token);
       for (const t of [
         cc.db.adminStatus, cc.db.adminOverview, cc.db.adminRooms, cc.db.adminPlayers, cc.db.adminPlayerTime, cc.db.adminDailyTime, cc.db.adminPlayerNet,
-        cc.db.adminPlayerDevice, cc.db.adminPlayerDay, cc.db.adminPlayerDayTime, cc.db.adminPlayerDayNet, cc.db.adminPlayerHour,
+        cc.db.adminPlayerDevice, cc.db.adminPlayerDay, cc.db.adminPlayerDayTime, cc.db.adminPlayerDayNet, cc.db.adminPlayerHour, cc.db.adminPeakHour,
       ]) {
         t.onInsert(render); t.onDelete(render);
       }
