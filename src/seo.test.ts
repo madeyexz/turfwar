@@ -9,6 +9,8 @@ import { describe, expect, it } from 'vitest';
  */
 const ROOT = join(__dirname, '..');
 const SITE = 'https://turfwar.ianhsiao.me';
+/** The author's personal site, as the owner asked for it (it redirects to ianhsiao.me/about). */
+const OWNER_SITE = 'https://www.ianhsiao.me';
 const read = (file: string) => readFileSync(join(ROOT, file), 'utf8');
 
 /** The public routes: URL path → the HTML file Vite builds for it. */
@@ -73,7 +75,7 @@ describe('canonical URLs stay clean', () => {
         expect(u.hash, `${file}: ${url}`).toBe('');
         expect(url).not.toMatch(/utm_/i);
       }
-      for (const id of idsIn(jsonLd(html))) expect(id).toMatch(new RegExp(`^${SITE}/[a-z/]*#[a-z]+$`));
+      for (const id of idsIn(jsonLd(html))) expect(id).toMatch(new RegExp(`^(${SITE}|${OWNER_SITE})/[a-z/]*#[a-z]+$`));
       expect(meta(html, 'property', 'og:url')).toBe(canonical(html));
     }
   });
@@ -161,6 +163,26 @@ describe('the about pages', () => {
       expect(text(/<h1>([\s\S]*?)<\/h1>/.exec(html)![1])).toMatch(/角頭械鬥/);
       expect(text(/<h1>([\s\S]*?)<\/h1>/.exec(html)![1])).toMatch(/Turf War: Taipei/);
     }
+  });
+});
+
+describe('the author', () => {
+  it('is one Person, Ian Hsiao, linked to the personal site and GitHub, and the pages point at it', () => {
+    for (const file of ['index.html', 'about/index.html', 'en/about/index.html']) {
+      const html = read(file), graph = jsonLd(html);
+      const person = graph.find(n => n['@type'] === 'Person')!;
+      expect(person, file).toMatchObject({ '@id': `${OWNER_SITE}/#person`, name: 'Ian Hsiao', url: `${OWNER_SITE}/`, sameAs: ['https://github.com/madeyexz'] });
+      const credited = graph.filter(n => ['VideoGame', 'WebSite', 'WebPage'].includes(String(n['@type']))).filter(n => JSON.stringify(n).includes('#person'));
+      expect(credited.map(n => n['@type']).sort(), file).toEqual(file === 'index.html' ? ['VideoGame', 'WebSite'] : ['WebPage']);
+    }
+    const game = jsonLd(read('index.html')).find(n => n['@type'] === 'VideoGame')!;
+    expect(game.author).toEqual({ '@id': `${OWNER_SITE}/#person` });
+    expect(game.creator).toEqual({ '@id': `${OWNER_SITE}/#person` });
+  });
+
+  it('is credited with a plain link, no tracking parameters, on both about pages and in llms files', () => {
+    for (const file of ['about/index.html', 'en/about/index.html']) expect(read(file)).toContain(`<a href="${OWNER_SITE}/" rel="author noopener">Ian Hsiao</a>`);
+    for (const file of ['public/llms.txt', 'public/llms-full.txt']) expect(read(file)).toContain(`${OWNER_SITE}/`);
   });
 });
 
