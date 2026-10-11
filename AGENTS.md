@@ -37,7 +37,7 @@ requests.
 - `src/analytics.ts`: PostHog product analytics (lazy, guarded; see `docs/DEVELOPMENT.md` "Players, analytics and the admin page").
 - `privacy/index.html`, `src/privacy/`: the public `/privacy` page (English and 繁體中文). Keep it true
   whenever what the game stores or sends changes.
-- `about/`, `en/about/`, `public/{robots.txt,sitemap.xml,llms.txt,llms-full.txt,og/}`: the crawlable text, structured data and previews for search and AI answer engines (`docs/SEO.md`). Keep them true to `docs/GAMEPLAY.md` when rules, modes, maps or names change; canonicals and sitemap URLs stay clean (no `utm_*`); `src/seo.test.ts` checks them.
+- `about/`, `en/about/`, `public/{robots.txt,sitemap.xml,llms.txt,llms-full.txt,og/}`: the crawlable text, structured data and previews for search and AI answer engines (`docs/SEO.md`). Keep them true to `docs/GAMEPLAY.md` when rules, modes, maps or names change; canonicals and sitemap URLs stay clean (no `utm_*`); `src/seo.test.ts` checks them. Before SEO work, run `bun run seo:report` (Google Search Console and Bing data) and decide from it; after a release, `bun run seo:ping`.
 - `admin/index.html`, `src/admin/`: the owner's `/admin` dashboard (admin-key login checked in the module; admin-only views).
 - Other `src/` modules: rendering, soldier/viewmodel animation, effects, HUD, and audio.
 - `spacetimedb/src/index.ts`: tables, reducers, lifecycle, and scheduled match tick.

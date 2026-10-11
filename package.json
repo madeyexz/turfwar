@@ -11,7 +11,9 @@
     "preview": "vite preview --host 0.0.0.0",
     "dev:spacetime": "./scripts/dev-spacetime.sh",
     "typecheck:module": "bun run --cwd spacetimedb typecheck",
-    "publish:prod": "bash deploy/publish-prod.sh"
+    "publish:prod": "bash deploy/publish-prod.sh",
+    "seo:report": "bun scripts/seo.ts report",
+    "seo:ping": "bun scripts/seo.ts ping"
   },
   "dependencies": {
     "@vercel/analytics": "^2.0.1",
