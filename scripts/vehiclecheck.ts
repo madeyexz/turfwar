@@ -1,8 +1,9 @@
 /**
- * Online vehicle check against a LOCAL server: two identities share a private Taipei room
- * (Elimination, no bots). The SWAT player walks to the nearest car, gets in, drives it along Civic
- * Blvd and down Zhonghua Rd to the helicopter pad (where a shot from the driver's seat must be
- * refused), gets out, boards the helicopter, waits for the rotor, climbs, flies and lands, then
+ * Online vehicle check against a LOCAL server: two identities share a private Ximending room (the
+ * `taipei` map; Elimination, no bots). The SWAT player walks to the nearest car, gets in, drives it
+ * up the ring road's west side and along its north side (where a shot from the driver's seat must be
+ * refused), gets out, walks to the arcade and climbs the ladder to its roof, boards the helicopter
+ * on the pad, waits for the rotor, climbs, flies and lands, then
  * walks to a scooter and rides it with handbrake drifts both ways while firing its SMG sideways
  * (aim independent of the heading), all in real time with the shared controllers and 20 Hz
  * reports. The server must accept every report (0 corrections) and every rider shot (from the
@@ -17,6 +18,7 @@ import { findPath, nearestNode } from '../shared/match/nav';
 import { wrapAngle } from '../shared/math';
 import { createMoveState, stepMovement, type MoveState } from '../shared/movement';
 import { eyeHeight } from '../shared/movement';
+import { LADDER_DIRS } from '../shared/collision';
 import { VEHICLES, exitSpot, forwardOf, idleVehicleInput, seatPosition, slipAngle, speedOf, stepVehicle, type Vehicle, type VehicleInput } from '../shared/vehicles';
 
 const uri = process.argv[2] ?? 'ws://127.0.0.1:3400';
@@ -47,12 +49,12 @@ const connect = (name: string, team: number) => new Promise<Conn>((resolve, reje
         const ready = () => {
           const mine = conn.db.player.identity.find(conn.identity!);
           if (!mine) { setTimeout(ready, 50); return; }
-          code.value ||= conn.db.match.id.find(mine.room)!.code;
+          code.value ||= conn.db.match.id.find(mine.room)!.code || [...conn.db.myRoomCode.iter()].find(r => r.room === mine.room)?.code || '';
           conn.subscriptionBuilder().onApplied(() => resolve(conn))
             .subscribe([`SELECT * FROM roster WHERE room = ${mine.room}`, `SELECT * FROM frame WHERE id = ${mine.room}`]);
         };
         ready();
-      }).subscribe(['SELECT * FROM match', 'SELECT * FROM player']);
+      }).subscribe(['SELECT * FROM match', 'SELECT * FROM player', 'SELECT * FROM my_room_code']);
     })
     .onConnectError((_c, e) => reject(e)).build();
 });
@@ -176,9 +178,9 @@ const car0 = vehicleNow(carIndex);
 await walkTo(m, exitSpot(world, { ...car0 }, 0));
 let car = await board(carIndex);
 const carStart = { x: car.x, z: car.z };
-// 2. Drive east along Civic Blvd's south carriageway, then south down Zhonghua Rd toward the pad.
-const OX = -781.5, OZ = -183;
-const route = [{ x: -760 - OX, z: -289 - OZ }, { x: -706 - OX, z: -289 - OZ }, { x: -692 - OX, z: -272 - OZ }, { x: -692 - OX, z: -244 - OZ }];
+const ladderOf = (x: number, z: number) => world.ladders.find(l => Math.hypot(l.x - x, l.z - z) < 1.5)!;
+// 2. Drive up the ring road's west side and east along its north side (the inner lane), a handbrake drift at the corner.
+const route = [{ x: -74.5, z: -40 }, { x: -62, z: -57 }, { x: -20, z: -57 }, { x: 4, z: -57 }];
 let leg = 0;
 // Into the corner onto Zhonghua Rd the driver holds the handbrake: a drift round the bend.
 let carSlip = 0, carDriftSteps = 0;
@@ -207,10 +209,23 @@ const carDistance = Math.hypot(carEnd.x - carStart.x, carEnd.z - carStart.z);
 // 3. Out of the car, over to the helicopter, in.
 const walker = await leave(carIndex);
 const heli0 = vehicleNow(heliIndex);
+// The helicopter stands on the arcade's roof: walk to the foot of its west ladder, climb it, walk on over the roof.
+{
+  const ladder = ladderOf(5, -11.4), [nx, nz] = LADDER_DIRS[ladder.dir];
+  await walkTo(walker, { x: ladder.x - nx * 1.2, y: ladder.y0, z: ladder.z - nz * 1.2 });
+  const yaw = Math.atan2(-nx, -nz);
+  for (let t = 0; t < 30 && !(walker.y > ladder.y1 - 0.05 && walker.grounded); t += 0.05) {
+    for (let i = 0; i < 6; i++) stepMovement(world, walker, { forward: 1, strafe: 0, yaw, jump: false, crouch: false, sprint: false, ads: false }, STEP, 0);
+    await wait(50);
+    await a.reducers.report({ x: walker.x, y: walker.y, z: walker.z, vx: walker.vx, vy: walker.vy, vz: walker.vz, yaw, pitch: 0, crouch: walker.crouch, grounded: walker.grounded, sprint: false, ads: false, slide: false, weapon: 0, use: false });
+    reports++;
+    checkCorrection('ladder', () => { const sp = pose(); if (sp) { walker.x = sp.x; walker.y = sp.y; walker.z = sp.z; walker.vx = walker.vy = walker.vz = 0; } }, { x: walker.x, y: walker.y, z: walker.z });
+  }
+}
 await walkTo(walker, exitSpot(world, { ...heli0 }, 0));
 const heli = await board(heliIndex);
 const ground = heli.y;
-// 4. Spin up, climb to ~30 m, fly north 60 m (back over the car, toward Civic Blvd), hover, turn and
+// 4. Spin up, climb to ~30 m, fly north 60 m (over Lane N and the north sidewalk), hover, turn and
 // fly back to the pad, descend and land.
 const pad = { x: heli.x, z: heli.z };
 const climb = await pilot(heli, 8, () => ({ lift: 1 }), v => v.y > ground + 30);

@@ -127,8 +127,8 @@ flashlight light, which is in the scene all match on presets with dynamic lights
 after death adds none. Once the map's
 dressing loads, `Renderer.warm` compiles every shader in the background and uploads every texture two a
 frame, so a camera that jumps (death, a new round) does not stall on first sight. Image textures are
-GPU-compressed KTX2 (`src/render/textures.ts`, built by `tools/make-ktx2.ts`), half size on Low: Taipei's
-textures take about 50 MB of video memory on Low and 180 MB on Medium, against 350 MB as raw RGBA. Remote soldiers
+GPU-compressed KTX2 (`src/render/textures.ts`, built by `tools/make-ktx2.ts`), half size on Low: the
+surface textures take about 50 MB of video memory on Low and 180 MB on Medium, against 350 MB as raw RGBA. Remote soldiers
 use a crowd level of detail: off-screen soldiers are hidden and not animated; on screen, full
 animation and shadows within 30 m, half-rate animation to 70 m, quarter rate beyond. Remote gunfire
 beyond 110 m is not drawn and gunshot audio is limited to 85 m, six voices per frame and 14 ringing at
@@ -175,14 +175,15 @@ shared/        Pure TypeScript shared by browser, tests and the SpacetimeDB modu
   world.ts       Grenades under gravity
   maps/          Builder + BeGone's six maps (Crane, Tower, Warehouse, Pipeline, Courtyard,
                  Timbertown) and eight originals (Cinder, Frostline, Verdant, Ochre, Citadel,
-                 Railyard, Skyline, Meridian), plus Taipei and Taipei 101 · Xinyi (taipei-data.ts and
-                 xinyi-data.ts, generated from 臺北狂飆), Taipei 101 · 88F (taipei101.ts)
+                 Railyard, Skyline, Meridian), plus Ximending (the `taipei` map: ximending*.ts, our own layout),
+                 Taipei 101 · Xinyi (xinyi.ts) and Taipei 101 · 88F (taipei101.ts; tower101.ts is the shared
+                 tower outline)
                  Memorial Hall (memorial*.ts) and Sanchong (sanchong*.ts),
                  with ladders, bomb sites and ammo crates
   match/         State, rounds and bomb, combat validation, economy, bots, navigation, packed frame
 src/           Browser client: lobby, game loop, prediction, rendering, view model, soldiers, HUD, store, audio, net
 spacetimedb/   SpacetimeDB module (tables, scheduled tick, validated reducers)
 scripts/       Local load test and simulation benchmark
-tools/         Reproducible CC0 asset import, sound and texture fetch scripts, the Taipei and Xinyi map imports and the Chinese font subset
+tools/         Reproducible CC0 asset import, sound and texture fetch scripts, and the Chinese font subset
 dev/           Development preview pages
 ```

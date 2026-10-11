@@ -193,7 +193,6 @@ servers, email **ian@rippling.computer**.
 ## Acknowledgements
 
 - [**BeGone**](https://begone.fandom.com) by nPlay — the rules, numbers and maps this game pays homage to.
-- [**臺北狂飆 / TAIPEI RUSH**](https://taipei-gta.vercel.app/) by [@aicodewithme](https://www.threads.com/share/DhdOGqUWh/) — the Ximending and Xinyi layouts.
 - [Quaternius](https://quaternius.com), [Poly Haven](https://polyhaven.com) and the authors of
   *The Free Firearm Sound Library* — CC0 models, textures and sounds.
 - [Three.js](https://threejs.org), [SpacetimeDB](https://spacetimedb.com), [Vite](https://vite.dev) and [Bun](https://bun.sh).
@@ -257,18 +256,11 @@ texture, sound and line of code here is original or CC0/OFL.
   common characters from `tools/font/edu-standard-4808.txt`, CJK punctuation, Bopomofo and full-width forms):
   `public/fonts/noto-sans-tc.woff2`, about 1.4 MB and 5,084 glyphs, loaded only for Chinese text
   (`unicode-range`). `src/ui/font.test.ts` fails when the source uses a character the font lacks.
-- Taipei map layout: the Ximending quarter of [*臺北狂飆 / TAIPEI RUSH*](https://taipei-gta.vercel.app/) by
-  [@aicodewithme](https://www.threads.com/share/DhdOGqUWh/) — its streets, buildings, signs and landmarks — extracted by
-  `tools/import-taipei.ts` into `shared/maps/taipei-data.ts`. Its shop names are that game's own parody
-  brands. Its district meshes and atlas, street furniture, prop meshes (scooter, YouBike, trees,
-  plants, signal heads) and skyline are that game's too, exported by the same tool.
-- Taipei 101 · Xinyi map layout: the Xinyi district of the same game — Taipei 101's sections and
-  ornaments, its plaza and mall, the Xinyi Plaza Malls, the Xinyi Skywalk, Four Four South Village, the
-  streets, hills and lots — extracted by `tools/import-xinyi.ts`
-  into `shared/maps/xinyi-data.ts`. Its mall and shop names are that game's own parodies. The mall's
-  interior, the sunken garden and the curtain-wall detailing are this project's own.
-- Taipei 101 · 88F: the tower's sections below the floor and the city's skyline and lots reuse the two
-  imports above; the floor's plan, fit-out and the damper are this project's own.
+- The Taipei maps (Ximending, Taipei 101 · Xinyi, Taipei 101 · 88F), the Taipei 101 outline and the
+  other city maps' layouts are this project's own, drawn from public knowledge of the real places
+  (`shared/maps/ximending*.ts`, `xinyi*.ts`, `taipei101.ts`, `tower101.ts`); the city past each map is a
+  procedural skyline (`src/render/cityscape.ts`); the props (scooters, trees, plants) and cars are built
+  in code (`src/render/props.ts`, `dressing.ts`). No data from another game or from a map database is used.
 - Sky, terrain, architecture, effects and the remaining audio (knife, casings, footsteps,
   explosions, heartbeat, bomb, round and cash cues, UI, and the fallback weapon voices used before
   the recordings load) are procedural.

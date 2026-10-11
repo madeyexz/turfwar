@@ -2,7 +2,6 @@ import { describe, expect, it } from 'vitest';
 import { CollisionWorld } from './collision';
 import { MAP_IDS, loadMap } from './maps/index';
 import { rng, wrapAngle } from './math';
-import { PLAY } from './maps/taipei-compact';
 import {
   HELI_CEILING, RIDER_TWIST, VEHICLES, createVehicle, exitSpot, riderTwist, forwardOf, idleVehicleInput, raycastVehicle, seatPosition, skidOf, slipAngle, speedOf, stepVehicle,
   vehicleBlocked, type Vehicle, type VehicleInput,
@@ -292,23 +291,21 @@ describe('vehicles in a match', () => {
     }
   });
 
-  // Taipei's ring road round the compact Ximending and Emei St's cut-through, in the source's
-  // coordinates (taipei-compact.ts, taipei-streets.ts): lane centres and the bends between them.
-  const RING_LAP: [number, number][] = [
-    [-840, -292], [-857, -291], [-865.5, -282], [-865.5, -240], [-865.5, -185], [-858, -168], [-800, -167.5], [-740, -167.5],
-    [-719, -169], [-711, -180], [-711, -240], [-711, -282], [-720, -292], [-780, -292], [-805, -292],
+  // Ximending's ring road (ximending.ts): the inner lane of each side, with the bends between them. The SWAT car
+  // laps the north-west corner and the north side to the north-east; the Militia car the south-east, the south side
+  // and the south-west. Together they make the lap, without passing a parked car.
+  const RING_NORTH: [number, number][] = [
+    [-74.5, -10], [-74.5, -34], [-72, -52], [-66, -57], [-30, -57], [30, -57], [66, -57], [72, -52], [74.5, -34],
   ];
-  const EMEI_RUN: [number, number][] = [
-    [-850, -167.5], [-860, -171], [-865.5, -182], [-865.5, -198], [-861, -207.5], [-852, -210.7], [-836, -210.7], [-832, -208],
-    [-828.5, -204.3], [-822, -203.5], [-803, -203.5], [-798, -207], [-793, -210.5], [-753, -210.5], [-748, -207], [-743, -203.5],
-    [-722, -203.3], [-713, -208], [-711, -222], [-711, -250],
+  const RING_SOUTH: [number, number][] = [
+    [74.5, 10], [74.5, 34], [72, 52], [66, 57], [30, 57], [-30, 57], [-66, 57], [-72, 52], [-74.5, 38],
   ];
   /**
-   * Drive a car along waypoints (source coordinates) like a player: steer for a point 6 m ahead on
+   * Drive a car along waypoints (map coordinates) like a player: steer for a point 6 m ahead on
    * the route, brake for the bends, report at 20 Hz. Returns how far it got and its hardest knock.
    */
   const driveRoute = (state: MatchState, ctx: SimContext, a: Soldier, index: number, path: [number, number][]) => {
-    const OX = (PLAY.x0 + PLAY.x1) / 2, OZ = (PLAY.z0 + PLAY.z1) / 2;
+    const OX = 0, OZ = 0;
     const sim = { ...state.vehicles[index] };
     const route = [{ x: sim.x, z: sim.z }, ...path.map(([x, z]) => ({ x: x - OX, z: z - OZ }))];
     let leg = 1, worst = 0, where = '', ticks = 0;
@@ -336,9 +333,8 @@ describe('vehicles in a match', () => {
     return { reached: leg - 1, worst, where, seconds: ticks * 0.05 };
   };
 
-  it('Taipei: a car laps the ring road round the core and cuts across it down Emei St, without a correction or a knock', () => {
-    // The SWAT car behind the cordon for the lap, the Militia car behind the barricade for the cut-through.
-    for (const [route, start] of [[RING_LAP, 0], [EMEI_RUN, 2]] as const) {
+  it('Ximending: cars lap the ring road round the district, the SWAT one round the north-west and north, the Militia one round the south, without a correction or a knock', () => {
+    for (const [route, start] of [[RING_NORTH, 0], [RING_SOUTH, 2]] as const) {
       const { ctx, state } = setup();
       const a = addSoldier(state, ctx, { name: 'Driver', team: 0, bot: false });
       goLive(state, ctx);
