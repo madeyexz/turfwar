@@ -8,7 +8,7 @@
  * Measured with SpacetimeDB's own HTTP `GET /v1/ping` on that host: it is answered by the host
  * without touching the database (no reducer, no subscription, nothing queued behind the match
  * tick), SpacetimeDB allows it cross-origin (`Access-Control-Allow-Origin: *`) and a plain GET needs
- * no preflight. The same request tells whether the host is reachable (src/net/wake.ts). The browser websocket API cannot send ping frames, and the SDK has no one-off
+ * no preflight. The same request tells whether the host is reachable (src/net/connect.ts). The browser websocket API cannot send ping frames, and the SDK has no one-off
  * query, so the open websocket offers nothing cheaper that does not load the database.
  *
  * The first sample pays for the TCP + TLS handshake (about 3× the RTT to Maincloud) and is
@@ -40,28 +40,23 @@ export const SERVER_REGIONS: Record<string, Key> = {
   // under its own name and its IP's sslip.io name.
   'tw.turfwar.ianhsiao.me': 'server.region.taipei',
   '34-81-41-144.sslip.io': 'server.region.taipei',
-  // Singapore (InstaCloud, ap-southeast): no longer a choice for players, but /admin still reads it and names it.
-  'play.turfwar.ianhsiao.me': 'server.region.singapore',
   localhost: 'server.region.local',
   '127.0.0.1': 'server.region.local',
 };
-/** Host suffixes with a known region: InstaCloud's own compute hostnames (every one of ours is in Singapore). */
-export const SERVER_REGION_SUFFIXES: readonly [string, Key][] = [['.compute.instacloud-edge.com', 'server.region.singapore']];
 export function serverHost(uri: string) {
   try { return new URL(uri).hostname; } catch { return uri; }
 }
 /** The region's dictionary key for a server URI, if its host is a known one. */
 export function serverRegionKey(uri: string): Key | undefined {
   const host = serverHost(uri).toLowerCase();
-  return SERVER_REGIONS[host] ?? SERVER_REGION_SUFFIXES.find(([suffix]) => host.endsWith(suffix))?.[1];
+  return SERVER_REGIONS[host];
 }
 /**
- * Hostnames of the Taipei and Singapore servers. Taipei began as a copy of Singapore, signing keys
- * included, so both issue and accept the same tokens: a player keeps one identity on either (with
- * each server's own stats), under any of their names.
+ * Hostnames of the Taipei server. It began as a copy of the retired Singapore server, signing keys
+ * included, so it accepts the tokens players got there: a player keeps one identity, under any of
+ * Taipei's names.
  */
-const PRODUCTION_HOSTS = (host: string) => host.endsWith('.compute.instacloud-edge.com')
-  || SERVER_REGIONS[host] === 'server.region.taipei' || SERVER_REGIONS[host] === 'server.region.singapore';
+const PRODUCTION_HOSTS = (host: string) => SERVER_REGIONS[host] === 'server.region.taipei';
 /**
  * Which server a URI reaches, for keying a player's saved identity: the same server under another
  * hostname issues and accepts the same tokens, so switching hostnames must not mint new players.
@@ -71,7 +66,7 @@ export function serverIdentityKey(uri: string) {
   // (The key's name dates from the Singapore server; renaming it would lose every saved identity.)
   return PRODUCTION_HOSTS(host) ? 'instacloud-singapore' : uri;
 }
-/** "Taipei", "Singapore", "US East", "Local", or the host name. */
+/** "Taipei", "US East", "Local", or the host name. */
 export function serverRegion(uri: string) {
   const key = serverRegionKey(uri);
   return key ? t(key) : serverHost(uri);
@@ -146,7 +141,7 @@ export class PingMonitor {
     this.servers.set(uri, { url, samples: new PingSamples(), busy: false });
     this.reschedule();
   }
-  /** Stop measuring this server (a sample in flight is dropped): another server was chosen, and pings would keep this one awake. */
+  /** Stop measuring this server (a sample in flight is dropped): another server was chosen, and it should not be pinged any more. */
   untrack(uri: string | undefined) {
     const s = uri ? this.servers.get(uri) : undefined;
     if (!s) return;

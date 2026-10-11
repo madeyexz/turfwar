@@ -59,10 +59,10 @@ header.top h1 em { font-style: normal; color: var(--accent); }
 .server-pick select:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
 .server-pick option { background: #0b151b; color: var(--ink); }
 
-/* Server unreachable (src/net/wake.ts): after 30 s of trying (3 minutes for Singapore, which sleeps). */
-.wake { max-width: 520px; margin: 12vh auto 0; padding: 22px 24px; background: var(--panel); border: 1px solid var(--line-strong); border-radius: 10px; }
-.wake h2 { display: flex; align-items: center; gap: 10px; margin: 0 0 8px; font-size: 20px; letter-spacing: 0.04em; text-transform: uppercase; color: var(--ink); }
-.wake p { margin: 0 0 12px; color: var(--ink); opacity: 0.9; line-height: 1.45; }
+/* Server unreachable (src/net/connect.ts): after 30 s of trying (3 minutes for Singapore, which sleeps). */
+.unreachable { max-width: 520px; margin: 12vh auto 0; padding: 22px 24px; background: var(--panel); border: 1px solid var(--line-strong); border-radius: 10px; }
+.unreachable h2 { display: flex; align-items: center; gap: 10px; margin: 0 0 8px; font-size: 20px; letter-spacing: 0.04em; text-transform: uppercase; color: var(--ink); }
+.unreachable p { margin: 0 0 12px; color: var(--ink); opacity: 0.9; line-height: 1.45; }
 .dot.wait { animation: admin-pulse 1s ease-in-out infinite; }
 @keyframes admin-pulse { 50% { opacity: 0.35; } }
 @media (prefers-reduced-motion: reduce) { .dot.wait { animation: none; } }

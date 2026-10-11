@@ -3,7 +3,6 @@ import { setLang, t } from '../ui/i18n';
 import { serverIdentityKey } from './ping';
 import { MAINCLOUD, SERVER_KEY, US_EAST, buildServer, chooseServer, gameServers, rememberServer, type KeyValue } from './servers';
 
-const SINGAPORE = { uri: 'wss://play.turfwar.ianhsiao.me', database: 'turfwar' };
 const TAIPEI = { uri: 'wss://tw.turfwar.ianhsiao.me', database: 'turfwar' };
 const page = (search = '', host = 'turfwar.ianhsiao.me', protocol = 'https:') => ({ search, host, protocol });
 
@@ -25,19 +24,18 @@ describe('the server list', () => {
     expect(list.map(s => s.region && t(s.region))).toEqual(['Taipei', 'US East']);
     setLang('zh-TW', false);
     expect(list.map(s => t(s.label))).toEqual(['台北', '美東']);
-    expect(list.some(s => s.uri === SINGAPORE.uri || (s.id as string) === 'sg')).toBe(false);
+    expect(list.some(s => (s.id as string) === 'sg')).toBe(false);
   });
 
   it('keeps Taipei on the identity Singapore had (same key), and the old key for US East', () => {
     const [tw, us] = gameServers(TAIPEI);
     expect(serverIdentityKey(tw.uri)).toBe('instacloud-singapore');
-    expect(serverIdentityKey(SINGAPORE.uri)).toBe('instacloud-singapore');
     // connectOnline saves the token under `lawbreaker.token:<identity key>:<database>`; US East was production as exactly this.
     expect(`lawbreaker.token:${serverIdentityKey(us.uri)}:${us.database}`).toBe('lawbreaker.token:wss://maincloud.spacetimedb.com:3d-game-c4lhd');
   });
 
-  it('shows a build pointed at Singapore (?stdb=) as its Dev server, not as a choice for players', () => {
-    const list = gameServers(SINGAPORE);
+  it('shows a build pointed at any other server (?stdb=) as its Dev server, not as a named choice', () => {
+    const list = gameServers({ uri: 'wss://other.example', database: 'turfwar' });
     expect(list.map(s => [s.id, t(s.label)])).toEqual([['tw', 'Dev server'], ['us', 'US East']]);
   });
 

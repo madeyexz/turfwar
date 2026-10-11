@@ -301,18 +301,18 @@
 #menu .status { margin: -4px 0 0; padding: 8px 12px; border: 1px solid var(--line); border-radius: 3px; background: rgba(4, 9, 12, 0.85); font-size: 13px; color: var(--ink); letter-spacing: 0.06em; font-weight: 600; }
 #menu .status:empty { display: none; }
 
-/* ---- Server unreachable (src/net/wake.ts): after 30 s of trying, a calm card under the tabs, never a red
+/* ---- Server unreachable (src/net/connect.ts): after 30 s of trying, a calm card under the tabs, never a red
    error: "Can't reach the server" with Retry. ---- */
-#menu .wake {
+#menu .unreachable {
   flex: none; display: flex; flex-direction: column; gap: 9px; padding: 12px 14px;
   border: 1px solid var(--line); border-radius: 4px; background: rgba(6, 12, 16, 0.84); backdrop-filter: blur(6px);
 }
-#menu .wake[hidden] { display: none; }
-#menu .wake-say { display: flex; flex-direction: column; gap: 5px; }
-#menu .wake-head { display: flex; align-items: center; gap: 9px; font-size: 14px; font-weight: 700; letter-spacing: 0.12em; text-transform: uppercase; color: var(--ink); }
-#menu .wake-head .conn { flex: none; }
-#menu .wake p { margin: 0; color: var(--ink); opacity: 0.9; font-size: 14px; font-weight: 500; line-height: 1.4; }
-#menu .wake-retry { align-self: flex-start; padding: 0 22px; }
+#menu .unreachable[hidden] { display: none; }
+#menu .unreachable-say { display: flex; flex-direction: column; gap: 5px; }
+#menu .unreachable-head { display: flex; align-items: center; gap: 9px; font-size: 14px; font-weight: 700; letter-spacing: 0.12em; text-transform: uppercase; color: var(--ink); }
+#menu .unreachable-head .conn { flex: none; }
+#menu .unreachable p { margin: 0; color: var(--ink); opacity: 0.9; font-size: 14px; font-weight: 500; line-height: 1.4; }
+#menu .unreachable-retry { align-self: flex-start; padding: 0 22px; }
 /* The amber dot: still, after giving up (not the red of an error). */
 #menu .conn.down i { background: var(--amber); }
 /* A big button whose action waits for the server: outlined, so it reads as pending rather than ready. */
@@ -509,11 +509,11 @@
   #menu .news:not([hidden]) + .others { margin-top: 10px; }
   /* The unreachable card sits beside the tabs (the rail's tallest row, so the screen grows no taller) and
      the open view starts under it. */
-  #menu .wake { grid-column: 2; grid-row: 2; align-self: start; margin: 0 4px 6px 0; gap: 4px; padding: 7px 12px; }
-  #menu .wake p { font-size: 13px; line-height: 1.3; }
-  #menu .wake-head { font-size: 12px; }
-  #menu .wake-retry { min-height: 40px; }
-  #menu:has(> .panel > .wake:not([hidden])) .view { grid-row: 3 / 6; }
+  #menu .unreachable { grid-column: 2; grid-row: 2; align-self: start; margin: 0 4px 6px 0; gap: 4px; padding: 7px 12px; }
+  #menu .unreachable p { font-size: 13px; line-height: 1.3; }
+  #menu .unreachable-head { font-size: 12px; }
+  #menu .unreachable-retry { min-height: 40px; }
+  #menu:has(> .panel > .unreachable:not([hidden])) .view { grid-row: 3 / 6; }
   #menu .status { grid-column: 2; grid-row: 6; margin: 0 0 8px; }
   #menu .site-links {
     position: static; grid-column: 1; grid-row: 5 / 7; align-self: end; justify-content: flex-start;

@@ -63,15 +63,15 @@ const en = {
   'lobby.playerCount.one': '1 player', 'lobby.playerCount.other': '{n} players',
   'lobby.roomAria': '{map} {mode} {size}, {n} of {max} players, {status}',
   // Ping to the game server (src/net/ping.ts): the room list's column, its header chip, the play line.
-  'server.label': 'Server', 'server.region.usEast': 'US East', 'server.region.taipei': 'Taipei', 'server.region.singapore': 'Singapore', 'server.region.local': 'Local',
+  'server.label': 'Server', 'server.region.usEast': 'US East', 'server.region.taipei': 'Taipei', 'server.region.local': 'Local',
   'server.ms': '{n} ms', 'server.ping': 'Ping {ms}', 'server.measuring': 'Measuring ping…',
   'server.pingTitle': 'Ping to the {server} server: round trip, median of the last {n} samples',
   // Choosing the server (Settings → Server, src/net/servers.ts): a development build's own server, and the chips' tooltip.
   'server.choice.dev': 'Dev server', 'server.change': 'Change server',
-  // Reaching the game server (src/net/wake.ts): connecting, queued play, and the unreachable card after 30 s.
-  'wake.queued': 'Joining as soon as the server is up…', 'wake.waiting': 'Waiting for the server…',
-  'wake.downHead': "Can't reach the server", 'wake.downBody': 'We could not connect to the server. Check your connection and retry. Solo and Practice still work.',
-  'wake.downChip': 'unreachable', 'wake.retry': 'Retry',
+  // Reaching the game server (src/net/connect.ts): connecting, queued play, and the unreachable card after 30 s.
+  'connect.queued': 'Joining as soon as the server is up…', 'connect.waiting': 'Waiting for the server…',
+  'connect.downHead': "Can't reach the server", 'connect.downBody': 'We could not connect to the server. Check your connection and retry. Solo and Practice still work.',
+  'connect.downChip': 'unreachable', 'connect.retry': 'Retry',
   // The three online views: Quick Play, Start a Server, Join a Server.
   'lobby.ways': 'Ways to play online', 'lobby.offline': 'Offline',
   // The footer links: the source on GitHub and the privacy page.
@@ -395,13 +395,13 @@ const zhTW: Record<Key, string> = {
   'lobby.roomCount.one': '1 個房間', 'lobby.roomCount.other': '{n} 個房間',
   'lobby.playerCount.one': '1 名玩家', 'lobby.playerCount.other': '{n} 名玩家',
   'lobby.roomAria': '{map} {mode} {size}，{n}/{max} 名玩家，{status}',
-  'server.label': '伺服器', 'server.region.usEast': '美東', 'server.region.taipei': '台北', 'server.region.singapore': '新加坡', 'server.region.local': '本機',
+  'server.label': '伺服器', 'server.region.usEast': '美東', 'server.region.taipei': '台北', 'server.region.local': '本機',
   'server.ms': '{n} ms', 'server.ping': '延遲 {ms}', 'server.measuring': '正在測量延遲…',
   'server.pingTitle': '到{server}伺服器的延遲：往返時間，取最近 {n} 次的中位數',
   'server.choice.dev': '開發伺服器', 'server.change': '切換伺服器',
-  'wake.queued': '伺服器一連上就自動加入…', 'wake.waiting': '等待伺服器…',
-  'wake.downHead': '無法連上伺服器', 'wake.downBody': '無法連上伺服器。請檢查網路後重試。仍可單人對戰電腦或進入練習場。',
-  'wake.downChip': '無法連線', 'wake.retry': '重試',
+  'connect.queued': '伺服器一連上就自動加入…', 'connect.waiting': '等待伺服器…',
+  'connect.downHead': '無法連上伺服器', 'connect.downBody': '無法連上伺服器。請檢查網路後重試。仍可單人對戰電腦或進入練習場。',
+  'connect.downChip': '無法連線', 'connect.retry': '重試',
   'lobby.ways': '線上玩法', 'lobby.offline': '離線',
   'lobby.openSource': '開放原始碼', 'lobby.openSourceTitle': 'GitHub 上的原始碼（在新分頁開啟）',
   'lobby.privacy': '隱私權', 'lobby.about': '玩法介紹', 'lobby.siteLinks': '關於本遊戲',

@@ -148,7 +148,7 @@ function devTestId() {
 /**
  * Load posthog-js and start sending; call once the lobby has rendered. `base` are the super
  * properties every event carries (the app version is added here): the language, the SpacetimeDB
- * database and its host (`server_host`, e.g. play.turfwar.ianhsiao.me) and the player's choice of
+ * database and its host (`server_host`, e.g. tw.turfwar.ianhsiao.me) and the player's choice of
  * server (`server_choice`: tw or us), so events can be told apart by server. The lobby updates the
  * three with `setSuper` when the player chooses another server.
  */

@@ -112,7 +112,7 @@ spacetime generate --lang typescript --out-dir src/module_bindings --module-path
 
 - Source of truth: `https://github.com/madeyexz/turfwar` (renamed from `madeyexz/lawbreaker`; private
   until the owner makes it public). Never change its visibility or settings without the owner.
-- Branches: **`main` = production** (Vercel production, game server `turfwar` in Taipei, plus Singapore and legacy Maincloud, which players are no longer offered); **`dev` =
+- Branches: **`main` = production** (Vercel production, game server `turfwar` in Taipei; legacy Maincloud is still published to); **`dev` =
   development** (every push is a Vercel preview wired to Maincloud `lawbreaker-dev`). Branch features
   off `dev`, commit, and merge back into `dev` with git (no pull requests). A release is merging `dev`
   into `main` and pushing, after publishing the module to the production database (see below); nothing
@@ -124,15 +124,16 @@ spacetime generate --lang typescript --out-dir src/module_bindings --module-path
 - Pushing `main` triggers Vercel production deployment. Do not push or
   publish merely to test; obtain authorization for releases and shared-state changes.
 - Frontend: `https://turfwar.ianhsiao.me` (production; `https://lawbreaker.vercel.app` still works, DNS for ianhsiao.me is on Cloudflare); `dev` previews are listed by `vercel ls`.
-- Production game servers, both database **`turfwar`**: **Taipei**, the only one players are offered (Settings →
+- Production game servers: **Taipei**, database `turfwar`, the only server players are offered (Settings →
   Server, with US East) — SpacetimeDB on a GCP VM in Taiwan, `wss://tw.turfwar.ianhsiao.me`
-  (`deploy/gcp-taipei/`, always on) — and **Singapore** on InstaCloud, `wss://play.turfwar.ianhsiao.me`
-  (`deploy/instacloud/`; it scales to zero and wakes on the next request). Singapore is no longer a choice in
-  the game (2026-10-12) but stays published and readable in `/admin` (it holds the players of 2026-10-07);
-  the game has no wake/"asleep" code, since every server it offers is always on. Decommissioning Singapore
-  is the owner's call. Taipei began as a copy of Singapore (signing keys included). The owner identity is in `~/.config/turfwar/`
-  on the Mac, outside the repo; `bun run publish:prod` publishes to Taipei, Singapore and legacy Maincloud.
-  InstaCloud's CLI is driven as `insta --agent …` from `deploy/instacloud/` (the linked directory).
+  (`deploy/gcp-taipei/`, always on). **Singapore** (InstaCloud, `wss://play.turfwar.ianhsiao.me`,
+  `deploy/instacloud/`) is **retired**: no longer offered to players (2026-10-12), stopped by the owner on
+  2026-10-11 (503 now) but not deleted, and no longer published to or read by `/admin`. Start it again with
+  `cd deploy/instacloud && insta --agent compute start stdb`; deleting the service and its volume is the
+  owner's call. The game has no wake/"asleep" code, since every server it offers is always on.
+  Taipei began as a copy of Singapore (signing keys included). The owner identity is in `~/.config/turfwar/`
+  on the Mac, outside the repo; `bun run publish:prod` (`deploy/publish-prod.sh`) publishes to Taipei and
+  legacy Maincloud. InstaCloud's CLI is driven as `insta --agent …` from `deploy/instacloud/` (the linked directory).
 - Maincloud databases, URI `wss://maincloud.spacetimedb.com`: legacy production **`3d-game-c4lhd`**
   (still published by `publish:prod` and readable in `/admin`), development **`lawbreaker-dev`**
   (publish `dev`'s module there freely; still never reset it while people test). Build-time public
@@ -140,6 +141,6 @@ spacetime generate --lang typescript --out-dir src/module_bindings --module-path
   `turfwar`; Preview for branch `dev` → Maincloud `lawbreaker-dev`).
 - Updating an existing database does not invoke the `init` lifecycle. Preserve the
   guarded first-join initialization and avoid duplicate tick schedules.
-- Never reset production data (Taipei, Singapore or Maincloud). Authorized module releases must use `--delete-data=never`
+- Never reset production data (Taipei, Maincloud, or the retired Singapore volume). Authorized module releases must use `--delete-data=never`
   and stop on destructive migration requirements. Follow the release procedure in docs/DEVELOPMENT.md (Deploy),
   keep module and frontend compatible, and verify both after deployment.

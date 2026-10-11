@@ -16,7 +16,7 @@ import { releasesByDay, releaseTitle, type Release } from './releases';
 import { activeByDay, GROUPS, niceStep, pingByDay, sideOf, SIDES, splitBySide, sumByDay, type DayNet as DayNetOf, type GroupId, type Side } from './groups';
 import { formatPlayTime, liveSeconds } from '../../shared/playtime';
 import { hostAnswers, pingUrl, serverIdentityKey } from '../net/ping';
-import { WAKE, WakeDriver, type WakeLink } from '../net/wake';
+import { ConnectDriver, type ConnectLink } from '../net/connect';
 import { adminServers, chosenServer, regionName, rememberServer, type AdminServer } from './servers';
 import './admin.css';
 
@@ -27,9 +27,9 @@ import './admin.css';
  * return nothing to anyone else). Only "this browser is logged in" is remembered, never the key.
  *
  * A switcher picks the server (src/admin/servers.ts): the build's own (production: the Taipei
- * server) or the others that stay published (Singapore, legacy Maincloud production, dev). Each has its own
- * admin table, so the login, the identity and the "logged in" flag are per server. The Singapore
- * server sleeps when idle and is read-only here (players are no longer offered it): the page just waits up to 3 minutes for it (src/net/wake.ts).
+ * server) or the others that stay published (legacy Maincloud production, dev). Each has its own
+ * admin table, so the login, the identity and the "logged in" flag are per server.
+ * (Singapore's server was retired on 2026-10-11 and is no longer listed.)
  */
 type Room = Infer<typeof AdminRoomsRow>;
 type Overview = Infer<typeof AdminOverviewRow>;
@@ -728,7 +728,7 @@ function render() {
     if (p === 'unreachable') { unreachableCard(); return; }
     // Remembered as logged in, but the server says no (revoked, or a new key): back to the login.
     if (conn && status() && store.get(flagKey())) store.del(flagKey());
-    if (!conn && p !== 'ready') { body.innerHTML = `<div class="empty">Connecting to ${esc(server.name)}…${server.sleeps ? '<br><small>This server sleeps when idle: the first connection can take up to a minute.</small>' : ''}</div>`; return; }
+    if (!conn && p !== 'ready') { body.innerHTML = `<div class="empty">Connecting to ${esc(server.name)}…</div>`; return; }
     renderLogin();
   });
 }
@@ -741,16 +741,16 @@ function renderConn() {
   else setConn('off', p === 'unreachable' ? "Can't reach the server" : 'Not connected');
 }
 
-/** "Can't reach the server" with Retry, after 30 s of trying (3 minutes for a server that sleeps). Redrawn whole only when the server changes. */
+/** "Can't reach the server" with Retry, after 30 s of trying. Redrawn whole only when the server changes. */
 let unreachableShown = '';
 function unreachableCard() {
   const key = server.id;
-  if (unreachableShown === key && body.querySelector('.wake')) return;
+  if (unreachableShown === key && body.querySelector('.unreachable')) return;
   unreachableShown = key;
-  body.innerHTML = `<section class="wake down"><h2><i class="dot off"></i>Can't reach the server</h2>
-      <p role="status">${server.sleeps ? 'It did not answer within 3 minutes. Check the server on InstaCloud, or try again.' : 'It did not answer within 30 seconds. Check that the server is running, or try again.'}</p>
-      <button type="button" class="btn primary" id="wake-retry">Retry</button></section>`;
-  body.querySelector('#wake-retry')?.addEventListener('click', () => driver.retry());
+  body.innerHTML = `<section class="unreachable"><h2><i class="dot off"></i>Can't reach the server</h2>
+      <p role="status">It did not answer within 30 seconds. Check that the server is running, or try again.</p>
+      <button type="button" class="btn primary" id="unreachable-retry">Retry</button></section>`;
+  body.querySelector('#unreachable-retry')?.addEventListener('click', () => driver.retry());
 }
 
 logoutBtn.addEventListener('click', () => {
@@ -764,7 +764,7 @@ logoutBtn.addEventListener('click', () => {
  * `live` once the views have arrived, or once the server answered but has no admin views (an older
  * module: there is nothing to retry, the login form says so).
  */
-function adminLink(s: AdminServer, lost: () => void): WakeLink {
+function adminLink(s: AdminServer, lost: () => void): ConnectLink {
   const key = `lawbreaker.admin.token:${s.uri}:${s.database}`;
   let c: DbConnection | undefined, stopped = false, isLive = false, ended = false;
   let settle: { resolve(): void; reject(error: Error): void } = { resolve() {}, reject() {} };
@@ -815,10 +815,10 @@ function adminLink(s: AdminServer, lost: () => void): WakeLink {
 function makeDriver() {
   const ping = pingUrl(server.uri);
   const s = server;
-  return new WakeDriver<never>({
+  return new ConnectDriver<never>({
     ping: signal => ping ? hostAnswers(ping, signal) : Promise.resolve(false),
     connect: lost => adminLink(s, lost),
-  }, () => render(), () => undefined, s.sleeps ? { ...WAKE, giveUpMs: 180_000 } : WAKE);
+  }, () => render(), () => undefined);
 }
 let driver = makeDriver();
 
