@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { MAX_CLIENT_ERRORS, errorReporter, errorSource } from './errors';
+import { MAX_CLIENT_ERRORS, errorReporter, errorSource, isOpaque } from './errors';
 
 describe('client error reports', () => {
   it('reports each failure once and stops after the page limit', () => {
@@ -26,5 +26,11 @@ describe('client error reports', () => {
   it('keeps only the file name of a source location', () => {
     expect(errorSource('https://turfwar.ianhsiao.me/assets/main-BY9Y6QmH.js?v=2', 12, 34)).toBe('main-BY9Y6QmH.js:12:34');
     expect(errorSource(undefined)).toBeUndefined();
+  });
+
+  it('tells an opaque "Script error." from a real one', () => {
+    expect(isOpaque({ message: 'Script error.', filename: '', lineno: 0 })).toBe(true);
+    expect(isOpaque({ message: 'Script error.', filename: 'https://turfwar.ianhsiao.me/assets/main.js', lineno: 3 })).toBe(false);
+    expect(isOpaque({ message: 'boom', filename: '', lineno: 0 })).toBe(false);
   });
 });
