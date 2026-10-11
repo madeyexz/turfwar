@@ -50,6 +50,8 @@ export interface Events {
   vehicle_entered: { kind: VehicleKind };
   store_purchase: { item: string; price: number };
   language_changed: { to: string };
+  /** The Discord button (the lobby's top bar). */
+  discord_clicked: { where: 'lobby' };
   error_shown: { where: string; message: string };
   /** The page's own failures (src/errors.ts: at most 5 a page, each message once); `source`: file:line:column, or `opaque` for a "Script error." the browser gave no details of (then with `uptime_s`, `standalone`, `visible`). */
   client_error: { kind: ClientErrorKind; message: string; source?: string; in_match: boolean; uptime_s?: number; standalone?: boolean; visible?: boolean };
