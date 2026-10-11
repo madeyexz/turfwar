@@ -16,8 +16,7 @@ import { plural, t } from '../ui/i18n';
 import { setPerson, track } from '../analytics';
 import { NetReporter, SAMPLE_EVERY_MS, type NetFields, type NetReport } from '../../shared/netstats';
 import type { WakeLink } from './wake';
-import { keepAwake, pingUrl, serverIdentityKey } from './ping';
-import { serverSleeps } from './servers';
+import { serverIdentityKey } from './ping';
 import { currentServer } from './servers';
 import { currentDeviceKind } from '../game/device';
 
@@ -93,8 +92,6 @@ export class OnlineLink implements GameLink {
   /** Connection quality (shared/netstats.ts): round trips, corrections, room time; reported every 2 minutes and on leaving. */
   private net = new NetReporter(performance.now());
   private netTimer = setInterval(() => this.pollNet(), 5000);
-  /** Stops the in-match requests that keep the server from sleeping under us (`keepServerAwake`). */
-  private stopAwake?: () => void;
   private reportsInFlight = 0;
   private disconnected = false;
   /** When the room's newest frame arrived (ms on the page's clock; -Infinity = none yet). */
@@ -178,7 +175,6 @@ export class OnlineLink implements GameLink {
     this.disconnected = true;
     this.lifetime.abort();
     clearInterval(this.netTimer);
-    this.stopAwake?.();
     this.onDrop?.();
   }
   myId() { this.state(); return this.me; }
@@ -369,12 +365,9 @@ export class OnlineLink implements GameLink {
   grenade(o: Vec3, d: Vec3) { if (!this.inMatch()) return; void this.conn.reducers.grenade({ ox: o.x, oy: o.y, oz: o.z, dx: d.x, dy: d.y, dz: d.z }).catch(() => undefined); }
   reload() { if (!this.inMatch()) return; void this.conn.reducers.reloadWeapon({}).catch(() => undefined); }
   switchWeapon(slot: Slot) { if (!this.inMatch()) return; void this.conn.reducers.switchSlot({ slot }).catch(() => undefined); }
-  /** While we are in a room, keep the scale-to-zero server from sleeping under the match (`keepAwake`). */
-  keepServerAwake(url: string) { this.stopAwake = keepAwake(url, () => this.inMatch()); }
 
   dispose() {
     this.lifetime.abort();
-    this.stopAwake?.();
     this.netLeft();
     // Already dropped by the server: there is nothing to leave (it would only answer "Not joined").
     if (this.inMatch()) void this.conn.reducers.leave({}).catch(() => undefined);
@@ -439,7 +432,7 @@ export function watchRooms(onChange: (rooms: PublicRoom[]) => void, lost: () => 
   const live = new Promise<void>((resolve, reject) => { settle = { resolve, reject }; });
   live.catch(() => undefined);
   const stop = () => { stopped = true; try { conn?.disconnect(); } catch { /* already closed */ } };
-  /** How long the lazy SDK chunk took to load (for `server_woke`: code or network?). */
+  /** How long the lazy SDK chunk took to load (for `connect_slow`: code or network?). */
   let importMs: number | undefined;
   const importMsOf = () => importMs;
   /** The connection failed (before live) or dropped (after): reported once. */
@@ -489,8 +482,8 @@ export function watchRooms(onChange: (rooms: PublicRoom[]) => void, lost: () => 
 }
 
 /**
- * The server could not be reached (refused, timed out, dropped before we were in a room): asleep (a server
- * that scales to zero) or restarting, not a refusal by the game. The lobby tries once more.
+ * The server could not be reached (refused, timed out, dropped before we were in a room): restarting or
+ * out of reach, not a refusal by the game. The lobby tries once more.
  */
 export class ConnectError extends Error {}
 
@@ -514,7 +507,7 @@ export async function connectOnline(name: string, team: Team | undefined, how: O
       try { conn.disconnect(); } catch { /* already closed */ }
       reject(error);
     };
-    // No handshake by then: the server is unreachable (asleep, restarting); after it, the join itself stalled.
+    // No handshake by then: the server is unreachable (restarting, out of reach); after it, the join itself stalled.
     const timer = setTimeout(() => fail(link ? new Error(t('net.timeout')) : new ConnectError(t('net.timeout'))), 20_000);
     const conn: DbConnection = DbConnection.builder().withUri(uri).withDatabaseName(database).withToken(token)
       .onConnect((connection, identity, nextToken) => {
@@ -527,9 +520,6 @@ export async function connectOnline(name: string, team: Team | undefined, how: O
         // PostHog people can be matched to SpacetimeDB profiles by this property (never identify()).
         setPerson({ stdb_identity: identity.toHexString() });
         link = new OnlineLink(connection, identity);
-        // Only a server that scales to zero (Singapore) needs a request now and then to stay up under the match.
-        const awake = serverSleeps({ uri, database }) ? pingUrl(uri) : undefined;
-        if (awake) link.keepServerAwake(awake);
         connection.subscriptionBuilder()
           .onApplied(async () => {
             if (done) return;

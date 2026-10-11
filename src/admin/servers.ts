@@ -1,13 +1,13 @@
 import { DICTIONARIES } from '../ui/i18n';
 import { serverHost, serverRegionKey } from '../net/ping';
-import { MAINCLOUD, SINGAPORE, US_EAST, sameServer } from '../net/servers';
+import { MAINCLOUD, US_EAST, sameServer } from '../net/servers';
 
 /**
  * The servers /admin can show. Each SpacetimeDB database has its own `admin` table (and the same
  * module, so the same admin key works on all of them), so logging in is per server, and so is the
  * browser's admin identity. The default is the build's own server (production: the Taipei server);
- * Singapore (production before Taipei, still a choice in the game) and the two Maincloud databases
- * are listed after it: the legacy production one, where older players' data remains, and the
+ * Singapore (production before Taipei, no longer a choice in the game, but it holds the players from
+ * 2026-10-07) and the two Maincloud databases are listed after it: the legacy production one, where older players' data remains, and the
  * development one behind `dev` previews.
  */
 export interface AdminServer {
@@ -16,11 +16,14 @@ export interface AdminServer {
   name: string;
   uri: string;
   database: string;
+  /** It scales to zero (InstaCloud): the first connection can take a minute, so the page waits longer and says so. */
+  sleeps?: boolean;
 }
 
 export { MAINCLOUD };
-/** Singapore: the game's "Singapore" choice (src/net/servers.ts). */
-export const SINGAPORE_SERVER: AdminServer = { id: 'sg', name: 'Singapore', uri: SINGAPORE.uri, database: SINGAPORE.database };
+/** Singapore (InstaCloud): production before Taipei. Read-only here; players are not offered it any more. */
+export const SINGAPORE = { uri: 'wss://play.turfwar.ianhsiao.me', database: 'turfwar' } as const;
+export const SINGAPORE_SERVER: AdminServer = { id: 'sg', name: 'Singapore', uri: SINGAPORE.uri, database: SINGAPORE.database, sleeps: true };
 export const MAINCLOUD_SERVERS: readonly AdminServer[] = [
   // The game's "US East" choice (src/net/servers.ts).
   { id: 'legacy', name: 'Maincloud (legacy)', uri: US_EAST.uri, database: US_EAST.database },

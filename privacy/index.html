@@ -41,7 +41,7 @@
         <p>When you share a match card or a 1v1 challenge, the picture is made in your browser and goes only where you send it. Its link carries your callsign, the map, your kills in that match, the code of a private room if you opened one, a random share code kept in this browser (not linked to your game ID), and plain "utm" tags saying what kind of link it is and which screen it came from (for example a share card from the end screen), so we can count how many players a shared link brings. When someone opens your link, the product analytics below record that a link with that share code was opened, accepted and played to the end.</p>
 
         <h2>Game server</h2>
-        <p>Online matches run on the game server you choose in Settings: Singapore (SpacetimeDB hosted by InstaCloud, the default) or US East (SpacetimeDB Maincloud in the United States). Each keeps its own players and stats; for each anonymous game ID the server keeps:</p>
+        <p>Online matches run on the game server you choose in Settings: Taipei (our own SpacetimeDB server in Taiwan, the default) or US East (SpacetimeDB Maincloud in the United States). Each keeps its own players and stats; for each anonymous game ID the server keeps:</p>
         <ul>
           <li>your callsign and your gameplay stats (kills, deaths, assists, headshots, rounds and matches played and won);</li>
           <li>when you first and last played, how much time you spent in online matches (in total, per day and per hour), how many sessions and on which days and hours (the hourly records are kept for two weeks), and your browser's time zone and language, which we use to estimate which countries players come from;</li>
@@ -49,10 +49,10 @@
           <li>your device type (phone, tablet or computer), as the game works it out from your browser, and how many times you connected on each, so we know what players play on.</li>
         </ul>
         <p>Your callsign and stats are public: other players see them in matches and on the in-game leaderboard. Chat messages go to the players in your room.</p>
-        <p>Before the move to Singapore the only game server was the US East one, and data from that time remains there.</p>
+        <p>Before the move to Taipei, the game ran on a server in Singapore (SpacetimeDB hosted by InstaCloud) and, before that, on the US East one. They are no longer offered to players, but the data from that time remains there.</p>
 
         <h2>Product analytics</h2>
-        <p>We use PostHog to learn how the game is played: anonymous events such as page views, opening the lobby, starting or leaving a match, rounds, maps and modes played, vehicles used, store purchases, language changes, errors, how long the game server took to wake up and your connection quality in online matches (ping and movement corrections), with your callsign, language, graphics setting, the game server you chose, your device type (phone, tablet or computer) and rounded screen size, and how you play on it: touch controls, whether the phone was held upright, whether the game was opened inside an app's built-in browser (such as Threads, Instagram, Messenger, Facebook, LINE or TikTok), how many times you have opened the game, whether your browser already had saved data for the game when the page loaded (and can save data at all), where you came from (the UTM tags of the link you followed, the referring website's name without its address, and only whether an ad click ID such as gclid or fbclid was present, never its value; the first of these is remembered in your browser and sent with every event), your touch aim assist setting, and in each match your knife (slipper) kills and the bubble teas you drank. PostHog estimates your approximate country from the connection; we don't store IP addresses ourselves. When you play online, these events are linked to your anonymous game ID. There are no session recordings, and no clicks or typing are captured from the page. If your browser sends Do Not Track or Global Privacy Control, no analytics events are sent.</p>
+        <p>We use PostHog to learn how the game is played: anonymous events such as page views, opening the lobby, starting or leaving a match, rounds, maps and modes played, vehicles used, store purchases, language changes, errors, how long the game server took to connect and your connection quality in online matches (ping and movement corrections), with your callsign, language, graphics setting, the game server you chose, your device type (phone, tablet or computer) and rounded screen size, and how you play on it: touch controls, whether the phone was held upright, whether the game was opened inside an app's built-in browser (such as Threads, Instagram, Messenger, Facebook, LINE or TikTok), how many times you have opened the game, whether your browser already had saved data for the game when the page loaded (and can save data at all), where you came from (the UTM tags of the link you followed, the referring website's name without its address, and only whether an ad click ID such as gclid or fbclid was present, never its value; the first of these is remembered in your browser and sent with every event), your touch aim assist setting, and in each match your knife (slipper) kills and the bubble teas you drank. PostHog estimates your approximate country from the connection; we don't store IP addresses ourselves. When you play online, these events are linked to your anonymous game ID. There are no session recordings, and no clicks or typing are captured from the page. If your browser sends Do Not Track or Global Privacy Control, no analytics events are sent.</p>
 
         <h2>Website analytics</h2>
         <p>Vercel Web Analytics counts anonymous page views and visitors, without cookies.</p>
@@ -76,7 +76,7 @@
         <p>你分享戰績卡或單挑連結時，圖片是在你的瀏覽器裡產生的，只會傳到你選擇分享的地方。連結裡帶有你的呼號、地圖、你在那場的擊殺數、你開的私人房代碼（如果有）、一個存在這個瀏覽器的隨機分享碼（跟你的遊戲 ID 無關），以及簡單的 utm 標記，說明這是哪種連結、從哪個畫面分享的（例如結算畫面的戰績卡），讓我們能算出一個分享連結帶來多少玩家。有人打開你的連結時，下方的產品分析會記錄帶這個分享碼的連結被打開、接受與打完。</p>
 
         <h2>遊戲伺服器</h2>
-        <p>線上對戰在你於設定中選擇的遊戲伺服器上進行：新加坡（SpacetimeDB，由 InstaCloud 託管，預設）或美東（位於美國的 SpacetimeDB Maincloud）。各伺服器的玩家與戰績分開記錄；伺服器會為每個匿名遊戲 ID 保存：</p>
+        <p>線上對戰在你於設定中選擇的遊戲伺服器上進行：台北（我們自己在台灣的 SpacetimeDB 伺服器，預設）或美東（位於美國的 SpacetimeDB Maincloud）。各伺服器的玩家與戰績分開記錄；伺服器會為每個匿名遊戲 ID 保存：</p>
         <ul>
           <li>你的呼號與遊戲戰績（擊殺、陣亡、助攻、爆頭，以及參與和獲勝的回合數、場數）；</li>
           <li>你第一次與最近一次遊玩的時間、在線上對戰中遊玩的時間（總計、每日與每小時）、遊玩次數與日期和時段（每小時的紀錄保留兩週），以及瀏覽器的時區與語言，用來估計玩家來自哪些國家；</li>
@@ -84,10 +84,10 @@
           <li>你的裝置類型（手機、平板或電腦），由遊戲依你的瀏覽器判斷，以及你用各類裝置連線的次數，讓我們知道玩家用什麼裝置遊玩。</li>
         </ul>
         <p>你的呼號與戰績是公開的：其他玩家會在對戰中與遊戲內排行榜上看到。聊天訊息會傳給同一房間的玩家。</p>
-        <p>遷至新加坡之前，美東是唯一的遊戲伺服器，當時的資料仍留在那裡。</p>
+        <p>遷至台北之前，遊戲曾在新加坡的伺服器（SpacetimeDB，由 InstaCloud 託管）上運行，更早則在美東。這兩個伺服器已不再提供給玩家，但當時的資料仍留在那裡。</p>
 
         <h2>產品分析</h2>
-        <p>我們使用 PostHog 了解大家怎麼玩：匿名的事件，例如瀏覽頁面、開啟大廳、開始或離開對戰、回合、玩過的地圖與模式、使用載具、商店購買、切換語言、錯誤、遊戲伺服器喚醒所需的時間，以及線上對戰的連線品質（延遲與移動修正），並附上你的呼號、語言、畫質設定、你選擇的遊戲伺服器、裝置類型（手機、平板或電腦）與概略的螢幕尺寸，以及你怎麼玩：是否使用觸控操作、手機是否直拿、是否在 App 內建瀏覽器（例如 Threads、Instagram、Messenger、Facebook、LINE 或 TikTok）中開啟、你開啟遊戲的次數、頁面載入時你的瀏覽器是否已存有這個遊戲的資料（以及是否能儲存資料）、你從哪裡來（你點的連結上的 UTM 標籤、來源網站的名稱但不含網址，以及是否帶有 gclid 或 fbclid 這類廣告點擊 ID，僅記錄有或沒有，不記錄其值；第一次的來源會記在你的瀏覽器中，並隨每個事件送出）、觸控輔助瞄準的設定，以及每場對戰中的藍白拖擊殺數與喝了幾杯珍奶。PostHog 會從連線推估你大致所在的國家；我們自己不保存 IP 位址。線上遊玩時，這些事件會與你的匿名遊戲 ID 連結。不錄製操作畫面，也不擷取你在頁面上的點擊或輸入。如果你的瀏覽器送出「不要追蹤」（Do Not Track）或全球隱私控制（Global Privacy Control），就不會傳送任何分析事件。</p>
+        <p>我們使用 PostHog 了解大家怎麼玩：匿名的事件，例如瀏覽頁面、開啟大廳、開始或離開對戰、回合、玩過的地圖與模式、使用載具、商店購買、切換語言、錯誤、遊戲伺服器連線所需的時間，以及線上對戰的連線品質（延遲與移動修正），並附上你的呼號、語言、畫質設定、你選擇的遊戲伺服器、裝置類型（手機、平板或電腦）與概略的螢幕尺寸，以及你怎麼玩：是否使用觸控操作、手機是否直拿、是否在 App 內建瀏覽器（例如 Threads、Instagram、Messenger、Facebook、LINE 或 TikTok）中開啟、你開啟遊戲的次數、頁面載入時你的瀏覽器是否已存有這個遊戲的資料（以及是否能儲存資料）、你從哪裡來（你點的連結上的 UTM 標籤、來源網站的名稱但不含網址，以及是否帶有 gclid 或 fbclid 這類廣告點擊 ID，僅記錄有或沒有，不記錄其值；第一次的來源會記在你的瀏覽器中，並隨每個事件送出）、觸控輔助瞄準的設定，以及每場對戰中的藍白拖擊殺數與喝了幾杯珍奶。PostHog 會從連線推估你大致所在的國家；我們自己不保存 IP 位址。線上遊玩時，這些事件會與你的匿名遊戲 ID 連結。不錄製操作畫面，也不擷取你在頁面上的點擊或輸入。如果你的瀏覽器送出「不要追蹤」（Do Not Track）或全球隱私控制（Global Privacy Control），就不會傳送任何分析事件。</p>
 
         <h2>網站分析</h2>
         <p>Vercel Web Analytics 計算匿名的瀏覽次數與訪客數，不使用 Cookie。</p>

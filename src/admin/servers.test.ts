@@ -59,4 +59,9 @@ describe('admin servers', () => {
     expect(chosenServer(list, blocked).id).toBe('build');
     expect(chosenServer(list, undefined).id).toBe('build');
   });
+
+  it('marks only Singapore as sleeping (the page waits longer for it), and does not offer it as a game server', () => {
+    const list = adminServers({ uri: 'wss://tw.turfwar.ianhsiao.me', database: 'turfwar' });
+    expect(list.map(s => [s.id, !!s.sleeps])).toEqual([['build', false], ['sg', true], ['legacy', false], ['dev', false]]);
+  });
 });

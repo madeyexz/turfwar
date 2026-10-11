@@ -38,7 +38,7 @@ Lobby URL flags: `?tab=quick|start|join` (the open tab), `?mode=offline|online|l
 starts: Solo, Quick Play or Practice), `&game=elimination|sabotage`, `&size=duel|squad|war` and `&map=<id>`
 (the Start a Server form; a 24v24 map picks 24v24 unless `size` says otherwise), `&room=CODE` (opens Join a
 server with the code filled in; with `autostart` joins it), `&team=0|1|auto`, `&skill=0.25…0.75`, `&name=…`,
-`&autostart=1`, `&server=sg|us` (the game server for this visit; Settings → Server saves a choice).
+`&autostart=1`, `&server=tw|us` (the game server for this visit; Settings → Server saves a choice).
 單挑我 challenge links (`src/game/challenge.ts`): `?c=1&ch=<callsign>&map=<id>&beat=<kills>&ref=<share code>`
 and `&room=CODE` when the challenger opened a private 1v1 room, plus `&utm_source=share|challenge|duel&utm_medium=share_card` (`tagLink`; unknown parameters never change what the link opens). The lobby shows 「<callsign> 向你下戰帖！」; accepting joins
 the room, or plays a Solo 1v1 on that map against a bot named after the challenger when there is no room or it is
@@ -115,18 +115,22 @@ preview wired to the development database `lawbreaker-dev`. Releases are maintai
 | Use | Server | Database |
 | --- | --- | --- |
 | Production, the default | SpacetimeDB 2.10.2 self-hosted on **GCP, Taiwan** (`asia-east1-b`, `wss://tw.turfwar.ianhsiao.me`) | `turfwar` |
-| Singapore (production before Taipei; a choice in Settings → Server) | SpacetimeDB 2.10.2 self-hosted on **InstaCloud, Singapore** (`wss://play.turfwar.ianhsiao.me`) | `turfwar` |
+| Singapore (production before Taipei; **no longer offered to players** since 2026-10-12, still published and read by `/admin`) | SpacetimeDB 2.10.2 self-hosted on **InstaCloud, Singapore** (`wss://play.turfwar.ianhsiao.me`) | `turfwar` |
 | US East (the previous production; still published, a choice in Settings → Server, read by `/admin`) | Maincloud, US East | `3d-game-c4lhd` |
 | Development (`dev` previews) | Maincloud, US East | `lawbreaker-dev` |
 
-Players pick their server in **Settings → Server** (`src/net/servers.ts`; `?server=tw|sg|us` for one
-visit): Taipei, the build's own server and the default; Singapore; or US East, where players from
-before Singapore keep their saved identity and career. Taipei began on 2026-10-07 as a copy of
-Singapore, signing keys included, so a player has one identity on both (the client keys both
-servers' saved token alike) and kept their career; from then on each server keeps its own stats.
+Players pick their server in **Settings → Server** (`src/net/servers.ts`; `?server=tw|us` for one
+visit): Taipei, the build's own server and the default; or US East, where players from before
+Singapore keep their saved identity and career. Singapore is no longer a choice (2026-10-12): a
+`sg` saved in a browser silently falls back to the default and is rewritten, and `?server=sg` is
+ignored (`?stdb=` / `?db=` can still point a build at any server, for development). Taipei began on
+2026-10-07 as a copy of Singapore, signing keys included, so a player has one identity on both
+(the client keys both servers' saved token alike) and kept their career; from then on each server
+keeps its own stats. Players who played on Singapore on 2026-10-07 have their career there, and
+their identity is the same on Taipei.
 The lobby switches at once, a match in progress stays on its server, and `play_clicked` /
 `match_joined` carry `server_choice`. A `dev` preview's own server is `lawbreaker-dev` (offered with
-US East, not Singapore).
+US East).
 
 The Taipei server (`deploy/gcp-taipei/`, GCP project `game-turfwar-ianhsiao-me`, VM `turfwar-tw`, an
 e2-small with 2 GB of swap and a 20 GB disk, static IP 34.81.41.144) runs the same container as
@@ -142,22 +146,18 @@ before risky work with `gcloud compute disks snapshot turfwar-tw --zone asia-eas
 the image built; `sudo docker builder prune -af && sudo docker image prune -af` frees the build layers.
 
 The Singapore server (`deploy/instacloud/`, InstaCloud project `5ad5aa00-…`, compute service `stdb`)
-is a slim container with SpacetimeDB's two binaries and a 10 GiB `/data` volume. It **scales to zero**:
-with no traffic it suspends (or stops), and the next request wakes it, ~2 s from a suspend; the
-lobby shows a "waking up" state meanwhile. It is the only server that does (`scalesToZero` in
-`src/net/servers.ts`; Taipei is always on, Maincloud is managed, a local server is ours): the wake states
-in `src/net/wake.ts`, the in-match `keepAwake` ping and the "asleep" copy apply to it alone, while a failed
-ping or connect on any other server just means "can't reach it" (normal "connecting" copy, retries for
-30 s, then unreachable with Retry). Real visitors now rarely reach Singapore: it is only
-reached by choosing it in Settings (or `?server=sg`, or a saved choice from before Taipei). In PostHog's
-first week 52 people loaded the lobby on it on 2026-10-07 before Taipei became the default (11:28 UTC),
-and only 5 after (one Philippines player is most of those 21 lobby views); none saw a wait over 10 s since. Traffic on an already-open WebSocket does not count as
-activity (only requests through the router do), and a match runs entirely on one, so the platform
-used to suspend the server mid-match, 5–13 minutes in, dropping everyone (2026-10-07). Since then a
-client in a room on that server requests `/v1/ping` once a minute (`keepAwake` in `src/net/ping.ts`); it
-stops once the player is out of the room, so the server still sleeps when nobody plays. The lobby's ping
-chip pings the chosen server every 4 s while visible (which also keeps a chosen Singapore awake). With the data volume attached, idle means a stop rather than a suspend, so a wake
-takes ~20–30 s. `cd deploy/instacloud && insta --agent compute logs stdb --deploy` lists the
+is a slim container with SpacetimeDB's two binaries and a 10 GiB `/data` volume. Players are no
+longer offered it (2026-10-12; in the first week 52 people loaded the lobby on it on 2026-10-07
+before Taipei became the default, and 5 after). It stays published (`publish:prod`) and readable in
+`/admin`, which waits up to 3 minutes for it because it **scales to zero**: with no traffic it
+suspends (or stops), and the next request wakes it, ~2 s from a suspend, ~20–30 s from a stop
+(the data volume is attached). The game has no code for a sleeping server any more: every server
+it offers is always on, so a failed ping or connect is just "can't reach it" (normal "connecting"
+copy, retries for 30 s, then "Can't reach the server" with Retry; `src/net/wake.ts`). Decommissioning
+Singapore is the owner's call. While it was a choice, traffic on an already-open WebSocket did not
+count as activity (only requests through the router do), so the platform suspended it mid-match,
+5–13 minutes in, dropping everyone (2026-10-07), and a client in a room requested `/v1/ping` once a
+minute to hold it up. `cd deploy/instacloud && insta --agent compute logs stdb --deploy` lists the
 platform's suspends and wakes. `start.sh` supervises the server: SpacetimeDB never
 deletes its commitlog (100 players write ~12 GB an hour, ~3x smaller once sealed), so once the data
 passes 4 GB and nothing has been written for 2 minutes it restarts the server around
@@ -172,7 +172,7 @@ is the only one that can update it, on Taipei and Singapore alike.
 To rebuild or reconfigure the container: `cd deploy/instacloud && insta --agent deploy . --group stdb --port 8080 --websocket`.
 
 Vercel production build variables are `VITE_SPACETIMEDB_URI=wss://tw.turfwar.ianhsiao.me` (Taipei) and
-`VITE_SPACETIMEDB_DATABASE=turfwar`; Singapore's address is in the code (`SINGAPORE` in `src/net/servers.ts`).
+`VITE_SPACETIMEDB_DATABASE=turfwar`; Singapore's address is in the code only for `/admin` (`SINGAPORE` in `src/admin/servers.ts`).
 Singapore's custom domain went live on 2026-10-07 (check it with
 `cd deploy/instacloud && insta --agent domain check play.turfwar.ianhsiao.me --group stdb`). The platform's own
 `wss://prod-main-stdb-2b7636-205bvw6d002.compute.instacloud-edge.com` reaches the same server; the client keys
@@ -240,7 +240,7 @@ whenever what is collected changes. These answer "how many players, and from whe
   the country from the IP on its side. Events: `lobby_view`, `play_clicked`, `match_joined`,
   `match_left` (also on tab close, by beacon; `exit` says how: `menu_button`, `end_screen`, `leave_key`,
   `removed`, `lost` (the connection dropped and the room could not be rejoined), `rejoined` (it dropped and we came straight back to the same room; `lost` counted these too until 2026-10-11) or `close`), `round_ended`, `vehicle_entered`, `store_purchase`,
-  `share_card_opened` / `share_card_shared` (`method`: `native` card + link through the share sheet, `link` link only through it, `copy`, `download`), `duel_clicked` (約朋友單挑, `via` `room` or `link`), `challenge_link_opened` / `challenge_started` / `challenge_completed`, `callsign_asked` (a new player was asked for a callsign; `play_clicked` follows only when they answer), `language_changed`, `error_shown`, `server_woke` (a server that scales to zero, i.e. Singapore, was found asleep and the "waking" screen showed) and `connect_slow` (the lobby's connection to any other server, or a sleeping one that was only slow, took over 6 s or needed a retry; before 2026-10-12 `server_woke` meant this too, and the first week's ~860 Taipei "wakes" were slow connects); both carry `seconds`, `queued`, `failures`, `reconnect` and the split of the wait: `ping_ms`/`ping_ok` (first ping), `connect_ms`, `import_ms` (SDK chunk load), `net_sample`, `client_error` (the page's own failures:
+  `share_card_opened` / `share_card_shared` (`method`: `native` card + link through the share sheet, `link` link only through it, `copy`, `download`), `duel_clicked` (約朋友單挑, `via` `room` or `link`), `challenge_link_opened` / `challenge_started` / `challenge_completed`, `callsign_asked` (a new player was asked for a callsign; `play_clicked` follows only when they answer), `language_changed`, `error_shown`, `connect_slow` (the lobby's connection took over 6 s or needed a retry after a failed ping or connect: `seconds`, `queued`, `failures`, `reconnect` and the split of the wait, `ping_ms`/`ping_ok` (first ping), `connect_ms`, `import_ms` (SDK chunk load). Until 2026-10-12 this was called `server_woke` and the lobby also showed an "asleep" screen for it; Singapore is gone from the game, so the event and screen are gone. The first week's ~920 `server_woke` events are therefore slow connects, almost all on Taipei, which is always on, plus 7 Oct's real Singapore wake-ups, and a query for the whole period should read both names), `net_sample`, `client_error` (the page's own failures:
   uncaught errors, promises nobody caught and a lost WebGL context, at most 5 a page, `src/errors.ts`; a "Script error." the browser gives no details of is sent once a page apart from those 5, with `source: opaque`, `uptime_s`, `standalone` and `visible`), (`match_joined` also says `private` (the room has a code) and `hosted` (we opened it with 約朋友單挑); rooms that found an opponent: hosted `room` codes with a second person's `match_joined` on the same code), with super properties `lang`, `app_version` (git SHA),
   `online_db`, `screen` and (`src/visit.ts`, `src/game/device.ts`) `in_app` (the app whose built-in browser it is: Threads, Instagram, Messenger, Facebook, LINE, TikTok…), `visit_n`, `has_prior_storage`, `storage_ok`, the first-touch `first_utm_*` / `first_referrer` / `first_touch_at` / `first_gclid` / `first_fbclid` and this visit's `visit_utm_*` / `visit_referrer` (UTM naming rules and links to post: [UTM.md](UTM.md); `withUtm` in `src/utm.ts` tags the links the game makes). Online, the person property `stdb_identity` links a PostHog person to
   a SpacetimeDB profile. Nothing is sent without a key, under `?bench`, `?trailer`, `?capture`,
