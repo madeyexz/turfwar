@@ -227,6 +227,39 @@ the keyword list and the owner's checklist (Search Console, Bing Webmaster Tools
 
 ## Players, analytics and the admin page
 
+### Client error tracking and private source maps
+
+`client_error` remains available for existing queries. Code errors also send `$exception` to
+PostHog Error Tracking, including early errors and caught boot failures (`kind: boot`). The old
+boot `error_shown` event is replaced by this pair. Reports share a five-message budget per page;
+opaque `Script error.` has one separate report with uptime/visibility context. WebGL loss remains
+a `client_error`. `src/exceptions.ts` cleans known secrets and URL queries/fragments; never put user
+input in exception messages. Error events drop inherited callsign, room, attribution and person-set
+properties. They retain anonymous SDK identifiers, build, server, browser and in-app context.
+Do Not Track, Global Privacy Control and all existing automation exclusions still apply.
+
+Vite creates hidden source maps. The final build step always deletes them from `dist`, even if an
+upload fails or credentials are absent. Cleanup failure fails the build rather than publishing maps.
+Upload is optional and non-fatal; without both credentials it is silent. Configure these **private
+build variables**, never `VITE_*`, in Vercel Production and the `dev` Preview scope:
+
+| Variable | Value |
+| --- | --- |
+| `POSTHOG_CLI_API_KEY` | Personal API key with source-map upload access, from PostHog Settings → User → Personal API keys |
+| `POSTHOG_CLI_PROJECT_ID` | `649207` |
+| `POSTHOG_CLI_HOST` | `https://us.posthog.com` |
+
+The pinned `@posthog/cli@0.18.10` processes maps with release name `turfwar` and version equal to
+`app_version` (git SHA). It injects chunk IDs before upload; deploy these processed bundles.
+Use Error Tracking → Issues; exclude `test: true` events (`properties.test is null` in SQL), then
+filter by `app_version`, `kind`, `server_host` and `in_app`. Configure issue alerts in PostHog and
+connect the desired Slack/webhook/email destination in project integrations. The owner must enable
+and test those integrations; source-map upload alone does not enable alerts.
+
+Verification must distinguish a parsed local stack from actual PostHog symbolication. After owner
+setup, use a private preview to throw an intentional bundled error and confirm that its issue shows
+the original TypeScript file and line. Do not claim resolved production stacks until that succeeds.
+
 Players stay anonymous (no login). The player-facing summary is the privacy page (`privacy/index.html`,
 served at `/privacy` and linked from the lobby, in English and 繁體中文): change it in the same commit
 whenever what is collected changes. These answer "how many players, and from where":

@@ -4,6 +4,7 @@ import { readFileSync, readdirSync, statSync, writeFileSync } from 'node:fs';
 import { join, resolve } from 'node:path';
 import { defineConfig, type Plugin } from 'vite';
 import { mergeReleases, parseReleaseLog, type Release } from './src/admin/releases';
+import { sourcemaps } from './src/buildtools/sourcemaps';
 
 /** The build's git short SHA (Vercel provides it; locally ask git), sent with analytics events. */
 function appVersion() {
@@ -103,7 +104,7 @@ const pwa: Plugin = {
 };
 
 export default defineConfig({
-  plugins: [pageRoutes, versionedCssUrls, fontPreload, pwa],
+  plugins: [pageRoutes, versionedCssUrls, fontPreload, pwa, sourcemaps(appVersion())],
   define: { __APP_VERSION__: JSON.stringify(appVersion()), __ASSET_VERSIONS__: JSON.stringify(VERSIONS), __RELEASES__: JSON.stringify(releases()) },
   server: {
     allowedHosts: true,
@@ -112,6 +113,8 @@ export default defineConfig({
     proxy: { '/stdb': { target: process.env.STDB_PROXY_TARGET || 'http://127.0.0.1:3000', ws: true, rewrite: path => path.replace(/^\/stdb/, '') } },
   },
   build: {
+    // Hidden: maps are written but not linked from the scripts; src/buildtools/sourcemaps.ts uploads them to PostHog (when its env vars are set) and deletes them from dist.
+    sourcemap: 'hidden',
     chunkSizeWarningLimit: 900,
     rollupOptions: {
       // The game, the privacy notice at /privacy, the about pages at /about (繁體中文) and /en/about (English; static text for search and answer engines, docs/SEO.md), the owner's admin dashboard at /admin (not linked from the game) and the service worker at /sw.js.

@@ -35,6 +35,7 @@ requests.
 - `src/game/`: client loop, player prediction/input, Solo link, settings, performance check.
 - `src/net/online.ts`: SpacetimeDB connection, replicated state, interpolation, and intents.
 - `src/analytics.ts`: PostHog product analytics (lazy, guarded; see `docs/DEVELOPMENT.md` "Players, analytics and the admin page").
+- `src/errors.ts`, `src/exceptions.ts`, `src/bootstrap.ts`: bounded client stacks and early/boot errors. Preserve analytics opt-outs and error-property filtering. Hidden maps must be removed from build output; private upload setup is in `docs/DEVELOPMENT.md`. Never claim PostHog symbolication from local parsing alone.
 - `privacy/index.html`, `src/privacy/`: the public `/privacy` page (English and 繁體中文). Keep it true
   whenever what the game stores or sends changes.
 - `about/`, `en/about/`, `public/{robots.txt,sitemap.xml,llms.txt,llms-full.txt,og/}`: the crawlable text, structured data and previews for search and AI answer engines (`docs/SEO.md`). Keep them true to `docs/GAMEPLAY.md` when rules, modes, maps or names change; canonicals and sitemap URLs stay clean (no `utm_*`); `src/seo.test.ts` checks them. Before SEO work, run `bun run seo:report` (Google Search Console and Bing data) and decide from it; after a release, `bun run seo:ping`.
