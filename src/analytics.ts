@@ -36,16 +36,20 @@ export interface ConnectTiming { seconds: number; queued: boolean; failures: num
 /** Every event and its properties (kept small and typed). */
 export interface Events {
   lobby_view: Record<string, never>;
+  /** The lobby is ready to play (assets loaded), once a page: ms since the page started loading. */
+  lobby_ready: { boot_ms: number };
+  /** This browser's first kill ever (activation; src/growth.ts). */
+  first_kill: { online: boolean };
   /** `server_choice`: the server an online play goes to (Settings → Server); offline plays leave it out. */
   play_clicked: { kind: PlayKind; size: string; mode: Mode | ''; map: string; server_choice?: ServerId };
   /** `device`: our own phone/tablet/desktop (src/game/device.ts), which, unlike PostHog's `$device_type`, counts an iPad posing as a Mac as a tablet. */
   /** `rejoin`: back in the same room after the connection dropped (main.ts rejoinAfterDrop). */
   /** `private`: the room has a 4-letter code (a private room, hosted or joined by code); `hosted`: we opened it with 約朋友單挑 (pair with the other persons' `room` to count rooms that found an opponent). */
   /** How it is played (phones): `touch` controls, the screen `upright` at the start (a touch match then plays turned sideways), the `in_app` browser's app, touch `aim_assist` on. */
-  match_joined: { online: boolean; room?: string; map: string; mode: Mode; size: string; team: 'swat' | 'militia'; server_choice?: ServerId; device: DeviceKind; rejoin?: boolean; touch?: boolean; upright?: boolean; in_app?: string; aim_assist?: boolean; private?: boolean; hosted?: boolean };
+  match_joined: { online: boolean; room?: string; map: string; mode: Mode; size: string; team: 'swat' | 'militia'; server_choice?: ServerId; device: DeviceKind; rejoin?: boolean; touch?: boolean; upright?: boolean; in_app?: string; aim_assist?: boolean; private?: boolean; hosted?: boolean; wait_ms?: number };
   /** Online, also the match's connection quality (shared/netstats.ts): ping percentiles over the newest ≤600 samples, totals for the rest. */
   /** `sideways`: the page was turned at some point (an upright phone); `knife_kills` (the 藍白拖) and `bobas_drunk` (珍奶) over the stay. */
-  match_left: { seconds: number; kills: number; deaths: number; rounds_played: number; reason: Reason; exit?: Exit; sideways?: boolean; knife_kills?: number; bobas_drunk?: number } & Partial<Omit<NetFields, 'seconds'>>;
+  match_left: { seconds: number; kills: number; deaths: number; rounds_played: number; reason: Reason; exit?: Exit; sideways?: boolean; knife_kills?: number; bobas_drunk?: number; fps?: number; fps_low?: number; frames?: number } & Partial<Omit<NetFields, 'seconds'>>;
   round_ended: { won: boolean; mode: Mode; map: string };
   vehicle_entered: { kind: VehicleKind };
   store_purchase: { item: string; price: number };
@@ -212,12 +216,12 @@ export function roundEnded(props: Events['round_ended']) {
 }
 
 /** The match is over for us (menu, a dropped connection, or the tab closing); sent once. `net`: online connection quality; `exit`: exactly how. */
-export function matchLeft(reason: Reason, score: { kills: number; deaths: number }, net?: Omit<NetFields, 'seconds'>, exit?: Exit) {
+export function matchLeft(reason: Reason, score: { kills: number; deaths: number }, net?: Omit<NetFields, 'seconds'>, exit?: Exit, frames?: { fps: number; low: number; frames: number }) {
   if (!match) return;
   const seconds = Math.round((performance.now() - match.start) / 1000);
   const { rounds, sideways, knifeKills, bobas } = match;
   match = undefined;
-  track('match_left', { seconds, kills: score.kills, deaths: score.deaths, rounds_played: rounds, reason, ...(exit ? { exit } : {}), sideways, knife_kills: knifeKills, bobas_drunk: bobas, ...net }, { beacon: reason === 'close' });
+  track('match_left', { seconds, kills: score.kills, deaths: score.deaths, rounds_played: rounds, reason, ...(exit ? { exit } : {}), sideways, knife_kills: knifeKills, bobas_drunk: bobas, ...(frames?.frames ? { fps: frames.fps, fps_low: frames.low, frames: frames.frames } : {}), ...net }, { beacon: reason === 'close' });
 }
 
 /** Counted into this stay's match_left: a knife (藍白拖) kill, a 珍奶 drunk, the page turned sideways. */

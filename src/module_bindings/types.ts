@@ -144,6 +144,18 @@ export const AdminPlayerHourRow = __t.object("AdminPlayerHourRow", {
 });
 export type AdminPlayerHourRow = __Infer<typeof AdminPlayerHourRow>;
 
+export const AdminPlayerMilestone = __t.object("AdminPlayerMilestone", {});
+export type AdminPlayerMilestone = __Infer<typeof AdminPlayerMilestone>;
+
+export const AdminPlayerMilestoneRow = __t.object("AdminPlayerMilestoneRow", {
+  id: __t.string(),
+  room: __t.u64(),
+  round: __t.u64(),
+  kill: __t.u64(),
+  match: __t.u64(),
+});
+export type AdminPlayerMilestoneRow = __Infer<typeof AdminPlayerMilestoneRow>;
+
 export const AdminPlayerNet = __t.object("AdminPlayerNet", {});
 export type AdminPlayerNet = __Infer<typeof AdminPlayerNet>;
 
@@ -158,6 +170,22 @@ export const AdminPlayerNetRow = __t.object("AdminPlayerNetRow", {
 });
 export type AdminPlayerNetRow = __Infer<typeof AdminPlayerNetRow>;
 
+export const AdminPlayerPerf = __t.object("AdminPlayerPerf", {});
+export type AdminPlayerPerf = __Infer<typeof AdminPlayerPerf>;
+
+export const AdminPlayerPerfRow = __t.object("AdminPlayerPerfRow", {
+  id: __t.string(),
+  fps: __t.f32(),
+  low: __t.f32(),
+  seconds: __t.u32(),
+  waitMs: __t.u32(),
+  waits: __t.u32(),
+  bootMs: __t.u32(),
+  boots: __t.u32(),
+  lastAt: __t.timestamp(),
+});
+export type AdminPlayerPerfRow = __Infer<typeof AdminPlayerPerfRow>;
+
 export const AdminPlayerRow = __t.object("AdminPlayerRow", {
   id: __t.string(),
   name: __t.string(),
@@ -170,6 +198,24 @@ export const AdminPlayerRow = __t.object("AdminPlayerRow", {
   kills: __t.u32(),
 });
 export type AdminPlayerRow = __Infer<typeof AdminPlayerRow>;
+
+export const AdminPlayerSource = __t.object("AdminPlayerSource", {});
+export type AdminPlayerSource = __Infer<typeof AdminPlayerSource>;
+
+export const AdminPlayerSourceRow = __t.object("AdminPlayerSourceRow", {
+  id: __t.string(),
+  source: __t.string(),
+  medium: __t.string(),
+  campaign: __t.string(),
+  inApp: __t.string(),
+  referred: __t.bool(),
+  shares: __t.u32(),
+  duels: __t.u32(),
+  invited: __t.u32(),
+  invitedPlayed: __t.u32(),
+  firstAt: __t.timestamp(),
+});
+export type AdminPlayerSourceRow = __Infer<typeof AdminPlayerSourceRow>;
 
 export const AdminPlayerTime = __t.object("AdminPlayerTime", {});
 export type AdminPlayerTime = __Infer<typeof AdminPlayerTime>;
@@ -184,6 +230,22 @@ export type AdminPlayerTimeRow = __Infer<typeof AdminPlayerTimeRow>;
 
 export const AdminPlayers = __t.object("AdminPlayers", {});
 export type AdminPlayers = __Infer<typeof AdminPlayers>;
+
+export const AdminRoomHour = __t.object("AdminRoomHour", {});
+export type AdminRoomHour = __Infer<typeof AdminRoomHour>;
+
+export const AdminRoomHourRow = __t.object("AdminRoomHourRow", {
+  hour: __t.u32(),
+  roomMinutes: __t.u32(),
+  seatMinutes: __t.u32(),
+  humanMinutes: __t.u32(),
+  botMinutes: __t.u32(),
+  joins: __t.u32(),
+  leaves: __t.u32(),
+  drops: __t.u32(),
+  kicks: __t.u32(),
+});
+export type AdminRoomHourRow = __Infer<typeof AdminRoomHourRow>;
 
 export const AdminRoomRow = __t.object("AdminRoomRow", {
   room: __t.u8(),
@@ -408,6 +470,15 @@ export const PlayerHour = __t.object("PlayerHour", {
 });
 export type PlayerHour = __Infer<typeof PlayerHour>;
 
+export const PlayerMilestone = __t.object("PlayerMilestone", {
+  identity: __t.identity(),
+  room: __t.u64(),
+  round: __t.u64(),
+  kill: __t.u64(),
+  match: __t.u64(),
+});
+export type PlayerMilestone = __Infer<typeof PlayerMilestone>;
+
 export const PlayerNet = __t.object("PlayerNet", {
   identity: __t.identity(),
   reports: __t.u32(),
@@ -422,6 +493,22 @@ export const PlayerNet = __t.object("PlayerNet", {
 });
 export type PlayerNet = __Infer<typeof PlayerNet>;
 
+export const PlayerPerf = __t.object("PlayerPerf", {
+  identity: __t.identity(),
+  reports: __t.u32(),
+  seconds: __t.u32(),
+  fpsSum: __t.f64(),
+  lowSum: __t.f64(),
+  lastFps: __t.f32(),
+  lastLow: __t.f32(),
+  waits: __t.u32(),
+  waitMsSum: __t.f64(),
+  boots: __t.u32(),
+  bootMsSum: __t.f64(),
+  lastAt: __t.timestamp(),
+});
+export type PlayerPerf = __Infer<typeof PlayerPerf>;
+
 export const PlayerSeen = __t.object("PlayerSeen", {
   identity: __t.identity(),
   firstSeen: __t.timestamp(),
@@ -432,6 +519,21 @@ export const PlayerSeen = __t.object("PlayerSeen", {
   name: __t.string(),
 });
 export type PlayerSeen = __Infer<typeof PlayerSeen>;
+
+export const PlayerSource = __t.object("PlayerSource", {
+  identity: __t.identity(),
+  source: __t.string(),
+  medium: __t.string(),
+  campaign: __t.string(),
+  inApp: __t.string(),
+  refBy: __t.string(),
+  ref: __t.string(),
+  shares: __t.u32(),
+  duels: __t.u32(),
+  firstAt: __t.timestamp(),
+  lastAt: __t.timestamp(),
+});
+export type PlayerSource = __Infer<typeof PlayerSource>;
 
 export const PlayerTime = __t.object("PlayerTime", {
   identity: __t.identity(),
@@ -473,6 +575,19 @@ export const RoomCode = __t.object("RoomCode", {
   code: __t.string(),
 });
 export type RoomCode = __Infer<typeof RoomCode>;
+
+export const RoomHour = __t.object("RoomHour", {
+  hour: __t.u32(),
+  roomMinutes: __t.u32(),
+  seatMinutes: __t.u32(),
+  humanMinutes: __t.u32(),
+  botMinutes: __t.u32(),
+  joins: __t.u32(),
+  leaves: __t.u32(),
+  drops: __t.u32(),
+  kicks: __t.u32(),
+});
+export type RoomHour = __Infer<typeof RoomHour>;
 
 export const Roster = __t.object("Roster", {
   id: __t.u32(),

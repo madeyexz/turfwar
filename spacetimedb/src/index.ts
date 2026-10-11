@@ -19,8 +19,9 @@ import { cleanHello } from '../../shared/hello';
 import { beginPlay, endPlay, flushDue, flushPlay, type PlayStore } from '../../shared/playtime';
 import { acceptNetReport, foldNetDay } from '../../shared/netstats';
 import { acceptDevice } from '../../shared/devicekind';
+import { acceptPerf, acceptVisit, countRoomEvent, foldRoomMinute, noteMilestones, type RoomHour } from '../../shared/metrics';
 import * as Admin from './admin';
-import { AdminError, bumpPeak, dailyNetRows, dailyRows, dailyTimeRows, dayOf, forAdmin, playerDayNetRows, playerDayRows, playerDayTimeRows, playerHourRows, playerDeviceRows, playerNetRows, playerRows, playTimeRows, onlineBySide, type AdminStore } from './admin';
+import { AdminError, bumpPeak, dailyNetRows, playerMilestoneRows, playerPerfRows, playerSourceRows, dailyRows, dailyTimeRows, dayOf, forAdmin, playerDayNetRows, playerDayRows, playerDayTimeRows, playerHourRows, playerDeviceRows, playerNetRows, playerRows, playTimeRows, onlineBySide, type AdminStore } from './admin';
 
 /**
  * Authoritative multiplayer: the same shared match simulation the offline client runs, executed
@@ -233,6 +234,45 @@ const hourOf = (micros: bigint) => Number(micros / HOUR_MICROS);
 const peakTable = table({ name: 'peak_hour' }, { hour: t.u32().primaryKey(), peak: t.u32(), phone: t.u32(), computer: t.u32(), at: t.timestamp() });
 
 /**
+ * Frame rate and load times per player (shared/metrics.ts), from `perf_stats` reports: median fps and
+ * 1% low summed weighted by seconds (so means can be taken), the latest, and the time from pressing
+ * Play to being in the match (`wait`) and from opening the page to the lobby being ready (`boot`).
+ * Its own table so existing ones keep their columns. Private.
+ */
+const perfTable = table({ name: 'player_perf' }, {
+  identity: t.identity().primaryKey(), reports: t.u32(), seconds: t.u32(), fpsSum: t.f64(), lowSum: t.f64(), lastFps: t.f32(), lastLow: t.f32(),
+  waits: t.u32(), waitMsSum: t.f64(), boots: t.u32(), bootMsSum: t.f64(), lastAt: t.timestamp(),
+});
+
+/**
+ * Where each player came from and whom they invited (shared/metrics.ts), from `visit` reports (one per
+ * connection, after `hello`): the browser's first touch (source, medium, campaign), the in-app browser,
+ * the share code they arrived through (`refBy`), their own share code and running share and duel
+ * counts. Codes never leave the module: the admin view turns them into counts. Private.
+ */
+const sourceTable = table({ name: 'player_source' }, {
+  identity: t.identity().primaryKey(), source: t.string(), medium: t.string(), campaign: t.string(), inApp: t.string(),
+  refBy: t.string(), ref: t.string().index('btree'), shares: t.u32(), duels: t.u32(), firstAt: t.timestamp(), lastAt: t.timestamp(),
+});
+
+/**
+ * How far each player has got (shared/metrics.ts): when they first entered a room, finished a round,
+ * made a kill and finished a match (epoch µs; 0 = not yet; 1 = before this table, for players who
+ * already had career stats). Private.
+ */
+const milestoneTable = table({ name: 'player_milestone' }, { identity: t.identity().primaryKey(), room: t.u64(), round: t.u64(), kill: t.u64(), match: t.u64() });
+
+/**
+ * How full rooms are per hour (hours since the epoch; shared/metrics.ts): each room's minute flush adds
+ * its seats, humans and bots; joins, leaves (on purpose), drops (the connection closed in a room) and
+ * idle kicks are counted as they happen. Kept: 24 rows a day. Private.
+ */
+const roomHourTable = table({ name: 'room_hour' }, {
+  hour: t.u32().primaryKey(), roomMinutes: t.u32(), seatMinutes: t.u32(), humanMinutes: t.u32(), botMinutes: t.u32(),
+  joins: t.u32(), leaves: t.u32(), drops: t.u32(), kicks: t.u32(),
+});
+
+/**
  * What each player plays on (shared/devicekind.ts), from `device` reports (one per connection, after
  * `hello`): the latest kind ('phone', 'tablet' or 'desktop'), connections reported per kind and the
  * latest report. Its own table so existing ones keep their columns. Private.
@@ -263,7 +303,7 @@ const spacetimedb = schema({
   matchEvent: eventTable, tickSchedule: tickTable, profile: profileTable, counter: counterTable,
   vehicle: vehicleTable, vehicleInbox: vehicleInboxTable, playerSeen: seenTable,
   playerDay: dayTable, admin: adminTable, adminAttempt: adminAttemptTable, playerTime: timeTable, playerDayTime: dayTimeTable,
-  playerNet: netTable, playerDayNet: dayNetTable, playerHour: hourTable, peakHour: peakTable, playerDevice: deviceTable, roomCode: roomCodeTable, privateRoom: privateRoomTable,
+  playerNet: netTable, playerDayNet: dayNetTable, playerHour: hourTable, peakHour: peakTable, playerPerf: perfTable, playerSource: sourceTable, playerMilestone: milestoneTable, roomHour: roomHourTable, playerDevice: deviceTable, roomCode: roomCodeTable, privateRoom: privateRoomTable,
 });
 export default spacetimedb;
 
@@ -573,6 +613,7 @@ function recordStats(ctx: Ctx, state: MatchState, events: MatchEvent[]) {
   }
   for (const row of rows.values()) {
     if (ctx.db.profile.identity.find(row.identity)) ctx.db.profile.identity.update(row); else ctx.db.profile.insert(row);
+    noteFirsts(ctx, row.identity, { rounds: row.roundsPlayed, kills: row.kills, matches: row.matchesPlayed });
   }
 }
 
@@ -700,6 +741,32 @@ function notePeak(ctx: Ctx) {
   if (prev) ctx.db.peakHour.hour.update(row); else ctx.db.peakHour.insert(row);
 }
 
+/** Stamp `identity`'s firsts (`player_milestone`) that have now happened. */
+function noteFirsts(ctx: Ctx, identity: Identity, happened: { room?: boolean; rounds?: number; kills?: number; matches?: number }) {
+  const prev = ctx.db.playerMilestone.identity.find(identity);
+  let base = prev ?? undefined;
+  if (!prev) {
+    // Career stats from before this table: those firsts happened at an unknown time (1 = before).
+    const p = ctx.db.profile.identity.find(identity);
+    if (p && (p.roundsPlayed > 0 || p.kills > 0 || p.matchesPlayed > 0)) {
+      base = { identity, room: 1n, round: p.roundsPlayed > 0 ? 1n : 0n, kill: p.kills > 0 ? 1n : 0n, match: p.matchesPlayed > 0 ? 1n : 0n };
+      ctx.db.playerMilestone.insert(base);
+    }
+  }
+  const next = noteMilestones(base, happened, micros(ctx));
+  if (!next) return;
+  if (base) ctx.db.playerMilestone.identity.update({ identity, ...next }); else ctx.db.playerMilestone.insert({ identity, ...next });
+}
+
+/** Change (or make) this hour's `room_hour` row. */
+function updateRoomHour(ctx: Ctx, change: (h: RoomHour | undefined) => RoomHour) {
+  const hour = hourOf(micros(ctx));
+  const prev = ctx.db.roomHour.hour.find(hour);
+  const row = { hour, ...change(prev ?? undefined) };
+  if (prev) ctx.db.roomHour.hour.update(row); else ctx.db.roomHour.insert(row);
+}
+const countRoom = (ctx: Ctx, kind: 'joins' | 'leaves' | 'drops' | 'kicks') => updateRoomHour(ctx, h => countRoomEvent(h, kind));
+
 /** One `player_day` row per player per UTC day they were active. */
 function markDay(ctx: Ctx) {
   const day = dayOf(micros(ctx));
@@ -729,6 +796,8 @@ function enterRoom(ctx: Ctx, room: number, name: string, team: number) {
   });
   beginPlay(playStore(ctx), ctx.sender, micros(ctx));
   notePeak(ctx);
+  noteFirsts(ctx, ctx.sender, { room: true });
+  countRoom(ctx, 'joins');
 }
 
 /**
@@ -793,6 +862,8 @@ export const onConnect = spacetimedb.clientConnected(ctx => {
 export const onDisconnect = spacetimedb.clientDisconnected(ctx => {
   const player = ctx.db.player.identity.find(ctx.sender);
   if (!player) return;
+  // In a room without having left it: the connection dropped (or the tab closed).
+  if (ctx.db.soldier.id.find(player.soldierId)) countRoom(ctx, 'drops');
   ctx.db.player.identity.delete(ctx.sender);
   leaveRoom(ctx, player);
 });
@@ -867,6 +938,7 @@ export const tick = spacetimedb.reducer({ onSchedule: tickTable }, { arg: tickTa
       flushPlay(playStore(ctx), here, now);
       pruneHours(ctx, now);
       notePeak(ctx);
+      updateRoomHour(ctx, h => foldRoomMinute(h, { seats: state.config.teamSize * 2, humans: humans.size, bots: state.soldiers.length - humans.size }));
     }
     applyInputs(ctx, state, sim);
     if (state.phase === 'ended' && state.phaseLeft - dt <= 0) {
@@ -894,6 +966,7 @@ export const tick = spacetimedb.reducer({ onSchedule: tickTable }, { arg: tickTa
           if (p.soldierId !== s.id) continue;
           endPlay(playStore(ctx), p.identity, quietSince);
           ctx.db.player.identity.delete(p.identity);
+          countRoom(ctx, 'kicks');
         }
         removeSoldier(state, sim, s.id); balanceTeams(state, sim);
       }
@@ -976,6 +1049,7 @@ export const hello = spacetimedb.reducer({ tz: t.string(), lang: t.string() }, (
 
 export const leave = spacetimedb.reducer({}, ctx => {
   const player = mySoldier(ctx);
+  countRoom(ctx, 'leaves');
   ctx.db.player.identity.delete(ctx.sender);
   leaveRoom(ctx, player);
 });
@@ -1018,6 +1092,41 @@ export const device = spacetimedb.reducer({ kind: t.string() }, (ctx, { kind }) 
   if (!next) return;
   const write = { identity: ctx.sender, ...next, lastAt: ctx.timestamp };
   if (row) ctx.db.playerDevice.identity.update(write); else ctx.db.playerDevice.insert(write);
+});
+
+/**
+ * The client's frame rate since its previous report and its load times (shared/metrics.ts): median
+ * fps, 1% low and the seconds behind them, ms from pressing Play to being in the match and from
+ * opening the page to the lobby being ready (0 = not in this report). Sent with the 2-minute
+ * connection report and on leaving. One per identity per 30 s, only from identities in `player_seen`,
+ * clamped (`acceptPerf`); anything else is ignored. Per-identity bookkeeping only.
+ */
+export const perfStats = spacetimedb.reducer({ fps: t.f32(), low: t.f32(), seconds: t.u32(), waitMs: t.u32(), bootMs: t.u32() }, (ctx, report) => {
+  if (!ctx.db.playerSeen.identity.find(ctx.sender)) return;
+  const row = ctx.db.playerPerf.identity.find(ctx.sender);
+  const next = acceptPerf(row ? { ...row, lastAt: row.lastAt.microsSinceUnixEpoch } : undefined, report, micros(ctx));
+  if (!next) return;
+  const write = { identity: ctx.sender, ...next, lastAt: ctx.timestamp };
+  if (row) ctx.db.playerPerf.identity.update(write); else ctx.db.playerPerf.insert(write);
+});
+
+/**
+ * Where the client came from and whom it invited (shared/metrics.ts), once per connection after
+ * `hello`: the browser's first touch (UTM source, medium, campaign; else the referrer's host), the
+ * in-app browser, the share code it arrived through, its own share code and running share and duel
+ * counts. The first touch, the app and the arrival code are kept once; counts only grow. One per
+ * identity per 10 s, only from identities in `player_seen` (`acceptVisit`). Per-identity bookkeeping only.
+ */
+export const visit = spacetimedb.reducer({
+  source: t.string(), medium: t.string(), campaign: t.string(), inApp: t.string(), refBy: t.string(), ref: t.string(), shares: t.u32(), duels: t.u32(),
+}, (ctx, report) => {
+  if (!ctx.db.playerSeen.identity.find(ctx.sender)) return;
+  const row = ctx.db.playerSource.identity.find(ctx.sender);
+  const prev = row ? { ...row, firstAt: row.firstAt.microsSinceUnixEpoch, lastAt: row.lastAt.microsSinceUnixEpoch } : undefined;
+  const next = acceptVisit(prev, report, micros(ctx));
+  if (!next) return;
+  const write = { identity: ctx.sender, ...next, firstAt: new Timestamp(next.firstAt), lastAt: ctx.timestamp };
+  if (row) ctx.db.playerSource.identity.update(write); else ctx.db.playerSource.insert(write);
 });
 
 /** Movement report: stored for the next tick (latest wins; elapsed time accumulates for the budget). */
@@ -1295,6 +1404,44 @@ export const adminDailyNet = spacetimedb.view({ name: 'admin_daily_net', public:
 export const adminPeakHour = spacetimedb.view({ name: 'admin_peak_hour', public: true },
   t.array(t.row('AdminPeakHourRow', { hour: t.u32(), peak: t.u32(), phone: t.u32(), computer: t.u32(), at: t.timestamp() })),
   ctx => forAdmin(viewAdmins(ctx.db), ctx.sender.toHexString(), () => [...ctx.db.peakHour.iter()]));
+
+// The growth metrics (shared/metrics.ts) have views of their own too (joined to `admin_players` by id on the page).
+
+/** Frame rate and load times per player who reported (same short id as `admin_players`): means over their reports. */
+export const adminPlayerPerf = spacetimedb.view({ name: 'admin_player_perf', public: true },
+  t.array(t.row('AdminPlayerPerfRow', { id: t.string(), fps: t.f32(), low: t.f32(), seconds: t.u32(), waitMs: t.u32(), waits: t.u32(), bootMs: t.u32(), boots: t.u32(), lastAt: t.timestamp() })),
+  ctx => forAdmin(viewAdmins(ctx.db), ctx.sender.toHexString(), () => playerPerfRows([...ctx.db.playerPerf.iter()].map(r => ({ ...r, identity: r.identity.toHexString(), lastAt: r.lastAt.microsSinceUnixEpoch })))
+    .map(r => ({ ...r, lastAt: new Timestamp(r.lastAt) }))));
+
+/**
+ * Where each player came from (same short id as `admin_players`): first-touch source, medium,
+ * campaign, in-app browser; whether a share brought them; their shares and duels, and how many
+ * players their code brought (`invited`) and how many of those entered a room (`invitedPlayed`).
+ * The share codes themselves stay in the module.
+ */
+export const adminPlayerSource = spacetimedb.view({ name: 'admin_player_source', public: true },
+  t.array(t.row('AdminPlayerSourceRow', {
+    id: t.string(), source: t.string(), medium: t.string(), campaign: t.string(), inApp: t.string(), referred: t.bool(),
+    shares: t.u32(), duels: t.u32(), invited: t.u32(), invitedPlayed: t.u32(), firstAt: t.timestamp(),
+  })),
+  ctx => forAdmin(viewAdmins(ctx.db), ctx.sender.toHexString(), () => {
+    const rows = [...ctx.db.playerSource.iter()].map(r => ({
+      ...r, identity: r.identity.toHexString(), played: (ctx.db.playerMilestone.identity.find(r.identity)?.room ?? 0n) > 0n, firstAt: r.firstAt.microsSinceUnixEpoch,
+    }));
+    return playerSourceRows(rows).map(r => ({ ...r, firstAt: new Timestamp(r.firstAt) }));
+  }));
+
+/** When each player first entered a room, finished a round, made a kill and finished a match (epoch µs; 0 = not yet, 1 = before these were recorded). */
+export const adminPlayerMilestone = spacetimedb.view({ name: 'admin_player_milestone', public: true },
+  t.array(t.row('AdminPlayerMilestoneRow', { id: t.string(), room: t.u64(), round: t.u64(), kill: t.u64(), match: t.u64() })),
+  ctx => forAdmin(viewAdmins(ctx.db), ctx.sender.toHexString(), () => playerMilestoneRows([...ctx.db.playerMilestone.iter()].map(r => ({ ...r, identity: r.identity.toHexString() })))));
+
+/** How full rooms were per hour, every hour recorded: room-, seat-, human- and bot-minutes; joins, leaves, drops and idle kicks. */
+export const adminRoomHour = spacetimedb.view({ name: 'admin_room_hour', public: true },
+  t.array(t.row('AdminRoomHourRow', {
+    hour: t.u32(), roomMinutes: t.u32(), seatMinutes: t.u32(), humanMinutes: t.u32(), botMinutes: t.u32(), joins: t.u32(), leaves: t.u32(), drops: t.u32(), kicks: t.u32(),
+  })),
+  ctx => forAdmin(viewAdmins(ctx.db), ctx.sender.toHexString(), () => [...ctx.db.roomHour.iter()]));
 
 // What players play on has a view of its own too (joined to `admin_players` by id on the page).
 

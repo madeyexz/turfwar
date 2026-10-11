@@ -9,6 +9,10 @@ import type AdminPlayerNetRow from '../module_bindings/admin_player_net_table';
 import type AdminPlayerDeviceRow from '../module_bindings/admin_player_device_table';
 import type AdminPlayerDayRow from '../module_bindings/admin_player_day_table';
 import type AdminPeakHourRow from '../module_bindings/admin_peak_hour_table';
+import type AdminPlayerPerfRow from '../module_bindings/admin_player_perf_table';
+import type AdminPlayerSourceRow from '../module_bindings/admin_player_source_table';
+import type AdminPlayerMilestoneRow from '../module_bindings/admin_player_milestone_table';
+import type AdminRoomHourRow from '../module_bindings/admin_room_hour_table';
 import { countByCountry, countryOf } from '../../shared/tzcountry';
 import { fmtPing, fmtRate, medianCorrections, medianPing, pingByCountry, pingClass, type NetOf } from './net';
 import { deviceCounts, deviceLabel, deviceShare, fmtShare, type DeviceOf } from './devices';
@@ -18,6 +22,11 @@ import { peakBetween, peakFor, peaksBy, type PeakOf } from './peak';
 import { averageDaily, BEGONE_EVIDENCE, BEGONE_FUNNEL, BEGONE_TAIWAN, LAUNCH_PEAKS, versus } from './benchmarks';
 import { activeByDay, GROUPS, niceStep, pingByDay, sideOf, SIDES, splitBySide, sumByDay, type DayNet as DayNetOf, type GroupId, type Side } from './groups';
 import { formatPlayTime, liveSeconds } from '../../shared/playtime';
+import { channelOf } from '../../shared/metrics';
+import {
+  activation, channels, dayN, firstsSince, grade, minutesPerActiveDay, pct, quality, qualityByBrowser, roomHealth, roomHealthBy, roundBuckets, secs,
+  TARGETS, virality, worse, worstStep, CORE_ROUNDS, type FirstsOf, type PerfOf, type RoomHourOf, type SourceOf, type Status, type Step,
+} from './growth';
 import { hostAnswers, pingUrl, serverIdentityKey } from '../net/ping';
 import { ConnectDriver, type ConnectLink } from '../net/connect';
 import { adminServers, chosenServer, regionName, rememberServer, type AdminServer } from './servers';
@@ -42,6 +51,10 @@ type PlayerNet = Infer<typeof AdminPlayerNetRow>;
 type PlayerDevice = Infer<typeof AdminPlayerDeviceRow>;
 type PlayerDay = Infer<typeof AdminPlayerDayRow>;
 type PeakHour = Infer<typeof AdminPeakHourRow>;
+type PlayerPerf = Infer<typeof AdminPlayerPerfRow>;
+type PlayerSource = Infer<typeof AdminPlayerSourceRow>;
+type PlayerFirsts = Infer<typeof AdminPlayerMilestoneRow>;
+type RoomHour = Infer<typeof AdminRoomHourRow>;
 /**
  * An `admin_players` row joined (by id) with its `admin_player_time` row (rounds, and play time
  * including a session in progress), its `admin_player_net` row, if any (connection quality:
@@ -59,6 +72,10 @@ type Player = Infer<typeof AdminPlayersRow> & {
   daySeconds?: Map<number, number>; dayNet?: Map<number, DayNetOf>;
   /** The hour first seen (hours since the epoch) and each active hour's play time and connection (`admin_player_hour`). */
   firstHour: number; hours?: Map<number, HourOf>;
+  /** First seen (ms); firsts (`admin_player_milestone`), visit (`admin_player_source`) and frame rate (`admin_player_perf`), if reported. */
+  firstSeenMs: number; firsts?: FirstsOf; src?: SourceOf; perf?: PerfOf;
+  /** For the table: the channel they came through and their typical frame rate. */
+  channel?: string; fps?: number;
 };
 /** A player's hour: play time, mean p50 and p95 (with `netSeconds` measured), corrections. */
 interface HourOf { seconds: number; p50: number; p95: number; netSeconds: number; corrections: number }
@@ -134,9 +151,13 @@ const OPTIONAL = {
   dayNet: ['SELECT * FROM admin_player_day_net'],
   hours: ['SELECT * FROM admin_player_hour'],
   peak: ['SELECT * FROM admin_peak_hour'],
+  perf: ['SELECT * FROM admin_player_perf'],
+  source: ['SELECT * FROM admin_player_source'],
+  firsts: ['SELECT * FROM admin_player_milestone'],
+  roomHours: ['SELECT * FROM admin_room_hour'],
 };
 type ViewState = 'wait' | 'on' | 'missing';
-const freshViews = (): Record<keyof typeof OPTIONAL, ViewState> => ({ net: 'wait', device: 'wait', days: 'wait', dayTime: 'wait', dayNet: 'wait', hours: 'wait', peak: 'wait' });
+const freshViews = (): Record<keyof typeof OPTIONAL, ViewState> => ({ net: 'wait', device: 'wait', days: 'wait', dayTime: 'wait', dayNet: 'wait', hours: 'wait', peak: 'wait', perf: 'wait', source: 'wait', firsts: 'wait', roomHours: 'wait' });
 let views = freshViews();
 /** Which players the list shows. */
 let playerGroup: GroupId = 'all';
@@ -242,8 +263,18 @@ function joinedPlayers(): Player[] {
     if (!m) hours.set(r.id, (m = new Map()));
     m.set(r.hour, { seconds: r.seconds, p50: r.p50, p95: r.p95, netSeconds: r.netSeconds, corrections: r.corrections });
   }
+  const perfs = new Map<string, PlayerPerf>();
+  if (views.perf === 'on') for (const r of db.adminPlayerPerf.iter()) perfs.set(r.id, r);
+  const sources = new Map<string, PlayerSource>();
+  if (views.source === 'on') for (const r of db.adminPlayerSource.iter()) sources.set(r.id, r);
+  const firsts = new Map<string, PlayerFirsts>();
+  if (views.firsts === 'on') for (const r of db.adminPlayerMilestone.iter()) firsts.set(r.id, r);
+  const ms = (micros: bigint) => (micros > 1n ? Number(micros / 1000n) : Number(micros));
   const nowMicros = BigInt(Date.now()) * 1000n;
   return [...db.adminPlayers.iter()].map(p => {
+    const f = firsts.get(p.id), s = sources.get(p.id), pf = perfs.get(p.id);
+    const src: SourceOf | undefined = s && { source: s.source, medium: s.medium, campaign: s.campaign, inApp: s.inApp, referred: s.referred, shares: s.shares, duels: s.duels, invited: s.invited, invitedPlayed: s.invitedPlayed };
+    const perf: PerfOf | undefined = pf && { fps: pf.fps, low: pf.low, seconds: pf.seconds, waitMs: pf.waitMs, waits: pf.waits, bootMs: pf.bootMs, boots: pf.boots, lastAtMs: pf.lastAt.toDate().getTime() };
     const t = times.get(p.id);
     const since = t?.playingSince.microsSinceUnixEpoch ?? 0n;
     const credited = t?.playSeconds ?? 0n;
@@ -259,6 +290,8 @@ function joinedPlayers(): Player[] {
       firstDay: firstDayOf(Math.floor(p.firstSeen.toDate().getTime() / DAY_MS), active), days: active ?? new Set(), activeDays: active?.size,
       daySeconds: dayTime.get(p.id), dayNet: dayNet.get(p.id),
       firstHour: Math.floor(p.firstSeen.toDate().getTime() / HOUR_MS), hours: hours.get(p.id),
+      firstSeenMs: p.firstSeen.toDate().getTime(), firsts: f && { room: ms(f.room), round: ms(f.round), kill: ms(f.kill), match: ms(f.match) }, src, perf,
+      channel: src ? channelOf(src) : undefined, fps: perf && perf.seconds > 0 ? perf.fps : undefined,
     };
   });
 }
@@ -300,12 +333,22 @@ function tile(label: string, figs: Fig[], note = '', hero = false) {
   return `<div class="tile${hero ? ' hero' : ''}"><small>${label}</small><div class="cols">${cols}</div>${note ? `<span class="note">${note}</span>` : ''}</div>`;
 }
 
+/** A figure for everyone only (rooms are not split by device). */
+function tile1(label: string, f: Fig, note = '', hero = false) {
+  const d = f?.delta && change(f.delta[0], f.delta[1]);
+  const delta = d ? `<em class="delta ${d.dir}">${d.text}</em>` : '';
+  return `<div class="tile one${hero ? ' hero' : ''}"><small>${label}</small><b${f?.cls ? ` class="${f.cls}"` : ''}${f?.title ? ` title="${esc(f.title)}"` : ''}>${f ? f.v : '—'}</b>${delta || f?.sub ? `<span>${[delta, f?.sub ?? ''].filter(Boolean).join(' ')}</span>` : ''}${note ? `<span class="note">${note}</span>` : ''}</div>`;
+}
+
 /** One section of the dashboard: a heading the nav links to, its figures, then its cards. */
 const group = (id: string, title: string, sub: string, tiles: string[], cards: string) => `
   <section class="group" id="${id}" aria-labelledby="${id}-h"><h2 class="group-h" id="${id}-h">${title}<small>${sub}</small></h2>
     ${tiles.length ? `<div class="tiles">${tiles.join('')}</div>` : ''}${cards}</section>`;
 const card = (title: string, sub: string, content: string, cls = '') => `<section class="card${cls ? ` ${cls}` : ''}"><h3>${title} <small>${sub}</small></h3>${content}</section>`;
-const SECTIONS: [string, string][] = [['now', 'Now'], ['growth', 'Growth'], ['retention', 'Retention'], ['play', 'Play time'], ['connection', 'Connection'], ['benchmarks', 'Benchmarks'], ['players', 'Players']];
+const SECTIONS: [string, string][] = [
+  ['scorecard', 'Score'], ['now', 'Now'], ['growth', 'Acquisition'], ['activation', 'Activation'], ['retention', 'Retention'], ['play', 'Engagement'],
+  ['virality', 'Virality'], ['health', 'Health'], ['connection', 'Quality'], ['benchmarks', 'Benchmarks'], ['players', 'Players'],
+];
 const SIDE_LABEL: Record<Side, string> = { phone: 'Phone', computer: 'Computer' };
 const dateOf = (day: number) => new Date(day * DAY_MS).toISOString().slice(0, 10);
 
@@ -397,6 +440,9 @@ function dashboard() {
     tile('Corrections / min', per(ps => { if (views.net !== 'on') return undefined; const c = medianCorrections(ps, now - 7 * DAY_MS); return { v: fmtRate(c.perMin), sub: `${num(c.players)} player${c.players === 1 ? '' : 's'}` }; }), 'median, 7 d'),
   ];
 
+  // The growth stages (src/admin/growth.ts): each section's headline figures, graded against its target.
+  const g = growthFigures(G, now, today);
+
   const shown = playerGroup === 'all' ? players : G[playerGroup];
   const chips = `<div class="chips" role="group" aria-label="Show players">${GROUPS.map(g => `<button type="button" class="chip${g.id === playerGroup ? ' on' : ''}" data-group="${g.id}" aria-pressed="${g.id === playerGroup}">${g.label} <span>${num(G[g.id].length)}</span></button>`).join('')}</div>`;
 
@@ -407,11 +453,16 @@ function dashboard() {
         <div class="seg" role="group" aria-label="Chart groups"><button type="button" data-combined="0" aria-pressed="${!charts.combined}">Split</button><button type="button" data-combined="1" aria-pressed="${charts.combined}">Combined</button></div>
       </div></nav>
     ${sideNote ? `<p class="notice">${sideNote}.</p>` : ''}
+    ${scorecard(g)}
     ${group('now', 'Now', 'live', nowTiles, roomCard + peakCard)}
-    ${group('growth', 'Growth', 'new and active players', growthTiles, growthCards)}
-    ${group('retention', 'Retention', 'do players come back?', retTiles, retCards)}
-    ${group('play', 'Play time', 'online rooms only', playTiles, card('Over time', `online play time ${rangeText()}`, playChart(G)))}
-    ${group('connection', 'Connection & devices', 'ping, corrections, what players play on', netTiles, `
+    ${group('growth', 'Acquisition', 'where new players come from, and which channels bring players who stay', growthTiles, growthCards + card('Channels', 'new players in the last 30 days by in-app browser or first-touch source', channelTable(G.all, now)))}
+    ${group('activation', 'Activation', 'how far a new player gets in their first 24 hours', g.activationTiles, activationCard(g))}
+    ${group('retention', 'Retention', 'do players come back?', retTiles, retCards + card('Who comes back', 'D1 and D7 by device and channel, new players of the last 30 days', retentionBySegment(G, today)))}
+    ${group('play', 'Engagement', 'how much they play, and how big the core is', [...playTiles, ...g.engagementTiles], `<div class="grid2">${card('Over time', `online play time ${rangeText()}`, playChart(G))}${card('Players by rounds played', `career rounds; ${CORE_ROUNDS}+ is the core`, roundsPanel(G.all))}</div>`)}
+    ${group('virality', 'Virality', 'do players bring players?', g.viralityTiles, viralityCard(G.all))}
+    ${group('health', 'Server health', 'do rooms feel alive, and do connections hold?', g.healthTiles, card('Rooms', `human share of seats (bars) and drops per join (tick) ${rangeText()}`, healthChart()))}
+    ${group('connection', 'Quality', 'frame rate, load times, ping, what players play on', [...g.qualityTiles, ...netTiles], `
+      <div class="grid2 even">${card('Frame rate', 'players by their typical fps, last 7 days', fpsPanel(G, now))}${card('By browser', 'in-app browsers against plain browsers, last 7 days, slowest first', browserTable(G.all, now))}</div>
       <div class="grid2">${card('Ping', `median of players' p50 (tick: p95) ${rangeText()}`, pingChart(G))}${card('Ping by country', 'median typical p50, time zone → country', countryPing(G))}</div>
       ${card('Devices', 'players by the device they last played on online, last 7 days', devicePanel(players, now))}`)}
     ${group('benchmarks', 'Benchmarks', 'BeGone (nplay) in Taiwan at its peak, estimated', [], benchmarks(G.all, peaks, today))}
@@ -425,11 +476,14 @@ function dashboard() {
       server; a player who moved to another server counts as gone. Ping is the round trip of a player's movement reports
       as their browser measured it (typical p50: a mean over their reports, weighted by time in rooms; hover for p95), and corrections are the
       server's rejections of their reported movement, per minute in rooms; both are reported every 2 minutes in a match and on leaving.
+      Growth stages (Scorecard, Activation, Virality, Server health, frame rate) come from tables added on 2026-10-11 and fill in from then on:
+      firsts count within 24 hours of a player's first connection; channels are the in-app browser, else the first UTM source or referrer;
+      the K-factor counts players who arrived through a share code and entered a room; drops are connections that closed in a room.
       Purple flags on the charts are releases to production (hover for what shipped).</p>
       <button type="button" class="btn revoke" id="revoke">Sign out all admins</button></footer>`;
   body.querySelectorAll<HTMLButtonElement>('th button[data-sort]').forEach(b => b.addEventListener('click', () => {
     const k = b.dataset.sort as typeof sortKey;
-    if (sortKey === k) sortDir = sortDir === 1 ? -1 : 1; else { sortKey = k; sortDir = k === 'name' || k === 'country' || k === 'tz' || k === 'deviceName' ? 1 : -1; }
+    if (sortKey === k) sortDir = sortDir === 1 ? -1 : 1; else { sortKey = k; sortDir = k === 'name' || k === 'country' || k === 'tz' || k === 'deviceName' || k === 'channel' ? 1 : -1; }
     render();
     body.querySelector<HTMLButtonElement>(`th button[data-sort="${k}"]`)?.focus();
   }));
@@ -456,6 +510,272 @@ function dashboard() {
   });
 }
 
+// ---- Growth stages (src/admin/growth.ts) ----------------------------------------------------
+
+const STATUS_LABEL: Record<Status, string> = { good: 'On track', watch: 'Watch', bad: 'Problem', none: 'No data yet' };
+/** A figure coloured by how it stands against its target. */
+const graded = (v: string, status: Status, sub?: string, title?: string): NonNullable<Fig> => ({ v, cls: `st st-${status}`, sub, title });
+/** The views a figure needs: "—" (undefined) while any is loading or missing. */
+const have = (...need: (keyof typeof OPTIONAL)[]) => need.every(v => views[v] === 'on');
+const WEEK = 7 * DAY_MS;
+
+/** One stage on the scorecard. */
+interface Stage { id: string; name: string; question: string; value: string; status: Status; target: string; split?: string; action: string }
+
+/**
+ * Every stage's headline figure (All, Phone, Computer), its tiles, and the scorecard entry: the value,
+ * the target, how it stands and what to look at when it is off.
+ */
+function growthFigures(G: Record<GroupId, Player[]>, now: number, today: number) {
+  const since = firstsSince(G.all);
+  const per = (f: (ps: Player[], g: GroupId) => Fig) => GROUPS.map(g => f(G[g.id], g.id));
+  const split = (f: (ps: Player[]) => string) => `Phone ${f(G.phone)} · Computer ${f(G.computer)}`;
+  const stages: Stage[] = [];
+
+  // Acquisition: new players this week against last week.
+  const newIn = (ps: Player[], from: number, to: number) => ps.filter(p => p.firstDay >= from && p.firstDay <= to).length;
+  const n7 = newIn(G.all, today - 6, today), p7 = newIn(G.all, today - 13, today - 7);
+  const growth = p7 ? n7 / p7 - 1 : undefined;
+  const top = channels(G.all, today - 29, now)[0];
+  stages.push({
+    id: 'growth', name: 'Acquisition', question: 'Are new players arriving?', value: num(n7), status: grade(growth, TARGETS.growth),
+    target: `new players in 7 d${growth === undefined ? '' : ` · ${growth >= 0 ? '+' : '−'}${Math.round(Math.abs(growth) * 100)}% vs the week before`}`,
+    split: top ? `Top channel (30 d): ${top.channel}, ${pct(top.share)} of new` : undefined,
+    action: 'Fewer new players: post again where the Channels table shows players who stay (activated and D1), not just the most visits.',
+  });
+
+  // Activation: a kill in the first 24 hours.
+  const act = (ps: Player[]) => activation(ps, now - 15 * DAY_MS, now, now, since);
+  const killRate = (ps: Player[]) => { const a = act(ps); return a.cohort ? a.steps.find(s => s.key === 'kill')!.rate : undefined; };
+  const all = act(G.all), worst = worstStep(all.steps);
+  stages.push({
+    id: 'activation', name: 'Activation', question: 'Do new players get into the fight?', value: have('firsts') ? pct(killRate(G.all)) : '—',
+    status: have('firsts') ? grade(killRate(G.all), TARGETS.activation) : 'none', target: `made a kill within 24 h · target ${pct(TARGETS.activation.good)}`,
+    split: have('firsts') ? split(ps => pct(killRate(ps))) : undefined,
+    action: worst ? `Biggest leak: “${worst.label}” keeps only ${pct(worst.fromPrev)} of the step before. ${worst.fix}` : 'Waiting for new players since firsts were recorded.',
+  });
+  const activationTiles = [
+    tile('New players', per(ps => have('firsts') ? { v: num(act(ps).cohort), sub: 'first seen 1–15 days ago' } : undefined), since ? `since ${dateOf(Math.floor(since / DAY_MS))}, when firsts began` : 'firsts not recorded yet'),
+    ...(['room', 'round', 'kill', 'match'] as const).map(k => tile(all.steps.find(s => s.key === k)!.label, per(ps => {
+      if (!have('firsts')) return undefined;
+      const a = act(ps), st = a.steps.find(s => s.key === k)!;
+      return a.cohort ? (k === 'kill' ? graded(pct(st.rate), grade(st.rate, TARGETS.activation), `${num(st.n)} of ${num(a.cohort)}`) : { v: pct(st.rate), sub: `${num(st.n)} of ${num(a.cohort)}` }) : { v: '—' };
+    }), 'within 24 h of connecting', k === 'kill')),
+  ];
+
+  // Retention: day 1 (day 7 alongside).
+  const d1 = (ps: Player[]) => dayN(ps.filter(p => p.firstDay >= today - 30), 1, today)?.rate;
+  const d7 = (ps: Player[]) => dayN(ps.filter(p => p.firstDay >= today - 37), 7, today)?.rate;
+  stages.push({
+    id: 'retention', name: 'Retention', question: 'Do they come back?', value: have('days') ? pct(d1(G.all)) : '—',
+    status: have('days') ? worse(grade(d1(G.all), TARGETS.d1), grade(d7(G.all), TARGETS.d7)) : 'none',
+    target: `D1 (target ${pct(TARGETS.d1.good)}) · D7 ${pct(d7(G.all))} (target ${pct(TARGETS.d7.good)})`, split: have('days') ? split(ps => pct(d1(ps))) : undefined,
+    action: 'Find the segment that does not return in “Who comes back” (an in-app browser, phones) and fix that first; then give a reason to return (a daily goal, friends).',
+  });
+
+  // Engagement: minutes per player per active day, last 7 days.
+  const mins = (ps: Player[]) => (have('dayTime') ? minutesPerActiveDay(ps, today - 6, today) : undefined);
+  const rb = roundBuckets(G.all);
+  stages.push({
+    id: 'play', name: 'Engagement', question: 'Do they play long?', value: mins(G.all) === undefined ? '—' : `${Math.round(mins(G.all)!)} min`,
+    status: grade(mins(G.all), TARGETS.minutes), target: `online minutes per player per active day, 7 d · target ${TARGETS.minutes.good}`,
+    split: `Core (${CORE_ROUNDS}+ rounds): ${num(rb.core.players)} players play ${pct(rb.core.roundShare)} of rounds`,
+    action: 'Short days: check where matches end early (PostHog match_left by rounds_played) and whether the core group grows week to week.',
+  });
+  const engagementTiles = [
+    tile('Min / active day', per(ps => { const m = mins(ps); return m === undefined ? undefined : graded(`${Math.round(m)} min`, grade(m, TARGETS.minutes)); }), 'online, per player per day played, 7 d'),
+    tile(`Core (${CORE_ROUNDS}+ rounds)`, per(ps => { const r = roundBuckets(ps); return { v: num(r.core.players), sub: `${pct(r.core.playerShare)} of players · ${pct(r.core.roundShare)} of rounds` }; }), 'career rounds'),
+  ];
+
+  // Virality: the K-factor.
+  const vir = (ps: Player[]) => virality(ps);
+  const v = vir(G.all);
+  stages.push({
+    id: 'virality', name: 'Virality', question: 'Do players bring players?', value: have('source') && v.k !== undefined ? v.k.toFixed(2) : '—',
+    status: have('source') ? grade(v.k, TARGETS.k) : 'none', target: `K-factor: new players a share brought, per player · target ${TARGETS.k.good}`,
+    split: have('source') ? `${num(v.sharers)} sharers sent ${num(v.invites)} invites; ${num(v.broughtPlayed)} became players` : undefined,
+    action: 'Few invites, or invites that do not turn into players: make 約朋友單挑 the obvious end-screen action, and check the challenge link opens straight into a match.',
+  });
+  const viralityTiles = [
+    tile('K-factor', per(ps => { if (!have('source')) return undefined; const x = vir(ps); return x.k === undefined ? { v: '—' } : graded(x.k.toFixed(2), grade(x.k, TARGETS.k), `${num(x.broughtPlayed)} of ${num(x.reporting)}`); }), 'new players brought per player', true),
+    tile('Sharers', per(ps => { if (!have('source')) return undefined; const x = vir(ps); return { v: num(x.sharers), sub: pct(x.sharerShare) + ' of players' }; }), 'sent a card or opened a duel'),
+    tile('Invites / sharer', per(ps => { if (!have('source')) return undefined; const x = vir(ps); return { v: x.perSharer === undefined ? '—' : x.perSharer.toFixed(1) }; }), 'cards sent + duels opened'),
+    tile('Invite → player', per(ps => { if (!have('source')) return undefined; const x = vir(ps); return { v: pct(x.conversion), sub: `${num(x.brought)} arrived, ${num(x.broughtPlayed)} played` }; }), 'arrived through a share and entered a room'),
+  ];
+
+  // Server health: drops per join and the human share of seats, 7 days.
+  const hours = roomHourRows(), nowHour = Math.floor(now / HOUR_MS);
+  const h7 = roomHealth(hours, nowHour - 7 * 24 + 1, nowHour), hPrev = roomHealth(hours, nowHour - 14 * 24 + 1, nowHour - 7 * 24);
+  const healthStatus = have('roomHours') ? worse(grade(h7.dropRate, TARGETS.drops), grade(h7.fill, TARGETS.fill)) : 'none';
+  stages.push({
+    id: 'health', name: 'Server health', question: 'Do rooms feel alive and connections hold?', value: have('roomHours') ? pct(h7.dropRate) : '—',
+    status: healthStatus, target: `drops per join, 7 d (target ≤ ${pct(TARGETS.drops.good)}) · humans fill ${pct(h7.fill)} of seats`,
+    split: have('roomHours') && h7.humansPerRoom !== undefined ? `${h7.humansPerRoom.toFixed(1)} humans per room on average` : undefined,
+    action: grade(h7.dropRate, TARGETS.drops) !== 'good' ? 'Connections drop mid-match: look at ping by country, corrections, and the lost/rejoined exits in PostHog.' : 'Rooms are mostly bots: send Quick Play into fewer rooms (one size and mode) off-peak so players meet.',
+  });
+  const one = (f: (h: typeof h7) => Fig): Fig => (have('roomHours') ? f(h7) : undefined);
+  const healthTiles = [
+    tile1('Drops / join', one(h => graded(pct(h.dropRate), grade(h.dropRate, TARGETS.drops), `${num(h.drops)} of ${num(h.joins)} joins`)), 'connection closed in a room, 7 d', true),
+    tile1('Seats with humans', one(h => ({ ...graded(pct(h.fill), grade(h.fill, TARGETS.fill)), delta: h.fill !== undefined && hPrev.fill !== undefined ? [Math.round(h.fill * 100), Math.round(hPrev.fill * 100)] : undefined })), 'bots fill the rest, 7 d'),
+    tile1('Humans / room', one(h => ({ v: h.humansPerRoom === undefined ? '—' : h.humansPerRoom.toFixed(1), sub: `${num(Math.round(h.roomMinutes / 60))} room-hours` })), 'average at once, 7 d'),
+    tile1('Idle kicks / join', one(h => ({ v: pct(h.kickRate), sub: `${num(h.kicks)}` })), 'removed after 45 s silent, 7 d'),
+    tile('Wait to match', per(ps => { if (!have('perf')) return undefined; const q = quality(ps, now - WEEK); return { v: secs(q.waitMs), sub: `median · ${num(q.waits)} player${q.waits === 1 ? '' : 's'}` }; }), 'Play pressed → in the match'),
+  ];
+
+  // Quality: median fps on phones.
+  const q = (ps: Player[]) => quality(ps, now - WEEK);
+  const phoneFps = q(G.phone).fps;
+  stages.push({
+    id: 'connection', name: 'Quality', question: 'Does it run well?', value: have('perf') && phoneFps !== undefined ? `${Math.round(phoneFps)} fps` : '—',
+    status: have('perf') ? grade(phoneFps, TARGETS.fps) : 'none', target: `median on phones, 7 d · target ${TARGETS.fps.good}`,
+    split: have('perf') ? `Computer ${q(G.computer).fps === undefined ? '—' : `${Math.round(q(G.computer).fps!)} fps`} · page load ${secs(q(G.all).bootMs)}` : undefined,
+    action: 'Slow phones: lower the default quality on phones and in-app browsers (By browser table), and check the 1% low for hitches.',
+  });
+  const qualityTiles = [
+    tile('Median fps', per(ps => { if (!have('perf')) return undefined; const x = q(ps); return x.fps === undefined ? { v: '—' } : graded(`${Math.round(x.fps)}`, grade(x.fps, TARGETS.fps), `1% low ${x.low === undefined ? '—' : Math.round(x.low)} · ${num(x.players)} players`); }), 'typical per player, 7 d', true),
+    tile('Under 30 fps', per(ps => { if (!have('perf')) return undefined; const x = q(ps); return { v: pct(x.slowShare) }; }), 'share of players, 7 d'),
+    tile('Page load', per(ps => { if (!have('perf')) return undefined; const x = q(ps); return { v: secs(x.bootMs), sub: `median · ${num(x.boots)}` }; }), 'open → lobby ready'),
+  ];
+
+  return { stages, since, activation: all, activationTiles, engagementTiles, viralityTiles, healthTiles, qualityTiles, G };
+}
+
+/** The top of the page: one card per stage, and where to look first (the earliest stage in the funnel with a problem). */
+function scorecard(g: ReturnType<typeof growthFigures>) {
+  const focus = g.stages.find(s => s.status === 'bad') ?? g.stages.find(s => s.status === 'watch');
+  const banner = focus
+    ? `<div class="focus st-${focus.status}"><b>Focus first: ${esc(focus.name)}</b><span>${esc(focus.question)} ${esc(focus.value)} (${esc(focus.target)}).</span><span>${esc(focus.action)}</span><a href="#${focus.id}">Details ↓</a></div>`
+    : `<div class="focus st-good"><b>${g.stages.some(s => s.status === 'good') ? 'Every stage with data is on track.' : 'Not enough data yet.'}</b><span>Stages fill in as players arrive after this version of the server.</span></div>`;
+  const cards = g.stages.map(s => `<a class="stage st-${s.status}" href="#${s.id}"><small>${esc(s.name)}</small><span class="q">${esc(s.question)}</span>
+    <b>${esc(s.value)}</b><span class="badge st-${s.status}">${STATUS_LABEL[s.status]}</span><span class="target">${esc(s.target)}</span>${s.split ? `<span class="split">${esc(s.split)}</span>` : ''}</a>`).join('');
+  return `<section class="group" id="scorecard" aria-labelledby="scorecard-h"><h2 class="group-h" id="scorecard-h">Scorecard<small>one number per stage, against its target; the earliest leak in the funnel comes first</small></h2>
+    ${banner}<div class="stages">${cards}</div>
+    <p class="table-note">Targets are rules of thumb for free web and mobile shooters (src/admin/growth.ts, <code>TARGETS</code>); online play only, since Solo never reaches the server.</p></section>`;
+}
+
+/** The funnel: each step for All, Phone and Computer, with the share kept from the step before; the biggest leak is marked. */
+function activationCard(g: ReturnType<typeof growthFigures>) {
+  if (views.firsts !== 'on') return card('First 24 hours', '', needs('firsts')!);
+  const now = Date.now();
+  const by = Object.fromEntries(GROUPS.map(x => [x.id, activation(g.G[x.id], now - 15 * DAY_MS, now, now, g.since)])) as Record<GroupId, { cohort: number; steps: Step[] }>;
+  if (!by.all.cohort) return card('First 24 hours', '', `<div class="empty">${g.since ? `No new players whose first 24 hours are over yet (firsts began ${dateOf(Math.floor(g.since / DAY_MS))}).` : 'Firsts are recorded from this version of the server on; none yet.'}</div>`);
+  const worst = worstStep(by.all.steps);
+  const rows = by.all.steps.map((st, i) => `<tr class="${worst?.key === st.key ? 'leak' : ''}"><th><b>${st.label}</b><small>${st.hint}</small></th>${GROUPS.map(x => {
+    const s = by[x.id].steps[i];
+    if (!by[x.id].cohort) return '<td>—</td>';
+    return `<td><div class="fbar"><i style="width:${(s.rate * 100).toFixed(1)}%" class="g-${x.id}"></i></div><span><b>${pct(s.rate)}</b> ${num(s.n)}${i && st.key !== 'back' ? ` <em title="kept from the step before">${pct(s.fromPrev)} kept</em>` : ''}</span></td>`;
+  }).join('')}</tr>`).join('');
+  return card('First 24 hours', `players first seen 1–15 days ago (${num(by.all.cohort)}); bars are shares of everyone who connected`, `<div class="scroll"><table class="funnel"><thead><tr><th>Step</th>${GROUPS.map(x => `<th>${x.label}</th>`).join('')}</tr></thead><tbody>${rows}</tbody></table></div>
+    <p class="table-note">${worst ? `<b>Biggest leak:</b> ${esc(worst.label)} keeps ${pct(worst.fromPrev)} of the players who reached the step before. ${esc(worst.fix)} ` : ''}“Connected” is pressing Play Online with this browser for the first time; Solo players never appear here. A step counts if it happened within 24 hours of connecting.</p>`);
+}
+
+/** New players by channel: how many, and whether they activate and come back. The channel to repeat is the one whose players stay. */
+function channelTable(players: Player[], now: number) {
+  if (views.source !== 'on') return needs('source')!;
+  const rows = channels(players, Math.floor(now / DAY_MS) - 29, now);
+  if (!rows.length) return '<div class="empty">No visits reported yet: channels are recorded from this version of the server on.</div>';
+  const cell = (v: number | undefined, t: { good: number; watch: number }, n?: number) => `<td class="num"><span class="st st-${grade(v, t)}"${n !== undefined ? ` title="of ${n}"` : ''}>${pct(v)}</span></td>`;
+  const body = rows.slice(0, 15).map(r => `<tr><td>${esc(r.channel)}</td><td class="num">${num(r.players)}</td><td class="num">${pct(r.share)}</td>${cell(r.activated, TARGETS.activation)}${cell(r.d1, TARGETS.d1, r.d1n)}${cell(r.d7, TARGETS.d7, r.d7n)}<td class="num">${r.minutes ? `${Math.round(r.minutes)} min` : '—'}</td></tr>`).join('');
+  return `<div class="scroll"><table><thead><tr><th>Channel</th><th class="num">New</th><th class="num">Share</th><th class="num">Kill in 24 h</th><th class="num">D1</th><th class="num">D7</th><th class="num">Median play</th></tr></thead><tbody>${body}</tbody></table></div>
+    <p class="table-note">Channel: the app whose built-in browser it was (Threads, Instagram, LINE…), else the first UTM source or referrer, else direct. Colours follow the stage targets. Players from before channels were recorded are left out.</p>`;
+}
+
+/** D1 and D7 by device and by channel, so the segment that does not return stands out. */
+function retentionBySegment(G: Record<GroupId, Player[]>, today: number) {
+  if (views.days !== 'on') return needs('days')!;
+  const recent = (ps: Player[]) => ps.filter(p => p.firstDay >= today - 37);
+  const row = (label: string, ps: Player[]) => {
+    const a = dayN(recent(ps).filter(p => p.firstDay >= today - 30), 1, today), b = dayN(recent(ps), 7, today);
+    return `<tr><td>${esc(label)}</td><td class="num">${num(recent(ps).length)}</td><td class="num"><span class="st st-${grade(a?.rate, TARGETS.d1)}" title="${a ? `${a.back} of ${a.players}` : ''}">${pct(a?.rate)}</span></td><td class="num"><span class="st st-${grade(b?.rate, TARGETS.d7)}" title="${b ? `${b.back} of ${b.players}` : ''}">${pct(b?.rate)}</span></td></tr>`;
+  };
+  const byChannel = new Map<string, Player[]>();
+  for (const p of G.all) if (p.channel) { let l = byChannel.get(p.channel); if (!l) byChannel.set(p.channel, (l = [])); l.push(p); }
+  const top = [...byChannel].filter(([, l]) => recent(l).length).sort((a, b) => recent(b[1]).length - recent(a[1]).length).slice(0, 8);
+  return `<div class="scroll"><table><thead><tr><th>Segment</th><th class="num">New</th><th class="num">D1</th><th class="num">D7</th></tr></thead><tbody>
+    ${row('All', G.all)}${row('Phone', G.phone)}${row('Computer', G.computer)}${top.map(([c, l]) => row(c, l)).join('')}</tbody></table></div>
+    <p class="table-note">New: first seen in the last 37 days; D1 over those whose next day is over, D7 likewise. Hover a figure for the counts. ${views.source === 'on' ? '' : 'Channels appear once the server records visits.'}</p>`;
+}
+
+/** Players by career rounds: how many in each band and their share of all rounds played. */
+function roundsPanel(players: Player[]) {
+  const r = roundBuckets(players);
+  if (!r.players) return '<div class="empty">No rounds played yet.</div>';
+  return `<ul class="rounds">${r.rows.map(b => `<li class="${b.min >= CORE_ROUNDS ? 'core' : ''}"><span>${b.label}</span><div class="bar two"><i class="p" style="width:${(b.playerShare * 100).toFixed(1)}%"></i><i class="r" style="width:${(b.roundShare * 100).toFixed(1)}%"></i></div>
+    <small>${num(b.players)} players (${pct(b.playerShare)}) · ${pct(b.roundShare)} of rounds</small></li>`).join('')}</ul>
+    <div class="legend"><span><i class="lp"></i>share of players</span><span><i class="lr"></i>share of rounds</span></div>
+    <p class="table-note">The core (${CORE_ROUNDS}+ rounds) is ${num(r.core.players)} player${r.core.players === 1 ? '' : 's'} (${pct(r.core.playerShare)}) playing ${pct(r.core.roundShare)} of all rounds. Grow it by turning 10–29-round players into regulars.</p>`;
+}
+
+/** The sharers and what they brought. */
+function viralityCard(players: Player[]) {
+  if (views.source !== 'on') return card('Sharers', '', needs('source')!);
+  const sharers = players.filter(p => p.src && p.src.shares + p.src.duels > 0)
+    .sort((a, b) => b.src!.invitedPlayed - a.src!.invitedPlayed || b.src!.shares + b.src!.duels - (a.src!.shares + a.src!.duels)).slice(0, 15);
+  const v = virality(players);
+  const flow = `<div class="flow"><div><b>${num(v.reporting)}</b><small>players</small></div><i>→</i><div><b>${num(v.sharers)}</b><small>shared (${pct(v.sharerShare)})</small></div><i>→</i>
+    <div><b>${num(v.invites)}</b><small>invites</small></div><i>→</i><div><b>${num(v.brought)}</b><small>arrived</small></div><i>→</i><div><b>${num(v.broughtPlayed)}</b><small>played</small></div></div>`;
+  const table = sharers.length ? `<div class="scroll"><table><thead><tr><th>Player</th><th class="num">Cards</th><th class="num">Duels</th><th class="num">Arrived</th><th class="num">Played</th></tr></thead><tbody>
+    ${sharers.map(p => `<tr><td>${esc(p.name || '—')}</td><td class="num">${num(p.src!.shares)}</td><td class="num">${num(p.src!.duels)}</td><td class="num">${num(p.src!.invited)}</td><td class="num">${num(p.src!.invitedPlayed)}</td></tr>`).join('')}</tbody></table></div>` : '<div class="empty">Nobody has shared yet.</div>';
+  return card('From share to player', 'running totals since visits were recorded; shares made in Solo count at the player\'s next online visit', `${flow}${table}
+    <p class="table-note">K-factor = players who arrived through a share and entered a room ÷ players. Above 1 the game spreads by itself; 0.3 makes sharing a real channel. ${num(v.referred)} player${v.referred === 1 ? '' : 's'} arrived through a share.</p>`);
+}
+
+/** This server's `admin_room_hour` rows (none until the view is there). */
+function roomHourRows(): RoomHourOf[] {
+  if (views.roomHours !== 'on' || !conn) return [];
+  return [...conn.db.adminRoomHour.iter()].map((r: RoomHour) => ({ ...r }));
+}
+
+/** Human share of seats per bucket (bars) with drops per join (tick). */
+function healthChart() {
+  const missing = needs('roomHours');
+  if (missing) return missing;
+  const b = buckets(), rows = roomHourRows();
+  const by = roomHealthBy(rows, b.keys, b.hourly);
+  if (!by.size) return '<div class="empty">No rooms in this range (recorded from this version of the server on).</div>';
+  return groupedChart({
+    aria: `Room fill and drops ${rangeText()}`, groups: ['all'], wide: true, minMax: 100, shades: ['mid'], refs: [{ v: TARGETS.fill.good * 100, label: `target: humans in ${pct(TARGETS.fill.good)} of seats` }],
+    value: key => {
+      const h = by.get(key);
+      if (!h || h.fill === undefined) return undefined;
+      return { stack: [h.fill * 100], tick: h.dropRate !== undefined ? Math.min(100, h.dropRate * 100) : undefined, title: `${bucketName(b, key)}: humans in ${pct(h.fill)} of seats · ${h.humansPerRoom?.toFixed(1) ?? '—'} per room · ${num(h.joins)} joins, ${num(h.drops)} drops (${pct(h.dropRate)}), ${num(h.kicks)} idle kicks` };
+    },
+    axis: v => `${Math.round(v)}%`, legend: '<span><i class="g-all"></i>humans / seats</span><span><i class="line"></i>drops / join</span><span><i class="ref"></i>fill target</span>',
+  });
+}
+
+/** Players by their typical frame rate, Phone and Computer. */
+function fpsPanel(G: Record<GroupId, Player[]>, now: number) {
+  if (views.perf !== 'on') return needs('perf')!;
+  const bands = [{ label: 'under 20', lo: 0, hi: 20 }, { label: '20–29', lo: 20, hi: 30 }, { label: '30–44', lo: 30, hi: 45 }, { label: '45–54', lo: 45, hi: 55 }, { label: '55+', lo: 55, hi: Infinity }];
+  const of = (ps: Player[]) => ps.filter(p => p.perf && p.perf.seconds > 0 && p.perf.lastAtMs >= now - WEEK).map(p => p.perf!.fps);
+  const sides = { phone: of(G.phone), computer: of(G.computer) };
+  if (!sides.phone.length && !sides.computer.length) return '<div class="empty">No frame-rate reports in the last 7 days (recorded from this version on).</div>';
+  return `<ul class="rounds">${bands.map(b => `<li class="${b.hi <= 30 ? 'slow' : ''}"><span>${b.label}</span><div class="bar two">${SIDES.map(s => {
+    const n = sides[s].filter(f => f >= b.lo && f < b.hi).length;
+    return `<i class="g-${s}" style="width:${sides[s].length ? ((n / sides[s].length) * 100).toFixed(1) : 0}%"></i>`;
+  }).join('')}</div><small>${SIDES.map(s => { const n = sides[s].filter(f => f >= b.lo && f < b.hi).length; return `${SIDE_LABEL[s]} ${num(n)} (${pct(sides[s].length ? n / sides[s].length : undefined)})`; }).join(' · ')}</small></li>`).join('')}</ul>
+    <div class="legend"><span><i class="g-phone"></i>Phone</span><span><i class="g-computer"></i>Computer</span></div>
+    <p class="table-note">A player's typical fps is their median frame rate in online matches, averaged over the time measured. Under 30 a shooter feels broken.</p>`;
+}
+
+/** Frame rate and load times by in-app browser, slowest first. */
+function browserTable(players: Player[], now: number) {
+  if (views.perf !== 'on') return needs('perf')!;
+  const rows = qualityByBrowser(players, now - WEEK);
+  if (!rows.length) return '<div class="empty">No frame-rate reports in the last 7 days.</div>';
+  return `<div class="scroll"><table><thead><tr><th>Browser</th><th class="num">Players</th><th class="num">Median fps</th><th class="num">1% low</th><th class="num">Under 30</th><th class="num">Page load</th><th class="num">Wait to match</th></tr></thead><tbody>
+    ${rows.map(r => `<tr><td>${esc(r.browser)}</td><td class="num">${num(r.players)}</td><td class="num"><span class="st st-${grade(r.fps, TARGETS.fps)}">${r.fps === undefined ? '—' : Math.round(r.fps)}</span></td><td class="num">${r.low === undefined ? '—' : Math.round(r.low)}</td><td class="num">${pct(r.slowShare)}</td><td class="num">${secs(r.bootMs)}</td><td class="num">${secs(r.waitMs)}</td></tr>`).join('')}</tbody></table></div>
+    <p class="table-note">In-app browsers (Threads, Instagram, LINE…) are often slower than the phone's own browser; the lobby already suggests opening the game outside them.</p>`;
+}
+
+/** A player's typical frame rate, coloured. */
+function fpsCell(p: Player) {
+  const f = p.perf;
+  if (!f || !(f.seconds > 0)) return `<td class="num">—</td>`;
+  return `<td class="num" title="${esc(`1% low ${Math.round(f.low)} · ${Math.round(f.seconds / 60)} min measured · last ${ago(new Date(f.lastAtMs))}`)}"><span class="st st-${grade(f.fps, TARGETS.fps)}">${Math.round(f.fps)}</span></td>`;
+}
+
 /**
  * A side's cohort table: the pooled figure over every cohort whose day N is over, then the last 14
  * UTC days' cohorts, newest first. A cell's shade grows with its rate; a day in progress is in italics.
@@ -476,7 +796,8 @@ const COLUMNS: { key: keyof Player | 'country'; label: string; num?: boolean }[]
   { key: 'name', label: 'Name' }, { key: 'lastSeen', label: 'Last seen' }, { key: 'firstSeen', label: 'First seen' },
   { key: 'playTime', label: 'Play time', num: true }, { key: 'sessions', label: 'Sessions', num: true }, { key: 'activeDays', label: 'Days', num: true }, { key: 'rounds', label: 'Rounds', num: true },
   { key: 'matches', label: 'Matches', num: true }, { key: 'kills', label: 'Kills', num: true },
-  { key: 'ping', label: 'Ping', num: true }, { key: 'corrPerMin', label: 'Corr/min', num: true }, { key: 'deviceName', label: 'Device' },
+  { key: 'ping', label: 'Ping', num: true }, { key: 'corrPerMin', label: 'Corr/min', num: true }, { key: 'fps', label: 'FPS', num: true }, { key: 'deviceName', label: 'Device' },
+  { key: 'channel', label: 'Channel' },
   { key: 'country', label: 'Country' }, { key: 'tz', label: 'Time zone' }, { key: 'lang', label: 'Lang' }, { key: 'id', label: 'Id' },
 ];
 const sortLabel = () => `${COLUMNS.find(c => c.key === sortKey)?.label.toLowerCase()}, ${sortDir === 1 ? 'ascending' : 'descending'}`;
@@ -500,7 +821,7 @@ function playerTable(players: Player[]) {
     return `<tr><td>${esc(p.name || '—')}</td><td title="${lastSeen.toISOString()}">${ago(lastSeen)}</td><td title="${firstSeen.toISOString()}">${shortDate(firstSeen)}</td>
       <td class="num"${p.playing ? ' title="In an online room now"' : ''}>${p.playing ? '<i class="dot live" aria-label="In a room now"></i>' : ''}${formatPlayTime(p.playTime)}</td>
       <td class="num">${num(p.sessions)}</td><td class="num"${p.activeDays ? ` title="Active on ${p.activeDays} UTC day${p.activeDays === 1 ? '' : 's'}"` : ''}>${p.activeDays === undefined ? '—' : num(p.activeDays)}</td><td class="num">${num(p.rounds)}</td><td class="num">${num(p.matches)}</td><td class="num">${num(p.kills)}</td>
-      ${pingCell(p)}<td class="num">${fmtRate(p.corrPerMin)}</td>${deviceCell(p)}
+      ${pingCell(p)}<td class="num">${fmtRate(p.corrPerMin)}</td>${fpsCell(p)}${deviceCell(p)}<td>${esc(p.channel ?? '—')}</td>
       <td>${esc(countryOf(p.tz))}</td><td class="tz" title="${esc(p.tz)}">${esc(p.tz || '—')}</td><td>${esc(p.lang || '—')}</td><td class="id">${esc(p.id)}</td></tr>`;
   }).join('');
   const more = sorted.length > playerLimit ? `<button type="button" class="btn more" id="more">Show more (${num(sorted.length - playerLimit)} left)</button>` : '';
@@ -630,8 +951,8 @@ interface Bar { stack: number[]; tick?: number; title: string }
  * Bars over the chosen range: per bucket one bar per group (Phone and Computer side by side, or
  * everyone), on one scale, with release flags. `value` gives a group's bar in a bucket (undefined: none).
  */
-function groupedChart(o: { aria: string; value: (key: number, g: GroupId) => Bar | undefined; axis: (v: number) => string; counts?: boolean; minMax?: number; shades?: string[]; legend: string; wide?: boolean; note?: string; refs?: { v: number; label: string }[] }) {
-  const b = buckets(), groups = chartGroups();
+function groupedChart(o: { aria: string; value: (key: number, g: GroupId) => Bar | undefined; axis: (v: number) => string; counts?: boolean; minMax?: number; shades?: string[]; legend: string; wide?: boolean; note?: string; refs?: { v: number; label: string }[]; groups?: GroupId[] }) {
+  const b = buckets(), groups = o.groups ?? chartGroups();
   const data = b.keys.map(k => groups.map(g => o.value(k, g)));
   // Narrow screens draw a narrower chart, so its labels keep a readable size.
   const narrow = innerWidth < 600;
@@ -885,6 +1206,7 @@ function adminLink(s: AdminServer, lost: () => void): ConnectLink {
       for (const t of [
         cc.db.adminStatus, cc.db.adminOverview, cc.db.adminRooms, cc.db.adminPlayers, cc.db.adminPlayerTime, cc.db.adminDailyTime, cc.db.adminPlayerNet,
         cc.db.adminPlayerDevice, cc.db.adminPlayerDay, cc.db.adminPlayerDayTime, cc.db.adminPlayerDayNet, cc.db.adminPlayerHour, cc.db.adminPeakHour,
+        cc.db.adminPlayerPerf, cc.db.adminPlayerSource, cc.db.adminPlayerMilestone, cc.db.adminRoomHour,
       ]) {
         t.onInsert(render); t.onDelete(render);
       }

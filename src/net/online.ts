@@ -19,6 +19,8 @@ import type { ConnectLink } from './connect';
 import { serverIdentityKey } from './ping';
 import { currentServer } from './servers';
 import { currentDeviceKind } from '../game/device';
+import { takePerfReport, visitReport } from '../growth';
+import { PERF_RATE_LIMIT_MICROS } from '../../shared/metrics';
 
 type RosterRow = Infer<typeof RosterTable>;
 
@@ -323,8 +325,18 @@ export class OnlineLink implements GameLink {
   private pollNet() {
     if (this.disconnected) return;
     const { report, event } = this.net.poll(performance.now(), !!this.conn.db.player.identity.find(this.identity));
-    if (report) this.sendNet(report);
+    if (report) { this.sendNet(report); this.sendPerf(); }
     if (event) track('net_sample', event);
+  }
+  /** Frame rate and load times since the last report (src/growth.ts), with the connection report; one per 30 s (the server's limit). */
+  private lastPerf = -Infinity;
+  private sendPerf() {
+    const now = performance.now();
+    if (now - this.lastPerf < Number(PERF_RATE_LIMIT_MICROS / 1000n)) return;
+    const perf = takePerfReport();
+    if (!perf) return;
+    this.lastPerf = now;
+    try { void this.conn.reducers.perfStats(perf).catch(() => undefined); } catch { /* a server without perf_stats */ }
   }
   private sendNet(report: NetReport) {
     try { void this.conn.reducers.netStats(report).catch(() => undefined); } catch { /* a server without net_stats */ }
@@ -338,6 +350,7 @@ export class OnlineLink implements GameLink {
     clearInterval(this.netTimer);
     const { report, totals } = this.net.leave(performance.now());
     if (report && !this.disconnected) this.sendNet(report);
+    if (!this.disconnected) this.sendPerf();
     // match_left has its own `seconds` (the match's length).
     return { ping_p50: totals.ping_p50, ping_p95: totals.ping_p95, samples: totals.samples, corrections: totals.corrections, corrections_per_min: totals.corrections_per_min };
   }
@@ -384,6 +397,8 @@ function sayHello(conn: DbConnection) {
   try { void conn.reducers.hello({ tz, lang: navigator.language ?? '' }).catch(() => undefined); } catch { /* server without hello */ }
   // Then whether this is a phone, tablet or computer (src/game/device.ts; older servers lack `device`).
   try { void conn.reducers.device({ kind: currentDeviceKind() }).catch(() => undefined); } catch { /* server without device */ }
+  // Then where this browser came from and whom it invited (src/growth.ts; older servers lack `visit`).
+  try { void conn.reducers.visit(visitReport()).catch(() => undefined); } catch { /* server without visit */ }
 }
 
 /** A server published before a reducer existed refuses the call by name. */
