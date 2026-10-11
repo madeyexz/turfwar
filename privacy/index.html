@@ -60,6 +60,7 @@
         <p>Error reports include cleaned exception messages and stack traces (script URLs without query strings or fragments, function names, line and column numbers), the build version, server host, browser and operating system, in-app browser and whether a match is active. We remove known secret fields, email addresses and long identity strings from error text, and exclude callsign, room and attribution properties from error events. Error reports retain PostHog's anonymous device and session identifiers. We send at most five distinct failures and one opaque browser error per page. Early errors wait in memory until analytics starts; the same opt-out rules apply. Private source maps help us read minified stacks; they are not served with the website.</p>
 
         <h2>Website analytics</h2>
+        <p>An optional server monitor counts panic and ERROR log lines. It can send fixed count summaries to an owner-selected webhook and keep the latest 200 summaries in a private, admin-only database view. These summaries contain no player identifiers or raw log text. Raw diagnostic logs remain on the server.</p>
         <p>Vercel Web Analytics counts anonymous page views and visitors, without cookies.</p>
 
         <h2>What we don't do</h2>
@@ -100,6 +101,7 @@
         <p>錯誤報告包含經清理的例外訊息與堆疊追蹤（不含查詢參數或片段的程式網址、函式名稱、行號與欄號）、版本、伺服器主機、瀏覽器與作業系統、App 內建瀏覽器，以及是否正在對戰。我們會從錯誤文字移除已知的機密欄位、電子郵件地址與長身分識別字串，並排除錯誤事件中的呼號、房間與來源屬性。錯誤報告保留 PostHog 的匿名裝置與工作階段識別碼。每頁最多傳送五種不同錯誤與一次瀏覽器未提供細節的錯誤。啟動初期的錯誤會先保存在記憶體，等待分析功能啟動；同樣遵守拒絕追蹤設定。私有原始碼對照檔協助我們讀取壓縮程式的堆疊，不會隨網站公開提供。</p>
 
         <h2>網站分析</h2>
+        <p>可選用的伺服器監控會計算 panic 與 ERROR 日誌行數。它可將固定格式的數量摘要傳給擁有者指定的 webhook，並在僅管理員可讀取的私有資料庫檢視保留最新 200 筆摘要。摘要不包含玩家識別資料或原始日誌文字。原始診斷日誌保留在伺服器上。</p>
         <p>Vercel Web Analytics 計算匿名的瀏覽次數與訪客數，不使用 Cookie。</p>
 
         <h2>我們不做的事</h2>

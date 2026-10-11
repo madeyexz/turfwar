@@ -42,6 +42,7 @@ requests.
 - `admin/index.html`, `src/admin/`: the owner's `/admin` dashboard (admin-key login checked in the module; admin-only views).
 - Other `src/` modules: rendering, soldier/viewmodel animation, effects, HUD, and audio.
 - `spacetimedb/src/index.ts`: tables, reducers, lifecycle, and scheduled match tick.
+- Server error summaries use private `server_error` and admin-only `admin_errors`. The optional `deploy/gcp-taipei/watch-errors.py` writes fixed log counts in a separate transaction. Do not swallow reducer errors or commit partial match state to preserve a diagnostic. Watcher install and module publication require approval.
 - `src/module_bindings/`: generated client bindings; regenerate after module API changes.
 - `public/assets/`, `public/fonts/`: runtime assets and licenses.
 - `tools/`: asset conversion/fetch tools with their own dependencies; not runtime code.

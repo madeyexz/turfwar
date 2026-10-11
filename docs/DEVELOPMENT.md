@@ -260,6 +260,60 @@ Verification must distinguish a parsed local stack from actual PostHog symbolica
 setup, use a private preview to throw an intentional bundled error and confirm that its issue shows
 the original TypeScript file and line. Do not claim resolved production stacks until that succeeds.
 
+### Server errors and optional Taipei watcher (owner setup)
+
+`server_error` is a new private table, capped at 200 rows. `admin_errors` returns rows only to
+authenticated admins. `/admin` → Errors subscribes separately, so older modules show “unavailable”
+without breaking the dashboard. A row contains ingestion time, source `runtime`, and a fixed
+panic/ERROR count summary. It does **not** identify the failing reducer or contain a raw stack.
+The owner must inspect VM logs for details. Failed reducers retain their normal rollback behavior:
+writing an error row then rethrowing would roll the row back too. The host watcher writes summaries
+through `record_server_error` in a separate transaction, using an authenticated admin identity.
+Without the watcher, this table does not collect failures automatically. Module logs not emitted
+to Docker stderr/stdout are outside this watcher's coverage; use `spacetime logs` for those.
+
+No module publish is part of a frontend build. **Needs the owner**, after approval, from the reviewed
+checkout (stop on destructive migration requirements; never reset data):
+
+```sh
+# Development first, when authorized:
+spacetime publish lawbreaker-dev --server maincloud --module-path spacetimedb --delete-data=never -y
+# Production only in a separately authorized release, using the owner's saved profile:
+bun run publish:prod
+```
+
+After publishing, verify admin vs non-admin access with two identities, send a monitor test summary,
+and confirm the Errors list updates. No module was published as part of implementing this feature.
+
+The optional Python 3 watcher is `deploy/gcp-taipei/watch-errors.py`. Install it on the VM as
+`/usr/local/lib/turfwar/watch-errors.py`. Create root-only `/etc/turfwar/errors.env` (mode `0600`):
+
+```sh
+WEBHOOK_URL='https://your-slack-or-discord-webhook'
+# Optional: enables the private database summary in addition to the webhook.
+ADMIN_TOKEN='token-of-a-dedicated-signed-in-admin-session'
+```
+
+Keep this file outside Git. An absent file or empty webhook URL is a silent no-op. The webhook must
+use HTTPS. For database writes, sign a dedicated browser session in to Taipei `/admin` through
+the existing rate-limited login. Its SpacetimeDB token is in browser local storage under
+`lawbreaker.admin.token:<server-uri>:turfwar`. Transfer it privately to the env file; never paste
+it into chat or use the database owner's publishing token. Revoking admin sessions disables its
+writes until it signs in again. The database target is fixed to local `127.0.0.1:8080`, database
+`turfwar`; the token is never sent to the webhook. Add this to root's crontab only after approval:
+
+```cron
+* * * * * /usr/bin/python3 /usr/local/lib/turfwar/watch-errors.py
+```
+
+The watcher uses a lock and persistent per-destination cursors in `/var/lib/turfwar/error-watcher`.
+It scans at most 2000 Docker log lines per interval, starting with the last minute on first run.
+It sends only counts, never log content. A failed delivery leaves its cursor for retry; a crash
+after delivery but before cursor save can duplicate a summary. Bursts over 2000 lines can be
+undercounted. Alerts are best-effort, not a complete incident archive. Monitor cron failures too.
+Test its logic with `python3 deploy/gcp-taipei/test_watch_errors.py`; this does not contact a VM or
+webhook. Installation, credentials, scheduling and live delivery tests remain owner actions.
+
 Players stay anonymous (no login). The player-facing summary is the privacy page (`privacy/index.html`,
 served at `/privacy` and linked from the lobby, in English and 繁體中文): change it in the same commit
 whenever what is collected changes. These answer "how many players, and from where":

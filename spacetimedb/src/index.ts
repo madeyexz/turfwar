@@ -1,5 +1,6 @@
 import { Identity, ScheduleAt, Timestamp } from 'spacetimedb';
 import { schema, table, t, SenderError, type ReducerCtx, type InferSchema } from 'spacetimedb/server';
+import { expiredErrorIds, serverErrorSummary } from './servererrors';
 import { loadMap, loadNav } from '../../shared/maps/index';
 import { cleanCode, filterError, isRoomSize, mapsFor, newRoomRules, nextRoomRules, pickAnyRoom, pickRoom, QUICK_PLAY_NEW, roomCode, startRoomConfig, startRoomError, type RoomFilter, type RoomView } from '../../shared/match/rooms';
 import type { SimContext } from '../../shared/match/combat';
@@ -292,6 +293,8 @@ const privateRoomTable = table({ name: 'private_room', public: true }, { room: t
 
 /** Identities logged in to the admin dashboard with the admin key (see admin.ts). Private. */
 const adminTable = table({ name: 'admin' }, { identity: t.identity().primaryKey(), grantedAt: t.timestamp() });
+// Written in a separate transaction by the host watcher: failed reducers must still roll back.
+const serverErrorTable = table({ name: 'server_error' }, { id: t.u64().primaryKey().autoInc(), at: t.timestamp(), reducer: t.string(), message: t.string() });
 /** Failed admin logins per identity in the current 10-minute window (the rate limit). Private. */
 const adminAttemptTable = table({ name: 'admin_attempt' }, { identity: t.identity().primaryKey(), windowStart: t.timestamp(), failures: t.u32() });
 
@@ -302,7 +305,7 @@ const spacetimedb = schema({
   point: pointTable, body: bodyTable, player: playerTable, inbox: inboxTable, command: commandTable, history: historyTable,
   matchEvent: eventTable, tickSchedule: tickTable, profile: profileTable, counter: counterTable,
   vehicle: vehicleTable, vehicleInbox: vehicleInboxTable, playerSeen: seenTable,
-  playerDay: dayTable, admin: adminTable, adminAttempt: adminAttemptTable, playerTime: timeTable, playerDayTime: dayTimeTable,
+  playerDay: dayTable, admin: adminTable, serverError: serverErrorTable, adminAttempt: adminAttemptTable, playerTime: timeTable, playerDayTime: dayTimeTable,
   playerNet: netTable, playerDayNet: dayNetTable, playerHour: hourTable, peakHour: peakTable, playerPerf: perfTable, playerSource: sourceTable, playerMilestone: milestoneTable, roomHour: roomHourTable, playerDevice: deviceTable, roomCode: roomCodeTable, privateRoom: privateRoomTable,
 });
 export default spacetimedb;
@@ -1277,6 +1280,19 @@ export const adminRevokeAll = spacetimedb.reducer({}, ctx => {
 
 /** The admin check of a view (read-only): is this identity in `admin`? */
 const viewAdmins = (db: { admin: { identity: { find(id: Identity): unknown } } }) => ({ isAdmin: (hex: string) => !!db.admin.identity.find(Identity.fromString(hex)) });
+
+/** Private host summaries, exposed only to an authenticated admin. */
+export const adminErrors = spacetimedb.view({ name: 'admin_errors', public: true },
+  t.array(serverErrorTable.rowType),
+  ctx => forAdmin(viewAdmins(ctx.db), ctx.sender.toHexString(), () => [...ctx.db.serverError.iter()]));
+
+/** Host watcher only. Never accept raw messages or player identifiers. */
+export const recordServerError = spacetimedb.reducer({ kind: t.string(), count: t.u32() }, (ctx, { kind, count }) => {
+  if (!ctx.db.admin.identity.find(ctx.sender)) throw new SenderError('Admins only');
+  const message = serverErrorSummary(kind, count);
+  ctx.db.serverError.insert({ id: 0n, at: ctx.timestamp, reducer: 'runtime', message });
+  for (const id of expiredErrorIds(ctx.db.serverError.iter())) ctx.db.serverError.id.delete(id);
+});
 
 /** The caller's own login state: admin or not, and failed attempts in the current window. */
 export const adminStatus = spacetimedb.view({ name: 'admin_status', public: true },
