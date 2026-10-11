@@ -24,7 +24,7 @@ if ! "$SPACETIME" --version | grep -q "/$SPACETIME_VERSION/"; then
 fi
 done_
 
-# InstaCloud CLI for the Singapore server (deploy/instacloud).
+# InstaCloud CLI: the Singapore server (deploy/instacloud) is retired (stopped 2026-10-11) but still exists; this starts or deletes it.
 step "insta"
 if ! command -v insta >/dev/null; then
   curl -fsSL https://raw.githubusercontent.com/InsForge/instacloud-cli/main/install.sh | sh

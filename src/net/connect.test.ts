@@ -1,11 +1,11 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { WAKE, WakeDriver, idleWake, retryDelay, step, wakeSeconds, type WakeEvent, type WakeLink, type WakeState } from './wake';
+import { CONNECT, ConnectDriver, idleConnect, retryDelay, step, connectSeconds, type ConnectEvent, type ConnectLink, type ConnectState } from './connect';
 
 /** Feed events through the pure machine, collecting what it asks to run. */
 function machine<A>() {
-  let s: WakeState<A> = idleWake<A>();
+  let s: ConnectState<A> = idleConnect<A>();
   const runs: A[] = [];
-  const send = (e: WakeEvent<A>, now: number) => { const r = step(s, e, now); s = r.state; if (r.run !== undefined) runs.push(r.run); return s; };
+  const send = (e: ConnectEvent<A>, now: number) => { const r = step(s, e, now); s = r.state; if (r.run !== undefined) runs.push(r.run); return s; };
   return { send, runs, get state() { return s; } };
 }
 
@@ -37,18 +37,18 @@ describe('connection state machine', () => {
     const m = machine<string>();
     m.send({ type: 'start' }, 0);
     m.send({ type: 'cold', from: 'ping' }, 100);
-    expect(m.send({ type: 'tick' }, WAKE.giveUpMs - 1).phase).toBe('probing');
-    expect(m.send({ type: 'tick' }, WAKE.giveUpMs).phase).toBe('unreachable');
-    expect(WAKE.giveUpMs).toBe(30_000);
+    expect(m.send({ type: 'tick' }, CONNECT.giveUpMs - 1).phase).toBe('probing');
+    expect(m.send({ type: 'tick' }, CONNECT.giveUpMs).phase).toBe('unreachable');
+    expect(CONNECT.giveUpMs).toBe(30_000);
     // Late answers from the abandoned attempt change nothing.
-    expect(m.send({ type: 'up' }, WAKE.giveUpMs + 10).phase).toBe('unreachable');
+    expect(m.send({ type: 'up' }, CONNECT.giveUpMs + 10).phase).toBe('unreachable');
     expect(m.send({ type: 'retry' }, 200_000)).toMatchObject({ phase: 'probing', since: 200_000, failures: 0 });
   });
 
   it('a failure past the limit gives up at once', () => {
     const m = machine<string>();
     m.send({ type: 'start' }, 0);
-    expect(m.send({ type: 'cold', from: 'connect' }, WAKE.giveUpMs + 1).phase).toBe('unreachable');
+    expect(m.send({ type: 'cold', from: 'connect' }, CONNECT.giveUpMs + 1).phase).toBe('unreachable');
   });
 
   it('runs a queued action once, when the server is up', () => {
@@ -79,7 +79,7 @@ describe('connection state machine', () => {
   it('pressing play after giving up retries and keeps the action', () => {
     const m = machine<string>();
     m.send({ type: 'start' }, 0);
-    m.send({ type: 'tick' }, WAKE.giveUpMs);
+    m.send({ type: 'tick' }, CONNECT.giveUpMs);
     expect(m.state.phase).toBe('unreachable');
     expect(m.send({ type: 'queue', action: 'quick' }, 190_000)).toMatchObject({ phase: 'probing', since: 190_000, queued: 'quick' });
     m.send({ type: 'up' }, 191_000);
@@ -92,14 +92,14 @@ describe('connection state machine', () => {
     m.send({ type: 'up' }, 100);
     expect(m.send({ type: 'down' }, 60_000)).toMatchObject({ phase: 'probing', since: 60_000 });
     m.send({ type: 'queue', action: 'quick' }, 60_100);
-    expect(m.send({ type: 'stop' }, 60_200)).toEqual(idleWake());
+    expect(m.send({ type: 'stop' }, 60_200)).toEqual(idleConnect());
     m.send({ type: 'up' }, 60_300);
     expect(m.runs).toEqual([]);
   });
 
   it('counts seconds and backs off to 3 s', () => {
-    const s = { ...idleWake<string>(), phase: 'probing' as const, since: 1000 };
-    expect(wakeSeconds(s, 13_999)).toBe(12);
+    const s = { ...idleConnect<string>(), phase: 'probing' as const, since: 1000 };
+    expect(connectSeconds(s, 13_999)).toBe(12);
     expect([1, 2, 3, 10].map(retryDelay)).toEqual([2000, 2500, 3000, 3000]);
   });
 });
@@ -116,7 +116,7 @@ function fakeServer() {
   const deps = {
     now: () => Date.now(),
     ping: async () => { server.pings++; return server.up; },
-    connect(lost: () => void): WakeLink {
+    connect(lost: () => void): ConnectLink {
       server.connects++;
       server.open++; server.maxOpen = Math.max(server.maxOpen, server.open);
       const rec = { lost, stopped: false };
@@ -132,7 +132,7 @@ function fakeServer() {
   return { server, deps };
 }
 
-describe('WakeDriver', () => {
+describe('ConnectDriver', () => {
   afterEach(() => { vi.useRealTimers(); });
 
   it('keeps connecting while the server is out of reach, then runs the queued action once', async () => {
@@ -140,7 +140,7 @@ describe('WakeDriver', () => {
     const { server, deps } = fakeServer();
     const runs: string[] = [];
     const phases: string[] = [];
-    const d = new WakeDriver<string>(deps, s => { if (phases.at(-1) !== s.phase) phases.push(s.phase); }, a => runs.push(a));
+    const d = new ConnectDriver<string>(deps, s => { if (phases.at(-1) !== s.phase) phases.push(s.phase); }, a => runs.push(a));
     d.start();
     await vi.advanceTimersByTimeAsync(1000);
     expect(d.state).toMatchObject({ phase: 'probing' });
@@ -166,7 +166,7 @@ describe('WakeDriver', () => {
     const { server, deps } = fakeServer();
     server.hold = true;
     // (The admin page's longer window for the Singapore database, which sleeps.)
-    const d = new WakeDriver<string>(deps, () => undefined, () => undefined, { ...WAKE, giveUpMs: 180_000 });
+    const d = new ConnectDriver<string>(deps, () => undefined, () => undefined, { ...CONNECT, giveUpMs: 180_000 });
     d.start();
     await vi.advanceTimersByTimeAsync(60_000);
     expect(server.maxOpen).toBe(1);
@@ -186,9 +186,9 @@ describe('WakeDriver', () => {
   it('gives up after 30 s and stops trying until Retry', async () => {
     vi.useFakeTimers();
     const { server, deps } = fakeServer();
-    const d = new WakeDriver<string>(deps, () => undefined, () => undefined);
+    const d = new ConnectDriver<string>(deps, () => undefined, () => undefined);
     d.start();
-    await vi.advanceTimersByTimeAsync(WAKE.giveUpMs + 1000);
+    await vi.advanceTimersByTimeAsync(CONNECT.giveUpMs + 1000);
     expect(d.state.phase).toBe('unreachable');
     const { pings, connects } = server;
     await vi.advanceTimersByTimeAsync(60_000);
@@ -208,11 +208,11 @@ describe('WakeDriver', () => {
       ...deps,
       // The host answers 200 after 3.5 s (inside the 4 s ping limit) and the database is ready at 6.5 s.
       ping: async () => { await new Promise(r => setTimeout(r, 3500)); setTimeout(() => { server.up = true; }, 3000); return true; },
-      connect(lost: () => void): WakeLink { return { ...deps.connect(lost), importMs: () => 1234 }; },
+      connect(lost: () => void): ConnectLink { return { ...deps.connect(lost), importMs: () => 1234 }; },
     };
-    const d = new WakeDriver<string>(slow, () => undefined, () => undefined);
+    const d = new ConnectDriver<string>(slow, () => undefined, () => undefined);
     d.start();
-    await vi.advanceTimersByTimeAsync(WAKE.slowMs + 100);
+    await vi.advanceTimersByTimeAsync(CONNECT.slowMs + 100);
     expect(d.state).toMatchObject({ phase: 'probing', slow: true, failures: 0 });
     await vi.advanceTimersByTimeAsync(1500);
     expect(d.state).toMatchObject({ phase: 'ready', slow: true });
@@ -224,8 +224,8 @@ describe('WakeDriver', () => {
     vi.useFakeTimers();
     const { server, deps } = fakeServer();
     server.up = true;
-    const withImport = { ...deps, connect(lost: () => void): WakeLink { return { ...deps.connect(lost), importMs: () => 41.6 }; } };
-    const d = new WakeDriver<string>(withImport, () => undefined, () => undefined);
+    const withImport = { ...deps, connect(lost: () => void): ConnectLink { return { ...deps.connect(lost), importMs: () => 41.6 }; } };
+    const d = new ConnectDriver<string>(withImport, () => undefined, () => undefined);
     d.start();
     await vi.advanceTimersByTimeAsync(500);
     expect(d.state.phase).toBe('ready');
@@ -237,10 +237,10 @@ describe('WakeDriver', () => {
     vi.useFakeTimers();
     const { server, deps } = fakeServer();
     const runs: string[] = [];
-    const d = new WakeDriver<string>(deps, () => undefined, a => runs.push(a));
+    const d = new ConnectDriver<string>(deps, () => undefined, a => runs.push(a));
     d.start();
     d.queue('quick');
-    await vi.advanceTimersByTimeAsync(WAKE.giveUpMs + 1000);
+    await vi.advanceTimersByTimeAsync(CONNECT.giveUpMs + 1000);
     expect(d.state.phase).toBe('unreachable');
     expect(runs).toEqual([]);
     server.up = true;
@@ -255,7 +255,7 @@ describe('WakeDriver', () => {
     vi.useFakeTimers();
     const { server, deps } = fakeServer();
     server.up = true;
-    const d = new WakeDriver<string>(deps, () => undefined, () => undefined);
+    const d = new ConnectDriver<string>(deps, () => undefined, () => undefined);
     d.start();
     await vi.advanceTimersByTimeAsync(500);
     expect(d.state.phase).toBe('ready');
@@ -274,9 +274,9 @@ describe('WakeDriver', () => {
   it('may be stopped from the queued action (the lobby leaves for the match)', async () => {
     vi.useFakeTimers();
     const { server, deps } = fakeServer();
-    let d: WakeDriver<string> | undefined;
+    let d: ConnectDriver<string> | undefined;
     const runs: string[] = [];
-    d = new WakeDriver<string>(deps, () => undefined, a => { runs.push(a); d!.stop(); });
+    d = new ConnectDriver<string>(deps, () => undefined, a => { runs.push(a); d!.stop(); });
     d.start();
     d.queue('quick');
     server.up = true;

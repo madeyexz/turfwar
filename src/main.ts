@@ -19,7 +19,7 @@ import { Bench, BENCH_SECONDS, benchReport, type BenchResult } from './game/benc
 import { onlineAvailable, connectOnline, watchRooms, ConnectError, OnlineLink, type OnlineEntry, type PublicRoom } from './net/online';
 import { PING_WINDOW, PingMonitor, hostAnswers, pingAllowed, pingTone, pingUrl, serverHost, serverRegion } from './net/ping';
 import { currentServer, gameServerList, onServer, type GameServer, type ServerId } from './net/servers';
-import { WakeDriver, wakeSeconds, type WakeState } from './net/wake';
+import { ConnectDriver, connectSeconds, type ConnectState } from './net/connect';
 import { matchJoined, matchLeft, matchNote, setSuper, startAnalytics, track, type PlayKind, type Exit, type Reason } from './analytics';
 import { LevelView } from './render/level';
 import { THEMES } from './render/materials';
@@ -144,12 +144,12 @@ menu.innerHTML = `
       <button type="button" class="tab" role="tab" id="tab-${id}" data-tab="${id}" aria-controls="view-${id}">${TAB_ICONS[id]}<span>${L(`tab.${id}`, 'b')}${L(`tab.${id}Sub`, 'small')}</span></button>`).join('')}
     </div>
 
-    <div class="wake" id="wake" hidden>
-      <div class="wake-say" role="status" aria-live="polite">
-        <b class="wake-head"><span class="conn down"><i></i></span><span id="wake-title"></span></b>
-        <p id="wake-body"></p>
+    <div class="unreachable" id="unreachable" hidden>
+      <div class="unreachable-say" role="status" aria-live="polite">
+        <b class="unreachable-head"><span class="conn down"><i></i></span><span id="unreachable-title"></span></b>
+        <p id="unreachable-body"></p>
       </div>
-      <button type="button" class="sub wake-retry" id="wake-retry"></button>
+      <button type="button" class="sub unreachable-retry" id="unreachable-retry"></button>
     </div>
 
     <div class="view" id="view-quick" role="tabpanel" aria-labelledby="tab-quick">
@@ -313,37 +313,37 @@ if (!mapOk(map)) map = firstMap();
 
 // ---- Live rooms: a light subscription to the server's room rows while the lobby is open. ----
 /*
- * The connection driver (src/net/wake.ts) owns the rooms connection: it pings and connects, and gives
+ * The connection driver (src/net/connect.ts) owns the rooms connection: it pings and connects, and gives
  * up (unreachable, Retry) after 30 s. Play buttons pressed meanwhile are queued and run once it is up.
  */
 /** A play action held until the server is up; `retried`: it already failed to reach the server once. */
 interface Queued { action: Action; room: number; retried: boolean }
 let rooms: PublicRoom[] = [];
 /** Pings and connects reach the chosen server (choosing another stops the driver and starts it again). */
-const wake = new WakeDriver<Queued>({
+const lobbyConn = new ConnectDriver<Queued>({
   ping: signal => { const url = server && pingUrl(server.uri); return url ? hostAnswers(url, signal) : Promise.resolve(false); },
   connect: lost => watchRooms(list => { rooms = list; refresh(); }, lost),
-}, s => onWake(s), q => run(q.action, q.room, q.retried));
-const phase = () => wake.state.phase;
+}, s => onLobbyConn(s), q => run(q.action, q.room, q.retried));
+const phase = () => lobbyConn.state.phase;
 /** What the screen last showed of the connection state: a change redraws everything, a tick only the timer. */
-let wakeKey = '';
+let connKey = '';
 /** "Server unreachable" is reported to analytics once per page, not on every attempt. */
 let unreachableReported = false;
 /** The lobby has been connected once on this page (a later connect is a reconnect after a drop). */
 let wasReady = false;
-function onWake(s: WakeState<Queued>) {
+function onLobbyConn(s: ConnectState<Queued>) {
   pings.setActive(pingOn && s.phase === 'ready');
   const key = `${s.phase}|${s.queued?.action ?? ''}`;
-  if (key === wakeKey) { renderQuick(); renderStart(); return; }
-  const [was, queued] = wakeKey.split('|');
-  wakeKey = key;
+  if (key === connKey) { renderQuick(); renderStart(); return; }
+  const [was, queued] = connKey.split('|');
+  connKey = key;
   // A new attempt (or a dropped connection): the old room list is stale. (Stopping keeps it: the
   // room being joined stays on screen while the game connects.)
   if (s.phase !== was && s.phase !== 'ready' && s.phase !== 'idle') rooms = [];
   if (s.phase === 'ready' && was !== 'ready' && (s.slow || s.failures > 0)) {
-    const tm = wake.timings;
+    const tm = lobbyConn.timings;
     track('connect_slow', {
-      seconds: wakeSeconds(s, performance.now()), queued: !!queued, failures: s.failures, reconnect: wasReady,
+      seconds: connectSeconds(s, performance.now()), queued: !!queued, failures: s.failures, reconnect: wasReady,
       ...(tm.pingMs !== undefined ? { ping_ms: tm.pingMs, ping_ok: !!tm.pingOk } : {}),
       ...(tm.connectMs !== undefined ? { connect_ms: tm.connectMs } : {}), ...(tm.importMs !== undefined ? { import_ms: tm.importMs } : {}),
     });
@@ -355,8 +355,8 @@ function onWake(s: WakeState<Queued>) {
 function watchLobbyRooms() {
   if (!online.ok || benchMode) { refresh(); return; }
   // A server chosen during a match applies now.
-  if (followServer()) wake.stop();
-  wake.start();
+  if (followServer()) lobbyConn.stop();
+  lobbyConn.start();
   refresh();
 }
 /** Analytics super properties for the lobby's server: its database, host and the choice (tw/us). */
@@ -364,8 +364,7 @@ const serverProps = () => ({
   online_db: online.ok ? server?.database ?? '' : '', server_host: online.ok && server ? serverHost(server.uri) : '', server_choice: server?.id ?? '',
 });
 /**
- * The lobby follows the chosen server: pings (the old server is no longer pinged, which would keep
- * it awake), the room list, the chips and the analytics super properties. True when it changed.
+ * The lobby follows the chosen server: pings (the old server is no longer pinged), the room list, the chips and the analytics super properties. True when it changed.
  */
 function followServer() {
   const next = currentServer();
@@ -386,25 +385,25 @@ onServer(() => {
   if (game || starting || !inMenu) return;
   const watching = phase() !== 'idle';
   if (!followServer()) return;
-  wake.stop();
+  lobbyConn.stop();
   if (watching) watchLobbyRooms(); else refresh();
 });
 function unwatchRooms() {
-  wake.stop();
+  lobbyConn.stop();
   pings.setActive(false);
 }
 /**
  * A lobby left in a background tab lets go of the server: after 5 minutes hidden it disconnects, and
- * on coming back it reconnects with a fresh socket (a phone's may have died meanwhile; an open connection
- * also keeps a server that scales to zero awake, and that costs money). Not while a play action waits.
+ * on coming back it reconnects with a fresh socket (a phone's may have died meanwhile), and a lobby nobody is
+ * looking at holds no connection. Not while a play action waits.
  */
-const LET_SLEEP_HIDDEN_MS = 5 * 60_000;
+const HIDDEN_LOBBY_MS = 5 * 60_000;
 let hiddenTimer: ReturnType<typeof setTimeout> | undefined;
 document.addEventListener('visibilitychange', () => {
   clearTimeout(hiddenTimer);
   if (!online.ok || benchMode || !inMenu) return;
   if (document.visibilityState === 'hidden') {
-    hiddenTimer = setTimeout(() => { if (inMenu && document.visibilityState === 'hidden' && !wake.state.queued) unwatchRooms(); }, LET_SLEEP_HIDDEN_MS);
+    hiddenTimer = setTimeout(() => { if (inMenu && document.visibilityState === 'hidden' && !lobbyConn.state.queued) unwatchRooms(); }, HIDDEN_LOBBY_MS);
   } else if (phase() === 'idle') watchLobbyRooms();
 });
 
@@ -430,7 +429,7 @@ const pingTitle = (uri: string | undefined) => uri ? t('server.pingTitle', { ser
 /** "Server · Taipei · 30 ms ▾" for the chips; "unreachable" instead of the ping when the server cannot be reached. */
 function chipHtml(uri: string) {
   const ms = pings.get(uri), p = phase();
-  const value = p === 'unreachable' ? `<span class="ping">${esc(t('wake.downChip'))}</span>`
+  const value = p === 'unreachable' ? `<span class="ping">${esc(t('connect.downChip'))}</span>`
     : `<span class="${pingClass(uri)}">${ms === undefined ? '—' : esc(t('server.ms', { n: ms }))}</span>`;
   return `<span class="server-word">${esc(t('server.label'))} · </span>${esc(serverName(uri))} · ${value}${choosable ? CARET : ''}`;
 }
@@ -517,12 +516,12 @@ function renderTabs() {
 }
 
 /** The queued action (pressed before the server answered), if any. */
-const queuedAction = () => wake.state.queued?.action;
+const queuedAction = () => lobbyConn.state.queued?.action;
 /** A big button's label: loading, the action under way, waiting for the server, or its name. It stays usable while connecting. */
 function renderDeploy(btn: HTMLButtonElement, action: Action, busyText: string, enabled: boolean) {
   const label = btn.querySelector<HTMLElement>('.deploy-t')!;
   const queued = queuedAction() === action;
-  label.textContent = !ready ? loadingText() : starting === action ? busyText : queued ? t('wake.waiting') : t(label.dataset.label as Key);
+  label.textContent = !ready ? loadingText() : starting === action ? busyText : queued ? t('connect.waiting') : t(label.dataset.label as Key);
   btn.disabled = !ready || !!starting || !enabled;
   btn.classList.toggle('queued', queued && !starting);
 }
@@ -534,8 +533,8 @@ function renderLine(id: string, action: Action, liveText: string) {
   if (!online.ok) return;
   const p = phase();
   const [state, text] = p === 'ready' ? ['live', liveText]
-    : p === 'unreachable' ? ['down', t('wake.downHead')]
-    : ['wait', queuedAction() === action ? t('wake.queued') : t('lobby.connecting')];
+    : p === 'unreachable' ? ['down', t('connect.downHead')]
+    : ['wait', queuedAction() === action ? t('connect.queued') : t('lobby.connecting')];
   el.querySelector('.conn')!.className = `conn ${state}`;
   el.title = p === 'ready' ? t('lobby.liveTitle', { db: server?.database ?? 'online' }) : '';
   setText($(`#${id}-hint`), text);
@@ -545,13 +544,13 @@ function renderLine(id: string, action: Action, liveText: string) {
 function setText(el: HTMLElement, text: string) { if (el.textContent !== text) el.textContent = text; }
 
 /** The card over the tabs' views when the server cannot be reached (after 30 s of trying): "Can't reach the server" with Retry. */
-function renderWake() {
-  const box = $('#wake');
+function renderUnreachable() {
+  const box = $('#unreachable');
   box.hidden = !online.ok || phase() !== 'unreachable';
   if (box.hidden) return;
-  setText($('#wake-title'), t('wake.downHead'));
-  setText($('#wake-body'), t('wake.downBody'));
-  setText($('#wake-retry'), t('wake.retry'));
+  setText($('#unreachable-title'), t('connect.downHead'));
+  setText($('#unreachable-body'), t('connect.downBody'));
+  setText($('#unreachable-retry'), t('connect.retry'));
 }
 
 /** QUICK PLAY: where it would put you (or that it opens a 6v6 with bots) beside the server chip, and every live room to pick from. */
@@ -613,7 +612,7 @@ function renderRoomRows(list: HTMLElement, shown: PublicRoom[], none: string, ta
     const p = phase();
     // The list always says why it is empty (never an empty box); an unreachable server offers Retry.
     const html = !online.ok ? `<div class="empty">${esc(t('lobby.noServer'))}</div>`
-      : p === 'unreachable' ? `<div class="empty"><p>${esc(t('wake.downHead'))}</p><button type="button" class="sub" data-wake-retry>${esc(t('wake.retry'))}</button></div>`
+      : p === 'unreachable' ? `<div class="empty"><p>${esc(t('connect.downHead'))}</p><button type="button" class="sub" data-unreachable-retry>${esc(t('connect.retry'))}</button></div>`
       : p !== 'ready' ? `<div class="empty">${esc(t('lobby.connecting'))}</div>`
       : none;
     // (Unchanged markup is left alone, so a focused Retry keeps its focus.)
@@ -700,7 +699,7 @@ function renderOthers() {
 function refresh() {
   renderBrand();
   renderTabs();
-  renderWake();
+  renderUnreachable();
   renderQuick();
   renderStart();
   renderJoin();
@@ -763,8 +762,8 @@ onClick('team', v => { team = v; select('teams', 'team', team); });
 onClick('skill', v => { skill = v; select('skills', 'skill', skill); });
 onClick('joinroom', v => run('room', Number(v)));
 onClick('coderoom', v => askRoomCode(Number(v)));
-onClick('wake-retry', () => wake.retry());
-$('#wake-retry').addEventListener('click', () => { audio.ui(); wake.retry(); });
+onClick('unreachable-retry', () => lobbyConn.retry());
+$('#unreachable-retry').addEventListener('click', () => { audio.ui(); lobbyConn.retry(); });
 roomCode.addEventListener('input', () => { roomCode.value = cleanCode(roomCode.value); renderJoin(); });
 $('#quick-go').addEventListener('click', () => { audio.ui(); run('quick'); });
 $('#start-go').addEventListener('click', () => { audio.ui(); run('start'); });
@@ -1127,7 +1126,7 @@ function run(action: Action, room = -1, retried = false) {
     fullscreenForTouch();
     // (A lobby that let go of the server in a background tab reconnects first.)
     if (phase() === 'idle') watchLobbyRooms();
-    wake.queue({ action, room, retried });
+    lobbyConn.queue({ action, room, retried });
     return;
   }
   if (action === 'room' && !rooms.some(r => r.room === room)) return;
@@ -1216,7 +1215,7 @@ async function start(action: Action, retried = false) {
     if (error instanceof ConnectError && via === 'online' && !retried && !benchMode) {
       status.textContent = '';
       watchLobbyRooms();
-      wake.queue({ action, room, retried: true });
+      lobbyConn.queue({ action, room, retried: true });
       return;
     }
     status.textContent = t('lobby.couldNotJoin', { error: serverError((error as Error).message) });

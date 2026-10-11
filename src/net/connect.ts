@@ -1,25 +1,25 @@
 /**
- * Reaching the game server (the file keeps the name from when a server slept; none does now). Every
- * game server is always on (Taipei, Maincloud, a local dev server), so a failed ping or connect only
- * means "can't reach it" (a bad network, a restart): the screen keeps saying "connecting", the driver
- * retries gently, and after 30 s it says unreachable, with Retry.
+ * Reaching the game server. Every game server we offer is always on (Taipei, Maincloud, a local dev
+ * server), so a failed ping or connect only means "can't reach it" (a bad network, a restart): the
+ * screen keeps saying "connecting", the driver retries gently, and after 30 s it says unreachable,
+ * with Retry.
  *
  *   idle → probing → ready                 a reachable server (a slow one only says "connecting")
  *            │ 30 s without an answer
  *            ▼
  *          unreachable → probing           Retry (or pressing play) starts over
  *
- * A live connection that drops goes back to probing. `step` is the pure state machine; `WakeDriver`
+ * A live connection that drops goes back to probing. `step` is the pure state machine; `ConnectDriver`
  * runs it with one `/v1/ping` in flight at a time (every 2–3 s while failing) and one connection in
  * flight at a time, opened at once, then after the host answers a ping (or every 15 s regardless).
  * Nothing retries on its own once unreachable. A play action pressed meanwhile is queued and runs
- * once, when the connection is up. The admin page passes a longer `giveUpMs` for its Singapore server,
- * the one database that still sleeps (read-only there, not offered to players).
+ * once, when the connection is up. (The file was `wake.ts` while the Singapore server slept when idle;
+ * it was retired on 2026-10-11 and its sleeping-server handling is gone.)
  */
-export type WakePhase = 'idle' | 'probing' | 'ready' | 'unreachable';
+export type ConnectPhase = 'idle' | 'probing' | 'ready' | 'unreachable';
 
-export interface WakeState<A> {
-  phase: WakePhase;
+export interface ConnectState<A> {
+  phase: ConnectPhase;
   /** When this attempt to reach the server began (ms on the driver's clock). */
   since: number;
   /** Failed pings and connects in this attempt (sets the retry backoff). */
@@ -30,7 +30,7 @@ export interface WakeState<A> {
   queued?: A;
 }
 
-export type WakeEvent<A> =
+export type ConnectEvent<A> =
   | { type: 'start' } // begin (no-op unless idle)
   | { type: 'retry' } // start over after giving up
   | { type: 'cold'; from: 'ping' | 'connect' } // a ping that was not a 200 (5xx, network error, timeout), or a failed connect
@@ -40,7 +40,7 @@ export type WakeEvent<A> =
   | { type: 'queue'; action: A } // a play button: run now if ready, else when ready
   | { type: 'stop' }; // leave (a match starts, the admin page switches server)
 
-export const WAKE = {
+export const CONNECT = {
   /** No answer this long on an attempt makes it `slow` (analytics only: the screen keeps saying "connecting"). */
   slowMs: 6000,
   /** Give up (unreachable) after this long. */
@@ -52,19 +52,19 @@ export const WAKE = {
   /** While pings fail, still try a connection this often (in case pings are blocked). */
   connectEveryMs: 15_000,
 };
-export type WakeLimits = typeof WAKE;
+export type ConnectLimits = typeof CONNECT;
 
-export const idleWake = <A>(): WakeState<A> => ({ phase: 'idle', since: 0, failures: 0, slow: false });
+export const idleConnect = <A>(): ConnectState<A> => ({ phase: 'idle', since: 0, failures: 0, slow: false });
 
 /** The state machine: the next state for an event at `now`, and the queued action to run (at most once). */
-export function step<A>(s: WakeState<A>, e: WakeEvent<A>, now: number, limits: WakeLimits = WAKE): { state: WakeState<A>; run?: A } {
-  const begin = (queued: A | undefined): WakeState<A> => ({ phase: 'probing', since: now, failures: 0, slow: false, queued });
+export function step<A>(s: ConnectState<A>, e: ConnectEvent<A>, now: number, limits: ConnectLimits = CONNECT): { state: ConnectState<A>; run?: A } {
+  const begin = (queued: A | undefined): ConnectState<A> => ({ phase: 'probing', since: now, failures: 0, slow: false, queued });
   const trying = s.phase === 'probing';
   switch (e.type) {
     case 'start': return { state: s.phase === 'idle' ? begin(undefined) : s };
     case 'retry': return { state: s.phase === 'unreachable' ? begin(s.queued) : s };
     case 'down': return { state: s.phase === 'ready' ? begin(s.queued) : s };
-    case 'stop': return { state: s.phase === 'idle' ? s : idleWake<A>() };
+    case 'stop': return { state: s.phase === 'idle' ? s : idleConnect<A>() };
     case 'cold': {
       if (!trying) return { state: s };
       const failures = s.failures + 1;
@@ -92,13 +92,13 @@ export function step<A>(s: WakeState<A>, e: WakeEvent<A>, now: number, limits: W
 }
 
 /** Whole seconds since this attempt began. */
-export const wakeSeconds = (s: WakeState<unknown>, now: number) => Math.max(0, Math.floor((now - s.since) / 1000));
+export const connectSeconds = (s: ConnectState<unknown>, now: number) => Math.max(0, Math.floor((now - s.since) / 1000));
 
 /** Gentle backoff between pings while failing: 2 s, then 2.5 s, then every 3 s. */
 export const retryDelay = (failures: number) => Math.min(3000, 2000 + 500 * Math.max(0, failures - 1));
 
 /** A connection the driver opens: `live` settles once (resolves when usable, rejects when it failed). */
-export interface WakeLink {
+export interface ConnectLink {
   live: Promise<void>;
   stop(): void;
   /** Milliseconds the connection spent loading its code (the lazy SDK chunk) before it could dial, once known. */
@@ -106,18 +106,18 @@ export interface WakeLink {
 }
 
 /** How the current attempt went, for `connect_slow`: the first ping, and the connection that came up. */
-export interface WakeTimings {
+export interface ConnectTimings {
   /** The first ping's round trip (ms) and whether it answered 200. */
   pingMs?: number; pingOk?: boolean;
   /** The connection that went live: dial to live (ms), and the part of it spent loading its code. */
   connectMs?: number; importMs?: number;
 }
 
-export interface WakeDeps {
+export interface ConnectDeps {
   /** One `/v1/ping`: true when the host answered 200 (false or a rejection: not up). */
   ping(signal: AbortSignal): Promise<boolean>;
   /** Open the real connection; `lost` is called if it drops after being live. */
-  connect(lost: () => void): WakeLink;
+  connect(lost: () => void): ConnectLink;
   now?: () => number;
 }
 
@@ -129,25 +129,25 @@ type Timer = ReturnType<typeof setTimeout>;
  * queued action when the server is up. Both are called after the driver's own bookkeeping, so they
  * may call back into it (a queued Quick Play stops the lobby's connection to open the game's).
  */
-export class WakeDriver<A> {
-  private s: WakeState<A> = idleWake<A>();
+export class ConnectDriver<A> {
+  private s: ConnectState<A> = idleConnect<A>();
   /** Bumped on every new attempt and on stop: answers from an older attempt are ignored. */
   private gen = 0;
   private pingAbort?: AbortController;
   private pingTimer?: Timer;
   private tickTimer?: ReturnType<typeof setInterval>;
   /** The connection: in flight, or live. Never more than one. */
-  private link?: WakeLink;
+  private link?: ConnectLink;
   private linkLive = false;
   private connectStarted = -Infinity;
   /** Timings of this attempt (reset when a new one begins). */
-  timings: WakeTimings = {};
+  timings: ConnectTimings = {};
 
   constructor(
-    private deps: WakeDeps,
-    private onChange: (s: WakeState<A>) => void,
+    private deps: ConnectDeps,
+    private onChange: (s: ConnectState<A>) => void,
     private onRun: (action: A) => void,
-    private limits: WakeLimits = WAKE,
+    private limits: ConnectLimits = CONNECT,
   ) {}
 
   get state() { return this.s; }
@@ -163,7 +163,7 @@ export class WakeDriver<A> {
   private now() { return this.deps.now ? this.deps.now() : performance.now(); }
   private trying() { return this.s.phase === 'probing'; }
 
-  private dispatch(e: WakeEvent<A>) {
+  private dispatch(e: ConnectEvent<A>) {
     const before = this.s;
     const { state, run } = step(before, e, this.now(), this.limits);
     this.s = state;
@@ -173,7 +173,7 @@ export class WakeDriver<A> {
   }
 
   /** Side effects of a transition: a new attempt starts pinging and connecting; leaving `trying` stops them. */
-  private effects(before: WakeState<A>, after: WakeState<A>) {
+  private effects(before: ConnectState<A>, after: ConnectState<A>) {
     const fresh = after.phase === 'probing' && (before.phase !== 'probing' || after.since !== before.since);
     if (fresh) {
       this.halt(true);
@@ -224,7 +224,7 @@ export class WakeDriver<A> {
     const now = this.now();
     if (!hostAnswered && now - this.connectStarted < this.limits.connectEveryMs) return;
     this.connectStarted = now;
-    const link: WakeLink = this.deps.connect(() => this.lost(link));
+    const link: ConnectLink = this.deps.connect(() => this.lost(link));
     this.link = link; this.linkLive = false;
     const timeout = setTimeout(() => this.failed(link), this.limits.connectTimeoutMs);
     link.live.then(() => {
@@ -238,14 +238,14 @@ export class WakeDriver<A> {
     }, () => { clearTimeout(timeout); this.failed(link); });
   }
 
-  private failed(link: WakeLink) {
+  private failed(link: ConnectLink) {
     if (this.link !== link || this.linkLive) return;
     this.link = undefined;
     try { link.stop(); } catch { /* already closed */ }
     this.dispatch({ type: 'cold', from: 'connect' });
   }
 
-  private lost(link: WakeLink) {
+  private lost(link: ConnectLink) {
     // Before it was live, a drop is a failed connect (`live` rejects).
     if (this.link !== link || !this.linkLive) return;
     this.link = undefined; this.linkLive = false;

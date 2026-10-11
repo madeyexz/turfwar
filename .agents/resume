@@ -16,7 +16,7 @@ if [ -n "${SPACETIME_MAINCLOUD_TOKEN:-}" ] && [ -x "$SPACETIME" ]; then
   echo "spacetime: Maincloud login"
 fi
 
-# Production owner identity (Taipei and Singapore `turfwar`), in the profile publish:prod reads.
+# Production owner identity (Taipei `turfwar`; Singapore's is the same), in the profile publish:prod reads.
 if [ -n "${TURFWAR_OWNER_TOKEN:-}" ] && [ -x "$SPACETIME" ]; then
   mkdir -p "$HOME/.config/turfwar"
   "$SPACETIME" --config-path "$HOME/.config/turfwar/instacloud-cli.toml" login --token "$TURFWAR_OWNER_TOKEN" >/dev/null 2>&1
@@ -34,7 +34,7 @@ if [ -n "${TURFWAR_TW_SSH_KEY:-}" ]; then
   echo "ssh: turfwar-tw"
 fi
 
-# InstaCloud (Singapore). `insta project link` in deploy/instacloud is still needed once per orb
+# InstaCloud (the retired Singapore service, kept to start or delete it). `insta project link` in deploy/instacloud is still needed once per orb
 # before `insta --agent …` commands.
 if [ -n "${INSTA_TOKEN:-}" ] && command -v insta >/dev/null && [ ! -s "$HOME/.insta/config.json" ]; then
   timeout 6 insta login --api-key "$INSTA_TOKEN" >/dev/null 2>&1 && echo "insta: logged in" || echo "insta: login failed"

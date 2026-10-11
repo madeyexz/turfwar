@@ -115,7 +115,7 @@ preview wired to the development database `lawbreaker-dev`. Releases are maintai
 | Use | Server | Database |
 | --- | --- | --- |
 | Production, the default | SpacetimeDB 2.10.2 self-hosted on **GCP, Taiwan** (`asia-east1-b`, `wss://tw.turfwar.ianhsiao.me`) | `turfwar` |
-| Singapore (production before Taipei; **no longer offered to players** since 2026-10-12, still published and read by `/admin`) | SpacetimeDB 2.10.2 self-hosted on **InstaCloud, Singapore** (`wss://play.turfwar.ianhsiao.me`) | `turfwar` |
+| Singapore (production before Taipei; **retired**: not offered to players since 2026-10-12, **stopped on 2026-10-11**, not deleted; its data is still on its volume) | SpacetimeDB 2.10.2 self-hosted on **InstaCloud, Singapore** (`wss://play.turfwar.ianhsiao.me`, returns 503 while stopped) | `turfwar` |
 | US East (the previous production; still published, a choice in Settings → Server, read by `/admin`) | Maincloud, US East | `3d-game-c4lhd` |
 | Development (`dev` previews) | Maincloud, US East | `lawbreaker-dev` |
 
@@ -146,18 +146,20 @@ before risky work with `gcloud compute disks snapshot turfwar-tw --zone asia-eas
 the image built; `sudo docker builder prune -af && sudo docker image prune -af` frees the build layers.
 
 The Singapore server (`deploy/instacloud/`, InstaCloud project `5ad5aa00-…`, compute service `stdb`)
-is a slim container with SpacetimeDB's two binaries and a 10 GiB `/data` volume. Players are no
-longer offered it (2026-10-12; in the first week 52 people loaded the lobby on it on 2026-10-07
-before Taipei became the default, and 5 after). It stays published (`publish:prod`) and readable in
-`/admin`, which waits up to 3 minutes for it because it **scales to zero**: with no traffic it
-suspends (or stops), and the next request wakes it, ~2 s from a suspend, ~20–30 s from a stop
-(the data volume is attached). The game has no code for a sleeping server any more: every server
-it offers is always on, so a failed ping or connect is just "can't reach it" (normal "connecting"
-copy, retries for 30 s, then "Can't reach the server" with Retry; `src/net/wake.ts`). Decommissioning
-Singapore is the owner's call. While it was a choice, traffic on an already-open WebSocket did not
-count as activity (only requests through the router do), so the platform suspended it mid-match,
-5–13 minutes in, dropping everyone (2026-10-07), and a client in a room requested `/v1/ping` once a
-minute to hold it up. `cd deploy/instacloud && insta --agent compute logs stdb --deploy` lists the
+is **retired**: players are no longer offered it (2026-10-12; in the first week 52 people loaded the
+lobby on it on 2026-10-07 before Taipei became the default, and 5 after), `bun run publish:prod`
+and `/admin` no longer touch it, and the owner stopped the service on 2026-10-11 (there are no real
+players left on it). The service and its 10 GiB `/data` volume still exist; deleting them is
+irreversible and is the owner's call. To start it again: `cd deploy/instacloud && insta --agent compute start stdb`
+(it then answers at `wss://play.turfwar.ianhsiao.me` within ~20–30 s; it also scales to zero when idle,
+so a request wakes it). `deploy/instacloud/` stays in the repo for that, and because the Taipei
+container is built from its Dockerfile and `start.sh`. It is a slim container with SpacetimeDB's two binaries.
+The game has no code for a sleeping or stopped server: every server it offers is always on, so a
+failed ping or connect is just "can't reach it" (normal "connecting" copy, retries for 30 s, then
+"Can't reach the server" with Retry; `src/net/connect.ts`). While it was a choice, traffic on an
+already-open WebSocket did not count as activity (only requests through the router do), so the platform
+suspended it mid-match, 5–13 minutes in, dropping everyone (2026-10-07), and a client in a room requested
+`/v1/ping` once a minute to hold it up. `cd deploy/instacloud && insta --agent compute logs stdb --deploy` lists the
 platform's suspends and wakes. `start.sh` supervises the server: SpacetimeDB never
 deletes its commitlog (100 players write ~12 GB an hour, ~3x smaller once sealed), so once the data
 passes 4 GB and nothing has been written for 2 minutes it restarts the server around
@@ -166,27 +168,25 @@ launch: 100 headless players in nine 6v6 rooms held 30 ticks/s; reducer round tr
 ~112 ms (Maincloud ~206 ms); ~21 KB/s down per player.
 
 The owner identity lives outside the repo in `~/.config/turfwar/` (made once with
-`deploy/instacloud/owner.sh <server-url>`, in its own CLI profile so the Maincloud login is untouched;
+`deploy/instacloud/owner.sh <server-url>` (it is also how the profile is made for Taipei), in its own CLI profile so the Maincloud login is untouched;
 its servers `taipei` and `instacloud`). Back that folder up: the identity that published `turfwar`
-is the only one that can update it, on Taipei and Singapore alike.
+is the only one that can update it, on Taipei (and it was on Singapore).
 To rebuild or reconfigure the container: `cd deploy/instacloud && insta --agent deploy . --group stdb --port 8080 --websocket`.
 
 Vercel production build variables are `VITE_SPACETIMEDB_URI=wss://tw.turfwar.ianhsiao.me` (Taipei) and
-`VITE_SPACETIMEDB_DATABASE=turfwar`; Singapore's address is in the code only for `/admin` (`SINGAPORE` in `src/admin/servers.ts`).
-Singapore's custom domain went live on 2026-10-07 (check it with
-`cd deploy/instacloud && insta --agent domain check play.turfwar.ianhsiao.me --group stdb`). The platform's own
-`wss://prod-main-stdb-2b7636-205bvw6d002.compute.instacloud-edge.com` reaches the same server; the client keys
-saved identities by server (`serverIdentityKey` in `src/net/ping.ts`), so either hostname keeps every player.
+`VITE_SPACETIMEDB_DATABASE=turfwar`. The client keys saved identities by server (`serverIdentityKey` in
+`src/net/ping.ts`; the key is still named `instacloud-singapore`, because Taipei took over Singapore's
+identities), so both of Taipei's hostnames (`tw.turfwar.ianhsiao.me` and its sslip.io name) keep every player.
 `scripts/wsping.ts` measures the round trip but registers a `probe` player (its `hello`): delete that row after
 running it against production. Do not use `same-origin` on Vercel; that proxy exists only in the
 development server.
 
 For module updates, run tests and module type checks, then publish non-destructively to production
-(Taipei, then Singapore, woken first, then the legacy Maincloud database):
+(Taipei, then the legacy Maincloud database; `deploy/publish-prod.sh`; Singapore is no longer published to):
 
 ```sh
 bun run test && bun run build && bun run typecheck:module
-bun run publish:prod                 # or: bun run publish:prod -- tw   (Taipei only; -- sg: Singapore only)
+bun run publish:prod                 # or: bun run publish:prod -- tw   (Taipei only)
 ```
 
 The dev database is published by hand:

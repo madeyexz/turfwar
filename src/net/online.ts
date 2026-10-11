@@ -15,7 +15,7 @@ import { newRoundStats, type BuyItem } from '../../shared/match/economy';
 import { plural, t } from '../ui/i18n';
 import { setPerson, track } from '../analytics';
 import { NetReporter, SAMPLE_EVERY_MS, type NetFields, type NetReport } from '../../shared/netstats';
-import type { WakeLink } from './wake';
+import type { ConnectLink } from './connect';
 import { serverIdentityKey } from './ping';
 import { currentServer } from './servers';
 import { currentDeviceKind } from '../game/device';
@@ -422,10 +422,10 @@ export interface PublicRoom extends RoomView { phase: string; round: number; ser
  * joining). Private rooms are listed too, marked `private`; their code never leaves this function,
  * so joining one still takes the code. `onChange` fires whenever a room opens, fills or closes. One attempt: `live`
  * resolves once the rooms have arrived and rejects if the connection fails first; `lost` is called
- * (once) if it drops after that. Retrying, and telling a sleeping server from a dead one, is the
- * caller's (src/net/wake.ts).
+ * (once) if it drops after that. Retrying is the
+ * caller's (src/net/connect.ts).
  */
-export function watchRooms(onChange: (rooms: PublicRoom[]) => void, lost: () => void): WakeLink {
+export function watchRooms(onChange: (rooms: PublicRoom[]) => void, lost: () => void): ConnectLink {
   const { uri, database } = onlineConfig();
   let conn: DbConnection | undefined, stopped = false, isLive = false, ended = false;
   let settle: { resolve(): void; reject(error: Error): void } = { resolve() {}, reject() {} };
