@@ -19,6 +19,8 @@ const db = process.argv[3] ?? 'turfwar';
 const mapId = process.argv[4] ?? 'taipei';
 const size = Number(process.argv[5] ?? 6);
 if (!/^wss?:\/\/(127\.0\.0\.1|localhost)(:\d+)?\/?$/.test(uri)) throw new Error(`Refusing non-local server ${uri}`);
+// Fail a stalled subscription or spawn instead of leaving the check running indefinitely.
+setTimeout(() => { console.error('FAIL: map check exceeded 180 seconds'); process.exit(1); }, 180_000).unref();
 if (typeof DecompressionStream === 'undefined') {
   const { gunzipSync } = await import('node:zlib');
   (globalThis as Record<string, unknown>).DecompressionStream = class {
@@ -45,6 +47,7 @@ const connect = (name: string, team: number) => new Promise<Conn>((resolve, reje
           const mine = conn.db.player.identity.find(conn.identity!);
           if (!mine) { setTimeout(ready, 50); return; }
           code.value ||= conn.db.match.id.find(mine.room)!.code || [...conn.db.myRoomCode.iter()].find(r => r.room === mine.room)?.code || '';
+          if (!code.value) { setTimeout(ready, 50); return; }
           conn.subscriptionBuilder().onApplied(() => resolve(conn))
             .subscribe([`SELECT * FROM roster WHERE room = ${mine.room}`, `SELECT * FROM frame WHERE id = ${mine.room}`]);
         };
@@ -93,7 +96,13 @@ class Walker {
   }
 }
 const wa = new Walker(a, start.a), wb = new Walker(b, start.b);
-wa.plan(start.b); wb.plan(start.a);
+// Meet on the same route. Independent A→B and B→A paths can go around opposite sides of
+// an opaque building and exchange bases without ever seeing one another.
+const route = findPath(nav, nearestNode(nav, start.a.x, start.a.y, start.a.z), nearestNode(nav, start.b.x, start.b.y, start.b.z));
+if (!route.length) throw new Error('No route between the two spawns');
+const middle = route[Math.floor(route.length / 2)];
+const meeting = { x: nav.x[middle], y: nav.y[middle], z: nav.z[middle] };
+wa.plan(meeting); wb.plan(meeting);
 let lineAt = -1, t = 0;
 for (; t < 120; t += 0.05) {
   await Promise.all([wa.step(), wb.step()]);
@@ -116,7 +125,7 @@ const hitsBefore = after.shots;
 await fire({ x: eye.x + 200, y: eye.y, z: eye.z }); await wait(500);
 // The server refuses a claim from far off the shooter, or fires from the shooter's own eye instead: never from the claimed spot.
 const mine = shots.filter(s => s.shooter === soldierOf(a)), last = mine[mine.length - 1];
-const refused = mine.length === hitsBefore || (!!last && Math.hypot(last.from.x - (eye.x + 200), last.from.z - eye.z) > 100);
+const refused = mine.length === hitsBefore || (!!last && Math.hypot(last.from.x - eye.x, last.from.y - eye.y, last.from.z - eye.z) < 1);
 clearInterval(keepalive);
 const result = {
   map: mapId, size, room: code.value, rulesMap: roomRules.mapId,
@@ -125,7 +134,7 @@ const result = {
   shot: { ammoBefore: ammo, ammoAfter: after.ammo, targetHealthBefore: health, targetHealthAfter: after.health, shotsInFrame: after.shots, farClaimNotHonoured: refused },
 };
 console.log(JSON.stringify(result, null, 1));
-const ok = result.rulesMap === mapId && result.spawned.swat && result.spawned.militia && lineAt >= 0 && walkCorrections.a === 0 && walkCorrections.b === 0 && after.ammo < ammo && after.shots >= 1 && refused;
+const ok = result.rulesMap === mapId && result.spawned.swat && result.spawned.militia && lineAt >= 0 && walkCorrections.a === 0 && walkCorrections.b === 0 && after.ammo < ammo && after.health < health && after.shots >= 1 && refused;
 console.log(ok ? 'PASS' : 'FAIL');
 a.disconnect(); b.disconnect();
 process.exit(ok ? 0 : 1);

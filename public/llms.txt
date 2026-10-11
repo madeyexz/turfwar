@@ -31,7 +31,6 @@ Two names, one game: 角頭械鬥 (Traditional Chinese) and Turf War: Taipei (En
 - [GitHub repository](https://github.com/madeyexz/turfwar): TypeScript, Three.js and SpacetimeDB; MIT licensed code
 - [Gameplay reference](https://github.com/madeyexz/turfwar/blob/main/docs/GAMEPLAY.md): every rule, weapon, map, vehicle and control with the numbers
 - [Architecture](https://github.com/madeyexz/turfwar/blob/main/docs/ARCHITECTURE.md): multiplayer design, performance and known limits
-- [Trailer (English, 30 s)](https://turfwar.ianhsiao.me/media/turfwar-trailer-30s.mp4) · [預告片 (中文, 30 s)](https://turfwar.ianhsiao.me/media/turfwar-trailer-30s.zh-TW.mp4)
 
 ## License and credits
 

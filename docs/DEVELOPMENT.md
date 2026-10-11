@@ -54,6 +54,11 @@ identities: the same filters share a room, different maps split, Any joins a spe
 `quick_join` and `join` still work, bad sizes, modes and maps are refused, and after a match fixed rooms
 keep their map (and mode) while Any rooms rotate (it ends matches early with `spacetime sql`, owner-only).
 `scripts/loadtest.ts` takes `--mode` and `--map` to Play Online with filters.
+`bun scripts/mapcheck.ts ws://127.0.0.1:<port> <db> <map> <size>` checks two independent clients
+spawn in their bases, walk to a common point without corrections, and replicate a shot that spends
+ammo and damages the target. A false shot origin must be refused or replaced with the shooter's
+own eye. Use `taipei 6`, `xinyi 24`, and `taipei101 6` for the replaced maps. The check stops after
+180 seconds. Scripted clients and bot tests do not replace human playtesting or a device FPS check.
 `bun scripts/slippercheck.ts ws://127.0.0.1:<port> <db>` (local only) checks the thrown 藍白拖 with two
 identities in a private 1v1 (placed with `spacetime sql`, owner-only): no wind-up does 30, a second throw
 with an empty hand does nothing, the other client's frame shows the slipper, walking onto it picks it
@@ -83,6 +88,10 @@ match every minute (not in production builds).
 The map picker shows a picture of each map (`public/media/maps/<id>.webp`, 480×270, under 40 KB).
 `bun scripts/mapshots.ts [--url <dev server>] [map …]` shoots them from the level preview through the
 agent-browser CLI, with the dev server running; re-shoot a map after changing it.
+The 2026-10-11 map replacement also removed the old trailers and screenshots containing the
+superseded geometry, and regenerated the map thumbnails and social previews. New trailer footage
+must use the authored maps. Historical commits and release titles remain unchanged; no Git history
+was rewritten.
 
 GPU-compressed textures: the surface sets (`public/assets/tex/*.webp`)
 ship as KTX2 copies that the game transcodes to the GPU's own format (ASTC, ETC2, BC7…) in a worker
