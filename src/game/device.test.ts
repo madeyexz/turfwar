@@ -133,6 +133,24 @@ describe('in-app browsers', () => {
     expect(inAppBrowserName(MAC)).toBeUndefined();
   });
 
+  it('recognises Messenger, Facebook, LINE and TikTok as well, Messenger before Facebook', () => {
+    const ios = (token: string) => env({ ...IPHONE, userAgent: `${IPHONE.userAgent} ${token}` });
+    const apps: [string, string][] = [
+      ['messenger', '[FBAN/MessengerForiOS;FBAV/450.0.0.30.109;FBBV/1;FBDV/iPhone15,2;FBMD/iPhone;FBSN/iOS;FBSV/17.5;FBLC/zh_TW;FBOP/5]'],
+      ['facebook', '[FBAN/FBIOS;FBAV/450.0.0.30.109;FBBV/1;FBDV/iPhone15,2;FBMD/iPhone;FBSN/iOS;FBSV/17.5;FBLC/zh_TW;FBOP/5]'],
+      ['instagram', 'Instagram 330.0.0.30.109 (iPhone15,2; iOS 17_5; zh_TW; zh-Hant-TW; scale=3.00; 1179x2556; 123456789)'],
+      ['line', 'Line/13.20.0'],
+      ['tiktok', 'musical_ly_34.1.0 JsSdk/2.0 NetType/WIFI Channel/App Store ByteLocale/zh-Hant-TW'],
+    ];
+    for (const [name, token] of apps) {
+      expect(inAppBrowserName(ios(token)), name).toBe(name);
+      expect(isInAppBrowser(ios(token)), name).toBe(true);
+    }
+    expect(inAppBrowserName(env({ ...ANDROID, userAgent: ANDROID.userAgent.replace(')', '; wv)') + ' [FB_IAB/Orca-Android;FBAV/450.0;]' }))).toBe('messenger');
+    expect(inAppBrowserName(env({ ...ANDROID, userAgent: ANDROID.userAgent.replace(')', '; wv)') + ' [FB_IAB/FB4A;FBAV/450.0;]' }))).toBe('facebook');
+    expect(inAppBrowserName(env({ ...ANDROID, userAgent: ANDROID.userAgent.replace(')', '; wv)') + ' trill_340000 BytedanceWebview/d8a21c6' }))).toBe('tiktok');
+  });
+
   it('offers Chrome on Android only, keeping the page and its query', () => {
     const url = 'https://turfwar.ianhsiao.me/?utm_source=threads';
     expect(openInBrowserUrl(THREADS_ANDROID, url)).toBe(`intent://turfwar.ianhsiao.me/?utm_source=threads#Intent;scheme=https;package=com.android.chrome;S.browser_fallback_url=${encodeURIComponent(url)};end`);

@@ -37,22 +37,27 @@ export function readEnv(): DeviceEnv {
 export const isIPad = (env: DeviceEnv) => /iPad/.test(env.userAgent) || (env.platform === 'MacIntel' && env.maxTouchPoints > 1);
 export const isIOS = (env: DeviceEnv) => /iPhone|iPod/.test(env.userAgent) || isIPad(env);
 export const isAndroid = (env: DeviceEnv) => /Android/i.test(env.userAgent);
-/**
- * In-app browsers (Threads, whose app calls itself Barcelona; Instagram, Facebook, LINE…) cannot
- * install a web app or turn to landscape: the game plays sideways there, and the real browser is a tap away.
- */
-export const isInAppBrowser = (env: DeviceEnv) => /Barcelona|Threads|FBAN|FBAV|Instagram|Line\/|MicroMessenger|; wv\)/i.test(env.userAgent);
+/** The apps whose built-in browser we recognise (analytics' `in_app`); `webview` is any other Android web view. */
+export type InAppBrowser = 'threads' | 'instagram' | 'messenger' | 'facebook' | 'line' | 'tiktok' | 'wechat' | 'webview';
 
-/** Which app's in-app browser this is (analytics), or undefined for a regular browser. */
-export function inAppBrowserName(env: DeviceEnv): 'threads' | 'instagram' | 'facebook' | 'line' | 'wechat' | 'webview' | undefined {
+/**
+ * Which app's in-app browser this is, or undefined for a regular browser. In-app browsers (Threads,
+ * whose app calls itself Barcelona; Instagram, Messenger, Facebook, LINE, TikTok…) cannot install a web
+ * app or turn to landscape, often keep storage and audio to themselves, and the real browser is a tap away.
+ * Order matters: Messenger's user agent also says FBAN/FBAV, and every Android app says `; wv)`.
+ */
+export function inAppBrowserName(env: DeviceEnv): InAppBrowser | undefined {
   const ua = env.userAgent;
   if (/Barcelona|Threads/i.test(ua)) return 'threads';
   if (/Instagram/i.test(ua)) return 'instagram';
-  if (/FBAN|FBAV/i.test(ua)) return 'facebook';
+  if (/Messenger|FB_IAB\/Orca/i.test(ua)) return 'messenger';
+  if (/FBAN|FBAV|FB_IAB/i.test(ua)) return 'facebook';
   if (/Line\//i.test(ua)) return 'line';
+  if (/musical_ly|TikTok|BytedanceWebview|trill_/i.test(ua)) return 'tiktok';
   if (/MicroMessenger/i.test(ua)) return 'wechat';
   return /; wv\)/i.test(ua) ? 'webview' : undefined;
 }
+export const isInAppBrowser = (env: DeviceEnv) => inAppBrowserName(env) !== undefined;
 
 /**
  * A link that opens `url` in Chrome from an Android in-app browser (an intent URL); none elsewhere —

@@ -147,6 +147,10 @@ body.sideways { --safe-t: env(safe-area-inset-right, 0px); --safe-r: env(safe-ar
 .install-hint a.inst-go { display: inline-flex; align-items: center; text-decoration: none; }
 .install-hint .inst-go { min-height: 44px; padding: 0 16px; border: 1px solid var(--accent); background: rgba(127, 246, 255, 0.16); color: var(--accent); font-weight: 700; letter-spacing: 0.1em; text-transform: uppercase; }
 .install-hint .x { min-width: 44px; min-height: 44px; border: 1px solid var(--line); background: none; color: var(--muted); font-size: 16px; }
+/* An app's browser has more to say and an extra button: the buttons go under the text, not beside it. */
+.install-hint.in-app { grid-template-columns: auto 1fr; }
+.install-hint.in-app .mark { grid-row: span 3; }
+.install-hint.in-app .acts { grid-column: 2; grid-row: auto; justify-content: flex-end; }
 .install-hint.tip-only { grid-template-columns: 1fr auto; }
 .install-hint.tip-only p.tip { grid-column: 1; border: 0; padding: 0; }
 .install-hint.tip-only .acts { grid-column: 2; grid-row: 1; }
