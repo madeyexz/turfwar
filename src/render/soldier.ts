@@ -210,6 +210,9 @@ const v1 = new THREE.Vector3(), v2 = new THREE.Vector3(), v3 = new THREE.Vector3
 const attachKey = (a: Attachments = {}) => ATTACHMENT_SLOTS.map(c => a[c] ?? '').join('|');
 
 /** A fully animated third-person soldier (remote players and bots). */
+/** Where a soldier's body faces: the aim, or for a scooter rider the bike's heading (never the aim). */
+export const bodyFacing = (p: Pick<SoldierPose, 'yaw' | 'hips'>) => (p.hips === undefined ? p.yaw : p.hips);
+
 export class SoldierView {
   readonly root = new THREE.Group();
   readonly gun = new THREE.Group();
@@ -323,10 +326,11 @@ export class SoldierView {
   private meshesOf(o: THREE.Object3D) { const out: THREE.Mesh[] = []; o.traverse(c => { const m = c as THREE.Mesh; if (m.isMesh && !(m.material as THREE.Material).transparent) out.push(m); }); return out; }
 
   /**
-   * The body's facing: the aim, or for a rider the bike's heading turned toward the aim by the
-   * torso's twist (never round on the seat: the whole body used to follow a look behind).
+   * The body's facing: the aim, or for a rider exactly the bike's heading. A rider never turns on
+   * the seat: as the camera (and with it the aim) swung round, the whole body used to turn with it.
+   * Only the spine, head and arms turn toward the aim (below).
    */
-  private bodyYaw(p: SoldierPose) { return p.hips === undefined ? p.yaw : p.hips + riderTwist(p.yaw, p.hips); }
+  private bodyYaw(p: SoldierPose) { return bodyFacing(p); }
 
   update(dt: number, p: SoldierPose) {
     // Distant and hidden soldiers animate at a reduced rate; between updates they only move.
@@ -347,7 +351,8 @@ export class SoldierView {
     // ---- Locomotion blend ----
     const sin = Math.sin(p.yaw), cos = Math.cos(p.yaw);
     const forward = -(p.vx * sin + p.vz * cos), strafe = p.vx * cos - p.vz * sin;
-    const speed = Math.hypot(p.vx, p.vz);
+    // A rider sits still on the bike, whatever its speed (the legs used to walk on the seat).
+    const speed = p.hips === undefined ? Math.hypot(p.vx, p.vz) : 0;
     const target: Partial<Record<ClipName, number>> = {};
     if (!p.alive) target.death = 1;
     else if (using) target.crouchIdle = 1;
@@ -368,9 +373,8 @@ export class SoldierView {
     let moveAngle = speed > 0.5 ? Math.atan2(strafe, forward) : 0;
     if (backwards) moveAngle = Math.atan2(-strafe, -forward);
     const clampAngle = Math.max(-1.1, Math.min(1.1, moveAngle));
-    // On a seat the hips and legs stay on the bike (exactly, every frame): the body turns toward the
-    // aim only as far as the torso twists; the arms bring the weapon the rest of the way.
-    if (p.hips !== undefined) this.legYaw = riderTwist(p.yaw, p.hips);
+    // On a seat the hips and legs stay on the bike (the root faces it): no leg twist.
+    if (p.hips !== undefined) this.legYaw = 0;
     else this.legYaw += (clampAngle * (p.sprint ? 0.3 : 1) - this.legYaw) * Math.min(1, dt * 10);
     for (const [name, action] of this.actions) {
       const w = this.weights.get(name)! + ((target[name] ?? 0) - this.weights.get(name)!) * Math.min(1, dt * (p.alive ? 12 : 30));
@@ -390,6 +394,13 @@ export class SoldierView {
     rotateWorld(pelvis, up, -this.legYaw);
     rotateWorld(spine1, up, this.legYaw * 0.6);
     rotateWorld(spine2, up, this.legYaw * 0.4);
+    if (p.hips !== undefined) {
+      // A rider turns toward the aim from the waist up, at most RIDER_TWIST spread up the spine, the
+      // head a little further; the arms bring the weapon the rest of the way.
+      const off = wrapAngle(p.yaw - p.hips), twist = riderTwist(p.yaw, p.hips);
+      rotateWorld(spine1, up, twist * 0.3); rotateWorld(spine2, up, twist * 0.35); rotateWorld(spine3, up, twist * 0.35);
+      rotateWorld(this.bones.get('neck_01')!, up, Math.max(-0.6, Math.min(0.6, off - twist)));
+    }
     const right = v3.set(Math.cos(p.yaw), 0, -Math.sin(p.yaw));
     const fit = GUN_FIT[p.weapon];
     const pistol = fit.kind !== 'long';
