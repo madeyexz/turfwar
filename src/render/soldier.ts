@@ -4,7 +4,7 @@ import { RoundedBoxGeometry } from 'three/examples/jsm/geometries/RoundedBoxGeom
 import { mergeGeometries } from 'three/examples/jsm/utils/BufferGeometryUtils.js';
 import * as SkeletonUtils from 'three/examples/jsm/utils/SkeletonUtils.js';
 import type { Assets } from '../assets';
-import { dirFromAngles, wrapAngle } from '../../shared/math';
+import { dirFromAngles } from '../../shared/math';
 import { riderTwist } from '../../shared/vehicles';
 import { curlFingers, orientHand, restorePose, rotateWorld, snapshotPose, solveArm } from './rig';
 import { ATTACHMENT_SLOTS, WEAPONS, type Attachments, type WeaponId } from '../../shared/weapons';
@@ -206,12 +206,22 @@ const CLIP_SPEED: Partial<Record<ClipName, number>> = { walk: 1.6, jog: 4.4, spr
 const LOD_INTERVAL = [1, 2, 4, 8] as const;
 
 const up = new THREE.Vector3(0, 1, 0);
-const v1 = new THREE.Vector3(), v2 = new THREE.Vector3(), v3 = new THREE.Vector3(), q1 = new THREE.Quaternion(), q2 = new THREE.Quaternion();
+const v1 = new THREE.Vector3(), v2 = new THREE.Vector3(), v3 = new THREE.Vector3(), v4 = new THREE.Vector3(), q1 = new THREE.Quaternion(), q2 = new THREE.Quaternion();
 const attachKey = (a: Attachments = {}) => ATTACHMENT_SLOTS.map(c => a[c] ?? '').join('|');
 
 /** A fully animated third-person soldier (remote players and bots). */
 /** Where a soldier's body faces: the aim, or for a scooter rider the bike's heading (never the aim). */
 export const bodyFacing = (p: Pick<SoldierPose, 'yaw' | 'hips'>) => (p.hips === undefined ? p.yaw : p.hips);
+
+/**
+ * The bladed shooting stance's torso turn (rad): the support shoulder leads, more with a long gun. None
+ * while sprinting, nor on a scooter: the rider sits square to the bike (the turn twisted the rider
+ * sideways on the seat, swinging as the aim moved).
+ */
+export const stanceBlade = (p: Pick<SoldierPose, 'sprint' | 'hips'>, pistol: boolean) => (p.sprint || p.hips !== undefined ? 0 : pistol ? -0.15 : -0.5);
+
+/** How far a soldier's body bends for the aim's pitch: a rider stays upright on the bike (±0.25 rad at most). */
+export const riderPitch = (p: Pick<SoldierPose, 'pitch' | 'hips'>) => (p.hips === undefined ? p.pitch : Math.max(-0.25, Math.min(0.25, p.pitch)));
 
 export class SoldierView {
   readonly root = new THREE.Group();
@@ -394,13 +404,10 @@ export class SoldierView {
     rotateWorld(pelvis, up, -this.legYaw);
     rotateWorld(spine1, up, this.legYaw * 0.6);
     rotateWorld(spine2, up, this.legYaw * 0.4);
-    if (p.hips !== undefined) {
-      // A rider turns toward the aim from the waist up, at most RIDER_TWIST spread up the spine, the
-      // head a little further; the arms bring the weapon the rest of the way.
-      const off = wrapAngle(p.yaw - p.hips), twist = riderTwist(p.yaw, p.hips);
-      rotateWorld(spine1, up, twist * 0.3); rotateWorld(spine2, up, twist * 0.35); rotateWorld(spine3, up, twist * 0.35);
-      rotateWorld(this.bones.get('neck_01')!, up, Math.max(-0.6, Math.min(0.6, off - twist)));
-    }
+    // A rider's body stays square on the bike, torso included (any turn toward the camera's aim read
+    // as the rider spinning round on the seat): only the head looks toward the aim, at most
+    // RIDER_TWIST, and the arms bring the weapon round.
+    if (p.hips !== undefined) rotateWorld(this.bones.get('neck_01')!, up, riderTwist(p.yaw, p.hips));
     const right = v3.set(Math.cos(p.yaw), 0, -Math.sin(p.yaw));
     const fit = GUN_FIT[p.weapon];
     const pistol = fit.kind !== 'long';
@@ -420,18 +427,21 @@ export class SoldierView {
       this.gun.visible = false;
       return;
     }
-    const pitch = p.pitch;
+    // A rider bends for the aim only a little, and about the bike's side axis: bending about the aim's
+    // side axis rolled the rider over sideways whenever the aim was not straight ahead.
+    const pitch = riderPitch(p);
+    const bend = p.hips === undefined ? right : v4.set(Math.cos(p.hips), 0, -Math.sin(p.hips));
     // Bladed shooting stance: torso turns so the support shoulder leads; head stays on target.
-    const blade = p.sprint ? 0 : pistol ? -0.15 : -0.5;
+    const blade = stanceBlade(p, pistol);
     rotateWorld(spine2, up, blade * 0.5);
     rotateWorld(spine3, up, blade * 0.5);
     rotateWorld(this.bones.get('neck_01')!, up, -blade * 0.6);
     rotateWorld(this.bones.get('Head')!, up, -blade * 0.4);
-    rotateWorld(spine2, right, pitch * 0.35);
-    rotateWorld(spine3, right, pitch * 0.35);
+    rotateWorld(spine2, bend, pitch * 0.35);
+    rotateWorld(spine3, bend, pitch * 0.35);
     this.flinch = Math.max(0, this.flinch - dt * 5);
     if (this.flinch > 0) rotateWorld(spine3, up, this.flinch * 0.25 * this.flinchDir);
-    rotateWorld(this.bones.get('neck_01')!, right, pitch * 0.3);
+    rotateWorld(this.bones.get('neck_01')!, bend, pitch * 0.3);
 
     // ---- Weapon placement ----
     this.showGun(p.weapon, p.attachments);
