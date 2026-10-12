@@ -120,7 +120,8 @@ nav.sections a { flex: none; padding: 5px 10px; border-radius: 8px; color: var(-
 nav.sections a:hover { color: var(--ink); background: var(--panel-2); }
 nav.sections a:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
 /* The charts' range and Split / Combined, at the right of the nav: one row scoping every chart. */
-.chart-controls { flex: none; display: flex; align-items: center; gap: 8px; margin-left: auto; flex-wrap: wrap; }
+.chart-controls { flex: 0 1 auto; min-width: 0; display: flex; align-items: center; gap: 8px; margin-left: auto; flex-wrap: wrap; }
+@media (max-width: 600px) { .chart-controls > span { display: none; } .seg button { padding: 4px 9px; } }
 .chart-controls > span { color: var(--faint); font-size: 13px; }
 .seg { display: inline-flex; padding: 2px; background: var(--panel); border: 1px solid var(--line); border-radius: 9px; }
 .seg button { border: 0; background: none; padding: 4px 11px; border-radius: 7px; font-weight: 600; font-size: 13px; color: var(--muted); font-variant-numeric: tabular-nums; }
