@@ -277,7 +277,7 @@ in hand draws the secondary), from the hip with extra spread and kick, no aiming
 binoculars or grenades. The mouse aims independently of the steering: while you aim (or fire) the
 camera holds its direction as the bike turns under it, and swings back behind the bike a moment
 after you stop; the crosshair is the camera's centre in both the chase and first-person views.
-Riders' legs stay on the bike while the torso turns to the aim (for everyone watching too).
+A rider always sits facing the bike (for everyone watching too): looking round turns only the upper body a little (at most about 30°), the head a little further, and the arms bring the weapon the rest of the way.
 
 Holding the handbrake (Space) through a turn at speed drifts a car or a scooter: rear grip drops, the
 body swings round faster than its velocity, so it slides at an angle; speed bleeds gently; counter-

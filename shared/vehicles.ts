@@ -102,10 +102,11 @@ export const VEHICLES: Record<VehicleKind, VehicleSpec> = {
 };
 
 /**
- * How far (rad) a scooter rider's torso turns from the bike's heading toward the aim: the hips and
- * legs stay on the seat, the arms bring the weapon round the rest of the way.
+ * How far (rad) a scooter rider's upper body turns from the bike's heading toward the aim (spread up
+ * the spine; the body itself always faces the bike): the head turns a little further and the arms
+ * bring the weapon round the rest of the way. Kept small so the rider never looks spun round.
  */
-export const RIDER_TWIST = 1.1;
+export const RIDER_TWIST = 0.5;
 /** The rider's torso twist from the heading toward the aim, within RIDER_TWIST either way. */
 export const riderTwist = (aimYaw: number, heading: number) => clamp(wrapAngle(aimYaw - heading), -RIDER_TWIST, RIDER_TWIST);
 
