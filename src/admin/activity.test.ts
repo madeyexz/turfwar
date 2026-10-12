@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { averageAtOnce, ccuByHour, compact, dauByDay, firstActiveDay, kpiChange, launchDay, pccuByDay, rollingActive } from './activity';
+import { averageAtOnce, ccuByHour, compact, dauByDay, firstActiveDay, kpiChange, launchDay, pccuByDay, qualifying, rollingActive } from './activity';
 import type { PeakOf } from './peak';
 
 const p = (...days: number[]) => ({ days: new Set(days) });
@@ -102,3 +102,32 @@ describe('helpers', () => {
     expect(new Date(launchDay('10-07') * 86_400_000).toISOString().slice(0, 10)).toBe('2026-10-07');
   });
 });
+
+describe('active-user bar (minutes of Online play on the day)', () => {
+  const m = (min: number) => min * 60;
+  const players = [
+    { firstDay: 9, days: new Set([10, 11, 12]), daySeconds: new Map([[10, m(2)], [11, m(6)], [12, m(3)]]) },
+    { firstDay: 11, days: new Set([11]), daySeconds: new Map([[11, m(10)]]) },
+    { firstDay: 12, days: new Set([12]), daySeconds: new Map([[12, 30]]), openSeconds: m(5) }, // today: 30 s credited + 5 min still open
+    { firstDay: 12, days: new Set([12]) }, // connected, never played
+  ];
+
+  it('with no bar keeps every active day and first day', () => {
+    expect(qualifying(players, 0, 12).map(q => [q.firstDay, [...q.days]])).toEqual([[9, [10, 11, 12]], [11, [11]], [12, [12]], [12, [12]]]);
+  });
+
+  it('keeps only days with enough play, today counting the open stretch, and drops players who never reached it', () => {
+    const three = qualifying(players, 3, 12);
+    expect(three.map(q => [q.firstDay, [...q.days].sort()])).toEqual([[11, [11, 12]], [11, [11]], [12, [12]]]);
+    expect([...dauByDay(three, 10, 12)]).toEqual([[10, 0], [11, 2], [12, 2]]);
+    const five = qualifying(players, 5, 12);
+    expect([...dauByDay(five, 10, 12)]).toEqual([[10, 0], [11, 2], [12, 1]]);
+    expect(qualifying(players, 10, 12).map(q => [...q.days])).toEqual([[11]]);
+  });
+
+  it('is exact at the threshold', () => {
+    expect(qualifying([{ firstDay: 1, days: new Set([1]), daySeconds: new Map([[1, 300]]) }], 5, 9)).toHaveLength(1);
+    expect(qualifying([{ firstDay: 1, days: new Set([1]), daySeconds: new Map([[1, 299]]) }], 5, 9)).toHaveLength(0);
+  });
+});
+

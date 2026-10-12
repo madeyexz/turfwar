@@ -378,7 +378,10 @@ active on any of the 30 UTC days ending that day; drawn faint while the window r
 day), DAU/MAU, **CCU per hour** (humans in Online rooms; the average at once is `room_hour` human-minutes ÷ 60, sampled
 once a minute per live room, falling back to `player_hour` play time ÷ 3600 for hours before `room_hour` began; the peak
 at once is `peak_hour`) and **PCCU per day** (the highest `peak_hour` of the UTC day, with launch-week peaks rebuilt from
-PostHog where nothing was recorded), plus a card naming each source and the first record the server has. All of it is
+PostHog where nothing was recorded), plus a card naming each source and the first record the server has. An **Active user** switch above the tiles sets what DAU,
+MAU and DAU/MAU count: **Joined** (the `player_day` definition above) or at least **3, 5 or 10 minutes** of Online play on the
+UTC day, summed over the day from `player_day_time` (today adds a match still in progress; lobby time, Solo and Practice never
+count). It opens on 5 min+ and is remembered per browser with the chart controls (`qualifying` in `src/admin/activity.ts`). All of it is
 computed in the page from existing admin views. Every chart has one shared tooltip: hover a day or hour, or focus the
 chart and use ←/→. Then the **Scorecard** (`src/admin/growth.ts`): one headline figure per
 funnel stage graded against `TARGETS` (on track / watch / problem), what to look at when it is off, and a "Focus

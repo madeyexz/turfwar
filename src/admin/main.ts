@@ -19,7 +19,7 @@ import { deviceCounts, deviceLabel, deviceShare, fmtShare, type DeviceOf } from 
 import { activeBetween, cameBack, change, cohorts, daysById, firstDayOf, fmtRetention, newBetween, RETENTION_DAYS, type Cell } from './retention';
 import { releasesByDay, releaseTitle, type Release } from './releases';
 import { peakBetween, peakFor, peaksBy, type PeakOf } from './peak';
-import { averageAtOnce, ccuByHour, compact, dauByDay, firstActiveDay, kpiChange, launchDay, pccuByDay, rollingActive, type DayPeak } from './activity';
+import { ACTIVE_MINUTES, averageAtOnce, ccuByHour, compact, dauByDay, firstActiveDay, kpiChange, launchDay, pccuByDay, qualifying, rollingActive, type ActiveMinutes, type DayPeak } from './activity';
 import { attachTooltips, legend, sparkline, timeChart, tipAttr, type TipRow } from './chart';
 import { averageDaily, BEGONE_EVIDENCE, BEGONE_FUNNEL, BEGONE_TAIWAN, LAUNCH_PEAKS, versus } from './benchmarks';
 import { activeByDay, GROUPS, niceStep, pingByDay, sideOf, SIDES, splitBySide, sumByDay, type DayNet as DayNetOf, type GroupId, type Side } from './groups';
@@ -183,11 +183,14 @@ const rangeDays = () => (charts.range === '90d' ? 90 : charts.range === '30d' ? 
 /** Hours the range spans, for the hourly CCU chart. */
 const rangeHours = () => (charts.range === '48h' ? 48 : rangeDays() * 24);
 const CHART_KEY = 'turfwar.admin.charts';
-let charts: { range: Range; combined: boolean } = (() => {
+/** The active-user bar the page opens with: 5 minutes of Online play on the day. */
+const DEFAULT_ACTIVE: ActiveMinutes = 5;
+let charts: { range: Range; combined: boolean; active: ActiveMinutes } = (() => {
   try {
-    const v = JSON.parse(localStorage.getItem(CHART_KEY) ?? '{}') as { range?: string; combined?: boolean };
-    return { range: RANGES.some(r => r.id === v.range) ? v.range as Range : '30d', combined: v.combined === true };
-  } catch { return { range: '30d', combined: false }; }
+    const v = JSON.parse(localStorage.getItem(CHART_KEY) ?? '{}') as { range?: string; combined?: boolean; active?: number };
+    const active = (ACTIVE_MINUTES as readonly number[]).includes(v.active ?? -1) ? v.active as ActiveMinutes : DEFAULT_ACTIVE;
+    return { range: RANGES.some(r => r.id === v.range) ? v.range as Range : '30d', combined: v.combined === true, active };
+  } catch { return { range: '30d', combined: false, active: DEFAULT_ACTIVE }; }
 })();
 const saveCharts = () => { try { localStorage.setItem(CHART_KEY, JSON.stringify(charts)); } catch { /* storage disabled */ } };
 const setConn = (s: 'wait' | 'live' | 'off', title: string) => { connDot.className = `dot ${s}`; connDot.title = title; };
@@ -552,6 +555,12 @@ function dashboard() {
     render();
     const sel = b.dataset.range ? `[data-range="${b.dataset.range}"]` : `[data-combined="${b.dataset.combined}"]`;
     requestAnimationFrame(() => chartControls.querySelector<HTMLButtonElement>(`button${sel}`)?.focus());
+  }));
+  body.querySelectorAll<HTMLButtonElement>('.active-pick button[data-active]').forEach(b => b.addEventListener('click', () => {
+    charts.active = Number(b.dataset.active) as ActiveMinutes;
+    saveCharts();
+    render();
+    requestAnimationFrame(() => body.querySelector<HTMLButtonElement>(`.active-pick button[data-active="${charts.active}"]`)?.focus());
   }));
   body.querySelector('#more')?.addEventListener('click', () => { playerLimit += 200; render(); });
   body.querySelector('#revoke')?.addEventListener('click', () => {
@@ -1146,7 +1155,9 @@ function kpi(o: { label: string; value: string; change?: ReturnType<typeof kpiCh
 
 const KPI_DEFS = {
   dau: 'Players active on a UTC day: they connected to Online on this server (pressed Play Online, reconnected or entered a room). Solo and Practice never reach the server. From player_day.',
+  dauBar: (m: number) => `Players with at least ${m} minutes of Online play on a UTC day (summed over the day; today includes a match still in progress). Lobby time, Solo and Practice do not count. From player_day_time.`,
   mau: 'Rolling 30 days: players active on any of the 30 UTC days ending today (today included). From player_day.',
+  mauBar: (m: number) => `Rolling 30 days: players who reached ${m} minutes of Online play on at least one of the 30 UTC days ending today (today included). From player_day_time.`,
   stick: 'Average DAU over the last 7 complete UTC days ÷ today\'s MAU (rolling 30 days): how many of the month\'s players show up on a typical day.',
   ccu: 'Players in Online rooms right now (humans only; the lobby and the room list do not count).',
   pccu: 'Peak concurrent users: the most players in Online rooms at once during the UTC day, from peak_hour (raised at every room entry and checked every minute).',
@@ -1183,14 +1194,20 @@ function keyMetrics(players: Player[], o: Overview | undefined, today: number, n
   const peaks = peakRows(), rooms = roomHourRows();
   const cov = coverage(players, peaks, rooms);
   const narrow = innerWidth < 600;
+  // The active-user bar (the switch above the tiles): minutes of Online play on the day, or any connection.
+  const bar: ActiveMinutes = views.dayTime === 'on' ? charts.active : 0;
+  const active = qualifying(players, bar, today);
+  /** The first day this bar's counts rest on (play time began later than player_day on older servers). */
+  const start = bar ? cov.dayTime : cov.day;
+  const tag = bar ? ` · ${bar} min+` : '';
 
   // Daily series over the range (and the 14 days the sparklines need, and the 7 before for changes).
   const span = Math.max(rangeDays(), 14);
   const from = today - span + 1;
-  const dau = dauByDay(players, from - 7, today);
-  const mau = rollingActive(players, from - 30, today);
+  const dau = dauByDay(active, from - 7, today);
+  const mau = rollingActive(active, from - 30, today);
   const pccu = views.peak === 'on' ? pccuByDay(peaks, from - 7, today) : new Map<number, DayPeak | undefined>();
-  const fresh = activeByDay(players, from, today);
+  const fresh = activeByDay(active, from, today);
   const dayKeys = Array.from({ length: rangeDays() }, (_, i) => today - rangeDays() + 1 + i);
   const last14 = Array.from({ length: 14 }, (_, i) => today - 13 + i);
   const avg = (from: number, to: number) => { let n = 0; for (let d = from; d <= to; d++) n += dau.get(d) ?? 0; return n / (to - from + 1); };
@@ -1210,10 +1227,10 @@ function keyMetrics(players: Player[], o: Overview | undefined, today: number, n
   const pToday = pccu.get(today), pYesterday = pccu.get(today - 1);
   const week = (to: number) => { let best: DayPeak | undefined, day = to; for (let d = to - 6; d <= to; d++) { const p = pccu.get(d); if (p && (!best || p.peak > best.peak)) { best = p; day = d; } } return best && { ...best, day }; };
   const w = week(today), wPrev = week(today - 7);
-  const partialMau = cov.day !== undefined && cov.day > today - 29;
+  const partialMau = start !== undefined && start > today - 29;
   const tiles = [
-    kpi({ label: 'DAU', value: yesterday === undefined ? '—' : num(yesterday), change: kpiChange(yesterday, dayBefore), vs: 'yesterday, vs the day before', sub: `today ${num(dau.get(today) ?? 0)} so far · 7-d avg ${fmtAvg(avg(today - 7, today - 1))}`, spark: last14.map(d => (d === today ? undefined : dau.get(d))), def: KPI_DEFS.dau, hero: true }),
-    kpi({ label: 'MAU (30 d)', value: num(mauNow), change: partialMau ? undefined : kpiChange(mauNow, mauBefore), vs: partialMau ? `history begins ${dateOf(cov.day!)}: window not full yet` : 'vs the 30 days before', sub: `${num(players.length)} players ever`, spark: last14.map(d => mau.get(d)), def: KPI_DEFS.mau }),
+    kpi({ label: `DAU${tag}`, value: yesterday === undefined ? '—' : num(yesterday), change: kpiChange(yesterday, dayBefore), vs: 'yesterday, vs the day before', sub: `today ${num(dau.get(today) ?? 0)} so far · 7-d avg ${fmtAvg(avg(today - 7, today - 1))}`, spark: last14.map(d => (d === today ? undefined : dau.get(d))), def: bar ? KPI_DEFS.dauBar(bar) : KPI_DEFS.dau, hero: true }),
+    kpi({ label: bar ? `MAU${tag}` : 'MAU (30 d)', value: num(mauNow), change: partialMau ? undefined : kpiChange(mauNow, mauBefore), vs: partialMau ? `history begins ${dateOf(start!)}: window not full yet` : 'vs the 30 days before', sub: bar ? `${num(active.length)} of ${num(players.length)} players ever reached ${bar} min in a day` : `${num(players.length)} players ever`, spark: last14.map(d => mau.get(d)), def: bar ? KPI_DEFS.mauBar(bar) : KPI_DEFS.mau }),
     kpi({ label: 'DAU / MAU', value: stick === undefined ? '—' : pct(stick), sub: 'stickiness: avg DAU ÷ MAU', spark: last14.map(d => { const m = mau.get(d); return m ? (dau.get(d) ?? 0) / m : undefined; }), def: KPI_DEFS.stick }),
     kpi({ label: 'CCU now', value: num(o?.onlineNow ?? 0), sub: thisHour?.peak !== undefined ? `this hour: peak ${num(thisHour.peak)}, avg ${fmtAvg(thisHour.avg ?? 0)}` : 'hourly peaks not recorded on this server', spark: Array.from({ length: 24 }, (_, i) => ccu.get(nowHour - 23 + i)?.peak), def: KPI_DEFS.ccu }),
     kpi({ label: 'PCCU today', value: pToday ? num(pToday.peak) : '—', change: pToday && pYesterday ? kpiChange(pToday.peak, pYesterday.peak) : undefined, vs: pToday && pYesterday ? 'vs yesterday' : views.peak === 'on' ? 'not recorded yesterday' : undefined, sub: pToday?.atMs ? `at ${localTime(pToday.atMs)} your time` : views.peak === 'on' ? 'nobody in rooms yet today' : 'not recorded on this server', spark: last14.map(d => pccu.get(d)?.peak), def: KPI_DEFS.pccu }),
@@ -1225,17 +1242,17 @@ function keyMetrics(players: Player[], o: Overview | undefined, today: number, n
 
   // DAU: bars per day (today faint, so far), a 7-day average line.
   const dauVals = dayKeys.map(d => dau.get(d));
-  const dau7 = dayKeys.map(d => (cov.day !== undefined && d - 6 >= cov.day && d < today ? avg(d - 6, d) : undefined));
+  const dau7 = dayKeys.map(d => (start !== undefined && d - 6 >= start && d < today ? avg(d - 6, d) : undefined));
   const dauChart = timeChart({
     aria: `Daily active users, last ${dayKeys.length} UTC days`, width: W, height: H, counts: true,
     series: [
-      { id: 'dau', label: 'DAU', kind: 'bar', cls: 'c-dau', values: dauVals.map((v, i) => (cov.day !== undefined && dayKeys[i] >= cov.day ? v : undefined)), faint: dayKeys.map(d => d === today) },
+      { id: 'dau', label: 'DAU', kind: 'bar', cls: 'c-dau', values: dauVals.map((v, i) => (start !== undefined && dayKeys[i] >= start ? v : undefined)), faint: dayKeys.map(d => d === today) },
       { id: 'avg', label: '7-day average', kind: 'line', cls: 'c-avg', values: dau7 },
     ],
     xLabel: i => (dayTick(dayKeys.length, i, narrow) ? dateOf(dayKeys[i]).slice(5) : undefined), yFmt: v => compact(v),
     tip: i => {
       const d = dayKeys[i];
-      if (cov.day === undefined || d < cov.day) return { title: `${weekday(d)} ${dateOf(d)}`, rows: [], note: `Not recorded: active days begin ${cov.day === undefined ? 'with the first player' : dateOf(cov.day)}.` };
+      if (start === undefined || d < start) return { title: `${weekday(d)} ${dateOf(d)}`, rows: [], note: `Not recorded: active days begin ${start === undefined ? 'with the first player' : dateOf(start)}.` };
       const f = fresh.get(d);
       return {
         title: `${weekday(d)} ${dateOf(d)}${d === today ? ' (so far)' : ''}`,
@@ -1249,17 +1266,17 @@ function keyMetrics(players: Player[], o: Overview | undefined, today: number, n
   // MAU: rolling 30 days, faint while the window reaches back before the first recorded day.
   const mauChart = timeChart({
     aria: `Monthly active users (rolling 30 days), last ${dayKeys.length} UTC days`, width: W, height: H, counts: true,
-    series: [{ id: 'mau', label: 'MAU', kind: 'area', cls: 'c-mau', values: dayKeys.map(d => (cov.day !== undefined && d >= cov.day ? mau.get(d) : undefined)), faint: dayKeys.map(d => cov.day !== undefined && d - 29 < cov.day) }],
+    series: [{ id: 'mau', label: 'MAU', kind: 'area', cls: 'c-mau', values: dayKeys.map(d => (start !== undefined && d >= start ? mau.get(d) : undefined)), faint: dayKeys.map(d => start !== undefined && d - 29 < start) }],
     xLabel: i => (dayTick(dayKeys.length, i, narrow) ? dateOf(dayKeys[i]).slice(5) : undefined), yFmt: v => compact(v),
     tip: i => {
       const d = dayKeys[i], m = mau.get(d) ?? 0;
-      if (cov.day === undefined || d < cov.day) return undefined;
-      const part = d - 29 < cov.day;
+      if (start === undefined || d < start) return undefined;
+      const part = d - 29 < start;
       return {
         title: `30 days to ${dateOf(d)}`,
         rows: [{ key: 'c-mau', shape: 'line', value: num(m), label: 'MAU', detail: `${dateOf(d - 29).slice(5)} → ${dateOf(d).slice(5)}` },
           { key: 'c-dau', value: m ? pct((dau.get(d) ?? 0) / m) : '—', label: 'DAU / MAU that day' }],
-        note: part ? `Partial window: activity is recorded from ${dateOf(cov.day)}, so it covers ${d - cov.day + 1} of 30 days.` : undefined,
+        note: part ? `Partial window: activity is recorded from ${dateOf(start)}, so it covers ${d - start + 1} of 30 days.` : undefined,
       };
     },
     overlay: releases(dayKeys, 86_400),
@@ -1318,13 +1335,17 @@ function keyMetrics(players: Player[], o: Overview | undefined, today: number, n
 
   const daysNote = charts.range === '48h' ? ' (48 h: daily charts show 7 days)' : '';
   const cards = `<div class="grid2 even">
-      ${card('Daily active users', `DAU per UTC day, last ${dayKeys.length} days${daysNote}`, legend([{ cls: 'c-dau', label: 'DAU' }, { cls: 'c-avg', label: '7-day average', shape: 'line' }, { cls: 'c-dau faint', label: 'today, so far' }]) + dauChart)}
-      ${card('Monthly active users', 'rolling 30 UTC days, per day', legend([{ cls: 'c-mau', label: 'MAU (rolling 30 d)', shape: 'line' }, { cls: 'c-mau faint', label: 'partial window', shape: 'line' }]) + mauChart)}
+      ${card('Daily active users', `DAU${tag ? ` (${bar} min+ of Online play)` : ''} per UTC day, last ${dayKeys.length} days${daysNote}`, legend([{ cls: 'c-dau', label: 'DAU' }, { cls: 'c-avg', label: '7-day average', shape: 'line' }, { cls: 'c-dau faint', label: 'today, so far' }]) + dauChart)}
+      ${card('Monthly active users', `rolling 30 UTC days, per day${tag ? ` · ${bar} min+ on a day` : ''}`, legend([{ cls: 'c-mau', label: 'MAU (rolling 30 d)', shape: 'line' }, { cls: 'c-mau faint', label: 'partial window', shape: 'line' }]) + mauChart)}
     </div>
     ${card('Concurrent users per hour', `players in Online rooms, last ${hours >= 72 ? `${hours / 24} days` : `${hours} hours`}, in your time zone`, legend([{ cls: 'c-peak', label: 'Peak at once', shape: 'line' }, { cls: 'c-avg-ccu', label: 'Average at once' }, { cls: 'ref', label: 'One full 6v6 room', shape: 'ref' }]) + ccuChart)}
     ${card('Peak concurrent users per day', `PCCU per UTC day, last ${dayKeys.length} days${daysNote}`, legend([{ cls: 'c-peak', label: 'PCCU' }, { cls: 'c-ghost', label: 'Launch week, rebuilt from PostHog', shape: 'ghost' }, { cls: 'c-avg-ccu', label: 'Average at once', shape: 'tick' }]) + pccuChart)}
     ${coverageCard(cov)}`;
-  return group('metrics', 'Key metrics', intro, [], `<div class="kpis">${tiles.join('')}</div>${cards}`);
+  const noTime = views.dayTime !== 'on';
+  const pick = `<div class="active-pick"><span id="active-h">Active user</span>
+    <div class="seg" role="group" aria-labelledby="active-h">${ACTIVE_MINUTES.map(m => `<button type="button" data-active="${m}" aria-pressed="${bar === m}"${m && noTime ? ' disabled title="This server\'s module has no per-day play time"' : ''}>${m ? `${m} min+` : 'Joined'}</button>`).join('')}</div>
+    <small>${bar ? `played at least ${bar} min Online that UTC day` : 'connected to Online that UTC day, any play time'} · applies to DAU, MAU and DAU / MAU</small></div>`;
+  return group('metrics', 'Key metrics', intro, [], `${pick}<div class="kpis">${tiles.join('')}</div>${cards}`);
 }
 
 /** What each headline metric rests on, and since when this server has it. */
@@ -1335,7 +1356,7 @@ function coverageCard(cov: ReturnType<typeof coverage>) {
     ['CCU peak, PCCU', 'peak_hour: most players in rooms at once per hour, raised on every room entry and each room\'s minute flush', since(cov.peak === undefined ? undefined : localHour(cov.peak), views.peak === 'on' ? 'no rows yet' : 'view missing'), 'kept forever; hours without a row after this had nobody in rooms'],
     ['CCU average', 'room_hour: each live room adds its humans once a minute (human-minutes ÷ 60)', since(cov.room === undefined ? undefined : localHour(cov.room), views.roomHours === 'on' ? 'no rows yet' : 'view missing'), 'kept forever'],
     ['CCU average (fallback)', 'player_hour: play time credited per player per hour (seconds ÷ 3600)', since(cov.hour === undefined ? undefined : localHour(cov.hour), views.hours === 'on' ? 'no rows yet' : 'view missing'), 'kept two weeks; the view sends the last 7 days; used only before room_hour began'],
-    ['Daily average at once', 'player_day_time: play time per player per UTC day', since(cov.dayTime === undefined ? undefined : dateOf(cov.dayTime), views.dayTime === 'on' ? 'no rows yet' : 'view missing'), 'kept forever'],
+    ['Active-user bars (3, 5, 10 min+), daily average at once', 'player_day_time: Online play time per player per UTC day', since(cov.dayTime === undefined ? undefined : dateOf(cov.dayTime), views.dayTime === 'on' ? 'no rows yet' : 'view missing'), 'kept forever'],
   ];
   return card('How these are measured', 'sources and the first record this server returns', `<div class="scroll"><table class="coverage"><thead><tr><th>Metric</th><th>Source</th><th>From</th><th>Notes</th></tr></thead><tbody>
     ${rows.map(r => `<tr><td><b>${r[0]}</b></td><td>${esc(r[1])}</td><td class="from">${r[2]}</td><td class="muted">${esc(r[3])}</td></tr>`).join('')}</tbody></table></div>
