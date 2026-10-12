@@ -19,6 +19,35 @@ import type { PeakOf } from './peak';
 export const DAY_HOURS = 24;
 export const MAU_DAYS = 30;
 
+/**
+ * What counts as an active user, switchable on the page: minutes of Online play on the UTC day (summed
+ * over the day's stretches, from `player_day_time`), or 0 for any connection at all (`player_day`).
+ */
+export const ACTIVE_MINUTES = [0, 3, 5, 10] as const;
+export type ActiveMinutes = (typeof ACTIVE_MINUTES)[number];
+
+/**
+ * Players as the active-user counts see them under a bar of `minutes`: with 0, every day they were
+ * active; otherwise only the days with at least that much Online play (today adds the stretch still
+ * open, not yet credited). `firstDay` becomes their first such day, so "new" means new to that bar;
+ * players who never reached it are left out.
+ */
+export function qualifying(
+  players: Iterable<{ firstDay: number; days: ReadonlySet<number>; daySeconds?: ReadonlyMap<number, number>; openSeconds?: number }>,
+  minutes: number, today: number,
+): { firstDay: number; days: Set<number> }[] {
+  const out: { firstDay: number; days: Set<number> }[] = [];
+  for (const p of players) {
+    if (minutes <= 0) { out.push({ firstDay: p.firstDay, days: new Set(p.days) }); continue; }
+    const days = new Set<number>();
+    const seconds = new Map(p.daySeconds ?? []);
+    if (p.openSeconds) seconds.set(today, (seconds.get(today) ?? 0) + p.openSeconds);
+    for (const [d, s] of seconds) if (s >= minutes * 60) days.add(d);
+    if (days.size) out.push({ firstDay: Math.min(...days), days });
+  }
+  return out;
+}
+
 /** Distinct players active per day from `from` to `to` (inclusive). */
 export function dauByDay(players: Iterable<{ days: ReadonlySet<number> }>, from: number, to: number): Map<number, number> {
   const out = new Map<number, number>();

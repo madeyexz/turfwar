@@ -159,6 +159,12 @@ a { color: var(--accent); }
 .seg button[aria-pressed="true"] { background: var(--panel-2); color: var(--ink); box-shadow: 0 0 0 1px var(--line-strong) inset; }
 .seg button:focus-visible { outline: 2px solid var(--accent); outline-offset: -2px; }
 
+/* Key metrics: what counts as an active user (src/admin/activity.ts, qualifying). */
+.active-pick { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 12px; margin: -2px 0 14px; }
+.active-pick > span { font-size: 13px; font-weight: 600; color: var(--muted); }
+.active-pick small { color: var(--faint); font-size: 13px; }
+.active-pick .seg button:disabled { opacity: 0.4; cursor: default; }
+
 /* ---- Sections, tiles and cards ------------------------------------------------------------ */
 section.group { padding-top: 24px; }
 .group-h { display: flex; align-items: baseline; flex-wrap: wrap; gap: 4px 12px; margin: 0 0 14px; font-size: 20px; font-weight: 650; letter-spacing: -0.01em; }
