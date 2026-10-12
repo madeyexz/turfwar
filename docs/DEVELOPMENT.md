@@ -370,10 +370,19 @@ whenever what is collected changes. These answer "how many players, and from whe
   `ADMIN_TEST_KEY=<test key> bun scripts/devicecheck.ts ws://127.0.0.1:<port> <db>`.
 
 **Admin page** (`/admin`, `admin/index.html`, not linked from the game, `noindex`): one section per
-question, linked from a sticky nav. It opens on the **Scorecard** (`src/admin/growth.ts`): one headline figure per
+question, linked from a sticky nav. It opens on **Key metrics** (`src/admin/activity.ts`, charts in `src/admin/chart.ts`):
+KPI tiles (value, change against the period before, sparkline) and charts for **DAU** (players with a `player_day` row on
+the UTC day: they said `hello`, reconnected or entered a room, so Solo-only players never count), **MAU** (rolling: players
+active on any of the 30 UTC days ending that day; drawn faint while the window reaches back before the first recorded
+day), DAU/MAU, **CCU per hour** (humans in Online rooms; the average at once is `room_hour` human-minutes ÷ 60, sampled
+once a minute per live room, falling back to `player_hour` play time ÷ 3600 for hours before `room_hour` began; the peak
+at once is `peak_hour`) and **PCCU per day** (the highest `peak_hour` of the UTC day, with launch-week peaks rebuilt from
+PostHog where nothing was recorded), plus a card naming each source and the first record the server has. All of it is
+computed in the page from existing admin views. Every chart has one shared tooltip: hover a day or hour, or focus the
+chart and use ←/→. Then the **Scorecard** (`src/admin/growth.ts`): one headline figure per
 funnel stage graded against `TARGETS` (on track / watch / problem), what to look at when it is off, and a "Focus
-first" banner naming the earliest stage in the funnel with a problem. Then **Now** (online, rooms, live rooms, peak
-online), **Acquisition** (players, new and active with the change from the period before, active 30 days = MAU, a
+first" banner naming the earliest stage in the funnel with a problem. Then **Now** (online, active 24 h, peak today and ever,
+live rooms), **Acquisition** (players, new and active with the change from the period before, active 30 days = MAU, a
 30-day chart of returning and new players per day, countries, and a **Channels** table: new players by in-app browser
 or first-touch source with their kill-in-24 h, D1, D7 and median play), **Activation** (the first 24 hours: connected
 → entered a room → finished a round → made a kill → finished a match → came back, All / Phone / Computer, the biggest
@@ -396,8 +405,8 @@ play only. Local check (separate identities, ~1 minute):
 `ADMIN_TEST_KEY=<test key> bun scripts/growthcheck.ts ws://127.0.0.1:<port> <db>`. **Peak online** (peak CCU, `src/admin/peak.ts`): the private table `peak_hour` keeps, per
 hour since the epoch, the most players in rooms at once (all, and Phone and Computer by each player's latest device
 report) and when the all-player peak was reached; entering a room (the only time the count rises) and each room's
-minute flush raise it, and it is kept (24 rows a day). The view `admin_peak_hour` feeds the Peak today / 7 d / ever
-tiles and a chart of the peak per day or hour (tick: the average at once, from play time; dashed line: 12, one full
+minute flush raise it, and it is kept (24 rows a day). The view `admin_peak_hour` feeds the Peak today / ever
+tiles and Key metrics' PCCU and hourly CCU (tick: the average at once, from play time; dashed line: 12, one full
 6v6 room). Local check: `ADMIN_TEST_KEY=<test key> bun scripts/peakcheck.ts ws://127.0.0.1:<port> <db>`.
 **Benchmarks** (`src/admin/benchmarks.ts`): this server's MAU, DAU, peak CCU and lifetime players (all, and on a
 Taiwan time zone) against BeGone's estimated Taiwan peak, the estimate's funnel and evidence (nplay.com in the
@@ -407,8 +416,9 @@ and a Computer bar each day. A player's side is the device they last played on (
 phones and tablets are Phone; players without a report count only in All), and per-day figures use it
 for every day. The daily play time and ping come per player from the views `admin_player_day_time` and
 `admin_player_day_net` (from `player_day_time` and `player_day_net`), subscribed separately like the rest.
-**Chart controls** in the sticky nav (remembered per browser): the range, 30 or 7 UTC days or the last
-48 hours (hourly, labelled in the viewer's time zone), and Split (Phone and Computer side by side) or
+**Chart controls** in the sticky nav (remembered per browser): the range, 90, 30 or 7 UTC days or the last
+48 hours (hourly, labelled in the viewer's time zone; Key metrics' daily charts show at least 7 days and its CCU chart is
+always hourly over the range), and Split (Phone and Computer side by side) or
 Combined (everyone in one bar; the cohorts become one table). Hours come from the private table
 `player_hour` (per identity per hour since the epoch: a row when the player was seen, play time split
 on the hour by shared/playtime.ts, connection reports folded like `player_day_net`), read through the
