@@ -847,6 +847,7 @@ export class Game {
     const d = this.driving, cam = this.renderer.camera;
     const viewYaw = d.placeCamera(cam, this.map.world);
     d.aimYaw = viewYaw; d.aimPitch = 0;
+    d.poseYaw = viewYaw; d.posePitch = d.camPitch;
     if (!d.armed) return;
     cam.updateMatrixWorld();
     const dir = cam.getWorldDirection(new THREE.Vector3());
@@ -888,7 +889,7 @@ export class Game {
     this.selfView.root.visible = true;
     // Legs on the bike, torso and weapon turned to the aim.
     this.selfView.update(dt, {
-      x: p.x, y: p.y, z: p.z, vx: 0, vy: 0, vz: 0, yaw: this.driving.aimYaw, hips: v!.yaw, pitch: this.driving.aimPitch, crouch: VEHICLES.scooter.sit,
+      x: p.x, y: p.y, z: p.z, vx: 0, vy: 0, vz: 0, yaw: this.driving.poseYaw, hips: v!.yaw, pitch: this.driving.posePitch, crouch: VEHICLES.scooter.sit,
       grounded: true, sprint: false, ads: false, slide: false, alive: true, weapon: held, attachments: pl.attachments[held],
       reloading: pl.reloading ? 1 - pl.reloadLeft / pl.reloadTotal : 0, firing: false,
     });
