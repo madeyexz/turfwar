@@ -569,7 +569,7 @@ describe('scooter riders', () => {
         if (Math.abs(twist - previous) > 0.06) expect(Math.abs(wrapAngle(aim - heading))).toBeGreaterThan(Math.PI - 0.06);
         previous = twist;
       }
-      expect(riderTwist(heading + 0.4, heading)).toBeCloseTo(0.4, 9);
+      expect(riderTwist(heading + 0.3, heading)).toBeCloseTo(0.3, 9);
       expect(riderTwist(heading - Math.PI * 0.75, heading)).toBe(-RIDER_TWIST);
     }
   });

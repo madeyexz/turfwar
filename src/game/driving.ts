@@ -38,6 +38,12 @@ export class Driving {
   /** Where the rider aims (world yaw and pitch), sent with each report. */
   aimYaw = 0;
   aimPitch = 0;
+  /**
+   * Where the rider's body is posed toward: the camera's direction, steady. The aim proper (above)
+   * runs from the rider's eye to what the crosshair hits, which swings wildly when that is close.
+   */
+  poseYaw = 0;
+  posePitch = 0;
 
   get active() { return !!this.v; }
   /** A scooter: the rider has a hand free to shoot. */
@@ -53,6 +59,7 @@ export class Driving {
     this.camPitch = v.kind === 'heli' ? -0.22 : -0.16;
     this.lookIdle = 9;
     this.aimYaw = v.yaw; this.aimPitch = 0;
+    this.poseYaw = v.yaw; this.posePitch = 0;
   }
 
   end() { this.v = undefined; this.prev = undefined; }
