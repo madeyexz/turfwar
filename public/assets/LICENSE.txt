@@ -4,6 +4,11 @@ Universal Animation Library and Universal Animation Library 2 (free Standard edi
 CC0 1.0 Universal Public Domain Dedication: https://creativecommons.org/publicdomain/zero/1.0/
 Converted with tools/import-assets.ts (textures resized to WebP; animations meshopt-compressed).
 
+soldiers.glb, soldier-anims.glb: the soldier characters and their clips from Quaternius' "Ultimate Modular Men"
+pack (Swat, Farmer, Punk, Worker, Adventurer, Casual_2, Casual_Hoodie; Feb 2022), CC0 1.0 Universal
+(https://quaternius.com/packs/ultimatemodularcharacters.html). Bones renamed to the soldier rig's names, meshes merged
+with their colours baked as vertex colours and compressed by tools/import-modular.ts.
+
 guns.glb: guns and accessories from Quaternius' "Ultimate Gun Pack" (July 2019), CC0 1.0 Universal
 (https://opengameart.org/content/low-poly-guns-pack, https://quaternius.itch.io/50-lowpoly-guns):
 SubmachineGun_3 (MP5), SubmachineGun_2 (MP7), AssaultRifle2_1 (M4A1), AssaultRifle2_2 (M110),

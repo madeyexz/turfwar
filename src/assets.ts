@@ -2,6 +2,7 @@ import * as THREE from 'three';
 import { GLTFLoader, type GLTF } from 'three/examples/jsm/loaders/GLTFLoader.js';
 import { MeshoptDecoder } from 'three/examples/jsm/libs/meshopt_decoder.module.js';
 import { assetUrl } from './assetUrl';
+import { CREW } from './game/crew';
 import { MEME_SKINS } from './game/memeskins';
 import { slipperModel } from './render/meme';
 import { applyOptics } from './render/optics';
@@ -12,8 +13,12 @@ import { fitModelTextures, initTextures, loadTexture } from './render/textures';
 export interface Assets {
   weapons: Map<string, THREE.Object3D>;
   props: Map<string, THREE.Object3D>;
+  /** The Universal Base Characters soldier: the classic third-person soldier (`?soldiers=classic`) and, always, the first-person arms. */
   soldier: GLTF;
+  /** The clips of whichever soldiers are drawn (src/game/crew.ts). */
   clips: Map<string, THREE.AnimationClip>;
+  /** The Modular Men crew (the default): one named root per character. */
+  crew?: THREE.Object3D;
   textures: TextureSets;
 }
 
@@ -70,10 +75,11 @@ export async function loadAssets(onProgress: (fraction: number) => void, gpu?: {
   const loader = new GLTFLoader(manager).setMeshoptDecoder(MeshoptDecoder);
   const textures = new TextureSets(manager);
   const gltf = (name: string) => loader.loadAsync(assetUrl(`assets/${name}`));
-  const [weapons, props, soldier, anims, imported] = await Promise.all([
-    gltf('weapons.glb'), gltf('props.glb'), gltf('soldier.glb'), gltf('anims.glb'), gltf('guns.glb'), textures.load(SHARED_SETS),
+  const [weapons, props, soldier, anims, imported, crew] = await Promise.all([
+    gltf('weapons.glb'), gltf('props.glb'), gltf('soldier.glb'), gltf(CREW ? 'soldier-anims.glb' : 'anims.glb'), gltf('guns.glb'), CREW ? gltf('soldiers.glb') : undefined, textures.load(SHARED_SETS),
   ]) as GLTF[];
   for (const g of [weapons, props, soldier, imported]) fitModelTextures(g.scene);
+  if (crew) restoreBoneNames(crew.scene);
   const named = (g: GLTF) => {
     const map = new Map<string, THREE.Object3D>();
     for (const child of g.scene.children) {
@@ -89,10 +95,22 @@ export async function loadAssets(onProgress: (fraction: number) => void, gpu?: {
   // The 藍白拖 reskin: every view of the knife (first person, soldiers, the store) shows the slipper.
   if (MEME_SKINS) guns.set('Gun_Knife', slipperModel());
   return {
-    weapons: guns, props: named(props), soldier,
+    weapons: guns, props: named(props), soldier, crew: crew?.scene,
     clips: new Map(anims.animations.map(c => [c.name, c])),
     textures,
   };
+}
+
+/**
+ * GLTFLoader makes node names unique across a file (`Head`, `Head_1` ...), but every character of
+ * soldiers.glb has the same bone names (and shares the clips, which bind by name): put them back.
+ */
+function restoreBoneNames(scene: THREE.Object3D) {
+  const first = scene.children[0], known = new Set<string>();
+  first.traverse(o => known.add(o.name));
+  for (const character of scene.children.slice(1)) {
+    character.traverse(o => { const base = o.name.replace(/_\d+$/, ''); if (!known.has(o.name) && known.has(base)) o.name = base; });
+  }
 }
 
 /** Bounding box of a model in its own space, cached per object. */
