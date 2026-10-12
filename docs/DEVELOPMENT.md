@@ -370,7 +370,8 @@ whenever what is collected changes. These answer "how many players, and from whe
   `ADMIN_TEST_KEY=<test key> bun scripts/devicecheck.ts ws://127.0.0.1:<port> <db>`.
 
 **Admin page** (`/admin`, `admin/index.html`, not linked from the game, `noindex`): one section per
-question, linked from a sticky nav. It opens on **Key metrics** (`src/admin/activity.ts`, charts in `src/admin/chart.ts`):
+question, shown one at a time from a sidebar on the left (grouped Overview, Growth, Operations, Reference; the URL's
+`#section` keeps the choice across reloads and Back; on narrow screens the sidebar folds into a bar on top). It opens on **Key metrics** (`src/admin/activity.ts`, charts in `src/admin/chart.ts`):
 KPI tiles (value, change against the period before, sparkline) and charts for **DAU** (players with a `player_day` row on
 the UTC day: they said `hello`, reconnected or entered a room, so Solo-only players never count), **MAU** (rolling: players
 active on any of the 30 UTC days ending that day; drawn faint while the window reaches back before the first recorded
@@ -416,7 +417,7 @@ and a Computer bar each day. A player's side is the device they last played on (
 phones and tablets are Phone; players without a report count only in All), and per-day figures use it
 for every day. The daily play time and ping come per player from the views `admin_player_day_time` and
 `admin_player_day_net` (from `player_day_time` and `player_day_net`), subscribed separately like the rest.
-**Chart controls** in the sticky nav (remembered per browser): the range, 90, 30 or 7 UTC days or the last
+**Chart controls** at the top right of the content (remembered per browser): the range, 90, 30 or 7 UTC days or the last
 48 hours (hourly, labelled in the viewer's time zone; Key metrics' daily charts show at least 7 days and its CCU chart is
 always hourly over the range), and Split (Phone and Computer side by side) or
 Combined (everyone in one bar; the cohorts become one table). Hours come from the private table
