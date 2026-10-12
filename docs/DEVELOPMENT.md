@@ -76,7 +76,7 @@ free-buy Solo match; for a **local** Online database, set `"freeBuy":true` in th
 
 Development pages (dev server only): `/dev/level.html?map=verdant` (map preview; `&cut=6` clips
 everything above 6 m to see under roofs),
-`/dev/soldier.html` (animation/IK pose sheet), `/dev/viewmodel.html?ads=1` (first-person weapon),
+`/dev/soldier.html` (animation/IK pose sheet), `/dev/roster.html` (every soldier model through each movement state) and `/dev/crew.html` (a scripted skirmish; both take `?capture`, which holds the clock and exposes `window.__frame(n)` for frame-by-frame recordings on a software renderer), `/dev/viewmodel.html?ads=1` (first-person weapon),
 `/dev/viewer.html?model=/assets/props.glb` (asset viewer), `/dev/vehicles.html?show=car:0,scooter:1,heli:2&focus=0&angle=front`
 (drivable vehicles in a studio, with `&wrecked=1`, `&rotor=1`, `&seats=1`, `&boxes=1`; `?map=taipei&focus=3` at their map
 spots; `window.__stats` gives each one's draw calls and triangles), `/dev/flyover.html?sky=overcast&live=1` (the National
@@ -84,6 +84,12 @@ Day flyover, `src/render/flyover.ts`, over Liberty Square from the memorial hall
 `window.__fly.frame(t)` draws pass time `t`, frame by frame for trailers). Dev-only URL flags `debuginput`,
 `fixeddt` and `capture` make automated runs deterministic on software renderers; `flyover` sends the flyover over a
 match every minute (not in production builds).
+
+Third-person soldiers are Quaternius' Modular Men (`public/assets/soldiers.glb`, `soldier-anims.glb`; `bun tools/import-modular.ts`
+with the pack's `Individual Characters/glTF` folder at `MODULAR_SRC`): the SWAT operator for team 0, six street-gang characters
+for the Militia (`src/game/crew.ts`). The importer renames their bones to the Universal Base Characters rig's names, so the IK in
+`src/render/rig.ts` drives both. `?soldiers=classic` brings back the older soldier with procedural gear; first-person arms always
+use that classic soldier.
 
 The map picker shows a picture of each map (`public/media/maps/<id>.webp`, 480×270, under 40 KB).
 `bun scripts/mapshots.ts [--url <dev server>] [map …]` shoots them from the level preview through the
