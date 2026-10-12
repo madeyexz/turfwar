@@ -1,13 +1,11 @@
 /**
- * GPU-compressed copies of the big textures: the surface sets (public/assets/tex/*.webp) and the
- * Taipei district atlas become KTX2 (Basis Universal) files that the game transcodes to the GPU's
+ * GPU-compressed copies of the big textures: the surface sets (public/assets/tex/*.webp)
+ * become KTX2 (Basis Universal) files that the game transcodes to the GPU's
  * own format (ASTC, ETC2, BC7…) instead of unpacking to raw RGBA: a 1024² texture costs the GPU
  * 0.7–1.4 MB instead of 5.3 MB. The .webp files stay the source and the fallback.
  *
  *   public/assets/tex/<set>_<kind>.ktx2       1024², for Medium and High
  *   public/assets/tex/low/<set>_<kind>.ktx2   512², for Low (phones' default)
- *   public/assets/taipei-atlas.ktx2           4096×2048 (stretched from 4096×1664; UVs are relative)
- *   public/assets/low/taipei-atlas.ktx2       2048×1024
  *
  * Colour and roughness are ETC1S (small files, 4 bpp on phones); normal maps are UASTC + Zstandard
  * on Low (the codec that keeps normals clean) and ETC1S tuned for normals at 1024 (a quarter of
@@ -19,7 +17,7 @@
  * public/assets/basis, so it is versioned and cached like any asset; re-run after updating three.
  *
  * Needs `basisu` from Basis Universal 2.x (its -quality and -effort options; tested with 2.50, `brew install basis_universal`).
- * Run: bun tools/make-ktx2.ts [name …]   (names: a set like `brick`, or `atlas`; none = everything)
+ * Run: bun tools/make-ktx2.ts [name …]   (names: a set like `brick`; none = everything)
  */
 import sharp from 'sharp';
 import { spawnSync } from 'node:child_process';
@@ -43,10 +41,6 @@ for (const set of SETS) for (const kind of ['diff', 'nor', 'rough'] as const) {
   const codec = (low: boolean) => kind === 'nor' ? (low ? UASTC_NORMAL : ETC1S_NORMAL) : kind === 'rough' ? [...ETC1S, '-linear'] : [...ETC1S, '-srgb'];
   jobs.push({ name: set, src, out: join(ASSETS, `tex/${set}_${kind}.ktx2`), width: 1024, height: 1024, args: codec(false) });
   jobs.push({ name: set, src, out: join(ASSETS, `tex/low/${set}_${kind}.ktx2`), width: 512, height: 512, args: codec(true) });
-}
-// The atlas keeps its alpha (the district's glow cards use it) and must not wrap when it is mipmapped.
-for (const [out, width, height] of [['taipei-atlas.ktx2', 4096, 2048], ['low/taipei-atlas.ktx2', 2048, 1024]] as const) {
-  jobs.push({ name: 'atlas', src: join(ASSETS, 'taipei-atlas.webp'), out: join(ASSETS, out), width, height, args: [...ETC1S, '-srgb', '-mip_clamp'] });
 }
 
 if (spawnSync('basisu', ['-version']).status !== 0) {

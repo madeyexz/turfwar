@@ -3,7 +3,7 @@ import type { KTX2Loader } from 'three/examples/jsm/loaders/KTX2Loader.js';
 import { assetUrl } from '../assetUrl';
 
 /**
- * Texture loading and the texture budget. The big image textures (surface sets, the Taipei atlas)
+ * Texture loading and the texture budget. The big image textures (the surface sets)
  * come as KTX2 files (tools/make-ktx2.ts) that a worker transcodes to whatever compressed format
  * the GPU takes (ASTC, ETC2, BC7…), so a 1024² texture costs 0.7–1.4 MB of video memory instead
  * of 5.3 MB as raw RGBA. The Low preset (phones' default) loads the half-size copies in `low/`,

@@ -57,6 +57,7 @@ import PerfStatsReducer from "./perf_stats_reducer";
 import QuickAnyReducer from "./quick_any_reducer";
 import QuickJoinReducer from "./quick_join_reducer";
 import QuickPlayReducer from "./quick_play_reducer";
+import RecordServerErrorReducer from "./record_server_error_reducer";
 import ReloadWeaponReducer from "./reload_weapon_reducer";
 import ReportReducer from "./report_reducer";
 import SayReducer from "./say_reducer";
@@ -74,6 +75,7 @@ import VisitReducer from "./visit_reducer";
 import AdminDailyRow from "./admin_daily_table";
 import AdminDailyNetRow from "./admin_daily_net_table";
 import AdminDailyTimeRow from "./admin_daily_time_table";
+import AdminErrorsRow from "./admin_errors_table";
 import AdminOverviewRow from "./admin_overview_table";
 import AdminPeakHourRow from "./admin_peak_hour_table";
 import AdminPlayerDayRow from "./admin_player_day_table";
@@ -237,6 +239,13 @@ const tablesSchema = __schema({
     constraints: [
     ],
   }, AdminDailyTimeRow),
+  adminErrors: __table({
+    name: 'admin_errors',
+    indexes: [
+    ],
+    constraints: [
+    ],
+  }, AdminErrorsRow),
   adminOverview: __table({
     name: 'admin_overview',
     indexes: [
@@ -383,6 +392,7 @@ const reducersSchema = __reducers(
   __reducerSchema("quick_any", QuickAnyReducer),
   __reducerSchema("quick_join", QuickJoinReducer),
   __reducerSchema("quick_play", QuickPlayReducer),
+  __reducerSchema("record_server_error", RecordServerErrorReducer),
   __reducerSchema("reload_weapon", ReloadWeaponReducer),
   __reducerSchema("report", ReportReducer),
   __reducerSchema("say", SayReducer),

@@ -54,8 +54,14 @@ async function google() {
 }
 
 async function gsc<T>(method: 'GET' | 'POST' | 'PUT', url: string, body?: object): Promise<T> {
-  const res = await fetch(url, { method, headers: { authorization: `Bearer ${await google()}`, 'content-type': 'application/json' }, body: body && JSON.stringify(body) });
-  const text = await res.text();
+  let res: Response, text: string;
+  // Google answers an occasional 500/503 (URL Inspection especially); retry those twice with a pause.
+  for (let attempt = 0; ; attempt++) {
+    res = await fetch(url, { method, headers: { authorization: `Bearer ${await google()}`, 'content-type': 'application/json' }, body: body && JSON.stringify(body) });
+    text = await res.text();
+    if (res.status < 500 || attempt === 2) break;
+    await new Promise(r => setTimeout(r, 3000 * (attempt + 1)));
+  }
   if (!res.ok) throw new Error(`Search Console ${method} ${url.replace(/\?.*/, '')}: ${res.status} ${text.slice(0, 300)}`);
   return (text ? JSON.parse(text) : {}) as T;
 }
@@ -115,7 +121,12 @@ async function report() {
       countries: await section('Google countries', () => searchAnalytics(days, ['country'], 10)),
       devices: await section('Google devices', () => searchAnalytics(days, ['device'], 5)),
       sitemaps: await section('Google sitemaps', sitemaps),
-      index: await section('Google URL inspection', async () => Object.fromEntries(await Promise.all(urls.map(async u => [u, await inspect(u)] as const)))),
+      // One URL at a time, each with its own error, so one failure does not hide the others.
+      index: await section('Google URL inspection', async () => {
+        const out: Record<string, Inspection | { error: string }> = {};
+        for (const u of urls) out[u] = await section(u.replace(SITE, '') || '/', () => inspect(u));
+        return out;
+      }),
     },
     bing: {
       queries: await section('Bing queries', () => bing<BingStat[]>('GetQueryStats', { siteUrl: `${SITE}/` })),
@@ -142,7 +153,7 @@ async function report() {
     '## Google: sitemaps', failed(g.sitemaps) ? `**${g.sitemaps.error}**` : table(['sitemap', 'submitted', 'downloaded', 'pending', 'errors', 'warnings', 'URLs submitted / indexed'],
       g.sitemaps.map(s => [s.path, s.lastSubmitted?.slice(0, 10) ?? '–', s.lastDownloaded?.slice(0, 10) ?? '–', String(!!s.isPending), s.errors ?? '0', s.warnings ?? '0', (s.contents ?? []).map(c => `${c.submitted} / ${c.indexed ?? '?'}`).join(', ')])),
     '## Google: index status of sitemap URLs', failed(g.index) ? `**${g.index.error}**` : table(['URL', 'verdict', 'coverage', 'last crawl', 'Google canonical'],
-      Object.entries(g.index).map(([u, i]) => [u.replace(SITE, '') || '/', i.verdict ?? '–', i.coverageState ?? '–', i.lastCrawlTime?.slice(0, 10) ?? 'never', i.googleCanonical === u ? 'same' : i.googleCanonical ?? '–'])),
+      Object.entries(g.index).map(([u, i]) => failed(i) ? [u.replace(SITE, '') || '/', `**${i.error.slice(0, 80)}**`, '–', '–', '–'] : [u.replace(SITE, '') || '/', i.verdict ?? '–', i.coverageState ?? '–', i.lastCrawlTime?.slice(0, 10) ?? 'never', i.googleCanonical === u ? 'same' : i.googleCanonical ?? '–'])),
     '## Bing: queries', failed(b.queries) ? `**${b.queries.error}**` : table(['query', 'date', 'clicks', 'impressions', 'avg position'],
       b.queries.slice(0, 50).map(q => [q.Query, bingDate(q.Date), q.Clicks, q.Impressions, q.AvgImpressionPosition])),
     '## Bing: pages', failed(b.pages) ? `**${b.pages.error}**` : table(['page', 'date', 'clicks', 'impressions', 'avg position'],

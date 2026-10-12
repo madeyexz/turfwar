@@ -17,12 +17,6 @@ Matthew Nanney) and reload/handling foley by SpringySpringo, BMacZero (Brian Mac
 LFA, all CC0 1.0 Universal on OpenGameArt. Built by tools/fetch-sounds.ts; sources and per-file
 mapping in sfx/LICENSE.txt.
 
-Taipei map (shared/maps/taipei-data.ts, not an asset in this folder): the layout of Ximending, its
-streets, buildings, signs and landmarks, comes from the game "臺北狂飆" / TAIPEI RUSH
-(https://taipei-gta.vercel.app) by @aicodewithme (https://www.threads.com/share/DhdOGqUWh/). Extracted by
-tools/import-taipei.ts; not covered by the CC0 terms above.
-
-Taipei 101 · Xinyi map (shared/maps/xinyi-data.ts, not an asset in this folder): Taipei 101 and the
-Xinyi district around it, its streets, buildings, skywalk, signs and landmarks, come from the same
-game, "臺北狂飆" / TAIPEI RUSH (https://taipei-gta.vercel.app) by @aicodewithme. Extracted by
-tools/import-xinyi.ts; not covered by the CC0 terms above.
+The Taipei maps (Ximending, Taipei 101 · Xinyi and Taipei 101 · 88F: shared/maps/ximending*.ts, xinyi*.ts, taipei101.ts)
+and the Taipei 101 outline (tower101.ts) are this project's own layouts, drawn from public knowledge of the real
+places. They are not assets in this folder and use no data from other games or map databases.

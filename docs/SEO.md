@@ -97,6 +97,7 @@ bun run seo:ping -- /about       # or just the pages that changed
   covers the owner's other subdomains, so every Search Analytics query is filtered to `https://turfwar.ianhsiao.me/`
   pages. Data lags 2–3 days, and Google hides rare queries for privacy, so totals can exceed the sum of query rows.
   URL Inspection is limited to about 2,000 calls a day.
+- **History**: each weekly run adds a row to [seo-history.md](seo-history.md) (numbers and what changed).
 - **Bing** has the site `https://turfwar.ianhsiao.me/`, imported from Search Console.
 - **IndexNow** (Bing, Yandex, Naver, Seznam): the key is `INDEXNOW_KEY` in `scripts/seo.ts`, served as
   `public/<key>.txt` (public by design; `src/seo.test.ts` checks they match). Ping only URLs that `main` actually

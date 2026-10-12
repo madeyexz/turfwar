@@ -54,6 +54,11 @@ identities: the same filters share a room, different maps split, Any joins a spe
 `quick_join` and `join` still work, bad sizes, modes and maps are refused, and after a match fixed rooms
 keep their map (and mode) while Any rooms rotate (it ends matches early with `spacetime sql`, owner-only).
 `scripts/loadtest.ts` takes `--mode` and `--map` to Play Online with filters.
+`bun scripts/mapcheck.ts ws://127.0.0.1:<port> <db> <map> <size>` checks two independent clients
+spawn in their bases, walk to a common point without corrections, and replicate a shot that spends
+ammo and damages the target. A false shot origin must be refused or replaced with the shooter's
+own eye. Use `taipei 6`, `xinyi 24`, and `taipei101 6` for the replaced maps. The check stops after
+180 seconds. Scripted clients and bot tests do not replace human playtesting or a device FPS check.
 `bun scripts/slippercheck.ts ws://127.0.0.1:<port> <db>` (local only) checks the thrown 藍白拖 with two
 identities in a private 1v1 (placed with `spacetime sql`, owner-only): no wind-up does 30, a second throw
 with an empty hand does nothing, the other client's frame shows the slipper, walking onto it picks it
@@ -83,13 +88,17 @@ match every minute (not in production builds).
 The map picker shows a picture of each map (`public/media/maps/<id>.webp`, 480×270, under 40 KB).
 `bun scripts/mapshots.ts [--url <dev server>] [map …]` shoots them from the level preview through the
 agent-browser CLI, with the dev server running; re-shoot a map after changing it.
+The 2026-10-11 map replacement also removed the old trailers and screenshots containing the
+superseded geometry, and regenerated the map thumbnails and social previews. New trailer footage
+must use the authored maps. Historical commits and release titles remain unchanged; no Git history
+was rewritten.
 
-GPU-compressed textures: the surface sets (`public/assets/tex/*.webp`) and the Taipei district atlas
+GPU-compressed textures: the surface sets (`public/assets/tex/*.webp`)
 ship as KTX2 copies that the game transcodes to the GPU's own format (ASTC, ETC2, BC7…) in a worker
 (`src/render/textures.ts`, three's `KTX2Loader`); the `.webp` files are the source and the fallback
 (no WebAssembly, a file that fails, or `?ktx2=0`). Medium and High load `tex/<set>_<kind>.ktx2`
-(1024², ETC1S; normals ETC1S tuned for normals) and `taipei-atlas.ktx2` (4096×2048); Low, the
-phones' default, loads the `low/` copies (512², normals UASTC + Zstandard; atlas 2048×1024), shrinks
+(1024², ETC1S; normals ETC1S tuned for normals); Low, the
+phones' default, loads the `low/` copies (512², normals UASTC + Zstandard), shrinks
 the models' own textures to 512 px, caps the sign atlas at 2048×1024 and anisotropic filtering at 4×.
 After changing a source `.webp`, or updating three, rebuild them (about three minutes) with
 [Basis Universal](https://github.com/BinomialLLC/basis_universal) installed
@@ -97,7 +106,7 @@ After changing a source `.webp`, or updating three, rebuild them (about three mi
 
 ```sh
 bun install --cwd tools --frozen-lockfile
-bun tools/make-ktx2.ts            # everything; or name sets / `atlas`: bun tools/make-ktx2.ts brick atlas
+bun tools/make-ktx2.ts            # everything; or name sets: bun tools/make-ktx2.ts brick
 ```
 
 It also copies three's Basis transcoder into `public/assets/basis/`, so it is versioned like any asset.
@@ -217,6 +226,93 @@ make the game findable and correctly described; `src/seo.test.ts` checks them. W
 the keyword list and the owner's checklist (Search Console, Bing Webmaster Tools, mentions) are in [SEO.md](SEO.md).
 
 ## Players, analytics and the admin page
+
+### Client error tracking and private source maps
+
+`client_error` remains available for existing queries. Code errors also send `$exception` to
+PostHog Error Tracking, including early errors and caught boot failures (`kind: boot`). The old
+boot `error_shown` event is replaced by this pair. Reports share a five-message budget per page;
+opaque `Script error.` has one separate report with uptime/visibility context. WebGL loss remains
+a `client_error`. `src/exceptions.ts` cleans known secrets and URL queries/fragments; never put user
+input in exception messages. Error events drop inherited callsign, room, attribution and person-set
+properties. They retain anonymous SDK identifiers, build, server, browser and in-app context.
+Do Not Track, Global Privacy Control and all existing automation exclusions still apply.
+
+Vite creates hidden source maps. The final build step always deletes them from `dist`, even if an
+upload fails or credentials are absent. Cleanup failure fails the build rather than publishing maps.
+Upload is optional and non-fatal; without both credentials it is silent. Configure these **private
+build variables**, never `VITE_*`, in Vercel Production and the `dev` Preview scope:
+
+| Variable | Value |
+| --- | --- |
+| `POSTHOG_CLI_API_KEY` | Personal API key with source-map upload access, from PostHog Settings → User → Personal API keys |
+| `POSTHOG_CLI_PROJECT_ID` | `649207` |
+| `POSTHOG_CLI_HOST` | `https://us.posthog.com` |
+
+The pinned `@posthog/cli@0.18.10` processes maps with release name `turfwar` and version equal to
+`app_version` (git SHA). It injects chunk IDs before upload; deploy these processed bundles.
+Use Error Tracking → Issues; exclude `test: true` events (`properties.test is null` in SQL), then
+filter by `app_version`, `kind`, `server_host` and `in_app`. Configure issue alerts in PostHog and
+connect the desired Slack/webhook/email destination in project integrations. The owner must enable
+and test those integrations; source-map upload alone does not enable alerts.
+
+Verification must distinguish a parsed local stack from actual PostHog symbolication. After owner
+setup, use a private preview to throw an intentional bundled error and confirm that its issue shows
+the original TypeScript file and line. Do not claim resolved production stacks until that succeeds.
+
+### Server errors and optional Taipei watcher (owner setup)
+
+`server_error` is a new private table, capped at 200 rows. `admin_errors` returns rows only to
+authenticated admins. `/admin` → Errors subscribes separately, so older modules show “unavailable”
+without breaking the dashboard. A row contains ingestion time, source `runtime`, and a fixed
+panic/ERROR count summary. It does **not** identify the failing reducer or contain a raw stack.
+The owner must inspect VM logs for details. Failed reducers retain their normal rollback behavior:
+writing an error row then rethrowing would roll the row back too. The host watcher writes summaries
+through `record_server_error` in a separate transaction, using an authenticated admin identity.
+Without the watcher, this table does not collect failures automatically. Module logs not emitted
+to Docker stderr/stdout are outside this watcher's coverage; use `spacetime logs` for those.
+
+No module publish is part of a frontend build. **Needs the owner**, after approval, from the reviewed
+checkout (stop on destructive migration requirements; never reset data):
+
+```sh
+# Development first, when authorized:
+spacetime publish lawbreaker-dev --server maincloud --module-path spacetimedb --delete-data=never -y
+# Production only in a separately authorized release, using the owner's saved profile:
+bun run publish:prod
+```
+
+After publishing, verify admin vs non-admin access with two identities, send a monitor test summary,
+and confirm the Errors list updates. No module was published as part of implementing this feature.
+
+The optional Python 3 watcher is `deploy/gcp-taipei/watch-errors.py`. Install it on the VM as
+`/usr/local/lib/turfwar/watch-errors.py`. Create root-only `/etc/turfwar/errors.env` (mode `0600`):
+
+```sh
+WEBHOOK_URL='https://your-slack-or-discord-webhook'
+# Optional: enables the private database summary in addition to the webhook.
+ADMIN_TOKEN='token-of-a-dedicated-signed-in-admin-session'
+```
+
+Keep this file outside Git. An absent file or empty webhook URL is a silent no-op. The webhook must
+use HTTPS. For database writes, sign a dedicated browser session in to Taipei `/admin` through
+the existing rate-limited login. Its SpacetimeDB token is in browser local storage under
+`lawbreaker.admin.token:<server-uri>:turfwar`. Transfer it privately to the env file; never paste
+it into chat or use the database owner's publishing token. Revoking admin sessions disables its
+writes until it signs in again. The database target is fixed to local `127.0.0.1:8080`, database
+`turfwar`; the token is never sent to the webhook. Add this to root's crontab only after approval:
+
+```cron
+* * * * * /usr/bin/python3 /usr/local/lib/turfwar/watch-errors.py
+```
+
+The watcher uses a lock and persistent per-destination cursors in `/var/lib/turfwar/error-watcher`.
+It scans at most 2000 Docker log lines per interval, starting with the last minute on first run.
+It sends only counts, never log content. A failed delivery leaves its cursor for retry; a crash
+after delivery but before cursor save can duplicate a summary. Bursts over 2000 lines can be
+undercounted. Alerts are best-effort, not a complete incident archive. Monitor cron failures too.
+Test its logic with `python3 deploy/gcp-taipei/test_watch_errors.py`; this does not contact a VM or
+webhook. Installation, credentials, scheduling and live delivery tests remain owner actions.
 
 Players stay anonymous (no login). The player-facing summary is the privacy page (`privacy/index.html`,
 served at `/privacy` and linked from the lobby, in English and 繁體中文): change it in the same commit

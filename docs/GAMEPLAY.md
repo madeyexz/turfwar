@@ -119,76 +119,64 @@ homage to the classic two-site layout of CS:GO's Dust II, built from our own geo
 above a city; the street is fatal) and **Meridian District** (a large war-torn city quarter), each with
 bomb sites (two on Ochre Quarter and Meridian District, one elsewhere).
 
-**Taipei** is Ximending (西門町) from the browser game *臺北狂飆 / TAIPEI RUSH*
-(https://taipei-gta.vercel.app) by @aicodewithme: the source's street plan,
-building volumes and collision boxes, shop and blade signs, rooftop billboards, the Ximen gateway,
-the walk-in cinema lobby and game arcade, the arcades (騎樓) of the blocks along Zhongxiao W. Rd, the
-median hedges, the Civic Blvd expressway and the Red House, around the spot where that game starts
-its player. `tools/import-taipei.ts` regenerates `shared/maps/taipei-data.ts` from that game's built
-JavaScript; its header explains how. The same tool also exports what the source *draws*: the
-district's own meshes and canvas atlas (facades, shopfronts, signs, AC units, the cinema and arcade
-interiors: `public/assets/taipei-district.glb`, `taipei-atlas.webp`), its street furniture run through
-the source's own street generator (trees, lamps, traffic signals and street-name plates, bus stops,
-YouBike docks, bollards, hydrants, postboxes, planters, rows of parked scooters, traffic signs:
-`shared/maps/taipei-street.ts`, with the colliders in `taipei-furniture.ts`), the source's prop meshes
-(`public/assets/taipei-props.json`), Ximen station's exit 6, and the city past the backdrop
-(`taipei-skyline.ts`: its buildings out to 1.3 km, landmarks, hills and roads), where Taipei 101 stands
-at the source's site, 1.6 km east-southeast, as a detailed 508 m model with its gold-lit segments.
-The renderer loads these on demand (`src/render/dressing.ts`, `skyline.ts`, `lotdetail.ts`), so the
-server and the other maps never carry them.
+**Taipei** is Ximending (西門町), a stylised pedestrian district under neon, laid out by this project
+(`shared/maps/ximending*.ts`; the plan is in `ximending-plan.ts`). It is drawn in the spirit of the real
+district and its landmarks, not surveyed, and it is not taken from any other game: a composite of three
+east–west lanes (north, middle, south) crossed by three north–south streets (West St, Hanzhong St 漢中街,
+East St), 162 × 132 m (Squad rooms), ringed by a road for cars. SWAT deploys at the west end, in the
+plaza by the MRT exit (a glass station pavilion, a bus shelter, hedges); Militia at the east end, in a
+construction yard (hoarding, a site office on stacked containers, a crane). Each base opens three ways
+(the lane between the screens, and two alleys, north and south), and a pair of police or site barriers
+across its mouth hides it from the lanes. The bomb sites are A, Cinema Street (電影街): the Starlight
+Cinema's front on the north lane, under its marquee balcony, with a stair up at each end and the lobby
+behind (doors on the lane, on Hanzhong St and to the north sidewalk); and B, the Red House square
+(西門紅樓廣場) on the south lane: the octagonal brick hall with its lantern, the cross-shaped wing,
+café tables and trees on a brick square. The bases are about 140 m apart on foot and SWAT reaches
+each site about two seconds (sprinting) before Militia (`shared/maps/ximending.test.ts` checks it).
+Between them:
+- the covered night market (西門夜市) along the middle lane: a tarp roof over rows of stalls, with
+  alleys north and south of it that join the lanes;
+- the game arcade (電玩城) across the middle lane: a hall of cabinets with doors on all four sides, a
+  roof with the helicopter's pad (one ladder from Hanzhong St, one from East St), a skybridge (a glazed
+  corridor) over the middle lane to the hotel's roof, and a ladder down the hotel's south face;
+- the mall passage (西門商場) through the north-west block, the shop-front arcades (騎樓) along the
+  lanes, and neon fascias, blade signs, gantries and string lanterns over everything.
+Every long street is broken up by chicanes (two walls of street clutter, a van and a booth, a container,
+a poster hoarding, a bus shelter, a billboard, standing out from opposite sides, one after the other),
+so no eye-level line between two places a soldier can stand runs longer than 60 m except along the ring
+road's drive lanes, the rooftops are rimmed by windowed walls (they look across a street, never along
+it) and covered galleries roof the lane ends (out of a jump from anything near them, so nobody perches on
+one to look down a lane). Everything sits on the bots' 2.5 m navigation grid
+(bots walk every alley, stair, hall, roof, bridge and ladder). The city past the map, with Taipei 101
+on the horizon, is a procedural skyline (client only, `src/render/cityscape.ts`); the shop names are
+generic (a noodle shop, a game hall), not brands.
 
-The game plays a compact cut of it (`taipei-compact.ts`, 162.5 × 133.5 m, Squad rooms): the nine
-blocks round Cinema Street and the arcade, ringed by a road made of one carriageway of each boulevard
-(Civic Blvd under the expressway, Huanhe Rd, Zhongxiao W. Rd, Zhonghua Rd). The far carriageways, the
-Red House and the city are backdrop past median fences and a lane closure. SWAT deploys behind a
-police cordon on Civic Blvd's sidewalk, in two squads by its west and east doors with the Ximen Mall
-through the block as its third way out; Militia behind a barricade in Xining S. Rd, out north across
-Emei St or through the shops either side. The bomb sites are A, Cinema Street (電影街), and B, the
-Tomas Bear arcade (湯瑪熊歡樂城); the bases are about 115 m apart on foot and SWAT's nearest squad
-reaches either site about two seconds (sprinting) before Militia's. Over the source:
-- passages through the blocks (`taipei-passages.ts`, on `taipei-interiors.ts`'s shop machinery): the
-  mall, a karaoke house (KTV) behind the 7-TWELVE with a second storey over site B, a run of shops south
-  of Emei St from the barricade to Hanzhong St, the cinema's back corridor from Emei St into its lobby
-  on Cinema Street, a tea house upstairs over Xining S. Rd, and a board-game café into the arcade's
-  back; plus the enterable 7-TWELVEs, claw-machine shop, 51嵐 tea shop and figure shop;
-- level changes (`taipei-heights.ts`): the cinema balcony over site A up stairs at both ends, a
-  plank bridge from the KTV's upper floor across Hanzhong St to a canopy over the arcade's front, the
-  two 7-TWELVE roofs (the helicopter's pad, a ladder shaft) joined by a covered skybridge over Emei
-  St, the scaffold on Xining S. Rd and the container site office, and sign gantries over the streets
-  that cut the long views from up there;
-- street cover (`taipei-cover.ts`, `taipei-streets.ts`): the covered night market (西門夜市) on Wuchang
-  St, the temple stage (廟口戲台), a walled roadwork and a construction compound, kiosks in every
-  crossing, booths across the ring road's sidewalks, stalls, vans, a box truck, crates and barriers.
-Emei St is the cut-through for cars: its lane swings from one side of the street to the other at
-three bends, with the street's cover on the side it is not using. Everything sits on the bots' 2.5 m
-navigation grid (bots walk every passage, stair, deck, bridge and roof), and no eye-level line
-between two places a soldier can stand runs longer than 60 m except along the ring road's drive
-lanes (the old full-size map's ran to 243 m; `shared/maps/taipei.test.ts` checks every node pair).
-Parked cars and taxis stand in the source's car bays off the drive lanes. Approximations: medians
-follow the junction gaps by rule, the generic buildings' balconies, window cages and rooftops are
-drawn by our own rules after the source's, and traffic and pedestrians are not carried over.
-
-**Taipei 101 · Xinyi** (big map, 24v24) is the Xinyi district (信義) around Taipei 101 from the same
-game. `tools/import-xinyi.ts` runs that game's city code headless and
-writes `shared/maps/xinyi-data.ts`: the street plan (Xinyi, Songren, Heping, Songzhi and Keelung Rds),
-the basin's hills, every section of Taipei 101 as the source lofts it (the tapering base, the eight
-stacked segments with their lit bands, crown and spire, the ruyi and coin ornaments), the 101 plaza
-and podium mall shell, the Xinyi Plaza Malls (信義新天地) and their signs, the Xinyi Skywalk (信義空橋)
-with its stairs and piers, the 101 west plaza, Four Four South Village (四四南村) and the city lots.
-The source keeps the tower and mall closed; this map opens the podium mall as the centre of the fight:
-**A** is the mall atrium, a sunken B1 food court under a ground-floor and a 2F gallery with a bridge
-across the void, shops on both sides, stairs between all three floors and a B1 passage out to a new
-sunken garden; **B** is the west plaza under the skywalk's spur to the tower, with an MRT exit
-pavilion; landmarks C–E are the skywalk, the sunken garden and the village. SWAT deploys in front of
-the Xinyi Plaza Malls, Militia on Songzhi Rd; Elephant Mountain's foot (象山) rises along the east edge
-(eased toward the edge of the terrain grid). The lots get curtain walls, mullion fins, crowns, lit
-canopies and rooftop plant. About 270 × 290 m; the tower itself is scenery (only its base collides).
+**Taipei 101 · Xinyi** (big map, 24v24) is a stylised Xinyi (信義) business district around Taipei 101,
+laid out by this project in the spirit of the real one (`shared/maps/xinyi*.ts`, the plan in
+`xinyi-plan.ts`; not a survey, and not taken from any other game). A row of department stores and
+towers on the north, Xinyi Rd under it (twenty metres of asphalt with a planted median), the tower
+block in the middle, Heping Rd, and an old village on the south; Keelung Rd closes the west and
+Songren Rd the east, with the foot of Elephant Mountain (象山) rising past it. The tower is scenery
+(`shared/maps/tower101.ts`, our own outline of it from public facts: only its base collides); the podium
+mall beside it is opened as the centre of the fight: **A** is its atrium, a food court sunk to B1 under
+a ground-floor ring and a gallery at F2, with a bridge across the void, stairs between all three floors,
+doors north, south and east, and a B1 passage out to **D**, the sunken garden (a pool, a pavilion, stairs
+up at both ends). **B** is the west plaza by the tower's foot, round a sculpture and an MRT exit
+pavilion; **C** is the skywalk, a glazed corridor eight metres up over Xinyi Rd (a stair down to the
+plaza, a ladder up from the sidewalk by SWAT's forecourt); **E** is the village (low brick houses with tin
+roofs, a middle row to fight through with a ladder to its roof lookout). SWAT deploys in a forecourt on
+the north sidewalk behind a police cordon (two gates, staggered baffles inside); Militia in one on the
+south behind site hoarding. Cars wait on both boulevards, scooters at the bases, and the helicopter on
+a pad at Xinyi Rd's east end. About 272 × 292 m. SWAT reaches each site about 1.5–2 s ahead of
+Militia (`shared/maps/xinyi.test.ts` checks the reachability of every site, floor, bridge, deck, roof,
+crate and ladder, the leads, and a 24v24 deployment). The skyline past the map is procedural (client
+only, `src/render/cityscape.ts`); the shop names are generic.
 
 **Taipei 101 · 88F** (台北101・高樓辦公層; 1v1 and 6v6, Elimination and Sabotage) moves the fight
 indoors, onto an office floor near the top of the same tower (`shared/maps/taipei101.ts`). The floor
-plate is the tower's notched square, 50 m across at the glass, set at the height (about 383 m) where
-the xinyi map's top-segment loft reaches that width, so the segments below the glass come from the
-same data. A 3 × 3 plan round a stone core: the Chairman's and CEO's corner suites either side of
+plate is the tower's notched square, 50 m across at the glass, set at the height (about 385 m) where
+the tower's top module (`shared/maps/tower101.ts`, our own outline of the tower from public facts)
+reaches that width, so the modules below the glass come from the same outline. A 3 × 3 plan round a stone core: the Chairman's and CEO's corner suites either side of
 the **Sky Lobby** (SWAT steps out of the lifts by the reception and logo wall); **A**, the server room
 (two zigzag rows of racks), and **B**, the boardroom, either side of the core; the pantry and the copy
 room below them; open offices with desk pods (and two glass meeting rooms in the SE) by the south
@@ -199,8 +187,8 @@ in a shaft through 89F; a stair either side of the hall climbs to the 89F viewin
 shaft (glass balustrades higher than a jump), which looks down into the hall. SWAT reaches each site
 about 1.8 s ahead of Militia; the bases are about 37 m apart on foot; no eye-level line between two
 standing spots exceeds 45 m (`shared/maps/taipei101.test.ts`). Glass stops bullets, as everywhere.
-The city below — the shared Taipei skyline (less the 101), Xinyi's lots and a seeded fill of blocks
-over the basin's flat ground — is the client-only `taipei101` dressing set (`src/render/cityfill.ts`),
+The city below — a seeded, procedural fill of blocks over the basin's flat ground, with hills and a
+river — is the client-only `taipei101` dressing set (`src/render/cityscape.ts`),
 lit by a golden-hour theme (`highrise`) through clear window glass. No vehicles.
 **Memorial Hall** (中正紀念堂, 1v1 and 6v6) is a compact arena in and around the National Chiang Kai-shek
 Memorial Hall in Taipei, stylised to the game's low-poly look (`shared/maps/memorial*.ts`). The white
@@ -273,9 +261,9 @@ Maps can park drivable vehicles (`MapDef.vehicles`, placed with the builder's `v
 
 | Map | Vehicles |
 | --- | --- |
-| **Taipei** (`shared/maps/taipei-vehicles.ts`) | Two cars on the ring road behind each base (Civic Blvd and Zhongxiao W. Rd) and two more on its Huanhe and Zhonghua Rd sides; scooters in the cordon's kerb lane, outside the barricade and in Xining S. Rd and Hanzhong St; a helicopter on a painted pad on the 7-TWELVE roof in the middle of the map, up its stair house |
+| **Taipei** (`ximending.ts`) | Six cars on the ring road: the inner lane is the lap, the outer lane holds the parked ones, two cars behind each base and one on the north and south sides; scooters on the ring's outer lanes, at both bases' edges and in West and East Streets; a helicopter on a painted pad on the arcade's roof (up a ladder) |
 | **Meridian District** | On each base boulevard: two cars, two scooters and a helicopter |
-| **Taipei 101 · Xinyi** (`shared/maps/xinyi-vehicles.ts`) | Two cars by each base (Xinyi Rd in front of the malls; Heping Rd by Songzhi Rd) and one on Songren Rd; scooters on the malls' frontage, on Songzhi Rd and by the 101 west plaza; a helicopter on a painted pad in Xinyi Rd's eastbound lanes past Songren Rd |
+| **Taipei 101 · Xinyi** (`xinyi.ts`) | Two cars on Xinyi Rd by SWAT's forecourt and two on Heping Rd by Militia's, one on Songren Rd and one on Keelung Rd; scooters at both forecourts and on the west plaza; a helicopter on a painted pad at Xinyi Rd's east end |
 
 | Vehicle | Seats | Top speed | Body | Notes |
 | --- | --- | --- | --- | --- |
