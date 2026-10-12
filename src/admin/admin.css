@@ -54,14 +54,57 @@ button { cursor: pointer; }
 a { color: var(--accent); }
 [hidden] { display: none !important; }
 
-#admin { max-width: 1240px; margin: 0 auto; padding: 18px 24px 56px; }
-@media (max-width: 600px) { #admin { padding: 12px 12px 40px; } }
+/* ---- Layout: the sidebar on the left, one section at a time on the right ------------------ */
+.shell { display: grid; grid-template-columns: 248px minmax(0, 1fr); min-height: 100vh; }
+.content { min-width: 0; width: 100%; max-width: 1280px; padding: 16px 32px 56px; }
+.side {
+  position: sticky; top: 0; height: 100vh; overflow-y: auto; scrollbar-width: thin;
+  display: flex; flex-direction: column; gap: 12px; padding: 18px 14px 14px;
+  background: #0d141a; border-right: 1px solid var(--line);
+}
+.brand { margin: 0 4px 2px; font-family: var(--brand); font-size: 21px; font-weight: 700; letter-spacing: 0.06em; text-transform: uppercase; display: flex; align-items: center; gap: 8px; white-space: nowrap; }
+.brand img { border-radius: 7px; }
+.brand em { font-style: normal; color: var(--accent); }
+.side .server-pick { flex-direction: column; align-items: stretch; gap: 6px; padding: 0 4px; }
+.side .server-pick span { display: none; }
+.side .server-pick select { max-width: none; width: 100%; font-size: 13px; }
+.side .db { margin: -4px 4px 0; padding: 2px 4px; background: none; border: 0; border-radius: 0; font-size: 12px; flex-wrap: nowrap; white-space: nowrap; overflow: hidden; }
+/* The menu above names the server and region; under it, the connection and the database. */
+.side .db #srv-name, .side .db #srv-region { display: none; }
+/* The sections, under their headings; the one on show is lit. */
+.side-nav { display: flex; flex-direction: column; gap: 6px; padding-top: 2px; border-top: 1px solid var(--line); }
+.nav-group { display: flex; flex-direction: column; gap: 1px; }
+.nav-h { padding: 8px 10px 3px; font-size: 11px; font-weight: 650; letter-spacing: 0.08em; text-transform: uppercase; color: var(--faint); }
+.side-nav a {
+  position: relative; display: flex; align-items: center; gap: 8px; padding: 5px 10px; border-radius: 8px;
+  color: var(--muted); text-decoration: none; font-weight: 550; font-size: 14px;
+}
+.side-nav a:hover { color: var(--ink); background: var(--panel); }
+.side-nav a[aria-current="page"] { color: var(--ink); background: var(--panel-2); box-shadow: 0 0 0 1px var(--line-strong) inset; }
+.side-nav a[aria-current="page"]::before { content: ''; position: absolute; left: -14px; top: 6px; bottom: 6px; width: 3px; border-radius: 0 3px 3px 0; background: var(--accent); }
+.side-nav a:focus-visible { outline: 2px solid var(--accent); outline-offset: -2px; }
+.side-nav .count { margin-left: auto; padding: 0 7px; border-radius: 999px; background: var(--panel); border: 1px solid var(--line); font-size: 12px; font-weight: 600; color: var(--faint); font-variant-numeric: tabular-nums; }
+.side-nav a[data-panel="errors"] .count { color: var(--crimson); border-color: rgba(255, 106, 90, 0.35); }
+.side-foot { margin-top: auto; padding: 12px 4px 0; border-top: 1px solid var(--line); justify-content: space-between; }
 
-/* ---- Header ---------------------------------------------------------------------------- */
-header.top { display: flex; flex-wrap: wrap; align-items: center; gap: 10px 16px; padding: 2px 0 16px; }
-header.top h1 { margin: 0; font-family: var(--brand); font-size: 24px; font-weight: 700; letter-spacing: 0.06em; text-transform: uppercase; display: flex; align-items: center; gap: 8px; }
-header.top h1 img { border-radius: 7px; }
-header.top h1 em { font-style: normal; color: var(--accent); }
+/* Narrower screens: the sidebar folds into a bar on top, and the sections scroll sideways in one row. */
+@media (max-width: 900px) {
+  .shell { display: block; }
+  .side { position: static; height: auto; overflow: visible; flex-direction: row; flex-wrap: wrap; align-items: center; gap: 10px 12px; padding: 12px 16px; border-right: 0; border-bottom: 1px solid var(--line); }
+  .brand { margin: 0; font-size: 19px; }
+  .side .server-pick { flex: 1 1 200px; flex-direction: row; align-items: center; padding: 0; }
+  .side-nav { order: 5; flex: 1 1 100%; flex-direction: row; gap: 2px; padding: 8px 0 0; overflow-x: auto; scrollbar-width: none; }
+  .side-nav::-webkit-scrollbar { display: none; }
+  .nav-group { flex: none; flex-direction: row; gap: 2px; }
+  .nav-h { display: none; }
+  .side-nav a { flex: none; padding: 6px 11px; font-size: 13.5px; }
+  .side-nav a[aria-current="page"]::before { left: 10px; right: 10px; top: auto; bottom: -1px; width: auto; height: 2px; border-radius: 2px; }
+  .side-foot { order: 3; margin: 0 0 0 auto; padding: 0; border: 0; }
+  .side .db { margin: 0; }
+  .content { padding: 12px 16px 40px; }
+}
+@media (max-width: 600px) { .content { padding: 10px 12px 40px; } .side { padding: 10px 12px; } }
+
 .db { display: inline-flex; align-items: center; flex-wrap: wrap; gap: 0 6px; padding: 4px 12px; background: var(--panel); border: 1px solid var(--line); border-radius: 999px; font-size: 13px; color: var(--muted); }
 .db b { color: var(--ink); font-weight: 600; }
 /* The server switcher: the build's server (Taipei in production), Maincloud legacy and dev. */
@@ -105,25 +148,11 @@ header.top h1 em { font-style: normal; color: var(--accent); }
 .login .msg { min-height: 1.4em; margin: 10px 0 0; color: var(--crimson); font-weight: 600; }
 .login .msg.ok { color: var(--muted); }
 
-/* ---- Navigation and range controls -------------------------------------------------------- */
-html { scroll-behavior: smooth; }
-@media (prefers-reduced-motion: reduce) { html { scroll-behavior: auto; } }
-nav.sections {
-  position: sticky; top: 0; z-index: 5; display: flex; flex-wrap: wrap; align-items: center; gap: 8px 12px;
-  margin: 0 -24px 6px; padding: 10px 24px; background: rgba(11, 16, 21, 0.86); backdrop-filter: blur(10px); border-top: 1px solid var(--line); border-bottom: 1px solid var(--line);
-}
-/* On a phone the nav and controls take three rows: let them scroll away instead of covering the charts. */
-@media (max-width: 600px) { nav.sections { position: static; margin: 0 -12px 6px; padding: 8px 12px; } }
-/* The links scroll sideways on a narrow screen; the chart controls wrap to a row of their own. */
-.nav-links { flex: 1 1 320px; min-width: 0; display: flex; gap: 2px; overflow-x: auto; scrollbar-width: none; }
-.nav-links::-webkit-scrollbar { display: none; }
-nav.sections a { flex: none; padding: 5px 10px; border-radius: 8px; color: var(--muted); text-decoration: none; font-weight: 550; font-size: 13.5px; }
-nav.sections a:hover { color: var(--ink); background: var(--panel-2); }
-nav.sections a:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
-/* The charts' range and Split / Combined, at the right of the nav: one row scoping every chart. */
-.chart-controls { flex: 0 1 auto; min-width: 0; display: flex; align-items: center; gap: 8px; margin-left: auto; flex-wrap: wrap; }
-@media (max-width: 600px) { .chart-controls > span { display: none; } .seg button { padding: 4px 9px; } }
+/* ---- Chart range and Split / Combined, top right of the content: they scope every chart ------- */
+.chart-controls { display: flex; flex-wrap: wrap; justify-content: flex-end; align-items: center; gap: 8px; margin-bottom: -8px; }
 .chart-controls > span { color: var(--faint); font-size: 13px; }
+@media (max-width: 900px) { .chart-controls { justify-content: flex-start; margin-bottom: 0; } }
+@media (max-width: 600px) { .chart-controls > span { display: none; } .seg button { padding: 4px 9px; } }
 .seg { display: inline-flex; padding: 2px; background: var(--panel); border: 1px solid var(--line); border-radius: 9px; }
 .seg button { border: 0; background: none; padding: 4px 11px; border-radius: 7px; font-weight: 600; font-size: 13px; color: var(--muted); font-variant-numeric: tabular-nums; }
 .seg button:hover { color: var(--ink); }
@@ -131,7 +160,7 @@ nav.sections a:focus-visible { outline: 2px solid var(--accent); outline-offset:
 .seg button:focus-visible { outline: 2px solid var(--accent); outline-offset: -2px; }
 
 /* ---- Sections, tiles and cards ------------------------------------------------------------ */
-section.group { scroll-margin-top: 64px; padding-top: 26px; }
+section.group { padding-top: 24px; }
 .group-h { display: flex; align-items: baseline; flex-wrap: wrap; gap: 4px 12px; margin: 0 0 14px; font-size: 20px; font-weight: 650; letter-spacing: -0.01em; }
 .group-h small { color: var(--faint); font-size: 14px; font-weight: 450; letter-spacing: 0; }
 
@@ -360,7 +389,6 @@ td .dot { display: inline-block; margin-right: 6px; vertical-align: 1px; }
   .tile b { font-size: 26px; }
   .tile .col b { font-size: 21px; }
   .tile .col { padding: 0 8px; }
-  header.top h1 { font-size: 21px; }
 }
 td .tag { display: inline-block; padding: 1px 7px; border-radius: 6px; background: rgba(255, 255, 255, 0.05); font-size: 12px; font-weight: 600; color: var(--muted); }
 td .tag.live { color: var(--cash); background: rgba(143, 224, 126, 0.12); }
