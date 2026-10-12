@@ -218,7 +218,14 @@ export function attachTooltips(scope: HTMLElement): void {
   });
   scope.addEventListener('pointerleave', hide);
   addEventListener('scroll', () => { if (current && !current.closest('.chart:focus-within, .chart:focus')) hide(); }, { passive: true });
-  scope.addEventListener('focusout', e => { if ((e.target as Element).classList?.contains('chart')) hide(); });
+  // A focused control with a readout (a KPI's "i") shows it under itself; leaving it or a chart hides it.
+  scope.addEventListener('focusin', e => {
+    const el = e.target as Element;
+    if (!el.matches?.('[data-tip]')) return;
+    const r = el.getBoundingClientRect();
+    show(el, r.left, r.bottom - 8);
+  });
+  scope.addEventListener('focusout', e => { const el = e.target as Element; if (el.classList?.contains('chart') || el.matches?.('[data-tip]')) hide(); });
   scope.addEventListener('keydown', e => {
     const chart = (e.target as Element).closest?.('.chart');
     if (!chart || !scope.contains(chart)) return;

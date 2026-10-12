@@ -112,7 +112,8 @@ nav.sections {
   position: sticky; top: 0; z-index: 5; display: flex; flex-wrap: wrap; align-items: center; gap: 8px 12px;
   margin: 0 -24px 6px; padding: 10px 24px; background: rgba(11, 16, 21, 0.86); backdrop-filter: blur(10px); border-top: 1px solid var(--line); border-bottom: 1px solid var(--line);
 }
-@media (max-width: 600px) { nav.sections { margin: 0 -12px 6px; padding: 8px 12px; } }
+/* On a phone the nav and controls take three rows: let them scroll away instead of covering the charts. */
+@media (max-width: 600px) { nav.sections { position: static; margin: 0 -12px 6px; padding: 8px 12px; } }
 /* The links scroll sideways on a narrow screen; the chart controls wrap to a row of their own. */
 .nav-links { flex: 1 1 320px; min-width: 0; display: flex; gap: 2px; overflow-x: auto; scrollbar-width: none; }
 .nav-links::-webkit-scrollbar { display: none; }
