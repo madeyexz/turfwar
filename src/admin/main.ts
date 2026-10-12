@@ -116,19 +116,27 @@ const titleCase = (id: string) => id.replace(/(^|[-_ ])(\w)/g, (_m, sep: string,
 
 const root = document.querySelector<HTMLDivElement>('#admin')!;
 const serverLabel = (s: AdminServer) => `${s.name} · ${regionName(s.uri)} · ${s.database}`;
+// A sidebar on the left (which server, the sections) and one section at a time on the right, under the charts' range.
 root.innerHTML = `
-  <header class="top">
-    <h1><img src="/icons/icon-192.png" width="32" height="32" alt=""> Turf War <em>Admin</em></h1>
-    <label class="server-pick" title="Which game server to show; each has its own login">
-      <span>Server</span>
-      <select id="server">${SERVERS.map(s => `<option value="${esc(s.id)}">${esc(serverLabel(s))}</option>`).join('')}</select>
-    </label>
-    <span class="db" id="db" title="SpacetimeDB server and database"><i class="dot wait" id="conn"></i><b id="srv-name"></b><span id="srv-region"></span><span class="db-name">db <b id="srv-db"></b></span></span>
-    <span class="spacer"></span>
-    <nav class="links"><a href="${POSTHOG}" target="_blank" rel="noopener noreferrer">PostHog ↗</a><button type="button" class="btn" id="logout" hidden>Log out</button></nav>
-  </header>
-  <main id="body"></main>`;
+  <div class="shell">
+    <aside class="side">
+      <h1 class="brand"><img src="/icons/icon-192.png" width="28" height="28" alt=""> Turf War <em>Admin</em></h1>
+      <label class="server-pick" title="Which game server to show; each has its own login">
+        <span>Server</span>
+        <select id="server">${SERVERS.map(s => `<option value="${esc(s.id)}">${esc(serverLabel(s))}</option>`).join('')}</select>
+      </label>
+      <span class="db" id="db" title="SpacetimeDB server and database"><i class="dot wait" id="conn"></i><b id="srv-name"></b><span id="srv-region"></span><span class="db-name">db <b id="srv-db"></b></span></span>
+      <nav class="side-nav" id="side-nav" aria-label="Sections" hidden></nav>
+      <div class="side-foot links"><a href="${POSTHOG}" target="_blank" rel="noopener noreferrer">PostHog ↗</a><button type="button" class="btn" id="logout" hidden>Log out</button></div>
+    </aside>
+    <div class="content">
+      <div class="chart-controls" id="chart-controls" hidden></div>
+      <main id="body"></main>
+    </div>
+  </div>`;
 const body = root.querySelector<HTMLElement>('#body')!;
+const sideNav = root.querySelector<HTMLElement>('#side-nav')!;
+const chartControls = root.querySelector<HTMLElement>('#chart-controls')!;
 const connDot = root.querySelector<HTMLElement>('#conn')!;
 const logoutBtn = root.querySelector<HTMLButtonElement>('#logout')!;
 const serverSelect = root.querySelector<HTMLSelectElement>('#server')!;
@@ -356,6 +364,46 @@ const SECTIONS: [string, string][] = [
   ['metrics', 'Key metrics'], ['scorecard', 'Score'], ['now', 'Now'], ['growth', 'Acquisition'], ['activation', 'Activation'], ['retention', 'Retention'], ['play', 'Engagement'],
   ['virality', 'Virality'], ['health', 'Health'], ['errors', 'Errors'], ['connection', 'Quality'], ['benchmarks', 'Benchmarks'], ['players', 'Players'],
 ];
+/** The sidebar's headings over the sections (ids from SECTIONS, in order). */
+const NAV_GROUPS: [string, string[]][] = [
+  ['Overview', ['metrics', 'scorecard', 'now']],
+  ['Growth', ['growth', 'activation', 'retention', 'play', 'virality']],
+  ['Operations', ['health', 'errors', 'connection']],
+  ['Reference', ['benchmarks', 'players']],
+];
+/** The section on show: the page's #hash when it names one, else Key metrics. */
+const panelFromHash = () => { const id = decodeURIComponent(location.hash.slice(1)); return SECTIONS.some(([s]) => s === id) ? id : 'metrics'; };
+let panel = panelFromHash();
+/** Show the current section only, and mark it in the sidebar. */
+function showPanel() {
+  body.querySelectorAll<HTMLElement>('section.group').forEach(s => { s.hidden = s.id !== panel; });
+  sideNav.querySelectorAll<HTMLAnchorElement>('a[data-panel]').forEach(a => {
+    if (a.dataset.panel === panel) a.setAttribute('aria-current', 'page'); else a.removeAttribute('aria-current');
+  });
+}
+function openPanel(id: string, push: boolean) {
+  if (push && id !== panel) history.pushState(null, '', `#${id}`);
+  panel = id;
+  showPanel();
+  window.scrollTo({ top: 0 });
+}
+// Links between sections (the Scorecard's stages) and Back / Forward.
+window.addEventListener('hashchange', () => openPanel(panelFromHash(), false));
+window.addEventListener('popstate', () => openPanel(panelFromHash(), false));
+sideNav.addEventListener('click', e => {
+  const a = (e.target as HTMLElement).closest<HTMLAnchorElement>('a[data-panel]');
+  if (!a || e.metaKey || e.ctrlKey || e.shiftKey || e.button !== 0) return;
+  e.preventDefault();
+  openPanel(a.dataset.panel!, true);
+});
+/** The sidebar's section list; `counts` adds a small figure after a label (players, error reports). */
+function renderSideNav(counts: Record<string, string>) {
+  const label = Object.fromEntries(SECTIONS);
+  sideNav.innerHTML = NAV_GROUPS.map(([heading, ids]) => `<div class="nav-group"><span class="nav-h">${heading}</span>${ids.map(id =>
+    `<a href="#${id}" data-panel="${id}">${label[id]}${counts[id] ? `<span class="count">${counts[id]}</span>` : ''}</a>`).join('')}</div>`).join('');
+  sideNav.hidden = false;
+}
+
 const SIDE_LABEL: Record<Side, string> = { phone: 'Phone', computer: 'Computer' };
 const dateOf = (day: number) => new Date(day * DAY_MS).toISOString().slice(0, 10);
 
@@ -447,12 +495,13 @@ function dashboard() {
   const shown = playerGroup === 'all' ? players : G[playerGroup];
   const chips = `<div class="chips" role="group" aria-label="Show players">${GROUPS.map(g => `<button type="button" class="chip${g.id === playerGroup ? ' on' : ''}" data-group="${g.id}" aria-pressed="${g.id === playerGroup}">${g.label} <span>${num(G[g.id].length)}</span></button>`).join('')}</div>`;
 
+  const errorCount = views.errors === 'on' ? [...db.adminErrors.iter()].length : 0;
+  renderSideNav({ players: num(players.length), ...(errorCount ? { errors: num(errorCount) } : {}) });
+  chartControls.innerHTML = `<span>Charts</span>
+    <div class="seg" role="group" aria-label="Chart range">${RANGES.map(r => `<button type="button" data-range="${r.id}" aria-pressed="${charts.range === r.id}">${r.label}</button>`).join('')}</div>
+    <div class="seg" role="group" aria-label="Chart groups"><button type="button" data-combined="0" aria-pressed="${!charts.combined}">Split</button><button type="button" data-combined="1" aria-pressed="${charts.combined}">Combined</button></div>`;
+  chartControls.hidden = false;
   body.innerHTML = `
-    <nav class="sections" aria-label="Sections"><div class="nav-links">${SECTIONS.map(([id, label]) => `<a href="#${id}">${label}</a>`).join('')}</div>
-      <div class="chart-controls"><span>Charts</span>
-        <div class="seg" role="group" aria-label="Chart range">${RANGES.map(r => `<button type="button" data-range="${r.id}" aria-pressed="${charts.range === r.id}">${r.label}</button>`).join('')}</div>
-        <div class="seg" role="group" aria-label="Chart groups"><button type="button" data-combined="0" aria-pressed="${!charts.combined}">Split</button><button type="button" data-combined="1" aria-pressed="${charts.combined}">Combined</button></div>
-      </div></nav>
     ${sideNote ? `<p class="notice">${sideNote}.</p>` : ''}
     ${keyMetrics(players, o, today, now)}
     ${scorecard(g)}
@@ -495,13 +544,14 @@ function dashboard() {
     render();
     requestAnimationFrame(() => body.querySelector<HTMLButtonElement>(`.chip[data-group="${playerGroup}"]`)?.focus());
   }));
-  body.querySelectorAll<HTMLButtonElement>('.chart-controls button').forEach(b => b.addEventListener('click', () => {
+  showPanel();
+  chartControls.querySelectorAll<HTMLButtonElement>('button').forEach(b => b.addEventListener('click', () => {
     if (b.dataset.range) charts.range = b.dataset.range as Range;
     if (b.dataset.combined) charts.combined = b.dataset.combined === '1';
     saveCharts();
     render();
     const sel = b.dataset.range ? `[data-range="${b.dataset.range}"]` : `[data-combined="${b.dataset.combined}"]`;
-    requestAnimationFrame(() => body.querySelector<HTMLButtonElement>(`.chart-controls button${sel}`)?.focus());
+    requestAnimationFrame(() => chartControls.querySelector<HTMLButtonElement>(`button${sel}`)?.focus());
   }));
   body.querySelector('#more')?.addEventListener('click', () => { playerLimit += 200; render(); });
   body.querySelector('#revoke')?.addEventListener('click', () => {
@@ -647,7 +697,7 @@ function growthFigures(G: Record<GroupId, Player[]>, now: number, today: number)
 function scorecard(g: ReturnType<typeof growthFigures>) {
   const focus = g.stages.find(s => s.status === 'bad') ?? g.stages.find(s => s.status === 'watch');
   const banner = focus
-    ? `<div class="focus st-${focus.status}"><b>Focus first: ${esc(focus.name)}</b><span>${esc(focus.question)} ${esc(focus.value)} (${esc(focus.target)}).</span><span>${esc(focus.action)}</span><a href="#${focus.id}">Details ↓</a></div>`
+    ? `<div class="focus st-${focus.status}"><b>Focus first: ${esc(focus.name)}</b><span>${esc(focus.question)} ${esc(focus.value)} (${esc(focus.target)}).</span><span>${esc(focus.action)}</span><a href="#${focus.id}">Details →</a></div>`
     : `<div class="focus st-good"><b>${g.stages.some(s => s.status === 'good') ? 'Every stage with data is on track.' : 'Not enough data yet.'}</b><span>Stages fill in as players arrive after this version of the server.</span></div>`;
   const cards = g.stages.map(s => `<a class="stage st-${s.status}" href="#${s.id}"><small>${esc(s.name)}</small><span class="q">${esc(s.question)}</span>
     <b>${esc(s.value)}</b><span class="badge st-${s.status}">${STATUS_LABEL[s.status]}</span><span class="target">${esc(s.target)}</span>${s.split ? `<span class="split">${esc(s.split)}</span>` : ''}</a>`).join('');
@@ -1351,6 +1401,7 @@ function render() {
     renderConn();
     if (conn && isAdmin()) { logoutBtn.hidden = false; dashboard(); return; }
     logoutBtn.hidden = true;
+    sideNav.hidden = true; chartControls.hidden = true;
     if (p === 'unreachable') { unreachableCard(); return; }
     // Remembered as logged in, but the server says no (revoked, or a new key): back to the login.
     if (conn && status() && store.get(flagKey())) store.del(flagKey());
