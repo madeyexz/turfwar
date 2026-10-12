@@ -4,9 +4,9 @@ import { RoundedBoxGeometry } from 'three/examples/jsm/geometries/RoundedBoxGeom
 import { mergeGeometries } from 'three/examples/jsm/utils/BufferGeometryUtils.js';
 import * as SkeletonUtils from 'three/examples/jsm/utils/SkeletonUtils.js';
 import type { Assets } from '../assets';
-import { dirFromAngles, wrapAngle } from '../../shared/math';
+import { dirFromAngles } from '../../shared/math';
 import { riderTwist } from '../../shared/vehicles';
-import { curlFingers, orientHand, restorePose, rotateWorld, snapshotPose, solveArm } from './rig';
+import { curlFingers, orientHand, restorePose, rotateWorld, snapshotPose, solveArm, solveLimb } from './rig';
 import { ATTACHMENT_SLOTS, WEAPONS, type Attachments, type WeaponId } from '../../shared/weapons';
 import { GUN_FIT, fitAttachments, vec, type Fitted } from './optics';
 
@@ -25,6 +25,23 @@ const MILITIA: Look[] = [
   { head: 0xa27e60, shirt: 0x7d7356, hands: 0x96714f, pants: 0x6e6447, boots: 0x463728, gear: 0x4c5034, pouch: 0x5a4d36, accent: 0x4d5236, patch: 0x4c5034 },
 ];
 const lookOf = (team: number, variant: number) => team === 0 ? SWAT : MILITIA[variant % MILITIA.length];
+
+/**
+ * The default crew (src/game/crew.ts, Quaternius' CC0 Modular Men): the SWAT operator is team 0, the
+ * Militia are street-gang irregulars picked in rotation. Their bones carry the classic rig's names
+ * (tools/import-modular.ts), so the IK below drives them unchanged; the colours are baked in the
+ * mesh (one skinned mesh, one draw call per soldier).
+ */
+const CREW_MILITIA = ['Farmer', 'Punk', 'Worker', 'Adventurer', 'Casual_2', 'Casual_Hoodie'];
+const crewMaterial = new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.84, metalness: 0.04 });
+function crewModel(assets: Assets, team: number, variant: number) {
+  const name = team === 0 ? 'Swat' : CREW_MILITIA[variant % CREW_MILITIA.length];
+  const model = SkeletonUtils.clone(assets.crew!.getObjectByName(name)!);
+  const body = bodyOf(model);
+  body.material = crewMaterial;
+  body.castShadow = true; body.receiveShadow = true; body.frustumCulled = false;
+  return model;
+}
 
 /** Body region by bone name (vertex colours are blended by skin weight across seams). */
 function region(bone: string): keyof Look {
@@ -201,15 +218,35 @@ const CLIPS: Record<ClipName, string> = {
 };
 /** Ground speed (m/s) at which each locomotion clip plays at 1x. */
 const CLIP_SPEED: Partial<Record<ClipName, number>> = { walk: 1.6, jog: 4.4, sprint: 7.2, crouchWalk: 1.8 };
+/** The crew's clips: it has no crouch, jump or slide, so those play a walk or idle under a procedural squat (see SoldierView.squat). */
+const CREW_CLIPS: Partial<Record<ClipName, string>> = { idle: 'Idle_Neutral', walk: 'Walk', jog: 'Run', death: 'Death' };
+/** The states that borrow another's clip (and how deep they squat). */
+const CREW_ALIAS: Partial<Record<ClipName, ClipName>> = { sprint: 'jog', crouchIdle: 'idle', crouchWalk: 'walk', air: 'idle', slide: 'idle' };
+/** The crew's fingers are long and start fanned out: curl them further around the grip. */
+const CREW_CURL = 2.2;
+const CREW_CLIP_SPEED: Partial<Record<ClipName, number>> = { walk: 1.5, jog: 4.2 };
 
 /** Frames between full animation updates per level of detail (see SoldierView.setLod). */
 const LOD_INTERVAL = [1, 2, 4, 8] as const;
 
 const up = new THREE.Vector3(0, 1, 0);
-const v1 = new THREE.Vector3(), v2 = new THREE.Vector3(), v3 = new THREE.Vector3(), q1 = new THREE.Quaternion(), q2 = new THREE.Quaternion();
+const v1 = new THREE.Vector3(), v2 = new THREE.Vector3(), v3 = new THREE.Vector3(), v4 = new THREE.Vector3(), q1 = new THREE.Quaternion(), q2 = new THREE.Quaternion();
 const attachKey = (a: Attachments = {}) => ATTACHMENT_SLOTS.map(c => a[c] ?? '').join('|');
 
 /** A fully animated third-person soldier (remote players and bots). */
+/** Where a soldier's body faces: the aim, or for a scooter rider the bike's heading (never the aim). */
+export const bodyFacing = (p: Pick<SoldierPose, 'yaw' | 'hips'>) => (p.hips === undefined ? p.yaw : p.hips);
+
+/**
+ * The bladed shooting stance's torso turn (rad): the support shoulder leads, more with a long gun. None
+ * while sprinting, nor on a scooter: the rider sits square to the bike (the turn twisted the rider
+ * sideways on the seat, swinging as the aim moved).
+ */
+export const stanceBlade = (p: Pick<SoldierPose, 'sprint' | 'hips'>, pistol: boolean) => (p.sprint || p.hips !== undefined ? 0 : pistol ? -0.15 : -0.5);
+
+/** How far a soldier's body bends for the aim's pitch: a rider stays upright on the bike (±0.25 rad at most). */
+export const riderPitch = (p: Pick<SoldierPose, 'pitch' | 'hips'>) => (p.hips === undefined ? p.pitch : Math.max(-0.25, Math.min(0.25, p.pitch)));
+
 export class SoldierView {
   readonly root = new THREE.Group();
   readonly gun = new THREE.Group();
@@ -237,28 +274,37 @@ export class SoldierView {
   /** Dev inspection of IK targets. */
   debug?: { chest: THREE.Vector3; grip: THREE.Vector3; fore: THREE.Vector3 };
 
+  private crew: boolean;
+  private squatDrop = 0;
+
   constructor(private assets: Assets, readonly team: number) {
-    const kit = gearOf(assets, team);
-    const look = lookOf(team, spawned++);
-    this.model = SkeletonUtils.clone(assets.soldier.scene);
-    const body = bodyOf(this.model);
-    this.model.traverse(o => { if ((o as THREE.Bone).isBone) this.bones.set(o.name, o as THREE.Bone); });
-    const original = body.material as THREE.MeshStandardMaterial;
-    body.geometry = paintedBody(body, look);
-    body.material = bodyMaterial(original);
-    body.castShadow = true; body.receiveShadow = true; body.frustumCulled = false;
-    const gear = new THREE.SkinnedMesh(kit.geometry, gearMaterials(look, team));
-    gear.bind(body.skeleton, kit.bindMatrix);
-    gear.castShadow = true; gear.frustumCulled = false;
-    gear.position.copy(body.position); gear.quaternion.copy(body.quaternion); gear.scale.copy(body.scale);
-    body.parent!.add(gear);
+    this.crew = !!assets.crew;
+    if (assets.crew) {
+      this.model = crewModel(assets, team, spawned++);
+      this.model.traverse(o => { if ((o as THREE.Bone).isBone) this.bones.set(o.name, o as THREE.Bone); });
+    } else {
+      const kit = gearOf(assets, team);
+      const look = lookOf(team, spawned++);
+      this.model = SkeletonUtils.clone(assets.soldier.scene);
+      const body = bodyOf(this.model);
+      this.model.traverse(o => { if ((o as THREE.Bone).isBone) this.bones.set(o.name, o as THREE.Bone); });
+      const original = body.material as THREE.MeshStandardMaterial;
+      body.geometry = paintedBody(body, look);
+      body.material = bodyMaterial(original);
+      body.castShadow = true; body.receiveShadow = true; body.frustumCulled = false;
+      const gear = new THREE.SkinnedMesh(kit.geometry, gearMaterials(look, team));
+      gear.bind(body.skeleton, kit.bindMatrix);
+      gear.castShadow = true; gear.frustumCulled = false;
+      gear.position.copy(body.position); gear.quaternion.copy(body.quaternion); gear.scale.copy(body.scale);
+      body.parent!.add(gear);
+    }
     this.bindPose = snapshotPose(this.bones);
     this.root.add(this.model);
     // The rig faces +Z; our yaw 0 faces -Z.
     this.model.rotation.y = Math.PI;
 
     this.mixer = new THREE.AnimationMixer(this.model);
-    for (const [name, clipName] of Object.entries(CLIPS) as [ClipName, string][]) {
+    for (const [name, clipName] of Object.entries(this.crew ? CREW_CLIPS : CLIPS) as [ClipName, string][]) {
       const clip = assets.clips.get(clipName);
       if (!clip) continue;
       const action = this.mixer.clipAction(clip);
@@ -295,6 +341,22 @@ export class SoldierView {
     this.suppressed = attachments?.muzzle === 'suppressor';
   }
 
+  /**
+   * Crouch the crew's animated pose: drop the hips and fold both legs with two-bone IK so the feet
+   * stay where the clip put them and the knees point forward.
+   */
+  private squat(amount: number) {
+    const body = this.bones.get('Body')!, pelvis = this.bones.get('pelvis')!;
+    this.model.updateMatrixWorld(true);
+    const forward = v2.set(0, 0, 1).applyQuaternion(pelvis.getWorldQuaternion(q1));
+    const sides = (['l', 'r'] as const).map(side => ({ thigh: this.bones.get(`thigh_${side}`)!, calf: this.bones.get(`calf_${side}`)!, foot: this.bones.get(`foot_${side}`)!, target: new THREE.Vector3() }));
+    for (const l of sides) l.foot.getWorldPosition(l.target);
+    this.squatDrop = 0.46 * amount;
+    body.position.y -= this.squatDrop;
+    body.updateMatrixWorld(true);
+    for (const l of sides) solveLimb(l.thigh, l.calf, l.foot, l.target, l.thigh.getWorldPosition(v1).addScaledVector(forward, 1));
+  }
+
   hit(fromLeft: boolean) { this.flinch = 1; this.flinchDir = fromLeft ? 1 : -1; }
   /** A shot (no flash when suppressed), or a knife stab. */
   shoot() {
@@ -323,10 +385,11 @@ export class SoldierView {
   private meshesOf(o: THREE.Object3D) { const out: THREE.Mesh[] = []; o.traverse(c => { const m = c as THREE.Mesh; if (m.isMesh && !(m.material as THREE.Material).transparent) out.push(m); }); return out; }
 
   /**
-   * The body's facing: the aim, or for a rider the bike's heading turned toward the aim by the
-   * torso's twist (never round on the seat: the whole body used to follow a look behind).
+   * The body's facing: the aim, or for a rider exactly the bike's heading. A rider never turns on
+   * the seat: as the camera (and with it the aim) swung round, the whole body used to turn with it.
+   * Only the spine, head and arms turn toward the aim (below).
    */
-  private bodyYaw(p: SoldierPose) { return p.hips === undefined ? p.yaw : p.hips + riderTwist(p.yaw, p.hips); }
+  private bodyYaw(p: SoldierPose) { return bodyFacing(p); }
 
   update(dt: number, p: SoldierPose) {
     // Distant and hidden soldiers animate at a reduced rate; between updates they only move.
@@ -347,7 +410,8 @@ export class SoldierView {
     // ---- Locomotion blend ----
     const sin = Math.sin(p.yaw), cos = Math.cos(p.yaw);
     const forward = -(p.vx * sin + p.vz * cos), strafe = p.vx * cos - p.vz * sin;
-    const speed = Math.hypot(p.vx, p.vz);
+    // A rider sits still on the bike, whatever its speed (the legs used to walk on the seat).
+    const speed = p.hips === undefined ? Math.hypot(p.vx, p.vz) : 0;
     const target: Partial<Record<ClipName, number>> = {};
     if (!p.alive) target.death = 1;
     else if (using) target.crouchIdle = 1;
@@ -358,6 +422,12 @@ export class SoldierView {
     else if (speed < 2.5) { const t = speed / 2.5; target.idle = 1 - t; target.walk = t; }
     else if (speed < 6.2) { const t = (speed - 2.5) / 3.7; target.walk = 1 - t; target.jog = t; }
     else { const t = Math.min(1, (speed - 6.2) / 2.2); target.jog = 1 - t; target.sprint = t; }
+    // The crew squats under a walk or idle clip (crouch, slide, in the air, kneeling on the bomb) and runs the jog clip faster to sprint.
+    let squat = 0;
+    if (this.crew) {
+      squat = !p.alive ? 0 : using ? 1 : p.slide ? 0.8 : !p.grounded && Math.abs(p.vy) > 1.5 ? 0.3 : p.crouch;
+      for (const [from, to] of Object.entries(CREW_ALIAS) as [ClipName, ClipName][]) if (target[from]) { target[to] = (target[to] ?? 0) + target[from]!; delete target[from]; }
+    }
     if (p.alive !== this.wasAlive) {
       const death = this.actions.get('death')!;
       if (!p.alive) { death.reset(); death.play(); for (const k of this.weights.keys()) this.weights.set(k, 0); }
@@ -368,21 +438,24 @@ export class SoldierView {
     let moveAngle = speed > 0.5 ? Math.atan2(strafe, forward) : 0;
     if (backwards) moveAngle = Math.atan2(-strafe, -forward);
     const clampAngle = Math.max(-1.1, Math.min(1.1, moveAngle));
-    // On a seat the hips and legs stay on the bike (exactly, every frame): the body turns toward the
-    // aim only as far as the torso twists; the arms bring the weapon the rest of the way.
-    if (p.hips !== undefined) this.legYaw = riderTwist(p.yaw, p.hips);
+    // On a seat the hips and legs stay on the bike (the root faces it): no leg twist.
+    if (p.hips !== undefined) this.legYaw = 0;
     else this.legYaw += (clampAngle * (p.sprint ? 0.3 : 1) - this.legYaw) * Math.min(1, dt * 10);
     for (const [name, action] of this.actions) {
       const w = this.weights.get(name)! + ((target[name] ?? 0) - this.weights.get(name)!) * Math.min(1, dt * (p.alive ? 12 : 30));
       this.weights.set(name, w);
       action.setEffectiveWeight(w);
-      const natural = CLIP_SPEED[name];
+      const natural = (this.crew ? CREW_CLIP_SPEED : CLIP_SPEED)[name];
       if (natural) action.timeScale = Math.max(0.4, Math.min(1.8, speed / natural)) * (backwards ? -1 : 1);
     }
     // Fingers are not animated by the clips; restore them before posing the grip.
-    restorePose(this.bones, this.bindPose, n => /^(index|middle|ring|pinky|thumb)_/.test(n));
+    // (The crew's clips leave out the bones that never move, so every bone returns to its rest pose or the procedural layer would pile up on it.)
+    restorePose(this.bones, this.bindPose, this.crew ? undefined : n => /^(index|middle|ring|pinky|thumb)_/.test(n));
+    // Undo last frame's squat first: a clip without a hip track would never reset it, and the drop would pile up.
+    if (this.squatDrop) { this.bones.get('Body')!.position.y += this.squatDrop; this.squatDrop = 0; }
     this.mixer.update(dt);
     if (!p.alive) { this.gun.visible = false; return; }
+    if (squat > 0.01) this.squat(squat);
 
     // ---- Procedural layer: leg twist, aim pitch, flinch ----
     const pelvis = this.bones.get('pelvis')!, spine1 = this.bones.get('spine_01')!, spine2 = this.bones.get('spine_02')!, spine3 = this.bones.get('spine_03')!;
@@ -390,7 +463,12 @@ export class SoldierView {
     rotateWorld(pelvis, up, -this.legYaw);
     rotateWorld(spine1, up, this.legYaw * 0.6);
     rotateWorld(spine2, up, this.legYaw * 0.4);
+    // A rider's body stays square on the bike, torso included (any turn toward the camera's aim read
+    // as the rider spinning round on the seat): only the head looks toward the aim, at most
+    // RIDER_TWIST, and the arms bring the weapon round.
+    if (p.hips !== undefined) rotateWorld(this.bones.get('neck_01')!, up, riderTwist(p.yaw, p.hips));
     const right = v3.set(Math.cos(p.yaw), 0, -Math.sin(p.yaw));
+    if (squat > 0.01) rotateWorld(spine1, right, -0.25 * squat);
     const fit = GUN_FIT[p.weapon];
     const pistol = fit.kind !== 'long';
     if (using) {
@@ -409,18 +487,21 @@ export class SoldierView {
       this.gun.visible = false;
       return;
     }
-    const pitch = p.pitch;
+    // A rider bends for the aim only a little, and about the bike's side axis: bending about the aim's
+    // side axis rolled the rider over sideways whenever the aim was not straight ahead.
+    const pitch = riderPitch(p);
+    const bend = p.hips === undefined ? right : v4.set(Math.cos(p.hips), 0, -Math.sin(p.hips));
     // Bladed shooting stance: torso turns so the support shoulder leads; head stays on target.
-    const blade = p.sprint ? 0 : pistol ? -0.15 : -0.5;
+    const blade = stanceBlade(p, pistol);
     rotateWorld(spine2, up, blade * 0.5);
     rotateWorld(spine3, up, blade * 0.5);
     rotateWorld(this.bones.get('neck_01')!, up, -blade * 0.6);
     rotateWorld(this.bones.get('Head')!, up, -blade * 0.4);
-    rotateWorld(spine2, right, pitch * 0.35);
-    rotateWorld(spine3, right, pitch * 0.35);
+    rotateWorld(spine2, bend, pitch * 0.35);
+    rotateWorld(spine3, bend, pitch * 0.35);
     this.flinch = Math.max(0, this.flinch - dt * 5);
     if (this.flinch > 0) rotateWorld(spine3, up, this.flinch * 0.25 * this.flinchDir);
-    rotateWorld(this.bones.get('neck_01')!, right, pitch * 0.3);
+    rotateWorld(this.bones.get('neck_01')!, bend, pitch * 0.3);
 
     // ---- Weapon placement ----
     this.showGun(p.weapon, p.attachments);
@@ -466,8 +547,9 @@ export class SoldierView {
     solveArm(this.bones, 'l', foreWorld, pole(-1));
     orientHand(this.bones, 'r', fwd.clone().addScaledVector(gunUp, -0.8).normalize(), right.clone().negate());
     orientHand(this.bones, 'l', knife ? fwd.clone().addScaledVector(gunUp, 0.5).normalize() : fwd.clone().addScaledVector(right, 0.3).normalize(), knife ? right : gunUp);
-    curlFingers(this.bones, 'r', knife ? 0.85 : 0.55, 0.5);
-    curlFingers(this.bones, 'l', knife ? 0.8 : 0.45, 0.4);
+    const curl = this.crew ? CREW_CURL : 1;
+    curlFingers(this.bones, 'r', (knife ? 0.85 : 0.55) * curl, 0.5);
+    curlFingers(this.bones, 'l', (knife ? 0.8 : 0.45) * curl, 0.4);
     this.flashLeft -= dt;
     this.flash.visible = this.flashLeft > 0;
   }

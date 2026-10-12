@@ -29,10 +29,9 @@ export function aimBone(bone: THREE.Object3D, child: THREE.Object3D, target: THR
   bone.updateMatrixWorld(true);
 }
 
-/** Analytic two-bone IK for an arm, bending the elbow toward `pole`. */
-export function solveArm(bones: Bones, side: 'l' | 'r', target: THREE.Vector3, pole: THREE.Vector3) {
-  const upper = bones.get(`upperarm_${side}`)!, lower = bones.get(`lowerarm_${side}`)!, hand = bones.get(`hand_${side}`)!;
-  const s = upper.getWorldPosition(new THREE.Vector3()), e = lower.getWorldPosition(new THREE.Vector3()), h = hand.getWorldPosition(new THREE.Vector3());
+/** Analytic two-bone IK: put `end` (a bone below `mid` below `upper`) at `target`, bending the middle joint toward `pole`. */
+export function solveLimb(upper: THREE.Object3D, lower: THREE.Object3D, end: THREE.Object3D, target: THREE.Vector3, pole: THREE.Vector3) {
+  const s = upper.getWorldPosition(new THREE.Vector3()), e = lower.getWorldPosition(new THREE.Vector3()), h = end.getWorldPosition(new THREE.Vector3());
   const a = s.distanceTo(e), b = e.distanceTo(h);
   const toTarget = target.clone().sub(s);
   const d = Math.max(0.05, Math.min(toTarget.length(), a + b - 0.002));
@@ -43,7 +42,12 @@ export function solveArm(bones: Bones, side: 'l' | 'r', target: THREE.Vector3, p
   const perp = toPole.sub(dir.clone().multiplyScalar(toPole.dot(dir))).normalize();
   const elbow = s.clone().addScaledVector(dir, cosA * a).addScaledVector(perp, sinA * a);
   aimBone(upper, lower, elbow);
-  aimBone(lower, hand, s.clone().addScaledVector(dir, d));
+  aimBone(lower, end, s.clone().addScaledVector(dir, d));
+}
+
+/** Analytic two-bone IK for an arm, bending the elbow toward `pole`. */
+export function solveArm(bones: Bones, side: 'l' | 'r', target: THREE.Vector3, pole: THREE.Vector3) {
+  solveLimb(bones.get(`upperarm_${side}`)!, bones.get(`lowerarm_${side}`)!, bones.get(`hand_${side}`)!, target, pole);
 }
 
 /**

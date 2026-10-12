@@ -215,6 +215,10 @@ texture, sound and line of code here is original or CC0/OFL.
   *Sci-Fi Essentials Kit* and *Modular Sci-Fi MegaKit* — CC0 1.0 (https://quaternius.com).
   Converted by `tools/import-assets.ts` (textures resized to WebP, animation tracks pruned and
   meshopt-compressed); see `public/assets/LICENSE.txt`.
+- Soldiers: Quaternius' *Ultimate Modular Men* (the SWAT operator and six street-gang irregulars with
+  their idle, walk, run and death animations) — CC0 1.0 (https://quaternius.com/packs/ultimatemodularcharacters.html).
+  Converted by `tools/import-modular.ts` into `public/assets/soldiers.glb` and `soldier-anims.glb`; `?soldiers=classic`
+  brings back the Universal Base Characters soldier.
 - Weapons: models from Quaternius' *Ultimate Gun Pack* (a bayonet for the knife) — CC0 1.0
   (https://opengameart.org/content/low-poly-guns-pack). Converted from OBJ by `tools/import-guns.ts`
   (`bun tools/import-guns.ts`, with the pack extracted under `GUN_SRC`; `--preview <dir>` renders
