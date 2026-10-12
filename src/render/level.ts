@@ -9,6 +9,7 @@ import { rng } from '../../shared/math';
 import { mergeStatic, shadowProxies, staticMeshes } from './batch';
 import { separateCoplanar, type DrawnBox } from './coplanar';
 import { addDressing } from './dressing';
+import type { NearField } from './skyline';
 import { CJK_STACK, UI_STACK, cjkFontReady } from '../ui/fonts';
 import { shieldMaterial, surfaceMaterial, terrainMaterial, type Theme } from './materials';
 import { textureBudget } from './textures';
@@ -145,7 +146,7 @@ export class LevelView {
       ? cjkFontReady(signs.map(s => s.text + (s.sub ?? '')).join('')).then(() => { this.group.add(signMesh(signs)); })
       : Promise.resolve();
     /** Resolves once the map's signs, dressing sets and model instances are built (they load on demand). */
-    this.ready = Promise.all([signsBuilt, addDressing(this.group, map.decor).then(ms => { this.buildStats.dressingMergeMs = Math.round(ms * 10) / 10; }, e => console.warn('dressing failed', e))]).then(() => {
+    this.ready = Promise.all([signsBuilt, addDressing(this.group, map.decor, nearField(map.terrain)).then(ms => { this.buildStats.dressingMergeMs = Math.round(ms * 10) / 10; }, e => console.warn('dressing failed', e))]).then(() => {
       // Once everything stands, the big static casters cast from shadow proxies cut into cells.
       const t1 = performance.now(), casters: THREE.Mesh[] = [];
       this.group.traverse(o => { if ((o as THREE.Mesh).isMesh) casters.push(o as THREE.Mesh); });
@@ -1257,4 +1258,21 @@ function drawSign(c: CanvasRenderingContext2D, s: SignDecor, r: { x: number; y: 
     }
   }
   c.restore();
+}
+
+/** The map's own ground, from its heightfield: the skyline's ground must stay under it (see underMap). */
+export function nearField(t: MapDef['terrain']): NearField {
+  const span = (t.n - 1) * t.spacing, cell = (v: number, o: number) => (v - o) / t.spacing;
+  return {
+    minX: t.x0, maxX: t.x0 + span, minZ: t.z0, maxZ: t.z0 + span,
+    // The ground is linear between samples, so its lowest over a rectangle is among the samples of the cells it covers.
+    lowest(x0, z0, x1, z1) {
+      const clamp = (i: number) => Math.min(t.n - 1, Math.max(0, i));
+      const i0 = clamp(Math.floor(cell(x0, t.x0))), i1 = clamp(Math.ceil(cell(x1, t.x0)));
+      const j0 = clamp(Math.floor(cell(z0, t.z0))), j1 = clamp(Math.ceil(cell(z1, t.z0)));
+      let low = Infinity;
+      for (let j = j0; j <= j1; j++) for (let i = i0; i <= i1; i++) low = Math.min(low, t.heights[j * t.n + i]);
+      return low;
+    },
+  };
 }

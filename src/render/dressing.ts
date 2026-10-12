@@ -3,7 +3,7 @@ import { mergeGeometries } from 'three/examples/jsm/utils/BufferGeometryUtils.js
 import type { Decor } from '../../shared/maps/types';
 import { rng } from '../../shared/math';
 import { mergeStatic } from './batch';
-import { buildSkyline, type SkylineData } from './skyline';
+import { buildSkyline, type NearField, type SkylineData } from './skyline';
 import { builtModels, type ModelData } from './props';
 
 /**
@@ -31,7 +31,7 @@ const STRIDE = 8;
  * Build every dressing set and model instance of a map into `group` (asynchronously: sets load on
  * demand). Resolves to the time the static batching took (ms).
  */
-export async function addDressing(group: THREE.Group, decor: Decor[]): Promise<number> {
+export async function addDressing(group: THREE.Group, decor: Decor[], near?: NearField): Promise<number> {
   const sets = decor.filter((d): d is Dressing => d.kind === 'dressing');
   const instances = decor.filter((d): d is Instances => d.kind === 'instances');
   if (!sets.length && !instances.length) return 0;
@@ -40,7 +40,12 @@ export async function addDressing(group: THREE.Group, decor: Decor[]): Promise<n
   for (const d of sets) {
     const set = await SETS[d.set]?.();
     if (!set) { console.warn('unknown dressing set', d.set); continue; }
-    if (set.skyline) { const sky = buildSkyline(set.skyline, d.x, d.z); sky.position.y = d.y ?? 0; group.add(sky); }
+    if (set.skyline) {
+      const y = d.y ?? 0;
+      // The skyline group sits at y: give it the map's ground in its own frame.
+      const sky = buildSkyline(set.skyline, d.x, d.z, near && { ...near, lowest: (x0, z0, x1, z1) => near.lowest(x0, z0, x1, z1) - y });
+      sky.position.y = y; group.add(sky);
+    }
   }
   const byModel = new Map<string, number[]>();
   for (const d of instances) byModel.set(d.model, [...(byModel.get(d.model) ?? []), ...d.data]);

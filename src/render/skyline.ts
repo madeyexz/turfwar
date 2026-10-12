@@ -19,6 +19,27 @@ export interface SkylineData {
   heights: number[];
 }
 
+/**
+ * Where the map draws its own ground, in the skyline's frame: its extent and its lowest height over
+ * a rectangle (clipped to the extent). The skyline's ground stays under it there.
+ */
+export interface NearField { minX: number; maxX: number; minZ: number; maxZ: number; lowest(x0: number, z0: number, x1: number, z1: number): number }
+
+/** How far the city ground sits under the map's lowest ground, so the map's paving and everything on it shows. */
+export const SKYLINE_SINK = -0.3;
+
+/**
+ * The height of the city ground's vertex at (x, z), `y` its height from the elevation data (sink
+ * included). Wherever the map has ground within one grid step of the vertex, the vertex stays under
+ * the lowest of it plus the sink: every point of the cells round the vertex lies within that step,
+ * so the triangles between such vertices stay under the map's ground too. Real elevation (0.3–0.6 m
+ * at Ximending, metres at Xinyi) would otherwise lift the city ground over the streets.
+ */
+export function underMap(x: number, z: number, y: number, near: NearField | undefined, step: number): number {
+  if (!near || x < near.minX - step || x > near.maxX + step || z < near.minZ - step || z > near.maxZ + step) return y;
+  return Math.min(y, near.lowest(x - step, z - step, x + step, z + step) + SKYLINE_SINK);
+}
+
 /** Haze over distance for the far layer: exp² fog with its own density, in the scene's fog colour. */
 function farHaze<T extends THREE.Material>(m: T, density = 0.00042): T {
   const prev = m.onBeforeCompile;
@@ -69,10 +90,29 @@ function facadeBox(x0: number, z0: number, x1: number, z1: number, y0: number, y
   return paint(g, hex);
 }
 
-export function buildSkyline(d: SkylineData, ox: number, oz: number) {
+/** The city ground's mesh (hills, flats and the near field kept under the map), in the skyline's frame. */
+export function skylineGround(d: SkylineData, ox: number, oz: number, near?: NearField) {
+  const { x0, z0, spacing, n } = d.ground, sink = SKYLINE_SINK;
+  const pos = new Float32Array(n * n * 3), col = new Float32Array(n * n * 3), idx: number[] = [];
+  const c = new THREE.Color(), city = new THREE.Color(0x56575a), hill = new THREE.Color(0x3c5a34), high = new THREE.Color(0x2c4430);
+  for (let j = 0; j < n; j++) for (let i = 0; i < n; i++) {
+    const k = j * n + i, h = d.heights[k], x = x0 + i * spacing - ox, z = z0 + j * spacing - oz;
+    pos.set([x, underMap(x, z, h + sink, near, spacing), z], k * 3);
+    if (h < 0) c.set(0x4a4a40); else if (h < 2) c.copy(city); else c.copy(hill).lerp(high, Math.min(1, h / 500));
+    col.set([c.r, c.g, c.b], k * 3);
+    if (i < n - 1 && j < n - 1) idx.push(k, k + n, k + 1, k + 1, k + n, k + n + 1);
+  }
+  const ground = new THREE.BufferGeometry();
+  ground.setAttribute('position', new THREE.BufferAttribute(pos, 3));
+  ground.setAttribute('color', new THREE.BufferAttribute(col, 3));
+  ground.setIndex(idx); ground.computeVertexNormals();
+  return ground;
+}
+
+export function buildSkyline(d: SkylineData, ox: number, oz: number, near?: NearField) {
   const group = new THREE.Group();
   group.name = 'dressing:skyline';
-  const sink = -0.3; // under the map's own ground, which covers the near field
+  const sink = SKYLINE_SINK; // under the map's own ground, which covers the near field (see underMap)
 
   // ---- Generic buildings ----
   const parts: THREE.BufferGeometry[] = [];
@@ -89,19 +129,7 @@ export function buildSkyline(d: SkylineData, ox: number, oz: number) {
 
   // ---- Ground, hills and water ----
   const { x0, z0, spacing, n, waterLevel } = d.ground;
-  const pos = new Float32Array(n * n * 3), col = new Float32Array(n * n * 3), idx: number[] = [];
-  const c = new THREE.Color(), city = new THREE.Color(0x56575a), hill = new THREE.Color(0x3c5a34), high = new THREE.Color(0x2c4430);
-  for (let j = 0; j < n; j++) for (let i = 0; i < n; i++) {
-    const k = j * n + i, h = d.heights[k];
-    pos.set([x0 + i * spacing - ox, h + sink, z0 + j * spacing - oz], k * 3);
-    if (h < 0) c.set(0x4a4a40); else if (h < 2) c.copy(city); else c.copy(hill).lerp(high, Math.min(1, h / 500));
-    col.set([c.r, c.g, c.b], k * 3);
-    if (i < n - 1 && j < n - 1) idx.push(k, k + n, k + 1, k + 1, k + n, k + n + 1);
-  }
-  const ground = new THREE.BufferGeometry();
-  ground.setAttribute('position', new THREE.BufferAttribute(pos, 3));
-  ground.setAttribute('color', new THREE.BufferAttribute(col, 3));
-  ground.setIndex(idx); ground.computeVertexNormals();
+  const ground = skylineGround(d, ox, oz, near);
   const gm = new THREE.Mesh(ground, farHaze(new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 1, flatShading: true })));
   gm.name = 'skyline:ground'; group.add(gm);
   const water = new THREE.Mesh(new THREE.PlaneGeometry(n * spacing, n * spacing).rotateX(-Math.PI / 2).translate(x0 + n * spacing / 2 - ox, waterLevel + sink, z0 + n * spacing / 2 - oz),
