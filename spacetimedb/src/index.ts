@@ -6,7 +6,7 @@ import { cleanCode, filterError, isRoomSize, mapsFor, newRoomRules, nextRoomRule
 import type { SimContext } from '../../shared/match/combat';
 import { encodeFrame } from '../../shared/match/frame';
 import {
-  ROOKIE_ROUNDS, addSoldier, balanceTeams, buyAttachmentFor, buyItem, createMatch, drinkBoba, enterVehicle as getIn, exitVehicle as getOut, fireShot, reload, removeSoldier, reportState, switchTeam, throwSlipper, throwSmoke,
+  ROOKIE_ROUNDS, addSoldier, balanceTeams, buyAttachmentFor, buyItem, createMatch, drinkBoba, enterVehicle as getIn, exitVehicle as getOut, fireShot, reload, removeSoldier, reportState, setSkin as wearSkin, switchTeam, throwSlipper, throwSmoke,
   reportVehicle, resetMatch, switchWeapon, throwGrenade, tickMatch, useAmmoCrate, TICK_RATE,
 } from '../../shared/match/sim';
 import {
@@ -16,6 +16,7 @@ import { ATTACHMENTS, DEFAULT_WEAPONS, STAMINA, WEAPONS, normalizeAttachments, t
 import { newRoundStats, type BuyItem } from '../../shared/match/economy';
 import { BODY_RADIUS, type Body } from '../../shared/world';
 import { VEHICLE_KINDS, type Vehicle, type VehicleKind } from '../../shared/vehicles';
+import { cleanSkin, type Skin } from '../../shared/skins';
 import { cleanHello } from '../../shared/hello';
 import { beginPlay, endPlay, flushDue, flushPlay, type PlayStore } from '../../shared/playtime';
 import { acceptNetReport, foldNetDay } from '../../shared/netstats';
@@ -347,7 +348,8 @@ type Command =
   | { kind: 'attach'; weapon: WeaponId; attachment: AttachmentId }
   | { kind: 'crate'; index: number }
   | { kind: 'vehicle'; enter: boolean; index: number }
-  | { kind: 'team' };
+  | { kind: 'team' }
+  | { kind: 'skin'; skin: Skin };
 
 /** Soldier state without a typed column of its own. */
 interface Gear {
@@ -361,6 +363,8 @@ interface Gear {
   slippers?: number;
   /** A new player: bots go easier on them (no column of its own). */
   rookie?: boolean;
+  /** Cosmetic skin (shared/skins.ts); written only when not the defaults. */
+  skin?: Skin;
 }
 const slotOf = (v: number): Slot => (v === 1 || v === 2 ? v : 0);
 
@@ -383,6 +387,7 @@ function soldierFromRow(r: SoldierRow, brain?: BotBrain): Soldier {
     sprint: r.sprint, ads: r.ads, sinceShot: r.sinceShot, using: gear.using ?? false, corrections: r.corrections,
     moveSlack: r.moveSlack, groundY: r.groundY, idle: r.idle, round: gear.round ?? newRoundStats(), roundsHere: gear.roundsHere ?? 0, brain,
     ...(gear.rookie ? { rookie: true } : {}),
+    ...(gear.skin ? { skin: cleanSkin(gear.skin) } : {}),
   };
 }
 
@@ -396,6 +401,7 @@ function soldierToRow(s: Soldier, room: number): SoldierRow {
     ...(s.bobas ? { bobas: s.bobas } : {}),
     ...(s.slippers <= 0 ? { slippers: 0 } : {}),
     ...(s.rookie ? { rookie: true } : {}),
+    ...(s.skin ? { skin: s.skin } : {}),
   };
   return {
     // Legacy columns (kit, shield, respawn, spawn protection, captures, law cooldown, purchases) stay neutral.
@@ -418,7 +424,7 @@ function rosterRow(s: Soldier, room: number): RosterRow {
     id: s.id, room, name: s.name, team: s.team, bot: s.bot, alive: s.alive, grenades: u(s.grenades, 255), grenadeHE: s.grenadeHE,
     kills: u(s.kills), deaths: u(s.deaths), assists: u(s.assists), score: u(s.score), lastAttacker: s.lastAttacker, corrections: u(s.corrections),
     weapon0: s.weapons[0], weapon1: s.weapons[1], reserve0: u(s.reserve[0], 65535), reserve1: u(s.reserve[1], 65535), money: u(s.money),
-    gearJson: JSON.stringify({ owned: s.owned, attachments: s.attachments, ...(s.smokes ? { smokes: s.smokes } : {}), ...(s.bobas ? { bobas: s.bobas } : {}), ...(s.slippers <= 0 ? { slippers: 0 } : {}) }),
+    gearJson: JSON.stringify({ owned: s.owned, attachments: s.attachments, ...(s.smokes ? { smokes: s.smokes } : {}), ...(s.bobas ? { bobas: s.bobas } : {}), ...(s.slippers <= 0 ? { slippers: 0 } : {}), ...(s.skin ? { skin: s.skin } : {}) }),
   };
 }
 const rosterKey = (r: RosterRow) => JSON.stringify(r);
@@ -955,6 +961,7 @@ function applyInputs(ctx: Ctx, state: MatchState, sim: SimContext) {
       case 'crate': useAmmoCrate(state, sim, c.soldierId, cmd.index); break;
       case 'vehicle': if (cmd.enter) getIn(state, sim, c.soldierId, cmd.index); else getOut(state, sim, c.soldierId); break;
       case 'team': switchTeam(state, sim, c.soldierId); break;
+      case 'skin': wearSkin(state, c.soldierId, cmd.skin); break;
     }
   }
 }
@@ -1224,6 +1231,11 @@ export const reloadWeapon = spacetimedb.reducer({}, ctx => { queue(ctx, { kind: 
 
 /** Change sides (the shared rules decide: only toward the side with fewer humans, between fights). */
 export const changeTeam = spacetimedb.reducer({}, ctx => { queue(ctx, { kind: 'team' }); });
+
+/** Wear a cosmetic skin (shared/skins.ts): the tick cleans and applies it; every client draws it from the roster. */
+export const setSkin = spacetimedb.reducer({ knife: t.string(), look: t.string() }, (ctx, { knife, look }) => {
+  queue(ctx, { kind: 'skin', skin: cleanSkin({ knife, look }) });
+});
 
 export const switchSlot = spacetimedb.reducer({ slot: t.u8() }, (ctx, { slot }) => { queue(ctx, { kind: 'switch', slot: slotOf(slot) }); });
 

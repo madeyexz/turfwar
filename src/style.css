@@ -109,9 +109,11 @@ body.menu-open #hud, body.menu-open #hud * { visibility: hidden; }
 .killfeed .t0 { color: var(--aegis); } .killfeed .t1 { color: var(--crimson); }
 .killfeed .wpn { color: var(--muted); margin: 0 7px; font-size: 13px; text-transform: uppercase; letter-spacing: 0.08em; }
 .killfeed .hs::before { content: '◉'; margin-left: 5px; color: var(--amber); }
-/* A 藍白拖 kill (src/game/memeskins.ts): the slipper mark with motion lines, in the slipper's blue. */
+/* A knife-skin kill (src/game/skins.ts): the 藍白拖 mark with motion lines in the slipper's blue; a 掃把 swat in straw gold. */
 .killfeed .wpn.slap { display: inline-flex; align-items: center; gap: 4px; color: #8fb6ff; font-weight: 700; }
 .killfeed .wpn.slap .slipper { width: 34px; height: 17px; flex: none; animation: slapIn 0.35s ease-out; }
+.killfeed .wpn.slap.swat { color: #f0cf6e; }
+.killfeed .wpn.slap .broom { width: 40px; }
 @keyframes slapIn { 0% { transform: rotate(-35deg) scale(1.5); } 60% { transform: rotate(8deg) scale(0.95); } 100% { transform: none; } }
 
 /* Crosshair: --gap follows the weapon's cone; style chosen on the deploy screen. */

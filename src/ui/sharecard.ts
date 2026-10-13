@@ -10,17 +10,18 @@ import { bragLine, nationalDay, type MatchSummary } from '../game/matchstats';
 import { cjkFontReady, UI_STACK } from './fonts';
 import { isZh, mapName, mapNameZh, t, type Key } from './i18n';
 import { loadMap } from '../../shared/maps/index';
+import type { KnifeSkin } from '../../shared/skins';
 
 export const CARD_W = 1080;
 export const CARD_H = 1920;
 
 const INK = '#e9f3f5', MUTED = '#9fb3b9', ACCENT = '#7ff6ff', CRIMSON = '#ff5544', CASH = '#9cf08a', AMBER = '#ffb45a';
 
-/** The card's headline in the current language. `meme`: the knife is the 藍白拖. */
-export function bragText(s: MatchSummary, meme: boolean, at = new Date()) {
+/** The card's headline in the current language. `knife`: the player's knife skin names their knife kills. */
+export function bragText(s: MatchSummary, knife: KnifeSkin, at = new Date()) {
   const b = bragLine(s, at);
   const map = mapLabel(s.mapId);
-  const key = !meme && b.key === 'slipperMulti' ? 'brag.knifeMulti' : !meme && b.key === 'slipper' ? 'brag.knife' : `brag.${b.key}`;
+  const key = b.key === 'slipperMulti' ? `brag.${knife}Multi` : b.key === 'slipper' ? `brag.${knife}` : `brag.${b.key}`;
   return t(key as Key, { n: b.n ?? 0, name: b.name ?? '', map });
 }
 
@@ -91,15 +92,15 @@ export interface CardInput {
   url: string;
   /** A frame of the match (any size; cropped to fill). */
   backdrop?: CanvasImageSource & { width: number; height: number };
-  meme: boolean;
+  knife: KnifeSkin;
   at?: Date;
 }
 
 /** Draws the card; resolves with the canvas (fonts and the app icon loaded first). */
 export async function drawShareCard(input: CardInput): Promise<HTMLCanvasElement> {
-  const { summary: s, url, meme } = input;
+  const { summary: s, url, knife } = input;
   const at = input.at ?? new Date();
-  const brag = bragText(s, meme, at);
+  const brag = bragText(s, knife, at);
   const result = t(s.result === 'win' ? 'hud.victory' : s.result === 'loss' ? 'hud.defeat' : 'hud.draw');
   const line = matchLine(s);
   const holiday = nationalDay(at);
@@ -177,7 +178,7 @@ export async function drawShareCard(input: CardInput): Promise<HTMLCanvasElement
   const knifeTile = s.knifeKills > 0;
   const tiles: [string, string | number, string][] = [
     [t('card.kills'), s.kills, ACCENT], [t('card.deaths'), s.deaths, INK], [t('card.hs'), s.headshots, AMBER],
-    knifeTile ? [t(meme ? 'card.slipper' : 'card.knife'), s.knifeKills, CASH] : [t('card.best'), s.bestRound, CASH],
+    knifeTile ? [t(`card.${knife}`), s.knifeKills, CASH] : [t('card.best'), s.bestRound, CASH],
   ];
   const gap = 24, tw = (W - gap) / 2, th = 170, ty = top + barH + 60;
   tiles.forEach(([label, value, c], i) => {

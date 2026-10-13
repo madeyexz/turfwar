@@ -3,8 +3,8 @@ import { GLTFLoader, type GLTF } from 'three/examples/jsm/loaders/GLTFLoader.js'
 import { MeshoptDecoder } from 'three/examples/jsm/libs/meshopt_decoder.module.js';
 import { assetUrl } from './assetUrl';
 import { CREW } from './game/crew';
-import { MEME_SKINS } from './game/memeskins';
-import { slipperModel } from './render/meme';
+import type { KnifeSkin } from '../shared/skins';
+import { broomModel, slipperModel } from './render/meme';
 import { applyOptics } from './render/optics';
 import { addProceduralGuns } from './render/procguns';
 import { fitModelTextures, initTextures, loadTexture } from './render/textures';
@@ -92,14 +92,20 @@ export async function loadAssets(onProgress: (fraction: number) => void, gpu?: {
   for (const [name, gun] of named(imported)) guns.set(name, gun);
   addProceduralGuns(guns);
   applyOptics(guns);
-  // The 藍白拖 reskin: every view of the knife (first person, soldiers, the store) shows the slipper.
-  if (MEME_SKINS) guns.set('Gun_Knife', slipperModel());
+  // The knife skins (shared/skins.ts): each view picks its soldier's (knifeModel).
+  guns.set(KNIFE_MODELS.slipper, slipperModel());
+  guns.set(KNIFE_MODELS.broom, broomModel());
   return {
     weapons: guns, props: named(props), soldier, crew: crew?.scene,
     clips: new Map(anims.animations.map(c => [c.name, c])),
     textures,
   };
 }
+
+/** The weapons-map model of each knife skin ('Gun_Knife' is the pack's own knife). */
+export const KNIFE_MODELS: Record<KnifeSkin, string> = { knife: 'Gun_Knife', slipper: 'Knife_Slipper', broom: 'Knife_Broom' };
+/** The model a weapon is drawn with: the knife's follows the skin. */
+export const weaponModel = (model: string, knife: KnifeSkin) => (model === 'Gun_Knife' ? KNIFE_MODELS[knife] : model);
 
 /**
  * GLTFLoader makes node names unique across a file (`Head`, `Head_1` ...), but every character of
