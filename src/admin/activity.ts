@@ -1,14 +1,15 @@
 import type { PeakOf } from './peak';
+import { taipeiDayOfHour, taipeiDayStart } from '../../shared/taipei';
 
 /**
  * The admin page's headline activity metrics (pure, for tests): DAU, MAU, CCU per hour and PCCU per
- * day, from views the module already has. Days are UTC days (days since the epoch), hours are hours
+ * day, from admin views. Days encode Taipei calendar dates; hours are hours
  * since the epoch. "Players" are SpacetimeDB identities on the server shown.
  *
- * - DAU (day d): players with a `player_day` row for d. A row is written when an identity says
- *   `hello` (it opened an Online connection: pressed Play Online), reconnects, or enters a room;
+ * - DAU (day d): players with a `taipei_player_day` row for d. A row is written when an identity says
+ *   `hello` (it opened an Online connection), reconnects, enters a room, or keeps playing;
  *   Solo and Practice never reach the server.
- * - MAU (day d): players with a `player_day` row in the 30 UTC days ending on d (rolling, d included).
+ * - MAU (day d): players active in the 30 Taipei days ending on d (rolling, d included).
  * - CCU (hour h): players in Online rooms (humans; bots, spectating lobbies and the room list do not
  *   count). Two readings per hour: the average at once (`room_hour.humanMinutes / 60`: every live room
  *   adds its humans once per wall-clock minute) and the peak at once (`peak_hour.peak`: raised at every
@@ -20,8 +21,8 @@ export const DAY_HOURS = 24;
 export const MAU_DAYS = 30;
 
 /**
- * What counts as an active user, switchable on the page: minutes of Online play on the UTC day (summed
- * over the day's stretches, from `player_day_time`), or 0 for any connection at all (`player_day`).
+ * What counts as an active user, switchable on the page: minutes of Online play on the Taipei day (summed
+ * over the day's stretches, from `taipei_player_day_time`), or 0 for any activity (`taipei_player_day`).
  */
 export const ACTIVE_MINUTES = [0, 3, 5, 10] as const;
 export type ActiveMinutes = (typeof ACTIVE_MINUTES)[number];
@@ -124,31 +125,31 @@ export function ccuByHour(o: {
   return out;
 }
 
-/** One UTC day's PCCU: the highest hourly peak, when it was reached, and whether recording began during the day. */
+/** One Taipei day's PCCU: the highest hourly peak, when it was reached, and whether recording began during the day. */
 export interface DayPeak { peak: number; atMs: number; partial: boolean }
 
-/** PCCU per UTC day from `from` to `to`: undefined before `peak_hour` began, 0 for a recorded day nobody played. */
+/** PCCU per Taipei day from `from` to `to`: undefined before `peak_hour` began, 0 for a recorded day nobody played. */
 export function pccuByDay(peaks: Iterable<PeakOf>, from: number, to: number): Map<number, DayPeak | undefined> {
   const list = [...peaks];
   const firstHour = list.reduce((m, p) => Math.min(m, p.hour), Infinity);
   const byDay = new Map<number, DayPeak>();
   for (const p of list) {
-    const d = Math.floor(p.hour / DAY_HOURS), cur = byDay.get(d);
+    const d = taipeiDayOfHour(p.hour), cur = byDay.get(d);
     if (!cur || p.peak > cur.peak) byDay.set(d, { peak: p.peak, atMs: p.atMs, partial: false });
   }
-  const firstDay = Math.floor(firstHour / DAY_HOURS);
+  const firstDay = taipeiDayOfHour(firstHour);
   const out = new Map<number, DayPeak | undefined>();
   for (let d = from; d <= to; d++) {
     if (!(d >= firstDay)) { out.set(d, undefined); continue; }
     const r = byDay.get(d) ?? { peak: 0, atMs: 0, partial: false };
-    out.set(d, { ...r, partial: d === firstDay && firstHour % DAY_HOURS !== 0 });
+    out.set(d, { ...r, partial: d === firstDay && (firstHour + 8) % DAY_HOURS !== 0 });
   }
   return out;
 }
 
-/** The average at once over a UTC day from its play seconds (the day in progress: over the time elapsed). */
+/** The average at once over a Taipei day from its play seconds (the day in progress: over the time elapsed). */
 export function averageAtOnce(seconds: number, day: number, nowMs: number): number {
-  const start = day * 86_400_000;
+  const start = taipeiDayStart(day);
   const span = Math.min(86_400_000, Math.max(60_000, nowMs - start)) / 1000;
   return seconds / span;
 }
@@ -172,7 +173,7 @@ export function compact(n: number): string {
   return Math.round(n).toLocaleString('en-US');
 }
 
-/** Launch-week peaks (Taipei days "MM-DD" of `year`) as UTC days: a Taipei evening falls on the same UTC date. */
+/** Launch-week peaks as Taipei calendar day numbers ("MM-DD" of `year`). */
 export function launchDay(mmdd: string, year = 2026): number {
   const [m, d] = mmdd.split('-').map(Number);
   return Math.floor(Date.UTC(year, m - 1, d) / 86_400_000);

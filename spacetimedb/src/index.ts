@@ -20,6 +20,7 @@ import { cleanHello } from '../../shared/hello';
 import { beginPlay, endPlay, flushDue, flushPlay, type PlayStore } from '../../shared/playtime';
 import { acceptNetReport, foldNetDay } from '../../shared/netstats';
 import { acceptDevice } from '../../shared/devicekind';
+import { taipeiDay } from '../../shared/taipei';
 import { acceptPerf, acceptVisit, countRoomEvent, foldRoomMinute, noteMilestones, type RoomHour } from '../../shared/metrics';
 import * as Admin from './admin';
 import { AdminError, bumpPeak, dailyNetRows, playerMilestoneRows, playerPerfRows, playerSourceRows, dailyRows, dailyTimeRows, dayOf, forAdmin, playerDayNetRows, playerDayRows, playerDayTimeRows, playerHourRows, playerDeviceRows, playerNetRows, playerRows, playTimeRows, onlineBySide, type AdminStore } from './admin';
@@ -210,6 +211,15 @@ const dayNetTable = table({ name: 'player_day_net' }, {
   reports: t.u32(), seconds: t.u32(), p50Sum: t.f64(), p95Sum: t.f64(), corrections: t.u32(),
 });
 
+/** Taipei-only collection, starting lazily after upgrade; UTC tables remain intact. All private. */
+const taipeiDayTable = table({ name: 'taipei_player_day' }, { key: t.string().primaryKey(), day: t.u32().index('btree'), identity: t.identity() });
+const taipeiDayTimeTable = table({ name: 'taipei_player_day_time' }, { key: t.string().primaryKey(), day: t.u32().index('btree'), identity: t.identity(), seconds: t.u32() });
+const taipeiDayNetTable = table({ name: 'taipei_player_day_net' }, {
+  key: t.string().primaryKey(), day: t.u32().index('btree'), identity: t.identity(),
+  reports: t.u32(), seconds: t.u32(), p50Sum: t.f64(), p95Sum: t.f64(), corrections: t.u32(),
+});
+const taipeiCoverageTable = table({ name: 'taipei_coverage' }, { id: t.u8().primaryKey(), startedAt: t.timestamp() });
+
 /**
  * Each player's activity per hour (key = identity hex + ':' + hour since the epoch), for the admin
  * page's hourly charts: a row means they were active that hour (seen, or credited play time), with the
@@ -307,6 +317,7 @@ const spacetimedb = schema({
   vehicle: vehicleTable, vehicleInbox: vehicleInboxTable, playerSeen: seenTable,
   playerDay: dayTable, admin: adminTable, serverError: serverErrorTable, adminAttempt: adminAttemptTable, playerTime: timeTable, playerDayTime: dayTimeTable,
   playerNet: netTable, playerDayNet: dayNetTable, playerHour: hourTable, peakHour: peakTable, playerPerf: perfTable, playerSource: sourceTable, playerMilestone: milestoneTable, roomHour: roomHourTable, playerDevice: deviceTable, roomCode: roomCodeTable, privateRoom: privateRoomTable,
+  taipeiPlayerDay: taipeiDayTable, taipeiPlayerDayTime: taipeiDayTimeTable, taipeiPlayerDayNet: taipeiDayNetTable, taipeiCoverage: taipeiCoverageTable,
 });
 export default spacetimedb;
 
@@ -700,7 +711,7 @@ function markSeen(ctx: Ctx, info: { tz?: string; lang?: string; name?: string } 
 
 /** `player_time` and `player_day_time` for the play-time rules in shared/playtime.ts. */
 function playStore(ctx: Ctx): PlayStore<Identity> {
-  return {
+  return Admin.taipeiPlayStore({
     get: identity => {
       const r = ctx.db.playerTime.identity.find(identity);
       return r ? { seconds: r.playSeconds, since: r.since } : undefined;
@@ -716,7 +727,30 @@ function playStore(ctx: Ctx): PlayStore<Identity> {
       else ctx.db.playerDayTime.insert({ key, day, identity, seconds });
     },
     addHour: (identity, hour, seconds) => updateHour(ctx, identity, hour, r => ({ ...r, seconds: r.seconds + seconds })),
-  };
+  }, {
+    startedAt: () => taipeiCollectionStart(ctx),
+    active: (identity, day) => markTaipeiDay(ctx, identity, day),
+    addDay: (identity, day, seconds) => {
+      const key = `${identity.toHexString()}:${day}`;
+      const r = ctx.db.taipeiPlayerDayTime.key.find(key);
+      if (r) ctx.db.taipeiPlayerDayTime.key.update({ ...r, seconds: r.seconds + seconds });
+      else ctx.db.taipeiPlayerDayTime.insert({ key, day, identity, seconds });
+    },
+  }, micros(ctx));
+}
+
+/** Persist once, in the first collecting transaction; views never create coverage. */
+function taipeiCollectionStart(ctx: Ctx): bigint {
+  const row = ctx.db.taipeiCoverage.id.find(0);
+  if (row) return row.startedAt.microsSinceUnixEpoch;
+  ctx.db.taipeiCoverage.insert({ id: 0, startedAt: ctx.timestamp });
+  return micros(ctx);
+}
+
+function markTaipeiDay(ctx: Ctx, identity: Identity, day = taipeiDay(Number(micros(ctx) / 1000n))) {
+  taipeiCollectionStart(ctx);
+  const key = `${identity.toHexString()}:${day}`;
+  if (!ctx.db.taipeiPlayerDay.key.find(key)) ctx.db.taipeiPlayerDay.insert({ key, day, identity });
 }
 
 /** Change (or make) `identity`'s `player_hour` row for `hour`. */
@@ -775,6 +809,7 @@ function markDay(ctx: Ctx) {
   const day = dayOf(micros(ctx));
   const key = `${ctx.sender.toHexString()}:${day}`;
   if (!ctx.db.playerDay.key.find(key)) ctx.db.playerDay.insert({ key, day, identity: ctx.sender });
+  markTaipeiDay(ctx, ctx.sender);
   const hour = hourOf(micros(ctx));
   if (!ctx.db.playerHour.key.find(`${ctx.sender.toHexString()}:${hour}`)) updateHour(ctx, ctx.sender, hour, r => r);
 }
@@ -1076,6 +1111,11 @@ export const netStats = spacetimedb.reducer({ p50Ms: t.u32(), p95Ms: t.u32(), sa
   const prevDay = ctx.db.playerDayNet.key.find(key);
   const folded = { key, day, identity: ctx.sender, ...foldNetDay(prevDay ?? undefined, accepted.report) };
   if (prevDay) ctx.db.playerDayNet.key.update(folded); else ctx.db.playerDayNet.insert(folded);
+  taipeiCollectionStart(ctx);
+  const taipei = taipeiDay(Number(now / 1000n)), taipeiKey = `${ctx.sender.toHexString()}:${taipei}`;
+  const prevTaipei = ctx.db.taipeiPlayerDayNet.key.find(taipeiKey);
+  const foldedTaipei = { key: taipeiKey, day: taipei, identity: ctx.sender, ...foldNetDay(prevTaipei ?? undefined, accepted.report) };
+  if (prevTaipei) ctx.db.taipeiPlayerDayNet.key.update(foldedTaipei); else ctx.db.taipeiPlayerDayNet.insert(foldedTaipei);
   updateHour(ctx, ctx.sender, hourOf(now), r => {
     const f = foldNetDay({ reports: r.reports, seconds: r.netSeconds, p50Sum: r.p50Sum, p95Sum: r.p95Sum, corrections: r.corrections }, accepted.report);
     return { ...r, reports: f.reports, netSeconds: f.seconds, p50Sum: f.p50Sum, p95Sum: f.p95Sum, corrections: f.corrections };
@@ -1487,6 +1527,24 @@ export const adminPlayerDayTime = spacetimedb.view({ name: 'admin_player_day_tim
 export const adminPlayerDayNet = spacetimedb.view({ name: 'admin_player_day_net', public: true },
   t.array(t.row('AdminPlayerDayNetRow', { id: t.string(), day: t.u32(), p50: t.u16(), p95: t.u16(), seconds: t.u32(), corrections: t.u32() })),
   ctx => forAdmin(viewAdmins(ctx.db), ctx.sender.toHexString(), () => playerDayNetRows([...ctx.db.playerDayNet.iter()].map(r => ({ ...r, identity: r.identity.toHexString() })))));
+
+/** Separate Taipei-day metrics: same hashed player ids and admin gate as the UTC views. */
+export const adminTaipeiPlayerDay = spacetimedb.view({ name: 'admin_taipei_player_day', public: true },
+  t.array(t.row('AdminTaipeiPlayerDayRow', { id: t.string(), day: t.u32() })),
+  ctx => forAdmin(viewAdmins(ctx.db), ctx.sender.toHexString(), () => playerDayRows([...ctx.db.taipeiPlayerDay.iter()].map(r => ({ identity: r.identity.toHexString(), day: r.day })))));
+
+export const adminTaipeiPlayerDayTime = spacetimedb.view({ name: 'admin_taipei_player_day_time', public: true },
+  t.array(t.row('AdminTaipeiPlayerDayTimeRow', { id: t.string(), day: t.u32(), seconds: t.u32() })),
+  ctx => forAdmin(viewAdmins(ctx.db), ctx.sender.toHexString(), () => playerDayTimeRows([...ctx.db.taipeiPlayerDayTime.iter()].map(r => ({ identity: r.identity.toHexString(), day: r.day, seconds: r.seconds })))));
+
+export const adminTaipeiPlayerDayNet = spacetimedb.view({ name: 'admin_taipei_player_day_net', public: true },
+  t.array(t.row('AdminTaipeiPlayerDayNetRow', { id: t.string(), day: t.u32(), p50: t.u16(), p95: t.u16(), seconds: t.u32(), corrections: t.u32() })),
+  ctx => forAdmin(viewAdmins(ctx.db), ctx.sender.toHexString(), () => playerDayNetRows([...ctx.db.taipeiPlayerDayNet.iter()].map(r => ({ ...r, identity: r.identity.toHexString() })))));
+
+/** Empty before collection; thereafter one immutable earliest recording timestamp. */
+export const adminTaipeiCoverage = spacetimedb.view({ name: 'admin_taipei_coverage', public: true },
+  t.array(t.row('AdminTaipeiCoverageRow', { startedAt: t.timestamp() })),
+  ctx => forAdmin(viewAdmins(ctx.db), ctx.sender.toHexString(), () => [...ctx.db.taipeiCoverage.iter()].map(r => ({ startedAt: r.startedAt }))));
 
 /**
  * Each player's activity per hour (from `player_hour`, same short id as `admin_players`) for the 168

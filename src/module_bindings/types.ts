@@ -276,6 +276,46 @@ export const AdminStatusRow = __t.object("AdminStatusRow", {
 });
 export type AdminStatusRow = __Infer<typeof AdminStatusRow>;
 
+export const AdminTaipeiCoverage = __t.object("AdminTaipeiCoverage", {});
+export type AdminTaipeiCoverage = __Infer<typeof AdminTaipeiCoverage>;
+
+export const AdminTaipeiCoverageRow = __t.object("AdminTaipeiCoverageRow", {
+  startedAt: __t.timestamp(),
+});
+export type AdminTaipeiCoverageRow = __Infer<typeof AdminTaipeiCoverageRow>;
+
+export const AdminTaipeiPlayerDay = __t.object("AdminTaipeiPlayerDay", {});
+export type AdminTaipeiPlayerDay = __Infer<typeof AdminTaipeiPlayerDay>;
+
+export const AdminTaipeiPlayerDayNet = __t.object("AdminTaipeiPlayerDayNet", {});
+export type AdminTaipeiPlayerDayNet = __Infer<typeof AdminTaipeiPlayerDayNet>;
+
+export const AdminTaipeiPlayerDayNetRow = __t.object("AdminTaipeiPlayerDayNetRow", {
+  id: __t.string(),
+  day: __t.u32(),
+  p50: __t.u16(),
+  p95: __t.u16(),
+  seconds: __t.u32(),
+  corrections: __t.u32(),
+});
+export type AdminTaipeiPlayerDayNetRow = __Infer<typeof AdminTaipeiPlayerDayNetRow>;
+
+export const AdminTaipeiPlayerDayRow = __t.object("AdminTaipeiPlayerDayRow", {
+  id: __t.string(),
+  day: __t.u32(),
+});
+export type AdminTaipeiPlayerDayRow = __Infer<typeof AdminTaipeiPlayerDayRow>;
+
+export const AdminTaipeiPlayerDayTime = __t.object("AdminTaipeiPlayerDayTime", {});
+export type AdminTaipeiPlayerDayTime = __Infer<typeof AdminTaipeiPlayerDayTime>;
+
+export const AdminTaipeiPlayerDayTimeRow = __t.object("AdminTaipeiPlayerDayTimeRow", {
+  id: __t.string(),
+  day: __t.u32(),
+  seconds: __t.u32(),
+});
+export type AdminTaipeiPlayerDayTimeRow = __Infer<typeof AdminTaipeiPlayerDayTimeRow>;
+
 export const Body = __t.object("Body", {
   id: __t.u32(),
   kind: __t.string(),
@@ -683,6 +723,39 @@ export const Soldier = __t.object("Soldier", {
   room: __t.u8(),
 });
 export type Soldier = __Infer<typeof Soldier>;
+
+export const TaipeiCoverage = __t.object("TaipeiCoverage", {
+  id: __t.u8(),
+  startedAt: __t.timestamp(),
+});
+export type TaipeiCoverage = __Infer<typeof TaipeiCoverage>;
+
+export const TaipeiPlayerDay = __t.object("TaipeiPlayerDay", {
+  key: __t.string(),
+  day: __t.u32(),
+  identity: __t.identity(),
+});
+export type TaipeiPlayerDay = __Infer<typeof TaipeiPlayerDay>;
+
+export const TaipeiPlayerDayNet = __t.object("TaipeiPlayerDayNet", {
+  key: __t.string(),
+  day: __t.u32(),
+  identity: __t.identity(),
+  reports: __t.u32(),
+  seconds: __t.u32(),
+  p50Sum: __t.f64(),
+  p95Sum: __t.f64(),
+  corrections: __t.u32(),
+});
+export type TaipeiPlayerDayNet = __Infer<typeof TaipeiPlayerDayNet>;
+
+export const TaipeiPlayerDayTime = __t.object("TaipeiPlayerDayTime", {
+  key: __t.string(),
+  day: __t.u32(),
+  identity: __t.identity(),
+  seconds: __t.u32(),
+});
+export type TaipeiPlayerDayTime = __Infer<typeof TaipeiPlayerDayTime>;
 
 export const TickSchedule = __t.object("TickSchedule", {
   scheduledId: __t.u64(),
