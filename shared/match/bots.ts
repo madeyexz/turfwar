@@ -1,9 +1,10 @@
 import { chestPoint } from '../hitbox';
 import { clamp, dirFromAngles, wrapAngle, type Vec3 } from '../math';
-import { MOVE, eyeHeight, stepMovement, type MoveInput } from '../movement';
+import { MOVE, stepMovement, type MoveInput } from '../movement';
+import { peekOf } from '../peek';
 import { blocksHeight, near, penetration, type Obstacle } from '../obstacles';
 import { GRENADE, STAMINA } from '../weapons';
-import { eyeOf, feetOf, onSite, resolvePellets, resolveShot, sideOf, smokeBlocks, spreadFor, throwGrenadeFrom, traceShot, weaponOf, type SimContext } from './combat';
+import { eyeOf, feetOf, onSite, shapeOf, resolvePellets, resolveShot, sideOf, smokeBlocks, spreadFor, throwGrenadeFrom, traceShot, weaponOf, type SimContext } from './combat';
 import { findPath, nearestNode } from './nav';
 import { ATTACKERS, type BotBrain, type MatchState, type Soldier } from './state';
 
@@ -120,8 +121,10 @@ function perceive(state: MatchState, ctx: SimContext, bot: Soldier, brain: BotBr
   }
   candidates.sort((a, b) => a.score - b.score);
   for (const { s } of candidates.slice(0, SIGHT_CHECKS)) {
-    const chest = chestPoint(feetOf(s), s.m.crouch);
-    const head = { x: s.m.x, y: s.m.y + eyeHeight(s.m), z: s.m.z };
+    // A soldier peeking round cover shows its head and shoulder, not its chest.
+    const shape = shapeOf(ctx, s);
+    const chest = peekOf(ctx.world, s) ? shape.chestTop : chestPoint(feetOf(s), s.m.crouch);
+    const head = shape.head;
     // Smoke hides: a bot sees through a cloud no better than a player does.
     if ((ctx.world.lineOfSight(eye, chest, bot.team) && !smokeBlocks(state.bodies, eye, chest))
       || (ctx.world.lineOfSight(eye, head, bot.team) && !smokeBlocks(state.bodies, eye, head))) return s;
@@ -220,7 +223,8 @@ export function updateBot(state: MatchState, ctx: SimContext, bot: Soldier, dt: 
   let wantAds = false;
   if (target && visible) {
     const eye = eyeOf(bot);
-    const aimAt = ctx.random() < 0.18 + brain.skill * 0.15 ? { x: target.m.x, y: target.m.y + eyeHeight(target.m) + 0.02, z: target.m.z } : chestPoint(feetOf(target), target.m.crouch);
+    const shape = shapeOf(ctx, target), peeking = peekOf(ctx.world, target) !== 0;
+    const aimAt = ctx.random() < 0.18 + brain.skill * 0.15 ? { ...shape.head, y: shape.head.y + 0.02 } : peeking ? { ...shape.chestTop } : chestPoint(feetOf(target), target.m.crouch);
     // Imperfect lead on moving targets.
     const lead = 0.06 + (1 - brain.skill) * 0.08;
     aimAt.x += target.m.vx * lead * (ctx.random() - 0.2); aimAt.z += target.m.vz * lead * (ctx.random() - 0.2);
