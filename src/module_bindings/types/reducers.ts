@@ -8,6 +8,7 @@ import { type Infer as __Infer } from "spacetimedb";
 // Import all reducer arg schemas
 import AdminLoginReducer from "../admin_login_reducer";
 import AdminLogoutReducer from "../admin_logout_reducer";
+import AdminRebuildTaipeiDaysReducer from "../admin_rebuild_taipei_days_reducer";
 import AdminRevokeAllReducer from "../admin_revoke_all_reducer";
 import BuyReducer from "../buy_reducer";
 import BuyAttachmentReducer from "../buy_attachment_reducer";
@@ -43,6 +44,7 @@ import VisitReducer from "../visit_reducer";
 
 export type AdminLoginParams = __Infer<typeof AdminLoginReducer>;
 export type AdminLogoutParams = __Infer<typeof AdminLogoutReducer>;
+export type AdminRebuildTaipeiDaysParams = __Infer<typeof AdminRebuildTaipeiDaysReducer>;
 export type AdminRevokeAllParams = __Infer<typeof AdminRevokeAllReducer>;
 export type BuyParams = __Infer<typeof BuyReducer>;
 export type BuyAttachmentParams = __Infer<typeof BuyAttachmentReducer>;

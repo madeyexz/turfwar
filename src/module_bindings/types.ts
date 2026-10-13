@@ -316,6 +316,16 @@ export const AdminTaipeiPlayerDayTimeRow = __t.object("AdminTaipeiPlayerDayTimeR
 });
 export type AdminTaipeiPlayerDayTimeRow = __Infer<typeof AdminTaipeiPlayerDayTimeRow>;
 
+export const AdminTaipeiRebuild = __t.object("AdminTaipeiRebuild", {});
+export type AdminTaipeiRebuild = __Infer<typeof AdminTaipeiRebuild>;
+
+export const AdminTaipeiRebuildRow = __t.object("AdminTaipeiRebuildRow", {
+  at: __t.timestamp(),
+  exactFrom: __t.u32(),
+  estimatedFrom: __t.u32(),
+});
+export type AdminTaipeiRebuildRow = __Infer<typeof AdminTaipeiRebuildRow>;
+
 export const Body = __t.object("Body", {
   id: __t.u32(),
   kind: __t.string(),
@@ -756,6 +766,14 @@ export const TaipeiPlayerDayTime = __t.object("TaipeiPlayerDayTime", {
   seconds: __t.u32(),
 });
 export type TaipeiPlayerDayTime = __Infer<typeof TaipeiPlayerDayTime>;
+
+export const TaipeiRebuild = __t.object("TaipeiRebuild", {
+  id: __t.u8(),
+  at: __t.timestamp(),
+  exactFrom: __t.u32(),
+  estimatedFrom: __t.u32(),
+});
+export type TaipeiRebuild = __Infer<typeof TaipeiRebuild>;
 
 export const TickSchedule = __t.object("TickSchedule", {
   scheduledId: __t.u64(),
