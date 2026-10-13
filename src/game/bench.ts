@@ -34,6 +34,8 @@ export interface BenchResult {
   shaderCompiles: number;
   /** Number of frames over 100 ms. */
   hitchCount: number;
+  /** How many of those frames had a shader compile. */
+  hitchCompiled: number;
   /** The first of those frames, with the measured second they happened at. */
   hitches: { at: number; ms: number; compiled: boolean }[];
   meets60: boolean;
@@ -197,6 +199,7 @@ export class Bench {
       triangles: Math.round(this.tris / n),
       shaderCompiles: (this.renderer.renderer.info.programs?.length ?? 0) - this.programs,
       hitchCount: this.hitches.length,
+      hitchCompiled: this.hitches.filter(h => h.compiled).length,
       hitches: this.hitches.slice(0, 12),
       meets60: avgFps >= 58 && p95 <= LATE_FRAME_MS,
     };

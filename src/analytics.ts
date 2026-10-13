@@ -5,6 +5,7 @@ import type { DeviceKind } from '../shared/devicekind';
 import type { ServerId } from './net/servers';
 import { currentVisitProps, dropClickIds } from './visit';
 import { scrub } from './exceptions';
+import type { BenchResult } from './game/bench';
 
 /**
  * Product analytics (PostHog, US cloud): how many players, from where (PostHog derives the country
@@ -53,6 +54,16 @@ export interface Events {
   /** How it was drawn (MatchRender): the graphics card the browser names, the preset, the pixel ratio drawn at when leaving and its adaptive scale. */
   match_left: { seconds: number; kills: number; deaths: number; rounds_played: number; reason: Reason; exit?: Exit; sideways?: boolean; knife_kills?: number; bobas_drunk?: number; fps?: number; fps_low?: number; frames?: number } & Partial<MatchRender> & Partial<Omit<NetFields, 'seconds'>>;
   round_ended: { won: boolean; mode: Mode; map: string };
+  /**
+   * The 30-second performance check (?bench, src/game/bench.ts) finished: the only event a ?bench page sends. Frame times in ms,
+   * `slow_frames` the % of frames slower than 60 Hz, `hitch_count` frames over 100 ms and `hitch_compiled` how many of those
+   * had a shader compile, `shader_compiles` in the measured window.
+   */
+  bench_result: {
+    map: string; quality: string; resolution: string; gpu: string; seconds: number; frames: number; avg_fps: number; low1_fps: number;
+    median_ms: number; p95_ms: number; p99_ms: number; max_ms: number; slow_frames: number; cpu_median_ms: number; cpu_p95_ms: number;
+    draw_calls: number; triangles: number; shader_compiles: number; hitch_count: number; hitch_compiled: number; meets60: boolean;
+  };
   vehicle_entered: { kind: VehicleKind };
   store_purchase: { item: string; price: number };
   language_changed: { to: string };
@@ -86,11 +97,14 @@ type EventName = keyof Events;
 type Props = Record<string, string | number | boolean>;
 interface Options { set?: Props; setOnce?: Props; beacon?: boolean }
 
-/** Automation flags that never send events. */
-const AUTOMATION = ['bench', 'trailer', 'capture', 'fixeddt'];
+/** Automation flags that never send events (?bench sends only its result, see analyticsGuard). */
+const AUTOMATION = ['trailer', 'capture', 'fixeddt'];
 
-/** Whether this page may send analytics, and whether its events are test events. */
-export function analyticsGuard(o: { key?: string; dev: boolean; search: string; webdriver: boolean }): { enabled: boolean; test: boolean; reason: string } {
+/**
+ * Whether this page may send analytics, and whether its events are test events. `only`: the one event the page may send
+ * (a ?bench page sends its `bench_result` and nothing else, not even page views; headless browsers still send nothing).
+ */
+export function analyticsGuard(o: { key?: string; dev: boolean; search: string; webdriver: boolean }): { enabled: boolean; test: boolean; reason: string; only?: EventName } {
   const params = new URLSearchParams(o.search);
   const off = (reason: string) => ({ enabled: false, test: false, reason });
   if (!o.key) return off('no key');
@@ -98,7 +112,8 @@ export function analyticsGuard(o: { key?: string; dev: boolean; search: string; 
   const flag = AUTOMATION.find(f => params.has(f));
   if (flag) return off(`?${flag}`);
   if (o.dev && !params.has('analytics')) return off('dev server');
-  return { enabled: true, test: o.dev, reason: o.dev ? 'dev server with ?analytics (test events)' : 'production' };
+  const only = params.has('bench') ? 'bench_result' as const : undefined;
+  return { enabled: true, test: o.dev, reason: `${o.dev ? 'dev server with ?analytics (test events)' : 'production'}${only ? ', ?bench: bench_result only' : ''}`, ...(only ? { only } : {}) };
 }
 
 /** The screen in coarse buckets (nearest 100 CSS pixels), e.g. "1500x1000". */
@@ -127,6 +142,7 @@ function run(fn: (ph: PostHog) => void) {
 
 /** Track an event (queued until posthog-js has loaded; dropped when analytics is off). */
 export function track<E extends EventName>(event: E, props: Events[E], options: Options = {}) {
+  if (guard.only && event !== guard.only) return;
   run(ph => ph.capture(event, props as unknown as Props, {
     ...(options.set ? { $set: options.set } : {}),
     ...(options.setOnce ? { $set_once: options.setOnce } : {}),
@@ -137,6 +153,7 @@ export function track<E extends EventName>(event: E, props: Events[E], options: 
 
 /** Manual error capture for the slim SDK (no exception extension is loaded). */
 export function captureException(list: unknown[], props: Record<string, string | number | boolean>) {
+  if (guard.only) return;
   const release = (globalThis as { _posthogReleaseId?: string })._posthogReleaseId;
   run(ph => ph.capture('$exception', { $exception_list: list, $exception_level: 'error', ...(release ? { $release_id: release } : {}), ...props }, { _noTruncate: true }));
 }
@@ -149,7 +166,7 @@ export function privateErrorProperties(props: Record<string, unknown>): Record<s
 }
 
 /** Set person properties (`$set`, and `$set_once` for first-touch values). */
-export function setPerson(set: Props, setOnce?: Props) { run(ph => ph.setPersonProperties(set, setOnce)); }
+export function setPerson(set: Props, setOnce?: Props) { if (!guard.only) run(ph => ph.setPersonProperties(set, setOnce)); }
 
 /** Update super properties sent with every event (e.g. `lang` after a language switch). */
 export function setSuper(props: Props) { run(ph => ph.register(props)); }
@@ -181,7 +198,7 @@ export function startAnalytics(base: { lang: string; online_db: string; server_h
     posthog.init(env.VITE_POSTHOG_KEY!, {
       api_host: env.VITE_POSTHOG_HOST || 'https://us.i.posthog.com',
       // Our own events plus page views and leaves; nothing captured from the DOM, no recordings.
-      autocapture: false, capture_pageview: true, capture_pageleave: true, disable_session_recording: true,
+      autocapture: false, capture_pageview: !guard.only, capture_pageleave: !guard.only, disable_session_recording: true,
       capture_dead_clicks: false, capture_heatmaps: false, capture_exceptions: false, capture_performance: false,
       disable_surveys: true, disable_product_tours: true, disable_conversations: true, disable_web_experiments: true,
       // No flags and no remote config: everything is set here, and no extra scripts or requests.
@@ -219,6 +236,15 @@ export function startAnalytics(base: { lang: string; online_db: string; server_h
     state = 'on';
     for (const fn of queue.splice(0)) { try { fn(posthog); } catch { /* keep going */ } }
   }, () => { state = 'off'; queue.length = 0; });
+}
+
+/** The performance check's result (rounded as shown; the first hitches' times stay on screen only). */
+export function benchFinished(r: BenchResult) {
+  track('bench_result', {
+    map: r.map, quality: r.quality, resolution: r.resolution, gpu: r.gpu.slice(0, 160), seconds: r.seconds, frames: r.frames, avg_fps: r.avgFps, low1_fps: r.low1Fps,
+    median_ms: r.medianMs, p95_ms: r.p95Ms, p99_ms: r.p99Ms, max_ms: r.maxMs, slow_frames: r.slowFrames, cpu_median_ms: r.cpuMedianMs, cpu_p95_ms: r.cpuP95Ms,
+    draw_calls: r.drawCalls, triangles: r.triangles, shader_compiles: r.shaderCompiles, hitch_count: r.hitchCount, hitch_compiled: r.hitchCompiled, meets60: r.meets60,
+  });
 }
 
 // ---- Match sessions: match_joined → round_ended… → match_left (once) ----------------------

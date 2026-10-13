@@ -22,11 +22,19 @@ describe('analytics guard', () => {
   });
 
   it('is blocked under the automation flags', () => {
-    for (const flag of ['bench', 'trailer', 'capture', 'fixeddt']) {
+    for (const flag of ['trailer', 'capture', 'fixeddt']) {
       expect(analyticsGuard({ ...prod, search: `?${flag}` })).toMatchObject({ enabled: false, reason: `?${flag}` });
       expect(analyticsGuard({ ...prod, search: `?map=taipei&${flag}=1` }).enabled).toBe(false);
       expect(analyticsGuard({ ...prod, dev: true, search: `?analytics&${flag}` }).enabled).toBe(false);
+      expect(analyticsGuard({ ...prod, search: `?bench&${flag}` }).enabled).toBe(false);
     }
+  });
+
+  it('lets a ?bench page send its result and nothing else, never from headless browsers', () => {
+    expect(analyticsGuard({ ...prod, search: '?bench&map=taipei&quality=medium' })).toMatchObject({ enabled: true, test: false, only: 'bench_result' });
+    expect(analyticsGuard({ ...prod, search: '?map=taipei' }).only).toBeUndefined();
+    expect(analyticsGuard({ ...prod, search: '?bench', webdriver: true }).enabled).toBe(false);
+    expect(analyticsGuard({ ...prod, dev: true, search: '?bench' }).enabled).toBe(false);
   });
 
   it('is blocked in headless automation (navigator.webdriver)', () => {
