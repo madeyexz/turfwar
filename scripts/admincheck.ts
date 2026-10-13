@@ -17,10 +17,11 @@ localOnly(uri);
 const key = process.env.ADMIN_TEST_KEY;
 if (!key) throw new Error('Set ADMIN_TEST_KEY to the test key whose hash the local module was published with');
 const { check, note, finish } = checker();
-const VIEWS = ['SELECT * FROM admin_status', 'SELECT * FROM admin_overview', 'SELECT * FROM admin_rooms', 'SELECT * FROM admin_players', 'SELECT * FROM admin_daily', 'SELECT * FROM admin_player_time', 'SELECT * FROM admin_daily_time', 'SELECT * FROM admin_player_day', 'SELECT * FROM admin_player_day_time', 'SELECT * FROM admin_player_day_net', 'SELECT * FROM admin_player_hour'];
+const VIEWS = ['SELECT * FROM admin_status', 'SELECT * FROM admin_overview', 'SELECT * FROM admin_rooms', 'SELECT * FROM admin_players', 'SELECT * FROM admin_daily', 'SELECT * FROM admin_player_time', 'SELECT * FROM admin_daily_time', 'SELECT * FROM admin_player_day', 'SELECT * FROM admin_player_day_time', 'SELECT * FROM admin_player_day_net', 'SELECT * FROM admin_player_hour', 'SELECT * FROM admin_taipei_player_day', 'SELECT * FROM admin_taipei_player_day_time', 'SELECT * FROM admin_taipei_player_day_net', 'SELECT * FROM admin_taipei_coverage'];
 const counts = (c: Conn) => ({
   overview: c.db.adminOverview.count(), rooms: c.db.adminRooms.count(), players: c.db.adminPlayers.count(), daily: c.db.adminDaily.count(),
   playerTime: c.db.adminPlayerTime.count(), dailyTime: c.db.adminDailyTime.count(), playerDay: c.db.adminPlayerDay.count(), playerDayTime: c.db.adminPlayerDayTime.count(), playerDayNet: c.db.adminPlayerDayNet.count(), playerHour: c.db.adminPlayerHour.count(),
+  taipeiDay: c.db.adminTaipeiPlayerDay.count(), taipeiTime: c.db.adminTaipeiPlayerDayTime.count(), taipeiNet: c.db.adminTaipeiPlayerDayNet.count(), taipeiCoverage: c.db.adminTaipeiCoverage.count(),
 });
 const status = (c: Conn) => [...c.db.adminStatus.iter()][0];
 const error = async (p: Promise<unknown>) => { try { await p; return ''; } catch (e) { return String((e as Error).message ?? e); } };
@@ -72,6 +73,18 @@ const player2 = await connect(uri, db, ['SELECT * FROM player']);
 await player2.conn.reducers.quickPlay({ name: 'Player2', team: -1, size: 6, mode: '', mapId: '' });
 await wait(300);
 check('the overview updates live', ([...admin.conn.db.adminOverview.iter()][0]?.onlineNow ?? 0) === before + 1);
+
+// Taipei collection is separate, live, and uses the same authorization gate as the UTC views.
+const day = Math.floor((Date.now() + 8 * 3_600_000) / 86_400_000);
+const coverage = [...admin.conn.db.adminTaipeiCoverage.iter()][0]?.startedAt.microsSinceUnixEpoch;
+check('Taipei coverage is persisted and activity replicates', coverage !== undefined && [...admin.conn.db.adminTaipeiPlayerDay.iter()].some(r => r.id === p1?.id && r.day === day));
+await player.conn.reducers.netStats({ p50Ms: 37, p95Ms: 83, samples: 10, corrections: 2, seconds: 30 });
+await player.conn.reducers.leave({});
+await wait(300);
+check('Taipei play time credits on leaving', [...admin.conn.db.adminTaipeiPlayerDayTime.iter()].some(r => r.id === p1?.id && r.day === day && r.seconds > 0));
+check('Taipei net report keeps its values', [...admin.conn.db.adminTaipeiPlayerDayNet.iter()].some(r => r.id === p1?.id && r.day === day && r.p50 === 37 && r.p95 === 83 && r.seconds === 30 && r.corrections === 2));
+check('Taipei recording does not replace UTC history', admin.conn.db.adminPlayerDay.count() > 0n && admin.conn.db.adminPlayerDayTime.count() > 0n);
+check('Taipei coverage does not restart', [...admin.conn.db.adminTaipeiCoverage.iter()][0]?.startedAt.microsSinceUnixEpoch === coverage);
 
 // Logout, then revoke_all.
 await admin.conn.reducers.adminLogout({});

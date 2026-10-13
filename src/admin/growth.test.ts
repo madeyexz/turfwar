@@ -69,6 +69,15 @@ describe('channels and retention', () => {
     expect(rows.map(r => [r.channel, r.players])).toEqual([['threads app', 2], ['google', 1]]);
     expect(rows[0]).toMatchObject({ share: 2 / 3, d1: 0.5, d1n: 2, minutes: 5 });
   });
+  it('completes channel D1 and D7 at Taipei midnight, not eight hours later', () => {
+    const ps = [
+      player({ day: today - 1, src: src(), days: new Set([today - 1, today]) }),
+      player({ day: today - 7, src: src(), days: new Set([today - 7]) }),
+    ];
+    const midnight = today * DAY + 16 * 3_600_000;
+    expect(channels(ps, today - 7, midnight - 1)[0]).toMatchObject({ d1: 0, d1n: 1, d7: undefined, d7n: 0 });
+    expect(channels(ps, today - 7, midnight)[0]).toMatchObject({ d1: 0.5, d1n: 2, d7: 0, d7n: 1 });
+  });
 });
 
 describe('engagement', () => {
@@ -107,6 +116,17 @@ describe('server health', () => {
     expect(roomHealth(rows, 100, 101)).toMatchObject({ fill: 300 / 840, humansPerRoom: 2.5, dropRate: 0.1, kickRate: 0.05 });
     expect(roomHealth(rows, 0, 1).fill).toBeUndefined();
     expect([...roomHealthBy(rows, [99, 100, 101], true).keys()]).toEqual([100, 101]);
+  });
+  it('splits room hours at 16:00Z while keeping hourly buckets unchanged', () => {
+    const boundary = [
+      { ...rows[0], hour: today * 24 + 15 },
+      { ...rows[1], hour: today * 24 + 16 },
+    ];
+    const daily = roomHealthBy(boundary, [today - 1, today, today + 1], false);
+    expect([...daily.keys()]).toEqual([today, today + 1]);
+    expect(daily.get(today)).toMatchObject({ fill: 0.25, humansPerRoom: 3, joins: 20, dropRate: 0.1 });
+    expect(daily.get(today + 1)).toMatchObject({ fill: 1, humansPerRoom: 2, joins: 0, dropRate: undefined });
+    expect(roomHealthBy(boundary, [today * 24 + 16], true).get(today * 24 + 16)).toEqual(daily.get(today + 1));
   });
 });
 

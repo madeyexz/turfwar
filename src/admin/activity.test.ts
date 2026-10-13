@@ -68,25 +68,28 @@ describe('CCU per hour', () => {
 });
 
 describe('PCCU per day', () => {
-  it('takes the highest hour of each UTC day; unknown before recording, partial on its first day', () => {
-    const rows = [peak(24 * 3 + 10, 5), peak(24 * 3 + 20, 9), peak(24 * 5 + 1, 2)];
+  it('splits at 16:00Z (midnight Taipei); unknown before recording, partial on its first day', () => {
+    const rows = [peak(24 * 3 + 10, 5), peak(24 * 3 + 15, 7), peak(24 * 3 + 16, 9), peak(24 * 5 + 1, 2)];
     const d = pccuByDay(rows, 2, 6);
     expect(d.get(2)).toBeUndefined();
-    expect(d.get(3)).toEqual({ peak: 9, atMs: (24 * 3 + 20) * H + 60_000, partial: true });
-    expect(d.get(4)).toEqual({ peak: 0, atMs: 0, partial: false });
+    expect(d.get(3)).toEqual({ peak: 7, atMs: (24 * 3 + 15) * H + 60_000, partial: true });
+    expect(d.get(4)).toEqual({ peak: 9, atMs: (24 * 3 + 16) * H + 60_000, partial: false });
     expect(d.get(5)?.peak).toBe(2);
     expect(d.get(6)?.peak).toBe(0);
   });
 
   it('is not partial when recording began at midnight', () => {
-    expect(pccuByDay([peak(48, 3)], 2, 2).get(2)?.partial).toBe(false);
+    expect(pccuByDay([peak(40, 3)], 2, 2).get(2)?.partial).toBe(false);
+    expect(pccuByDay([peak(48, 3)], 2, 2).get(2)?.partial).toBe(true); // 08:00 Taipei
   });
 });
 
 describe('helpers', () => {
   it('averages a day at once, over the elapsed part of today', () => {
     expect(averageAtOnce(86_400 * 3, 10, 20 * 86_400_000)).toBe(3);
-    expect(averageAtOnce(3600, 10, 10 * 86_400_000 + H)).toBe(1);
+    expect(averageAtOnce(3600, 10, 9 * 86_400_000 + 17 * H)).toBe(1); // 01:00 Taipei
+    expect(averageAtOnce(3600, 10, 10 * 86_400_000 + H)).toBe(1 / 9); // 09:00 Taipei
+    expect(averageAtOnce(120, 10, 9 * 86_400_000 + 16 * H)).toBe(2); // midnight: minimum 60 s
   });
 
   it('describes a change', () => {
@@ -130,4 +133,3 @@ describe('active-user bar (minutes of Online play on the day)', () => {
     expect(qualifying([{ firstDay: 1, days: new Set([1]), daySeconds: new Map([[1, 299]]) }], 5, 9)).toHaveLength(0);
   });
 });
-

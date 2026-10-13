@@ -1,5 +1,50 @@
 import { constantTimeEqual, sha256Hex } from '../../shared/sha256';
 import { median, perMinute, type NetDay } from '../../shared/netstats';
+import type { PlayStore } from '../../shared/playtime';
+import { taipeiDay, taipeiDayOfHour } from '../../shared/taipei';
+
+/** Separate collection sink: never changes the lifetime, UTC-day or hourly store's credit. */
+export interface TaipeiPlaySink<K> {
+  startedAt(): bigint;
+  active(id: K, day: number): void;
+  addDay(id: K, day: number, seconds: number): void;
+}
+
+/** Mirror hourly credit into Taipei days, excluding time before collection began (including open upgrade stretches). */
+export function taipeiPlayStore<K>(base: PlayStore<K>, sink: TaipeiPlaySink<K>, now: bigint): PlayStore<K> {
+  const starts = new Map<K, bigint>();
+  const currentDay = taipeiDay(Number(now / 1000n));
+  return {
+    ...base,
+    get: id => {
+      sink.startedAt(); // A first post-upgrade flush starts coverage even without credited seconds.
+      const row = base.get(id);
+      starts.set(id, row?.since ?? 0n);
+      if (row && row.since > 0n) sink.active(id, currentDay);
+      return row;
+    },
+    set: (id, time) => {
+      base.set(id, time);
+      if (time.since > 0n) sink.active(id, currentDay);
+    },
+    addHour: (id, hour, seconds) => {
+      base.addHour?.(id, hour, seconds);
+      const from = starts.get(id) ?? 0n;
+      const hourStart = BigInt(hour) * 3_600_000_000n;
+      const start = from > hourStart ? from : hourStart;
+      // splitHours assigns whole-second endpoints to each hour. Clip conservatively at coverage,
+      // so even a fractional second straddling startedAt is not credited as Taipei history.
+      const end = (start / 1_000_000n + BigInt(seconds)) * 1_000_000n;
+      const coverage = sink.startedAt();
+      const cut = coverage > start ? coverage : start;
+      const credited = coverage <= start ? seconds : Math.max(0, Number((end - cut) / 1_000_000n));
+      if (credited <= 0) return;
+      const day = taipeiDayOfHour(hour);
+      sink.active(id, day);
+      sink.addDay(id, day, credited);
+    },
+  };
+}
 
 /**
  * The owner's admin dashboard (`/admin`), checked inside the module: no owner token anywhere.
