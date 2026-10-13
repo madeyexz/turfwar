@@ -3,6 +3,7 @@ import { hitShape, raycastSoldier } from '../../shared/hitbox';
 import { loadMap } from '../../shared/maps/index';
 import { wrapAngle, type Vec3 } from '../../shared/math';
 import { eyeHeight } from '../../shared/movement';
+import { PEEK, easePeek, peekShift, peekSide, type PeekSide } from '../../shared/peek';
 import { ATTACKERS, vehicleTarget, type MatchEvent, type MatchState, type Soldier, type Team } from '../../shared/match/state';
 import { VEHICLES, obstaclesOf, raycastVehicle, seatPosition, speedOf, type Vehicle } from '../../shared/vehicles';
 import { seatFor } from '../../shared/match/vehicles';
@@ -58,7 +59,8 @@ const LOD_NEAR = 30, LOD_MID = 70;
 const SHOT_FX_RANGE = 110, SHOT_AUDIO_RANGE = 85;
 const frustum = new THREE.Frustum(), projScreen = new THREE.Matrix4(), lodSphere = new THREE.Sphere(new THREE.Vector3(), 1.3);
 
-interface Remote { view: SoldierView; buffer: InterpBuffer<Sample>; pos: THREE.Vector3; crouch: number; yaw: number; pitch: number; stepDist: number; last?: THREE.Vector3 }
+/** `peek`: auto-peek lean as rendered (-1..1), easing toward `peekSide` (shared/peek.ts). */
+interface Remote { view: SoldierView; buffer: InterpBuffer<Sample>; pos: THREE.Vector3; crouch: number; yaw: number; pitch: number; stepDist: number; last?: THREE.Vector3; peek: number; peekSide: PeekSide }
 
 /** One deployed match: rendering, local prediction, effects, HUD and the link to the match host. */
 export class Game {
@@ -529,6 +531,9 @@ export class Game {
       }
       const hips = ride && vp && VEHICLES[ride.v.kind].exposed ? vp.yaw : undefined;
       r.pos.set(sample.x, sample.y, sample.z); r.crouch = sample.crouch; r.yaw = sample.yaw; r.pitch = sample.pitch;
+      // Auto-peek: judged from the pose we see, the same way the server judges it.
+      r.peekSide = s.alive && s.ads && !s.bot && !ride ? peekSide(this.map.world, sample.x, sample.y, sample.z, sample.crouch, sample.yaw, s.team, r.peekSide) : 0;
+      r.peek = easePeek(r.peek, r.peekSide, dt);
       positions.set(id, r.pos);
       lodSphere.center.set(sample.x, sample.y + 1, sample.z);
       const distance = lodSphere.center.distanceTo(cam0.position);
@@ -537,7 +542,7 @@ export class Game {
       r.view.update(dt, {
         x: sample.x, y: sample.y, z: sample.z, vx: sample.vx, vy: sample.vy, vz: sample.vz, yaw: sample.yaw, hips, pitch: sample.pitch, crouch: sample.crouch,
         grounded: s.m.grounded, sprint: s.sprint, ads: s.ads, slide: s.m.slideTime > 0, alive: s.alive, weapon, attachments: s.attachments[weapon], using: s.using,
-        reloading: s.reloadLeft > 0 ? 1 - s.reloadLeft / 2 : 0, firing: s.sinceShot < 0.15,
+        reloading: s.reloadLeft > 0 ? 1 - s.reloadLeft / 2 : 0, firing: s.sinceShot < 0.15, peek: r.peek,
       });
       // Hide a soldier the camera is inside (crowded bases, spectating): clipping through a body looks broken.
       const cp = this.renderer.camera.position;
@@ -581,7 +586,7 @@ export class Game {
       const bob = this.player.m.grounded ? Math.sin(this.player.bobPhase * 2) * 0.012 * Math.min(1, this.player.speed() / 6) * (1 - this.player.ads) : 0;
       cam.position.y += bob;
       const slideRoll = this.player.m.slideTime > 0 ? 0.06 : 0;
-      cam.rotation.set(this.player.pitch + this.player.punchPitch * 0.01, this.player.yaw + this.player.punchYaw, slideRoll, 'YXZ');
+      cam.rotation.set(this.player.pitch + this.player.punchPitch * 0.01, this.player.yaw + this.player.punchYaw, slideRoll - this.player.lean * PEEK.roll, 'YXZ');
       const w = this.player.weapon;
       const base = settings.fov;
       const targetFov = base + (this.player.aimFov - base) * this.player.ads + (this.player.sprinting ? 6 : 0) + (this.player.m.slideTime > 0 ? 4 : 0);
@@ -1020,8 +1025,9 @@ export class Game {
       w.reloadTotal = w.weapon.reload; w.reloadLeft = target.reloadLeft;
       w.ads = Math.max(0, Math.min(1, w.ads + (target.ads ? 1 : -1) * dt / w.weapon.adsTime));
       if (target.m.grounded) w.bobPhase += dt * Math.hypot(target.m.vx, target.m.vz) * (target.sprint ? 1.5 : 1.75);
-      cam.position.set(r.pos.x, r.pos.y + eyeHeight({ crouch: r.crouch }), r.pos.z);
-      cam.rotation.set(r.pitch, r.yaw, 0, 'YXZ');
+      const shift = peekShift(r.yaw, r.peek);
+      cam.position.set(r.pos.x + shift.x, r.pos.y + eyeHeight({ crouch: r.crouch }) - Math.abs(r.peek) * PEEK.drop, r.pos.z + shift.z);
+      cam.rotation.set(r.pitch, r.yaw, -r.peek * PEEK.roll, 'YXZ');
       r.view.root.visible = false; r.view.gun.visible = false;
       const vm = this.viewmodelFor(target.team);
       vm.setKnifeSkin(skinOf(target).knife);
@@ -1057,7 +1063,7 @@ export class Game {
         if (r) { r.view.dispose(); r.view.gun.removeFromParent(); }
         const view = new SoldierView(this.assets, s.team, skin);
         this.renderer.scene.add(view.root, view.gun);
-        r = { view, buffer: new InterpBuffer(), pos: new THREE.Vector3(s.m.x, s.m.y, s.m.z), crouch: 0, yaw: s.yaw, pitch: 0, stepDist: 0 };
+        r = { view, buffer: new InterpBuffer(), pos: new THREE.Vector3(s.m.x, s.m.y, s.m.z), crouch: 0, yaw: s.yaw, pitch: 0, stepDist: 0, peek: 0, peekSide: 0 };
         this.remotes.set(s.id, r);
       }
       r.view.setKnifeSkin(skin.knife);
@@ -1131,7 +1137,7 @@ export class Game {
     for (const [id, r] of this.remotes) {
       const s = state.soldiers.find(x => x.id === id);
       if (!s || !s.alive || s.team === this.myTeam || shielded.has(id)) continue;
-      const hit = raycastSoldier(origin, dir, hitShape(r.pos, r.crouch, r.yaw));
+      const hit = raycastSoldier(origin, dir, hitShape(r.pos, r.crouch, r.yaw, r.peek));
       if (hit && hit.t < best) { best = hit.t; target = id; zone = hit.zone; }
     }
     const point = { x: origin.x + dir.x * best, y: origin.y + dir.y * best, z: origin.z + dir.z * best };

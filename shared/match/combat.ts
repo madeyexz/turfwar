@@ -1,5 +1,6 @@
 import type { CollisionWorld } from '../collision';
-import { chestPoint, hitShape, raycastSoldier } from '../hitbox';
+import { chestPoint, hitShape, raycastSoldier, type HitShape } from '../hitbox';
+import { peekOf } from '../peek';
 import type { MapDef } from '../maps/types';
 import { dist3, segmentPointDistance, type Vec3 } from '../math';
 import { MOVE, createMoveState, eyeHeight } from '../movement';
@@ -24,6 +25,8 @@ export const TICK_RATE = 30;
 export const weaponOf = (s: Soldier): WeaponDef => statsOf(s);
 export const eyeOf = (s: Soldier): Vec3 => ({ x: s.m.x, y: s.m.y + eyeHeight(s.m), z: s.m.z });
 export const feetOf = (s: Soldier): Vec3 => ({ x: s.m.x, y: s.m.y, z: s.m.z });
+/** A soldier's hit volumes, leaning out if it auto-peeks (peek.ts); `feet` may move them (lag compensation). */
+export const shapeOf = (ctx: SimContext, s: Soldier, feet: Vec3 = feetOf(s)): HitShape => hitShape(feet, s.m.crouch, s.yaw, peekOf(ctx.world, s));
 export const isHostile = (a: number, b: number) => a !== b || a === -1;
 
 /**
@@ -203,7 +206,7 @@ export function traceShot(state: MatchState, ctx: SimContext, shooter: Soldier, 
   for (const s of state.soldiers) {
     if (!s.alive || s.id === shooter.id || s.team === shooter.team || shielded?.has(s.id)) continue;
     if (Math.abs(s.m.x - origin.x) > best + 2 || Math.abs(s.m.z - origin.z) > best + 2) continue;
-    const hit = raycastSoldier(origin, dir, hitShape(feet(s), s.m.crouch, s.yaw));
+    const hit = raycastSoldier(origin, dir, shapeOf(ctx, s, feet(s)));
     if (hit && hit.t < best) {
       best = hit.t;
       result = { point: { x: origin.x + dir.x * hit.t, y: origin.y + dir.y * hit.t, z: origin.z + dir.z * hit.t }, soldier: s, zone: hit.zone, distance: hit.t };
@@ -304,7 +307,7 @@ export function slipperStrike(state: MatchState, ctx: SimContext, b: Body, from:
   for (const s of state.soldiers) {
     if (!s.alive || s.id === b.owner || s.team === b.team || shielded?.has(s.id)) continue;
     if (Math.abs(s.m.x - from.x) > len + 1.5 || Math.abs(s.m.z - from.z) > len + 1.5) continue;
-    const hit = raycastSoldier(from, dir, hitShape(feetOf(s), s.m.crouch, s.yaw));
+    const hit = raycastSoldier(from, dir, shapeOf(ctx, s));
     if (hit && hit.t <= len + BODY_RADIUS.slipper && (!best || hit.t < best.t)) best = { s, ...hit };
   }
   if (!best) return;
