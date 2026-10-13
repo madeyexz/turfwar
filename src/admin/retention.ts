@@ -1,7 +1,7 @@
 /**
- * Retention on the admin page (pure, for tests): who came back, from the `admin_player_day` view
- * (every UTC day each player was active) joined to `admin_players` by id. Days are UTC day numbers
- * (days since 1970-01-01), like the rest of the page.
+ * Retention on the admin page (pure, for tests): who came back, from the `admin_taipei_player_day` view
+ * (every Taipei day each player was active) joined to `admin_players` by id. Day numbers encode
+ * Taipei calendar dates (days since 1970-01-01), like the rest of the page.
  *
  * Day-N retention is the classic one: of the players whose first day was D, the share active on day
  * D + N exactly. A cohort's day N is complete once that day is over, in progress while it is today,

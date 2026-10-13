@@ -24,15 +24,18 @@ describe('admin releases', () => {
     expect(mergeReleases([a], [{ ...a, sha: 'aaaaaaa1234' }, b])).toEqual([b, a]);
   });
 
-  it('groups releases by UTC day within a range and titles a day\'s marker', () => {
-    const list = [{ sha: '1', at: 10 * DAY + 60, title: 'one' }, { sha: '2', at: 10 * DAY + 7200, title: 'two' }, { sha: '3', at: 12 * DAY, title: 'three' }, { sha: '4', at: 3 * DAY, title: 'old' }];
-    const byDay = releasesByDay(list, 9, 12);
-    expect([...byDay.keys()]).toEqual([10, 12]);
-    expect(byDay.get(10)!.map(r => r.title)).toEqual(['one', 'two']);
-    expect(releaseTitle(10, byDay.get(10)!)).toBe('1970-01-11: 2 releases (UTC)\n• 00:01 one\n• 02:00 two');
-    const byHour = releasesByDay(list, 240, 242, 3600);
-    expect([...byHour.keys()]).toEqual([240, 242]);
-    expect(releaseTitle(242, byHour.get(242)!, 3600)).toBe('1970-01-11 02:00: 1 release (UTC)\n• 02:00 two');
+  it('groups at midnight Taipei and formats daily and epoch-hour markers in Taipei', () => {
+    const list = [{ sha: '1', at: 10 * DAY + 16 * 3600 - 1, title: 'one' }, { sha: '2', at: 10 * DAY + 16 * 3600, title: 'two' }, { sha: '3', at: 11 * DAY, title: 'three' }, { sha: '4', at: 3 * DAY, title: 'old' }];
+    const byDay = releasesByDay(list, 10, 11);
+    expect([...byDay.keys()]).toEqual([10, 11]);
+    expect(byDay.get(10)!.map(r => r.title)).toEqual(['one']);
+    expect(byDay.get(11)!.map(r => r.title)).toEqual(['two', 'three']);
+    expect(releaseTitle(10, byDay.get(10)!)).toBe('1970-01-11: 1 release (Taipei, UTC+8)\n• 23:59 one');
+    expect(releaseTitle(11, byDay.get(11)!)).toBe('1970-01-12: 2 releases (Taipei, UTC+8)\n• 00:00 two\n• 08:00 three');
+    const byHour = releasesByDay(list, 255, 256, 3600);
+    expect([...byHour.keys()]).toEqual([255, 256]);
+    expect(releaseTitle(256, byHour.get(256)!, 3600)).toBe('1970-01-12 00:00: 1 release (Taipei, UTC+8)\n• 00:00 two');
+    expect([...releasesByDay(list, 11, 11).keys()]).toEqual([11]);
   });
 
   it('keeps a well-formed snapshot', () => {

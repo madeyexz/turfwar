@@ -377,16 +377,31 @@ whenever what is collected changes. These answer "how many players, and from whe
 
 **Admin page** (`/admin`, `admin/index.html`, not linked from the game, `noindex`): one section per
 question, shown one at a time from a sidebar on the left (grouped Overview, Growth, Operations, Reference; the URL's
-`#section` keeps the choice across reloads and Back; on narrow screens the sidebar folds into a bar on top). It opens on **Key metrics** (`src/admin/activity.ts`, charts in `src/admin/chart.ts`):
-KPI tiles (value, change against the period before, sparkline) and charts for **DAU** (players with a `player_day` row on
-the UTC day: they said `hello`, reconnected or entered a room, so Solo-only players never count), **MAU** (rolling: players
-active on any of the 30 UTC days ending that day; drawn faint while the window reaches back before the first recorded
-day), DAU/MAU, **CCU per hour** (humans in Online rooms; the average at once is `room_hour` human-minutes ÷ 60, sampled
+`#section` keeps the choice across reloads and Back; on narrow screens the sidebar folds into a bar on top).
+All calendar days and timestamp labels use **Taipei (UTC+8)**, independent of the viewer's browser time zone.
+A day begins at **00:00 Taipei, exactly 16:00 UTC on the preceding date**; epoch-hour keys remain unchanged.
+Elapsed-time windows (24 hours, activation's first 24 hours, play durations and cooldowns) are not calendar days.
+The private tables `taipei_player_day`, `taipei_player_day_time` and `taipei_player_day_net` collect separate
+Taipei daily activity, play seconds and connection quality, exposed only to authenticated admins through
+`admin_taipei_player_day`, `admin_taipei_player_day_time` and `admin_taipei_player_day_net`.
+The private `taipei_coverage` table persists the first collecting transaction's `startedAt` once;
+`admin_taipei_coverage` exposes it to admins. Opening a view does not start or move coverage.
+If collection starts mid-day, the first fully covered day is the next Taipei midnight; if it starts exactly
+at midnight, that day is covered. Older daily metrics and rolling metrics whose windows extend before
+coverage are **unavailable, not zero**; retention targets likewise require recorded coverage.
+The existing UTC daily tables and views remain intact: there is **no backfill and no reinterpretation of
+UTC history** as Taipei days. Lifetime totals and retained epoch-hour records remain usable independently.
+
+It opens on **Key metrics** (`src/admin/activity.ts`, charts in `src/admin/chart.ts`):
+KPI tiles (value, change against the period before, sparkline) and charts for **DAU** (players with a `taipei_player_day` row on
+the Taipei day: they said `hello`, reconnected or entered a room, so Solo-only players never count), **MAU** (rolling: players
+active on any of the 30 Taipei days ending that day; unavailable until the entire window is covered),
+DAU/MAU, **CCU per hour** (humans in Online rooms; the average at once is `room_hour` human-minutes ÷ 60, sampled
 once a minute per live room, falling back to `player_hour` play time ÷ 3600 for hours before `room_hour` began; the peak
-at once is `peak_hour`) and **PCCU per day** (the highest `peak_hour` of the UTC day, with launch-week peaks rebuilt from
+at once is `peak_hour`) and **PCCU per day** (the highest `peak_hour` of the Taipei day, with launch-week peaks rebuilt from
 PostHog where nothing was recorded), plus a card naming each source and the first record the server has. An **Active user** switch above the tiles sets what DAU,
-MAU and DAU/MAU count: **Joined** (the `player_day` definition above) or at least **3, 5 or 10 minutes** of Online play on the
-UTC day, summed over the day from `player_day_time` (today adds a match still in progress; lobby time, Solo and Practice never
+MAU and DAU/MAU count: **Joined** (the `taipei_player_day` definition above) or at least **3, 5 or 10 minutes** of Online play on the
+Taipei day, summed over the day from `taipei_player_day_time` (today adds a match still in progress; lobby time, Solo and Practice never
 count). It opens on 5 min+ and is remembered per browser with the chart controls (`qualifying` in `src/admin/activity.ts`). All of it is
 computed in the page from existing admin views. Every chart has one shared tooltip: hover a day or hour, or focus the
 chart and use ←/→. Then the **Scorecard** (`src/admin/growth.ts`): one headline figure per
@@ -420,34 +435,34 @@ tiles and Key metrics' PCCU and hourly CCU (tick: the average at once, from play
 6v6 room). Local check: `ADMIN_TEST_KEY=<test key> bun scripts/peakcheck.ts ws://127.0.0.1:<port> <db>`.
 **Benchmarks** (`src/admin/benchmarks.ts`): this server's MAU, DAU, peak CCU and lifetime players (all, and on a
 Taiwan time zone) against BeGone's estimated Taiwan peak, the estimate's funnel and evidence (nplay.com in the
-Wayback Machine), and Turf War's launch-week peaks rebuilt from PostHog before `peak_hour` existed. Days are UTC days. **Phone and Computer side by side**
+Wayback Machine), and Turf War's launch-week peaks rebuilt from PostHog before `peak_hour` existed. Days are Taipei days. **Phone and Computer side by side**
 (`src/admin/groups.ts`): every figure shows All, Phone and Computer, and the 30-day charts draw a Phone
 and a Computer bar each day. A player's side is the device they last played on (`admin_player_device`;
 phones and tablets are Phone; players without a report count only in All), and per-day figures use it
-for every day. The daily play time and ping come per player from the views `admin_player_day_time` and
-`admin_player_day_net` (from `player_day_time` and `player_day_net`), subscribed separately like the rest.
-**Chart controls** at the top right of the content (remembered per browser): the range, 90, 30 or 7 UTC days or the last
-48 hours (hourly, labelled in the viewer's time zone; Key metrics' daily charts show at least 7 days and its CCU chart is
+for every day. The daily play time and ping come per player from the views `admin_taipei_player_day_time` and
+`admin_taipei_player_day_net` (from the separate Taipei tables), subscribed separately like the rest.
+**Chart controls** at the top right of the content (remembered per browser): the range, 90, 30 or 7 Taipei days or the last
+48 hours (hourly, labelled in Taipei time; Key metrics' daily charts show at least 7 days and its CCU chart is
 always hourly over the range), and Split (Phone and Computer side by side) or
 Combined (everyone in one bar; the cohorts become one table). Hours come from the private table
 `player_hour` (per identity per hour since the epoch: a row when the player was seen, play time split
 on the hour by shared/playtime.ts, connection reports folded like `player_day_net`), read through the
 view `admin_player_hour` (the 168 hours up to the latest); the rooms' minute flush deletes rows older
-than two weeks. **Retention** (`src/admin/retention.ts`) comes from the view `admin_player_day` (every UTC day
-each player was active, from `player_day`; subscribed separately: a database without it shows "—"):
+than two weeks. **Retention** (`src/admin/retention.ts`) comes from the view `admin_taipei_player_day` (every Taipei day
+each player was active, from `taipei_player_day`; subscribed separately: a database without it shows "—"):
 the share who came back on any later day, classic day-N retention (back exactly 1, 3, 7, 14 or 30 days
 after their first day) pooled over every cohort whose day N is over, and a table of the last 14 days'
 cohorts. **Release flags** on the 30-day charts mark the days `main` got a release (hover for what
 shipped): the build reads `main`'s first-parent "Release…" commits from git and adds the snapshot in
-`src/admin/releases.json`, since Vercel's clone is shallow; refresh it with `bun scripts/releases.ts`
+`src/admin/releases.json`, since Vercel's clone is shallow; release days and tooltip hours use Taipei time. Refresh it with `bun scripts/releases.ts`
 on `dev` now and then (after a release is fine) and commit it. Connection quality adds a
 PING column (typical p50, coloured; hover for p95 and worst p95) and CORR/MIN to the player list,
 median ping cards (24 h, 7 d) and corrections per minute, ping by country and a 30-day ping chart, from
-the views `admin_player_net` and `admin_daily_net` (subscribed separately: a database without them
+the views `admin_player_net` (lifetime) and `admin_taipei_player_day_net` (daily, aggregated in the page; subscribed separately: a database without them
 shows "—"). A DEVICE column (Phone, Tablet or Computer; hover for connections per kind) and a Devices
 card (share of players by the device they last played on, last 7 days and all time) come from the view
 `admin_player_device`, subscribed separately the same way. Play time comes from the
-views `admin_player_time` and `admin_daily_time`, joined to `admin_players` by the short id: new
+views `admin_player_time` (lifetime) and `admin_taipei_player_day_time` (daily), joined to `admin_players` by the short id: new
 views rather than new columns on the old ones, because changing an existing view's columns makes a
 publish disconnect every client. The owner logs in with the **admin key**; the module
 keeps only its SHA-256 (`ADMIN_KEY_SHA256` in `spacetimedb/src/admin.ts`). `admin_login(key)` adds

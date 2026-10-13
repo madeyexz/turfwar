@@ -4,10 +4,8 @@ import type AdminPlayersRow from '../module_bindings/admin_players_table';
 import type AdminRoomsRow from '../module_bindings/admin_rooms_table';
 import type AdminOverviewRow from '../module_bindings/admin_overview_table';
 import type AdminPlayerTimeRow from '../module_bindings/admin_player_time_table';
-import type AdminDailyTimeRow from '../module_bindings/admin_daily_time_table';
 import type AdminPlayerNetRow from '../module_bindings/admin_player_net_table';
 import type AdminPlayerDeviceRow from '../module_bindings/admin_player_device_table';
-import type AdminPlayerDayRow from '../module_bindings/admin_player_day_table';
 import type AdminPeakHourRow from '../module_bindings/admin_peak_hour_table';
 import type AdminPlayerPerfRow from '../module_bindings/admin_player_perf_table';
 import type AdminPlayerSourceRow from '../module_bindings/admin_player_source_table';
@@ -16,14 +14,15 @@ import type AdminRoomHourRow from '../module_bindings/admin_room_hour_table';
 import { countByCountry, countryOf } from '../../shared/tzcountry';
 import { fmtPing, fmtRate, medianCorrections, medianPing, pingByCountry, pingClass, type NetOf } from './net';
 import { deviceCounts, deviceLabel, deviceShare, fmtShare, type DeviceOf } from './devices';
-import { activeBetween, cameBack, change, cohorts, daysById, firstDayOf, fmtRetention, newBetween, RETENTION_DAYS, type Cell } from './retention';
+import { activeBetween, cameBack, change, cohorts, daysById, fmtRetention, newBetween, RETENTION_DAYS, type Cell } from './retention';
 import { releasesByDay, releaseTitle, type Release } from './releases';
-import { peakBetween, peakFor, peaksBy, type PeakOf } from './peak';
-import { ACTIVE_MINUTES, averageAtOnce, ccuByHour, compact, dauByDay, firstActiveDay, kpiChange, launchDay, pccuByDay, qualifying, rollingActive, type ActiveMinutes, type DayPeak } from './activity';
+import { peakBetween, peakFor, type PeakOf } from './peak';
+import { ACTIVE_MINUTES, averageAtOnce, ccuByHour, compact, dauByDay, kpiChange, launchDay, pccuByDay, qualifying, rollingActive, type ActiveMinutes, type DayPeak } from './activity';
 import { attachTooltips, legend, sparkline, timeChart, tipAttr, type TipRow } from './chart';
 import { averageDaily, BEGONE_EVIDENCE, BEGONE_FUNNEL, BEGONE_TAIWAN, LAUNCH_PEAKS, versus } from './benchmarks';
 import { activeByDay, GROUPS, niceStep, pingByDay, sideOf, SIDES, splitBySide, sumByDay, type DayNet as DayNetOf, type GroupId, type Side } from './groups';
-import { formatPlayTime, liveSeconds } from '../../shared/playtime';
+import { formatPlayTime, liveSeconds, splitDays } from '../../shared/playtime';
+import { firstTaipeiDay, taipeiDay, taipeiDayStart, taipeiTimestamp, TAIPEI_OFFSET_MS } from '../../shared/taipei';
 import { channelOf } from '../../shared/metrics';
 import {
   activation, channels, dayN, firstsSince, grade, minutesPerActiveDay, pct, quality, qualityByBrowser, roomHealth, roomHealthBy, roundBuckets, secs,
@@ -48,10 +47,8 @@ import './admin.css';
 type Room = Infer<typeof AdminRoomsRow>;
 type Overview = Infer<typeof AdminOverviewRow>;
 type PlayerTime = Infer<typeof AdminPlayerTimeRow>;
-type DayTime = Infer<typeof AdminDailyTimeRow>;
 type PlayerNet = Infer<typeof AdminPlayerNetRow>;
 type PlayerDevice = Infer<typeof AdminPlayerDeviceRow>;
-type PlayerDay = Infer<typeof AdminPlayerDayRow>;
 type PeakHour = Infer<typeof AdminPeakHourRow>;
 type PlayerPerf = Infer<typeof AdminPlayerPerfRow>;
 type PlayerSource = Infer<typeof AdminPlayerSourceRow>;
@@ -62,15 +59,14 @@ type RoomHour = Infer<typeof AdminRoomHourRow>;
  * including a session in progress), its `admin_player_net` row, if any (connection quality:
  * `ping` is the typical p50 in ms, `corrPerMin` the corrections per minute), and its
  * `admin_player_device` row, if any (`deviceName`: Phone, Tablet or Computer), and its
- * `admin_player_day` rows, if any (`days`: the UTC days active; `firstDay`: the first of them or the
- * day first seen, whichever is earlier).
+ * `admin_taipei_player_day` rows, if any (`days`: Taipei days active; `firstDay`: true firstSeen day).
  */
 type Player = Infer<typeof AdminPlayersRow> & {
   rounds: number; playTime: number; playing: boolean; openSeconds: number; net?: NetOf; ping?: number; corrPerMin?: number; device?: DeviceOf; deviceName?: string;
   firstDay: number; days: Set<number>; activeDays?: number;
   /** Phone or Computer, by the device last played on (none without a report). */
   side?: Side;
-  /** Play time and connection quality per UTC day (`admin_player_day_time`, `admin_player_day_net`). */
+  /** Play time (including split open stretches) and connection quality per Taipei day. */
   daySeconds?: Map<number, number>; dayNet?: Map<number, DayNetOf>;
   /** The hour first seen (hours since the epoch) and each active hour's play time and connection (`admin_player_hour`). */
   firstHour: number; hours?: Map<number, HourOf>;
@@ -111,7 +107,7 @@ const ago = (d: Date) => {
   const s = Math.max(0, (Date.now() - d.getTime()) / 1000);
   return s < 60 ? 'just now' : s < 3600 ? `${Math.floor(s / 60)} min ago` : s < 86400 ? `${Math.floor(s / 3600)} h ago` : `${Math.floor(s / 86400)} d ago`;
 };
-const shortDate = (d: Date) => d.toISOString().slice(0, 10);
+const shortDate = (d: Date) => taipeiTimestamp(d.getTime()).slice(0, 10);
 const titleCase = (id: string) => id.replace(/(^|[-_ ])(\w)/g, (_m, sep: string, c: string) => `${sep ? ' ' : ''}${c.toUpperCase()}`);
 
 const root = document.querySelector<HTMLDivElement>('#admin')!;
@@ -130,6 +126,7 @@ root.innerHTML = `
       <div class="side-foot links"><a href="${POSTHOG}" target="_blank" rel="noopener noreferrer">PostHog ↗</a><button type="button" class="btn" id="logout" hidden>Log out</button></div>
     </aside>
     <div class="content">
+      <p class="notice">Taipei time (UTC+8)</p>
       <div class="chart-controls" id="chart-controls" hidden></div>
       <main id="body"></main>
     </div>
@@ -157,9 +154,10 @@ const OPTIONAL = {
   errors: ['SELECT * FROM admin_errors'],
   net: ['SELECT * FROM admin_player_net'],
   device: ['SELECT * FROM admin_player_device'],
-  days: ['SELECT * FROM admin_player_day'],
-  dayTime: ['SELECT * FROM admin_player_day_time'],
-  dayNet: ['SELECT * FROM admin_player_day_net'],
+  days: ['SELECT * FROM admin_taipei_player_day'],
+  dayTime: ['SELECT * FROM admin_taipei_player_day_time'],
+  dayNet: ['SELECT * FROM admin_taipei_player_day_net'],
+  coverage: ['SELECT * FROM admin_taipei_coverage'],
   hours: ['SELECT * FROM admin_player_hour'],
   peak: ['SELECT * FROM admin_peak_hour'],
   perf: ['SELECT * FROM admin_player_perf'],
@@ -168,17 +166,36 @@ const OPTIONAL = {
   roomHours: ['SELECT * FROM admin_room_hour'],
 };
 type ViewState = 'wait' | 'on' | 'missing';
-const freshViews = (): Record<keyof typeof OPTIONAL, ViewState> => ({ errors: 'wait', net: 'wait', device: 'wait', days: 'wait', dayTime: 'wait', dayNet: 'wait', hours: 'wait', peak: 'wait', perf: 'wait', source: 'wait', firsts: 'wait', roomHours: 'wait' });
+const freshViews = (): Record<keyof typeof OPTIONAL, ViewState> => ({ errors: 'wait', net: 'wait', device: 'wait', days: 'wait', dayTime: 'wait', dayNet: 'wait', coverage: 'wait', hours: 'wait', peak: 'wait', perf: 'wait', source: 'wait', firsts: 'wait', roomHours: 'wait' });
 let views = freshViews();
+/** Persisted collection boundary, never inferred from whichever player happens to have a row. */
+function recordingStart() {
+  if (!conn || views.coverage !== 'on') return undefined;
+  return [...conn.db.adminTaipeiCoverage.iter()][0]?.startedAt.toDate().getTime();
+}
+function dailyStart() {
+  const start = recordingStart();
+  return start === undefined ? undefined : firstTaipeiDay(start);
+}
+const covered = (from: number, to = from) => {
+  const start = dailyStart();
+  return start !== undefined && from >= start && to >= from;
+};
+const retentionPlayers = (ps: Player[]) => ps.filter(p => covered(p.firstDay));
+function coverageNote() {
+  const start = recordingStart(), day = dailyStart();
+  return start === undefined ? 'Unavailable: Taipei daily recording coverage is not available on this server.'
+    : `Taipei daily recording began ${taipeiTimestamp(start)}. Complete-day coverage starts ${dateOf(day!)}; earlier days (including the partial launch day) are Unavailable, not zero. Legacy UTC data is preserved but is not used here. Retention excludes earlier cohorts; MAU and DAU / MAU require a covered 30-day window.`;
+}
 /** Which players the list shows. */
 let playerGroup: GroupId = 'all';
 /**
- * How the charts show time and players (remembered in this browser): the last 30 or 7 UTC days, or
+ * How the charts show time and players (remembered in this browser): the last 30 or 7 Taipei days, or
  * the last 48 hours; Phone and Computer side by side, or everyone combined in one bar.
  */
 type Range = '90d' | '30d' | '7d' | '48h';
 const RANGES: { id: Range; label: string }[] = [{ id: '48h', label: '48 h' }, { id: '7d', label: '7 d' }, { id: '30d', label: '30 d' }, { id: '90d', label: '90 d' }];
-/** UTC days the range spans (48 h: the daily-only charts show a week). */
+/** Taipei days the range spans (48 h: the daily-only charts show a week). */
 const rangeDays = () => (charts.range === '90d' ? 90 : charts.range === '30d' ? 30 : 7);
 /** Hours the range spans, for the hourly CCU chart. */
 const rangeHours = () => (charts.range === '48h' ? 48 : rangeDays() * 24);
@@ -262,15 +279,15 @@ function joinedPlayers(): Player[] {
   if (views.net === 'on') for (const n of db.adminPlayerNet.iter()) nets.set(n.id, n);
   const devices = new Map<string, PlayerDevice>();
   if (views.device === 'on') for (const d of db.adminPlayerDevice.iter()) devices.set(d.id, d);
-  const days = views.days === 'on' ? daysById(db.adminPlayerDay.iter() as Iterable<PlayerDay>) : new Map<string, Set<number>>();
+  const days = views.days === 'on' ? daysById(db.adminTaipeiPlayerDay.iter()) : new Map<string, Set<number>>();
   const dayTime = new Map<string, Map<number, number>>();
-  if (views.dayTime === 'on') for (const r of db.adminPlayerDayTime.iter()) {
+  if (views.dayTime === 'on') for (const r of db.adminTaipeiPlayerDayTime.iter()) {
     let m = dayTime.get(r.id);
     if (!m) dayTime.set(r.id, (m = new Map()));
     m.set(r.day, r.seconds);
   }
   const dayNet = new Map<string, Map<number, DayNetOf>>();
-  if (views.dayNet === 'on') for (const r of db.adminPlayerDayNet.iter()) {
+  if (views.dayNet === 'on') for (const r of db.adminTaipeiPlayerDayNet.iter()) {
     let m = dayNet.get(r.id);
     if (!m) dayNet.set(r.id, (m = new Map()));
     m.set(r.day, { p50: r.p50, p95: r.p95, seconds: r.seconds, corrections: r.corrections });
@@ -302,11 +319,19 @@ function joinedPlayers(): Player[] {
     const d = devices.get(p.id);
     const device: DeviceOf | undefined = d && { device: d.device, phone: d.phone, tablet: d.tablet, desktop: d.desktop, lastAtMs: d.lastAt.toDate().getTime() };
     const active = days.get(p.id);
+    // The shared splitter accepts shifted microseconds: its midnight is Taipei midnight here.
+    const seconds = new Map(dayTime.get(p.id) ?? []);
+    const start = recordingStart();
+    if (views.dayTime === 'on' && start !== undefined && since > 0n && live > Number(credited)) {
+      const clipped = since > BigInt(start) * 1000n ? since : BigInt(start) * 1000n;
+      const end = since + BigInt(live - Number(credited)) * 1_000_000n;
+      if (end > clipped) for (const [day, s] of splitDays(clipped + BigInt(TAIPEI_OFFSET_MS) * 1000n, (end - clipped) / 1_000_000n)) seconds.set(day, (seconds.get(day) ?? 0) + s);
+    }
     return {
       ...p, rounds: t?.rounds ?? 0, playTime: live, playing: since > 0n, openSeconds: live - Number(credited), net, ping: net?.pingP50, corrPerMin: net?.correctionsPerMin,
       device, deviceName: deviceLabel(device), side: sideOf(device?.device),
-      firstDay: firstDayOf(Math.floor(p.firstSeen.toDate().getTime() / DAY_MS), active), days: active ?? new Set(), activeDays: active?.size,
-      daySeconds: dayTime.get(p.id), dayNet: dayNet.get(p.id),
+      firstDay: taipeiDay(p.firstSeen.toDate().getTime()), days: active ?? new Set(), activeDays: views.days === 'on' && dailyStart() !== undefined ? [...(active ?? [])].filter(d => covered(d)).length : undefined,
+      daySeconds: views.dayTime === 'on' ? seconds : undefined, dayNet: dayNet.get(p.id),
       firstHour: Math.floor(p.firstSeen.toDate().getTime() / HOUR_MS), hours: hours.get(p.id),
       firstSeenMs: p.firstSeen.toDate().getTime(), firsts: f && { room: ms(f.room), round: ms(f.round), kill: ms(f.kill), match: ms(f.match) }, src, perf,
       channel: src ? channelOf(src) : undefined, fps: perf && perf.seconds > 0 ? perf.fps : undefined,
@@ -320,20 +345,15 @@ const hm = (seconds: number) => (seconds >= 1 ? formatPlayTime(seconds) : '0 m')
 const hmFig = (seconds: number): NonNullable<Fig> => (seconds >= 36_000 ? { v: `${num(Math.round(seconds / 3600))} h`, title: hm(seconds) } : { v: hm(seconds) });
 
 /**
- * A group's play time: totals over its players, and per UTC day (credited per day plus the sessions
- * in progress, which belong to today). `byDay` is undefined without the per-day view, except for
- * everyone, which falls back to the server's daily totals.
+ * A group's play time: lifetime totals remain intact; Taipei daily totals already include split open stretches.
  */
-function playStats(ps: Player[], today: number, fallback?: DayTime[]) {
+function playStats(ps: Player[], today: number) {
   const played = ps.map(p => p.playTime).filter(s => s > 0).sort((a, b) => a - b);
   const total = played.reduce((n, s) => n + s, 0);
   const mid = played.length >> 1;
   const median = !played.length ? 0 : played.length % 2 ? played[mid] : (played[mid - 1] + played[mid]) / 2;
-  const open = ps.reduce((n, p) => n + p.openSeconds, 0);
   let byDay: Map<number, number> | undefined;
   if (views.dayTime === 'on') byDay = sumByDay(ps.map(p => p.daySeconds));
-  else if (fallback) byDay = new Map(fallback.map(d => [d.day, Number(d.playSeconds)]));
-  if (byDay) byDay.set(today, (byDay.get(today) ?? 0) + open);
   const span = (from: number, to: number) => { let n = 0; for (let d = from; d <= to; d++) n += byDay?.get(d) ?? 0; return n; };
   return { total, players: played.length, average: played.length ? total / played.length : 0, median, byDay, today: span(today, today), week: span(today - 6, today), prevWeek: span(today - 13, today - 7) };
 }
@@ -419,7 +439,7 @@ function dashboard() {
   const per = (f: (ps: Player[], g: GroupId) => Fig) => GROUPS.map(g => f(G[g.id], g.id));
   const rooms = [...db.adminRooms.iter()].sort((a, b) => b.humans - a.humans || a.room - b.room);
   const now = Date.now();
-  const today = Math.floor(now / DAY_MS);
+  const today = taipeiDay(now);
   const last = (p: Player) => p.lastSeen.toDate().getTime();
   const peaks = peakRows();
   const hasDays = views.days === 'on';
@@ -429,7 +449,7 @@ function dashboard() {
   const nowTiles = [
     tile('Online now', per((ps, g) => ({ v: num(g === 'all' ? o?.onlineNow ?? 0 : ps.filter(p => p.playing).length) })), 'players in rooms', true),
     tile('Active 24 h', per(ps => ({ v: num(ps.filter(p => last(p) >= now - DAY_MS).length) })), 'seen in the last 24 hours'),
-    tile('Peak today', per((_ps, g) => peakFig(peakBetween(peaks, today * 24, today * 24 + 23), g, 'time')), 'most in rooms at once, UTC day'),
+    tile('Peak today', per((_ps, g) => peakFig(peakBetween(peaks, today * 24 - 8, today * 24 + 15), g, 'time')), 'most in rooms at once, Taipei day'),
     tile('Peak ever', per((_ps, g) => peakFig(peakBetween(peaks, 0, Infinity), g, 'date')), 'since peaks were recorded'),
   ];
   const roomRows = rooms.map(r => `<tr><td>${r.code ? `<span class="tag">#${esc(r.code)}</span>` : '<span class="tag">public</span>'}</td><td>${esc(titleCase(r.mapId))}</td><td>${esc(titleCase(r.mode))}</td>
@@ -437,46 +457,46 @@ function dashboard() {
   const roomCard = card('Live rooms', rooms.length ? `${num(o?.humansInRooms ?? 0)} human${o?.humansInRooms === 1 ? '' : 's'} in ${rooms.length} room${rooms.length === 1 ? '' : 's'}` : 'none open',
     rooms.length ? `<div class="scroll"><table><thead><tr><th>Room</th><th>Map</th><th>Mode</th><th>Size</th><th class="num">Humans</th><th class="num">Bots</th><th class="num">Round</th><th>Phase</th></tr></thead><tbody>${roomRows}</tbody></table></div>` : '<div class="empty">No rooms open: nobody is playing online right now.</div>');
 
-  // Growth: new and active players, each against the period before it (UTC days, today included).
+  // Acquisition stays valid before daily coverage: firstSeen is an actual timestamp.
   const growthTiles = [
     tile('Total players', per(ps => ({ v: num(ps.length) })), 'ever seen'),
-    tile('New today', per(ps => ({ v: num(newBetween(ps, today, today)), sub: `yesterday ${num(newBetween(ps, today - 1, today - 1))}` })), 'UTC day'),
+    tile('New today', per(ps => ({ v: num(newBetween(ps, today, today)), sub: `yesterday ${num(newBetween(ps, today - 1, today - 1))}` })), 'Taipei day'),
     tile('New 7 d', per(ps => { const n = newBetween(ps, today - 6, today); return { v: num(n), delta: [n, newBetween(ps, today - 13, today - 7)] }; }), 'vs the 7 days before'),
     tile('New 30 d', per(ps => { const n = newBetween(ps, today - 29, today); return { v: num(n), delta: [n, newBetween(ps, today - 59, today - 30)] }; }), 'vs the 30 days before'),
     tile('Active 7 d', per(ps => {
-      if (!hasDays) return { v: num(ps.filter(p => last(p) >= now - 7 * DAY_MS).length) };
+      if (!hasDays || !covered(today - 6, today)) return undefined;
       const n = activeBetween(ps, today - 6, today);
-      return { v: num(n), delta: [n, activeBetween(ps, today - 13, today - 7)] };
+      return { v: num(n), delta: covered(today - 13, today - 7) ? [n, activeBetween(ps, today - 13, today - 7)] : undefined };
     }), hasDays ? 'vs the 7 days before' : ''),
     tile('Active 30 d', per(ps => {
-      if (!hasDays) return { v: num(ps.filter(p => last(p) >= now - 30 * DAY_MS).length) };
+      if (!hasDays || !covered(today - 29, today)) return undefined;
       const n = activeBetween(ps, today - 29, today);
-      return { v: num(n), delta: [n, activeBetween(ps, today - 59, today - 30)] };
+      return { v: num(n), delta: covered(today - 59, today - 30) ? [n, activeBetween(ps, today - 59, today - 30)] : undefined };
     }), `MAU${hasDays ? ' · vs the 30 days before' : ''}`),
   ];
   const growthCards = `<div class="grid2">${card('New and returning', `players active ${rangeText()}`, playersChart(G))}${card('Where from', 'time zone → country, estimate', countryList(G))}</div>`;
 
   // Retention: who came back (needs the active-days view).
-  const ret = hasDays ? { phone: cohorts(G.phone, today), computer: cohorts(G.computer, today), all: cohorts(G.all, today) } : undefined;
+  const ret = hasDays && dailyStart() !== undefined ? { phone: cohorts(retentionPlayers(G.phone), today), computer: cohorts(retentionPlayers(G.computer), today), all: cohorts(retentionPlayers(G.all), today) } : undefined;
   const retFig = (c: Cell | undefined): Fig => (!hasDays ? undefined : { v: fmtRetention(c), sub: c ? `${num(c.back)} of ${num(c.players)}` : 'not yet' });
   const retTiles = [
-    tile('Came back', per(ps => retFig(hasDays ? cameBack(ps, today) : undefined)), 'played again on a later day', true),
+    tile('Came back', per(ps => retFig(hasDays ? cameBack(retentionPlayers(ps), today) : undefined)), 'covered new-player cohorts only', true),
     ...([1, 7, 30] as const).map(n => tile(`Day ${n}`, per((_ps, g) => retFig(ret?.[g].overall[RETENTION_DAYS.indexOf(n)])), `back exactly ${n} day${n === 1 ? '' : 's'} after their first`)),
   ];
   // Combined (the charts' switch): one table for everyone; split: Phone and Computer side by side.
   const retCards = charts.combined
-    ? card('Cohorts', 'all players · share of each UTC day\'s new players back exactly N days later', retentionTable(ret?.all, G.all.length))
-    : `<div class="grid2 even">${SIDES.map(s => card(`${SIDE_LABEL[s]} cohorts`, 'share of each UTC day\'s new players back exactly N days later', retentionTable(ret?.[s], G[s].length))).join('')}</div>`;
+    ? card('Cohorts', 'all players · share of each Taipei day\'s new players back exactly N days later', retentionTable(ret?.all, retentionPlayers(G.all).length))
+    : `<div class="grid2 even">${SIDES.map(s => card(`${SIDE_LABEL[s]} cohorts`, 'share of each Taipei day\'s new players back exactly N days later', retentionTable(ret?.[s], retentionPlayers(G[s]).length))).join('')}</div>`;
 
   // Play time.
-  const play = { all: playStats(G.all, today, [...db.adminDailyTime.iter()]), phone: playStats(G.phone, today), computer: playStats(G.computer, today) };
-  const perDay = (g: GroupId, v: (s: ReturnType<typeof playStats>) => number, delta?: (s: ReturnType<typeof playStats>) => [number, number]): Fig =>
-    play[g].byDay ? { ...hmFig(v(play[g])), delta: delta?.(play[g]) } : undefined;
+  const play = { all: playStats(G.all, today), phone: playStats(G.phone, today), computer: playStats(G.computer, today) };
+  const perDay = (g: GroupId, v: (s: ReturnType<typeof playStats>) => number, from: number, delta?: (s: ReturnType<typeof playStats>) => [number, number]): Fig =>
+    play[g].byDay && covered(from, today) ? { ...hmFig(v(play[g])), delta: covered(today - 13, today - 7) ? delta?.(play[g]) : undefined } : undefined;
   const playTiles = [
     tile('Total play time', per((_ps, g) => hmFig(play[g].total)), 'online, all time'),
     tile('Avg / player', per((_ps, g) => ({ ...hmFig(play[g].average), sub: `median ${hm(play[g].median)}` })), 'over players who played online'),
-    tile('Today', per((_ps, g) => perDay(g, s => s.today)), 'UTC day'),
-    tile('7 d', per((_ps, g) => perDay(g, s => s.week, s => [Math.round(s.week / 60), Math.round(s.prevWeek / 60)])), 'vs the 7 days before'),
+    tile('Today', per((_ps, g) => perDay(g, s => s.today, today)), 'Taipei day'),
+    tile('7 d', per((_ps, g) => perDay(g, s => s.week, today - 6, s => [Math.round(s.week / 60), Math.round(s.prevWeek / 60)])), 'vs the 7 days before when covered'),
     tile('Matches played', per(ps => ({ v: num(ps.reduce((n, p) => n + p.matches, 0)) })), 'player-matches finished'),
   ];
 
@@ -505,6 +525,7 @@ function dashboard() {
     <div class="seg" role="group" aria-label="Chart groups"><button type="button" data-combined="0" aria-pressed="${!charts.combined}">Split</button><button type="button" data-combined="1" aria-pressed="${charts.combined}">Combined</button></div>`;
   chartControls.hidden = false;
   body.innerHTML = `
+    <p class="notice">${coverageNote()}</p>
     ${sideNote ? `<p class="notice">${sideNote}.</p>` : ''}
     ${keyMetrics(players, o, today, now)}
     ${scorecard(g)}
@@ -515,7 +536,7 @@ function dashboard() {
     ${group('play', 'Engagement', 'how much they play, and how big the core is', [...playTiles, ...g.engagementTiles], `<div class="grid2">${card('Over time', `online play time ${rangeText()}`, playChart(G))}${card('Players by rounds played', `career rounds; ${CORE_ROUNDS}+ is the core`, roundsPanel(G.all))}</div>`)}
     ${group('virality', 'Virality', 'do players bring players?', g.viralityTiles, viralityCard(G.all))}
     ${group('health', 'Server health', 'do rooms feel alive, and do connections hold?', g.healthTiles, card('Rooms', `human share of seats (bars) and drops per join (tick) ${rangeText()}`, healthChart()))}
-    ${group('errors', 'Errors', 'latest 200 host reports; raw logs stay on the VM', [], card('Server errors', 'requires the optional host watcher', views.errors !== 'on' ? '<p>Error view unavailable on this module.</p>' : [...db.adminErrors.iter()].length === 0 ? '<p>No reports. This does not confirm that the watcher is active.</p>' : `<table><thead><tr><th>Time</th><th>Source</th><th>Message</th></tr></thead><tbody>${[...db.adminErrors.iter()].sort((a, b) => a.id > b.id ? -1 : 1).map(e => `<tr><td>${esc(e.at.toDate().toISOString())}</td><td>${esc(e.reducer)}</td><td>${esc(e.message)}</td></tr>`).join('')}</tbody></table>`))}
+    ${group('errors', 'Errors', 'latest 200 host reports; raw logs stay on the VM', [], card('Server errors', 'requires the optional host watcher · Taipei time', views.errors !== 'on' ? '<p>Error view unavailable on this module.</p>' : [...db.adminErrors.iter()].length === 0 ? '<p>No reports. This does not confirm that the watcher is active.</p>' : `<table><thead><tr><th>Time</th><th>Source</th><th>Message</th></tr></thead><tbody>${[...db.adminErrors.iter()].sort((a, b) => a.id > b.id ? -1 : 1).map(e => `<tr><td>${esc(taipeiTimestamp(e.at.toDate().getTime()))}</td><td>${esc(e.reducer)}</td><td>${esc(e.message)}</td></tr>`).join('')}</tbody></table>`))}
     ${group('connection', 'Quality', 'frame rate, load times, ping, what players play on', [...g.qualityTiles, ...netTiles], `
       <div class="grid2 even">${card('Frame rate', 'players by their typical fps, last 7 days', fpsPanel(G, now))}${card('By browser', 'in-app browsers against plain browsers, last 7 days, slowest first', browserTable(G.all, now))}</div>
       <div class="grid2">${card('Ping', `median of players' p50 (tick: p95) ${rangeText()}`, pingChart(G))}${card('Ping by country', 'median typical p50, time zone → country', countryPing(G))}</div>
@@ -524,10 +545,10 @@ function dashboard() {
     ${group('players', 'Players', `${num(shown.length)} · sorted by ${sortLabel()}`, [], `<section class="card">${chips}${playerTable(shown)}</section>`)}
     <footer><p>Updates live. Players are identities that said hello or joined a room; ids are anonymous. <b>Phone</b> and <b>Computer</b> group players by
       the device they last played on online (phones and tablets are Phone); players who never reported a device count only in All, and per-day figures
-      use that latest device for every day. Days are UTC days; "the days before" compares with the same number of days just before (today counts in
-      the 7 and 30 days, so early in a UTC day they read low). Career numbers come from <code>profile</code>:
+      use that latest device for every day. Days are Taipei days; "the days before" compares only covered windows (today counts in
+      the 7 and 30 days, so early in a Taipei day they read low). Career numbers come from <code>profile</code>:
       matches counts finished first-to-10 matches, rounds every round played. Play time is online play time only: time spent in an online room
-      (lobby time, Solo and Practice are not counted), credited every minute and on leaving. Retention counts the UTC days each player was seen on this
+      (lobby time, Solo and Practice are not counted), credited every minute and on leaving. Retention counts the Taipei days each player was seen on this
       server; a player who moved to another server counts as gone. Ping is the round trip of a player's movement reports
       as their browser measured it (typical p50: a mean over their reports, weighted by time in rooms; hover for p95), and corrections are the
       server's rejections of their reported movement, per minute in rooms; both are reported every 2 minutes in a match and on leaving.
@@ -617,7 +638,7 @@ function growthFigures(G: Record<GroupId, Player[]>, now: number, today: number)
     action: worst ? `Biggest leak: “${worst.label}” keeps only ${pct(worst.fromPrev)} of the step before. ${worst.fix}` : 'Waiting for new players since firsts were recorded.',
   });
   const activationTiles = [
-    tile('New players', per(ps => have('firsts') ? { v: num(act(ps).cohort), sub: 'first seen 1–15 days ago' } : undefined), since ? `since ${dateOf(Math.floor(since / DAY_MS))}, when firsts began` : 'firsts not recorded yet'),
+    tile('New players', per(ps => have('firsts') ? { v: num(act(ps).cohort), sub: 'first seen 1–15 days ago' } : undefined), since ? `since ${dateOf(taipeiDay(since))}, when firsts began` : 'firsts not recorded yet'),
     ...(['room', 'round', 'kill', 'match'] as const).map(k => tile(all.steps.find(s => s.key === k)!.label, per(ps => {
       if (!have('firsts')) return undefined;
       const a = act(ps), st = a.steps.find(s => s.key === k)!;
@@ -626,8 +647,8 @@ function growthFigures(G: Record<GroupId, Player[]>, now: number, today: number)
   ];
 
   // Retention: day 1 (day 7 alongside).
-  const d1 = (ps: Player[]) => dayN(ps.filter(p => p.firstDay >= today - 30), 1, today)?.rate;
-  const d7 = (ps: Player[]) => dayN(ps.filter(p => p.firstDay >= today - 37), 7, today)?.rate;
+  const d1 = (ps: Player[]) => have('days') ? dayN(retentionPlayers(ps).filter(p => p.firstDay >= today - 30), 1, today)?.rate : undefined;
+  const d7 = (ps: Player[]) => have('days') ? dayN(retentionPlayers(ps).filter(p => p.firstDay >= today - 37), 7, today)?.rate : undefined;
   stages.push({
     id: 'retention', name: 'Retention', question: 'Do they come back?', value: have('days') ? pct(d1(G.all)) : '—',
     status: have('days') ? worse(grade(d1(G.all), TARGETS.d1), grade(d7(G.all), TARGETS.d7)) : 'none',
@@ -636,7 +657,7 @@ function growthFigures(G: Record<GroupId, Player[]>, now: number, today: number)
   });
 
   // Engagement: minutes per player per active day, last 7 days.
-  const mins = (ps: Player[]) => (have('dayTime') ? minutesPerActiveDay(ps, today - 6, today) : undefined);
+  const mins = (ps: Player[]) => (have('dayTime') && covered(today - 6, today) ? minutesPerActiveDay(ps, today - 6, today) : undefined);
   const rb = roundBuckets(G.all);
   stages.push({
     id: 'play', name: 'Engagement', question: 'Do they play long?', value: mins(G.all) === undefined ? '—' : `${Math.round(mins(G.all)!)} min`,
@@ -720,26 +741,34 @@ function activationCard(g: ReturnType<typeof growthFigures>) {
   if (views.firsts !== 'on') return card('First 24 hours', '', needs('firsts')!);
   const now = Date.now();
   const by = Object.fromEntries(GROUPS.map(x => [x.id, activation(g.G[x.id], now - 15 * DAY_MS, now, now, g.since)])) as Record<GroupId, { cohort: number; steps: Step[] }>;
-  if (!by.all.cohort) return card('First 24 hours', '', `<div class="empty">${g.since ? `No new players whose first 24 hours are over yet (firsts began ${dateOf(Math.floor(g.since / DAY_MS))}).` : 'Firsts are recorded from this version of the server on; none yet.'}</div>`);
+  if (!by.all.cohort) return card('First 24 hours', '', `<div class="empty">${g.since ? `No new players whose first 24 hours are over yet (firsts began ${dateOf(taipeiDay(g.since))}).` : 'Firsts are recorded from this version of the server on; none yet.'}</div>`);
   const worst = worstStep(by.all.steps);
   const rows = by.all.steps.map((st, i) => `<tr class="${worst?.key === st.key ? 'leak' : ''}"><th><b>${st.label}</b><small>${st.hint}</small></th>${GROUPS.map(x => {
-    const s = by[x.id].steps[i];
-    if (!by[x.id].cohort) return '<td>—</td>';
+    const measured = st.key === 'back' ? activation(retentionPlayers(g.G[x.id]), now - 15 * DAY_MS, now, now, g.since) : by[x.id];
+    const s = measured.steps[i];
+    if (!measured.cohort || (st.key === 'back' && views.days !== 'on')) return '<td title="Unavailable">—</td>';
     return `<td><div class="fbar"><i style="width:${(s.rate * 100).toFixed(1)}%" class="g-${x.id}"></i></div><span><b>${pct(s.rate)}</b> ${num(s.n)}${i && st.key !== 'back' ? ` <em title="kept from the step before">${pct(s.fromPrev)} kept</em>` : ''}</span></td>`;
   }).join('')}</tr>`).join('');
   return card('First 24 hours', `players first seen 1–15 days ago (${num(by.all.cohort)}); bars are shares of everyone who connected`, `<div class="scroll"><table class="funnel"><thead><tr><th>Step</th>${GROUPS.map(x => `<th>${x.label}</th>`).join('')}</tr></thead><tbody>${rows}</tbody></table></div>
-    <p class="table-note">${worst ? `<b>Biggest leak:</b> ${esc(worst.label)} keeps ${pct(worst.fromPrev)} of the players who reached the step before. ${esc(worst.fix)} ` : ''}“Connected” is pressing Play Online with this browser for the first time; Solo players never appear here. A step counts if it happened within 24 hours of connecting.</p>`);
+    <p class="table-note">${worst ? `<b>Biggest leak:</b> ${esc(worst.label)} keeps ${pct(worst.fromPrev)} of the players who reached the step before. ${esc(worst.fix)} ` : ''}“Connected” is pressing Play Online with this browser for the first time; Solo players never appear here. A step counts if it happened within 24 hours of connecting. Coming back uses only covered new-player cohorts; earlier cohorts are Unavailable, not failures.</p>`);
 }
 
 /** New players by channel: how many, and whether they activate and come back. The channel to repeat is the one whose players stay. */
 function channelTable(players: Player[], now: number) {
   if (views.source !== 'on') return needs('source')!;
-  const rows = channels(players, Math.floor(now / DAY_MS) - 29, now);
+  const today = taipeiDay(now);
+  // Keep acquisition and activation intact; exclude cohorts before Taipei collection from retention.
+  const rows = channels(players, today - 29, now).map(r => {
+    const eligible = retentionPlayers(players).filter(p => p.channel === r.channel && p.firstDay >= today - 29);
+    const d1 = views.days === 'on' ? dayN(eligible, 1, today) : undefined;
+    const d7 = views.days === 'on' ? dayN(eligible, 7, today) : undefined;
+    return { ...r, d1: d1?.rate, d1n: d1?.players ?? 0, d7: d7?.rate, d7n: d7?.players ?? 0 };
+  });
   if (!rows.length) return '<div class="empty">No visits reported yet: channels are recorded from this version of the server on.</div>';
   const cell = (v: number | undefined, t: { good: number; watch: number }, n?: number) => `<td class="num"><span class="st st-${grade(v, t)}"${n !== undefined ? ` title="of ${n}"` : ''}>${pct(v)}</span></td>`;
   const body = rows.slice(0, 15).map(r => `<tr><td>${esc(r.channel)}</td><td class="num">${num(r.players)}</td><td class="num">${pct(r.share)}</td>${cell(r.activated, TARGETS.activation)}${cell(r.d1, TARGETS.d1, r.d1n)}${cell(r.d7, TARGETS.d7, r.d7n)}<td class="num">${r.minutes ? `${Math.round(r.minutes)} min` : '—'}</td></tr>`).join('');
   return `<div class="scroll"><table><thead><tr><th>Channel</th><th class="num">New</th><th class="num">Share</th><th class="num">Kill in 24 h</th><th class="num">D1</th><th class="num">D7</th><th class="num">Median play</th></tr></thead><tbody>${body}</tbody></table></div>
-    <p class="table-note">Channel: the app whose built-in browser it was (Threads, Instagram, LINE…), else the first UTM source or referrer, else direct. Colours follow the stage targets. Players from before channels were recorded are left out.</p>`;
+    <p class="table-note">Channel: the app whose built-in browser it was (Threads, Instagram, LINE…), else the first UTM source or referrer, else direct. Colours follow the stage targets. Players from before channels were recorded are left out. New counts use true firstSeen; D1/D7 exclude precoverage cohorts (—: Unavailable).</p>`;
 }
 
 /** D1 and D7 by device and by channel, so the segment that does not return stands out. */
@@ -747,7 +776,7 @@ function retentionBySegment(G: Record<GroupId, Player[]>, today: number) {
   if (views.days !== 'on') return needs('days')!;
   const recent = (ps: Player[]) => ps.filter(p => p.firstDay >= today - 37);
   const row = (label: string, ps: Player[]) => {
-    const a = dayN(recent(ps).filter(p => p.firstDay >= today - 30), 1, today), b = dayN(recent(ps), 7, today);
+    const a = dayN(retentionPlayers(recent(ps)).filter(p => p.firstDay >= today - 30), 1, today), b = dayN(retentionPlayers(recent(ps)), 7, today);
     return `<tr><td>${esc(label)}</td><td class="num">${num(recent(ps).length)}</td><td class="num"><span class="st st-${grade(a?.rate, TARGETS.d1)}" title="${a ? `${a.back} of ${a.players}` : ''}">${pct(a?.rate)}</span></td><td class="num"><span class="st st-${grade(b?.rate, TARGETS.d7)}" title="${b ? `${b.back} of ${b.players}` : ''}">${pct(b?.rate)}</span></td></tr>`;
   };
   const byChannel = new Map<string, Player[]>();
@@ -755,7 +784,7 @@ function retentionBySegment(G: Record<GroupId, Player[]>, today: number) {
   const top = [...byChannel].filter(([, l]) => recent(l).length).sort((a, b) => recent(b[1]).length - recent(a[1]).length).slice(0, 8);
   return `<div class="scroll"><table><thead><tr><th>Segment</th><th class="num">New</th><th class="num">D1</th><th class="num">D7</th></tr></thead><tbody>
     ${row('All', G.all)}${row('Phone', G.phone)}${row('Computer', G.computer)}${top.map(([c, l]) => row(c, l)).join('')}</tbody></table></div>
-    <p class="table-note">New: first seen in the last 37 days; D1 over those whose next day is over, D7 likewise. Hover a figure for the counts. ${views.source === 'on' ? '' : 'Channels appear once the server records visits.'}</p>`;
+    <p class="table-note">New: truly first seen in the last 37 days, including before coverage. D1/D7 use only covered new-player cohorts whose target day is over; —: Unavailable. Hover for eligible counts. ${views.source === 'on' ? '' : 'Channels appear once the server records visits.'}</p>`;
 }
 
 /** Players by career rounds: how many in each band and their share of all rounds played. */
@@ -794,7 +823,7 @@ function healthChart() {
   if (missing) return missing;
   const b = buckets(), rows = roomHourRows();
   const by = roomHealthBy(rows, b.keys, b.hourly);
-  if (!by.size) return '<div class="empty">No rooms in this range (recorded from this version of the server on).</div>';
+  if (!by.size && b.hourly) return '<div class="empty">No rooms in this range (recorded from this version of the server on).</div>';
   return groupedChart({
     aria: `Room fill and drops ${rangeText()}`, groups: ['all'], wide: true, minMax: 100, shades: ['mid'], refs: [{ v: TARGETS.fill.good * 100, label: `target: humans in ${pct(TARGETS.fill.good)} of seats` }],
     value: key => {
@@ -802,7 +831,7 @@ function healthChart() {
       if (!h || h.fill === undefined) return undefined;
       return { stack: [h.fill * 100], tick: h.dropRate !== undefined ? Math.min(100, h.dropRate * 100) : undefined, tip: { value: pct(h.fill), label: 'of seats had humans', detail: `${h.humansPerRoom?.toFixed(1) ?? '—'} per room · ${num(h.joins)} joins, ${num(h.drops)} drops (${pct(h.dropRate)}), ${num(h.kicks)} idle kicks` } };
     },
-    axis: v => `${Math.round(v)}%`, legend: '<span><i class="g-all"></i>humans / seats</span><span><i class="line"></i>drops / join</span><span><i class="ref"></i>fill target</span>',
+    axis: v => `${Math.round(v)}%`, legend: '<span><i class="g-all"></i>humans / seats</span><span><i class="line"></i>drops / join</span><span><i class="ref"></i>fill target</span>', dailyCoverage: false,
   });
 }
 
@@ -840,18 +869,18 @@ function fpsCell(p: Player) {
 
 /**
  * A side's cohort table: the pooled figure over every cohort whose day N is over, then the last 14
- * UTC days' cohorts, newest first. A cell's shade grows with its rate; a day in progress is in italics.
+ * Taipei days' covered cohorts, newest first. A cell's shade grows with its rate; today is italic.
  */
 function retentionTable(ret: ReturnType<typeof cohorts> | undefined, everyone: number) {
-  if (!ret) return `<div class="empty">${views.days === 'missing' ? "— This server's module has no active-days view yet." : 'Loading…'}</div>`;
-  if (!ret.rows.length && ret.overall.every(c => !c)) return '<div class="empty">No new players in the last 14 days.</div>';
+  if (!ret) return `<div class="empty">Unavailable: active days or persisted coverage missing.</div>`;
+  if (!ret.rows.length && ret.overall.every(c => !c)) return '<div class="empty">Unavailable: no eligible covered new-player cohorts yet.</div>';
   const cellOf = (c: Cell | undefined, n: number) => !c ? '<td class="num ret none">·</td>'
     : `<td class="num ret${c.open ? ' open' : ''}" style="--r:${Math.sqrt(c.rate).toFixed(3)}" title="${esc(`${num(c.back)} of ${num(c.players)} back on day ${n}${c.open ? ' so far (that day is today)' : ''}`)}">${fmtRetention(c)}</td>`;
   const head = `<tr><th>First day</th><th class="num">New</th>${RETENTION_DAYS.map(n => `<th class="num">D${n}</th>`).join('')}</tr>`;
   const all = `<tr class="all"><td>All</td><td class="num">${num(everyone)}</td>${ret.overall.map((c, i) => cellOf(c, RETENTION_DAYS[i])).join('')}</tr>`;
   const rows = ret.rows.map(r => `<tr><td>${dateOf(r.day).slice(5)}</td><td class="num">${num(r.size)}</td>${r.cells.map((c, i) => cellOf(c, RETENTION_DAYS[i])).join('')}</tr>`).join('');
   return `<div class="scroll"><table class="cohorts"><thead>${head}</thead><tbody>${all}${rows}</tbody></table></div>
-    <p class="table-note">D<i>N</i>: played again exactly N UTC days after their first. "All" pools every cohort whose day N is over; · not reached yet; <i>italics</i>: today, so far.</p>`;
+    <p class="table-note">D<i>N</i>: played again exactly N Taipei days after their true firstSeen day. Precoverage cohorts are excluded. "All" pools covered cohorts whose day N is over; · not reached yet; <i>italics</i>: today, so far.</p>`;
 }
 
 const COLUMNS: { key: keyof Player | 'country'; label: string; num?: boolean }[] = [
@@ -880,9 +909,9 @@ function playerTable(players: Player[]) {
   }).join('');
   const rows = sorted.slice(0, playerLimit).map(p => {
     const lastSeen = p.lastSeen.toDate(), firstSeen = p.firstSeen.toDate();
-    return `<tr><td>${esc(p.name || '—')}</td><td title="${lastSeen.toISOString()}">${ago(lastSeen)}</td><td title="${firstSeen.toISOString()}">${shortDate(firstSeen)}</td>
+    return `<tr><td>${esc(p.name || '—')}</td><td title="${taipeiTimestamp(lastSeen.getTime())} Taipei">${ago(lastSeen)}</td><td title="${taipeiTimestamp(firstSeen.getTime())} Taipei">${shortDate(firstSeen)}</td>
       <td class="num"${p.playing ? ' title="In an online room now"' : ''}>${p.playing ? '<i class="dot live" aria-label="In a room now"></i>' : ''}${formatPlayTime(p.playTime)}</td>
-      <td class="num">${num(p.sessions)}</td><td class="num"${p.activeDays ? ` title="Active on ${p.activeDays} UTC day${p.activeDays === 1 ? '' : 's'}"` : ''}>${p.activeDays === undefined ? '—' : num(p.activeDays)}</td><td class="num">${num(p.rounds)}</td><td class="num">${num(p.matches)}</td><td class="num">${num(p.kills)}</td>
+      <td class="num">${num(p.sessions)}</td><td class="num" title="Covered Taipei days active, not lifetime days">${p.activeDays === undefined ? '—' : num(p.activeDays)}</td><td class="num">${num(p.rounds)}</td><td class="num">${num(p.matches)}</td><td class="num">${num(p.kills)}</td>
       ${pingCell(p)}<td class="num">${fmtRate(p.corrPerMin)}</td>${fpsCell(p)}${deviceCell(p)}<td>${esc(p.channel ?? '—')}</td>
       <td>${esc(countryOf(p.tz))}</td><td class="tz" title="${esc(p.tz)}">${esc(p.tz || '—')}</td><td>${esc(p.lang || '—')}</td><td class="id">${esc(p.id)}</td></tr>`;
   }).join('');
@@ -957,47 +986,45 @@ function countryPing(G: Record<GroupId, Player[]>) {
 }
 
 /**
- * The charts' time buckets: UTC days (30 or 7), or the last 48 hours (hours since the epoch, labelled
- * in this browser's time zone). `now` is the bucket in progress.
+ * Taipei days, or epoch hours labelled in fixed Taipei time. `now` is the bucket in progress.
  */
 interface Buckets { hourly: boolean; keys: number[]; now: number; unit: number }
 function buckets(): Buckets {
   const hourly = charts.range === '48h';
-  const now = Math.floor(Date.now() / (hourly ? HOUR_MS : DAY_MS));
+  const now = hourly ? Math.floor(Date.now() / HOUR_MS) : taipeiDay(Date.now());
   const n = hourly ? 48 : rangeDays();
   return { hourly, now, unit: hourly ? 3600 : 86_400, keys: Array.from({ length: n }, (_, i) => now - n + 1 + i) };
 }
 const pad2 = (n: number) => String(n).padStart(2, '0');
-/** A bucket in a tooltip: "2026-10-09" (UTC day) or "10-09 21:00" (local hour). */
+/** A bucket in a tooltip: Taipei date or Taipei hour. */
 function bucketName(b: Buckets, key: number) {
   if (!b.hourly) return dateOf(key);
-  const d = new Date(key * HOUR_MS);
-  return `${pad2(d.getMonth() + 1)}-${pad2(d.getDate())} ${pad2(d.getHours())}:00`;
+  return taipeiTimestamp(key * HOUR_MS).slice(5, 16);
 }
 /** The axis label under a bucket, if it gets one: every 5th day of 30, every day of 7, every 6th hour (the date at midnight). */
 function bucketLabel(b: Buckets, i: number, narrow: boolean): string | undefined {
   const key = b.keys[i];
   if (b.hourly) {
-    const d = new Date(key * HOUR_MS), h = d.getHours();
+    const d = new Date(key * HOUR_MS + TAIPEI_OFFSET_MS), h = d.getUTCHours();
     if (h % (narrow ? 12 : 6)) return undefined;
-    return h ? `${pad2(h)}:00` : `${pad2(d.getMonth() + 1)}-${pad2(d.getDate())}`;
+    return h ? `${pad2(h)}:00` : `${pad2(d.getUTCMonth() + 1)}-${pad2(d.getUTCDate())}`;
   }
   return dayTick(b.keys.length, i, narrow) ? dateOf(key).slice(5) : undefined;
 }
 /** Whether day `i` of `n` gets an axis label: at most about 10 (5 when narrow), counting back from the latest. */
 const dayTick = (n: number, i: number, narrow: boolean) => (n - 1 - i) % Math.max(1, Math.ceil(n / (narrow ? 5 : 10))) === 0;
-/** The axis label under hour `i` of `keys` (local time): every 6th hour over two days, else local midnights spaced like days. */
+/** Taipei hour ticks: every 6th hour over two days, else Taipei midnights spaced like days. */
 function hourTick(keys: number[], i: number, narrow: boolean): string | undefined {
-  const d = new Date(keys[i] * HOUR_MS), h = d.getHours(), date = `${pad2(d.getMonth() + 1)}-${pad2(d.getDate())}`;
+  const d = new Date(keys[i] * HOUR_MS + TAIPEI_OFFSET_MS), h = d.getUTCHours(), date = `${pad2(d.getUTCMonth() + 1)}-${pad2(d.getUTCDate())}`;
   if (keys.length <= 48) return h % (narrow ? 12 : 6) ? undefined : h ? `${pad2(h)}:00` : date;
   if (h) return undefined;
   const days = Math.ceil(keys.length / 24), step = Math.max(1, Math.ceil(days / (narrow ? 5 : 10)));
   return Math.floor((keys.length - 1 - i) / 24) % step === 0 ? date : undefined;
 }
 /** The range in a card's subtitle. */
-const rangeText = () => (charts.range === '48h' ? 'per hour (your time zone), last 48 hours' : `per UTC day, last ${rangeDays()} days`);
+const rangeText = () => (charts.range === '48h' ? 'per hour (Taipei), last 48 hours' : `per Taipei day, last ${rangeDays()} days`);
 
-/** Release flags over a chart: a dashed line down each bucket with releases and a flag at the top to hover (what shipped, in UTC). */
+/** Release flags over Taipei-labelled buckets. */
 function releaseMarks(b: Buckets, cx: (i: number) => number, top: number, bottom: number) {
   let svg = '';
   for (const [key, list] of releasesByDay(RELEASES, b.keys[0], b.now, b.unit)) {
@@ -1024,9 +1051,10 @@ interface Bar { stack: number[]; tick?: number; tip: { value: string; label?: st
  * everyone), on one scale, with release flags. `value` gives a group's bar in a bucket (undefined: none).
  * Each bucket is one hover column whose tooltip lists every group.
  */
-function groupedChart(o: { aria: string; value: (key: number, g: GroupId) => Bar | undefined; axis: (v: number) => string; counts?: boolean; minMax?: number; shades?: string[]; legend: string; wide?: boolean; note?: string; refs?: { v: number; label: string }[]; groups?: GroupId[] }) {
+function groupedChart(o: { aria: string; value: (key: number, g: GroupId) => Bar | undefined; axis: (v: number) => string; counts?: boolean; minMax?: number; shades?: string[]; legend: string; wide?: boolean; note?: string; refs?: { v: number; label: string }[]; groups?: GroupId[]; dailyCoverage?: boolean }) {
   const b = buckets(), groups = o.groups ?? chartGroups();
-  const data = b.keys.map(k => groups.map(g => o.value(k, g)));
+  const unavailable = (key: number) => !b.hourly && o.dailyCoverage !== false && !covered(key);
+  const data = b.keys.map(k => groups.map(g => unavailable(k) ? undefined : o.value(k, g)));
   // Narrow screens draw a narrower chart, so its labels keep a readable size.
   const narrow = innerWidth < 600;
   const W = narrow ? 360 : o.wide ? 1100 : 600, H = narrow || !o.wide ? 230 : 210, L = 44, R = 10, T = 18, B = 24;
@@ -1062,6 +1090,7 @@ function groupedChart(o: { aria: string; value: (key: number, g: GroupId) => Bar
     const label = bucketLabel(b, i, narrow);
     if (label) svg += `<text class="xtick" x="${r1(cx(i))}" y="${H - 6}" text-anchor="middle">${label}</text>`;
     const rows = bars.flatMap((x, j) => (x ? [{ key: `g-${groups[j]}`, value: x.tip.value, label: x.tip.label ?? GROUP_LABEL[groups[j]], detail: x.tip.detail }] : []));
+    if (unavailable(b.keys[i])) rows.push({ key: 'unavailable', value: 'Unavailable', label: 'Before complete-day coverage', detail: undefined });
     if (rows.length) cols += `<g class="col"${tipAttr({ title: bucketName(b, b.keys[i]) + (b.keys[i] === b.now ? ' (so far)' : ''), rows })}><rect class="hit" x="${r1(L + col * i)}" y="${T}" width="${r1(col + 0.5)}" height="${H - T - B}"/></g>`;
   });
   svg += cols + releaseMarks(b, cx, T, H - B);
@@ -1109,12 +1138,12 @@ function playChart(G: Record<GroupId, Player[]>) {
   if (missing) return missing;
   const by = Object.fromEntries(chartGroups().map(g => {
     const m = sumByDay(G[g].map(p => (b.hourly ? hourSeconds(p) : p.daySeconds)));
-    m.set(b.now, (m.get(b.now) ?? 0) + G[g].reduce((n, p) => n + p.openSeconds, 0));
+    if (b.hourly) m.set(b.now, (m.get(b.now) ?? 0) + G[g].reduce((n, p) => n + p.openSeconds, 0));
     return [g, m];
   })) as Record<GroupId, Map<number, number>>;
   let maxSeconds = 0;
-  for (const g of chartGroups()) for (const k of b.keys) maxSeconds = Math.max(maxSeconds, by[g].get(k) ?? 0);
-  if (!maxSeconds) return `<div class="empty">No online play time in this range.</div>${b.hourly ? `<p class="table-note">${hourlyNote(G.all, b) ?? ''}</p>` : ''}`;
+  for (const g of chartGroups()) for (const k of b.keys) if (b.hourly || covered(k)) maxSeconds = Math.max(maxSeconds, by[g].get(k) ?? 0);
+  if (!maxSeconds && b.hourly) return `<div class="empty">No online play time in this range.</div><p class="table-note">${hourlyNote(G.all, b) ?? ''}</p>`;
   const unit = maxSeconds >= 7200 ? 3600 : 60, suffix = unit === 3600 ? 'h' : 'm';
   return groupedChart({
     aria: `Online play time ${rangeText()}`, wide: true, shades: ['mid'],
@@ -1132,7 +1161,7 @@ function pingChart(G: Record<GroupId, Player[]>) {
   const missing = needs(b.hourly ? 'hours' : 'dayNet');
   if (missing) return missing;
   const by = Object.fromEntries(chartGroups().map(g => [g, pingByDay(G[g].map(p => (b.hourly ? hourNet(p) : p.dayNet)))])) as Record<GroupId, ReturnType<typeof pingByDay>>;
-  if (!chartGroups().some(g => b.keys.some(k => by[g].has(k)))) return `<div class="empty">No ping reports in this range.</div>${b.hourly ? `<p class="table-note">${hourlyNote(G.all, b) ?? ''}</p>` : ''}`;
+  if (b.hourly && !chartGroups().some(g => b.keys.some(k => by[g].has(k)))) return `<div class="empty">No ping reports in this range.</div><p class="table-note">${hourlyNote(G.all, b) ?? ''}</p>`;
   return groupedChart({
     aria: `Median ping ${rangeText()}`, minMax: 80, shades: ['mid'],
     value: (key, g) => {
@@ -1154,33 +1183,32 @@ function kpi(o: { label: string; value: string; change?: ReturnType<typeof kpiCh
 }
 
 const KPI_DEFS = {
-  dau: 'Players active on a UTC day: they connected to Online on this server (pressed Play Online, reconnected or entered a room). Solo and Practice never reach the server. From player_day.',
-  dauBar: (m: number) => `Players with at least ${m} minutes of Online play on a UTC day (summed over the day; today includes a match still in progress). Lobby time, Solo and Practice do not count. From player_day_time.`,
-  mau: 'Rolling 30 days: players active on any of the 30 UTC days ending today (today included). From player_day.',
-  mauBar: (m: number) => `Rolling 30 days: players who reached ${m} minutes of Online play on at least one of the 30 UTC days ending today (today included). From player_day_time.`,
-  stick: 'Average DAU over the last 7 complete UTC days ÷ today\'s MAU (rolling 30 days): how many of the month\'s players show up on a typical day.',
+  dau: 'Players active on a Taipei day: they connected to Online on this server. Solo and Practice never reach the server. From admin_taipei_player_day; unavailable before persisted coverage.',
+  dauBar: (m: number) => `Players with at least ${m} minutes of Online play on a Taipei day (today includes split open stretches). Lobby time, Solo and Practice do not count. From admin_taipei_player_day_time.`,
+  mau: 'Players active on any of the 30 Taipei days ending today (today included). From admin_taipei_player_day; unavailable until all 30 days are covered.',
+  mauBar: (m: number) => `Players who reached ${m} minutes of Online play on at least one of the 30 Taipei days ending today. From admin_taipei_player_day_time; requires all 30 days covered.`,
+  stick: 'Average DAU over the last 7 complete Taipei days ÷ today\'s MAU (rolling 30 days); requires a covered 30-day window.',
   ccu: 'Players in Online rooms right now (humans only; the lobby and the room list do not count).',
-  pccu: 'Peak concurrent users: the most players in Online rooms at once during the UTC day, from peak_hour (raised at every room entry and checked every minute).',
-  pccu7: 'The highest daily peak in the last 7 UTC days (today included), against the 7 days before.',
+  pccu: 'Peak concurrent users: the most players in Online rooms at once during the Taipei day, from peak_hour (raised at every room entry and checked every minute).',
+  pccu7: 'The highest daily peak in the last 7 Taipei days (today included), against the 7 days before; only covered windows.',
 };
 
-/** When each metric's source began (the earliest row this server returns), for the coverage card and chart notes. */
+/** Persisted daily coverage; hourly sources still describe the first row returned, not daily coverage. */
 function coverage(players: Player[], peaks: PeakOf[], rooms: RoomHourOf[]) {
-  let hour = Infinity, dayTime = Infinity;
+  let hour = Infinity;
   for (const p of players) {
     if (p.hours) for (const h of p.hours.keys()) hour = Math.min(hour, h);
-    if (p.daySeconds) for (const d of p.daySeconds.keys()) dayTime = Math.min(dayTime, d);
   }
   return {
-    day: firstActiveDay(players), hour: hour === Infinity ? undefined : hour, dayTime: dayTime === Infinity ? undefined : dayTime,
+    day: dailyStart(), hour: hour === Infinity ? undefined : hour, dayTime: views.dayTime === 'on' ? dailyStart() : undefined,
     peak: peaks.length ? Math.min(...peaks.map(r => r.hour)) : undefined, room: rooms.length ? Math.min(...rooms.map(r => r.hour)) : undefined,
   };
 }
 
-/** An hour (hours since the epoch) in this browser's time zone: "10-12 21:00". */
-const localHour = (h: number) => { const d = new Date(h * HOUR_MS); return `${pad2(d.getMonth() + 1)}-${pad2(d.getDate())} ${pad2(d.getHours())}:00`; };
-const localTime = (ms: number) => { const d = new Date(ms); return `${pad2(d.getHours())}:${pad2(d.getMinutes())}`; };
-const weekday = (day: number) => new Date(day * DAY_MS).toLocaleDateString('en-US', { weekday: 'short', timeZone: 'UTC' });
+/** Fixed Taipei wall-clock labels, never the browser's zone. */
+const localHour = (h: number) => taipeiTimestamp(h * HOUR_MS).slice(5, 16);
+const localTime = (ms: number) => taipeiTimestamp(ms).slice(11, 16);
+const weekday = (day: number) => new Date(taipeiDayStart(day)).toLocaleDateString('en-US', { weekday: 'short', timeZone: 'Asia/Taipei' });
 const fmtAvg = (v: number) => (v >= 10 ? v.toFixed(0) : v.toFixed(1));
 
 /**
@@ -1188,17 +1216,17 @@ const fmtAvg = (v: number) => (v >= 10 ? v.toFixed(0) : v.toFixed(1));
  * (daily charts show at least a week; the CCU chart is always hourly) and what each figure rests on.
  */
 function keyMetrics(players: Player[], o: Overview | undefined, today: number, now: number) {
-  const missing = needs('days');
-  const intro = 'online players on this server · days are UTC days · hours in your time zone';
-  if (missing) return group('metrics', 'Key metrics', intro, [], missing);
+  const intro = 'online players on this server · Taipei time (UTC+8)';
   const peaks = peakRows(), rooms = roomHourRows();
   const cov = coverage(players, peaks, rooms);
   const narrow = innerWidth < 600;
   // The active-user bar (the switch above the tiles): minutes of Online play on the day, or any connection.
   const bar: ActiveMinutes = views.dayTime === 'on' ? charts.active : 0;
-  const active = qualifying(players, bar, today);
-  /** The first day this bar's counts rest on (play time began later than player_day on older servers). */
-  const start = bar ? cov.dayTime : cov.day;
+  const dailyReady = bar ? views.dayTime === 'on' : views.days === 'on';
+  // Open seconds are already split into daySeconds. New means first-ever, not first newly recorded day.
+  const active = players.flatMap(p => qualifying([{ ...p, openSeconds: 0 }], bar, today).map(q => ({ ...q, firstDay: p.firstDay })));
+  /** All daily bars share the explicit persisted boundary. */
+  const start = dailyReady ? (bar ? cov.dayTime : cov.day) : undefined;
   const tag = bar ? ` · ${bar} min+` : '';
 
   // Daily series over the range (and the 14 days the sparklines need, and the 7 before for changes).
@@ -1207,6 +1235,8 @@ function keyMetrics(players: Player[], o: Overview | undefined, today: number, n
   const dau = dauByDay(active, from - 7, today);
   const mau = rollingActive(active, from - 30, today);
   const pccu = views.peak === 'on' ? pccuByDay(peaks, from - 7, today) : new Map<number, DayPeak | undefined>();
+  for (const d of dau.keys()) if (!dailyReady || !covered(d)) dau.delete(d);
+  for (const d of mau.keys()) if (!dailyReady || !covered(d - 29, d)) mau.delete(d);
   const fresh = activeByDay(active, from, today);
   const dayKeys = Array.from({ length: rangeDays() }, (_, i) => today - rangeDays() + 1 + i);
   const last14 = Array.from({ length: 14 }, (_, i) => today - 13 + i);
@@ -1222,18 +1252,18 @@ function keyMetrics(players: Player[], o: Overview | undefined, today: number, n
 
   // KPI tiles.
   const dayBefore = dau.get(today - 2), yesterday = dau.get(today - 1);
-  const mauNow = mau.get(today)!, mauBefore = mau.get(today - 30);
+  const mauNow = mau.get(today), mauBefore = mau.get(today - 30);
   const stick = mauNow ? avg(today - 7, today - 1) / mauNow : undefined;
   const pToday = pccu.get(today), pYesterday = pccu.get(today - 1);
-  const week = (to: number) => { let best: DayPeak | undefined, day = to; for (let d = to - 6; d <= to; d++) { const p = pccu.get(d); if (p && (!best || p.peak > best.peak)) { best = p; day = d; } } return best && { ...best, day }; };
+  const week = (to: number) => { let best: DayPeak | undefined, day = to; for (let d = to - 6; d <= to; d++) { const p = pccu.get(d); if (!p || p.partial) return undefined; if (!best || p.peak > best.peak) { best = p; day = d; } } return best && { ...best, day }; };
   const w = week(today), wPrev = week(today - 7);
-  const partialMau = start !== undefined && start > today - 29;
+  const partialMau = !covered(today - 29, today);
   const tiles = [
-    kpi({ label: `DAU${tag}`, value: yesterday === undefined ? '—' : num(yesterday), change: kpiChange(yesterday, dayBefore), vs: 'yesterday, vs the day before', sub: `today ${num(dau.get(today) ?? 0)} so far · 7-d avg ${fmtAvg(avg(today - 7, today - 1))}`, spark: last14.map(d => (d === today ? undefined : dau.get(d))), def: bar ? KPI_DEFS.dauBar(bar) : KPI_DEFS.dau, hero: true }),
-    kpi({ label: bar ? `MAU${tag}` : 'MAU (30 d)', value: num(mauNow), change: partialMau ? undefined : kpiChange(mauNow, mauBefore), vs: partialMau ? `history begins ${dateOf(start!)}: window not full yet` : 'vs the 30 days before', sub: bar ? `${num(active.length)} of ${num(players.length)} players ever reached ${bar} min in a day` : `${num(players.length)} players ever`, spark: last14.map(d => mau.get(d)), def: bar ? KPI_DEFS.mauBar(bar) : KPI_DEFS.mau }),
+    kpi({ label: `DAU${tag}`, value: yesterday === undefined ? '—' : num(yesterday), change: kpiChange(yesterday, dayBefore), vs: 'yesterday, vs the day before when covered', sub: `today ${dailyReady && covered(today) ? num(dau.get(today) ?? 0) + ' so far' : 'Unavailable'} · 7-d avg ${dailyReady && covered(today - 7, today - 1) ? fmtAvg(avg(today - 7, today - 1)) : 'Unavailable'}`, spark: last14.map(d => (d === today ? undefined : dau.get(d))), def: bar ? KPI_DEFS.dauBar(bar) : KPI_DEFS.dau, hero: true }),
+    kpi({ label: bar ? `MAU${tag}` : 'MAU (30 d)', value: mauNow === undefined ? '—' : num(mauNow), change: kpiChange(mauNow, mauBefore), vs: partialMau ? 'Unavailable: needs 30 covered days' : mauBefore === undefined ? 'prior window Unavailable' : 'vs the 30 days before', sub: bar ? `${num(active.length)} players reached ${bar} min on a recorded day` : `${num(players.length)} players ever`, spark: last14.map(d => mau.get(d)), def: bar ? KPI_DEFS.mauBar(bar) : KPI_DEFS.mau }),
     kpi({ label: 'DAU / MAU', value: stick === undefined ? '—' : pct(stick), sub: 'stickiness: avg DAU ÷ MAU', spark: last14.map(d => { const m = mau.get(d); return m ? (dau.get(d) ?? 0) / m : undefined; }), def: KPI_DEFS.stick }),
     kpi({ label: 'CCU now', value: num(o?.onlineNow ?? 0), sub: thisHour?.peak !== undefined ? `this hour: peak ${num(thisHour.peak)}, avg ${fmtAvg(thisHour.avg ?? 0)}` : 'hourly peaks not recorded on this server', spark: Array.from({ length: 24 }, (_, i) => ccu.get(nowHour - 23 + i)?.peak), def: KPI_DEFS.ccu }),
-    kpi({ label: 'PCCU today', value: pToday ? num(pToday.peak) : '—', change: pToday && pYesterday ? kpiChange(pToday.peak, pYesterday.peak) : undefined, vs: pToday && pYesterday ? 'vs yesterday' : views.peak === 'on' ? 'not recorded yesterday' : undefined, sub: pToday?.atMs ? `at ${localTime(pToday.atMs)} your time` : views.peak === 'on' ? 'nobody in rooms yet today' : 'not recorded on this server', spark: last14.map(d => pccu.get(d)?.peak), def: KPI_DEFS.pccu }),
+    kpi({ label: 'PCCU today', value: pToday ? num(pToday.peak) : '—', change: pToday && pYesterday && !pYesterday.partial ? kpiChange(pToday.peak, pYesterday.peak) : undefined, vs: pToday && pYesterday && !pYesterday.partial ? 'vs yesterday' : 'prior day Unavailable', sub: pToday?.atMs ? `at ${localTime(pToday.atMs)} Taipei` : pToday ? 'nobody in rooms yet today' : 'not recorded on this server', spark: last14.map(d => pccu.get(d)?.peak), def: KPI_DEFS.pccu }),
     kpi({ label: 'PCCU (7 d)', value: w ? num(w.peak) : '—', change: w && wPrev ? kpiChange(w.peak, wPrev.peak) : undefined, vs: w && wPrev ? 'vs the 7 days before' : undefined, sub: w?.atMs ? `${weekday(w.day)} ${dateOf(w.day).slice(5)} at ${localTime(w.atMs)}` : undefined, def: KPI_DEFS.pccu7 }),
   ];
 
@@ -1244,7 +1274,7 @@ function keyMetrics(players: Player[], o: Overview | undefined, today: number, n
   const dauVals = dayKeys.map(d => dau.get(d));
   const dau7 = dayKeys.map(d => (start !== undefined && d - 6 >= start && d < today ? avg(d - 6, d) : undefined));
   const dauChart = timeChart({
-    aria: `Daily active users, last ${dayKeys.length} UTC days`, width: W, height: H, counts: true,
+    aria: `Daily active users, last ${dayKeys.length} Taipei days`, width: W, height: H, counts: true,
     series: [
       { id: 'dau', label: 'DAU', kind: 'bar', cls: 'c-dau', values: dauVals.map((v, i) => (start !== undefined && dayKeys[i] >= start ? v : undefined)), faint: dayKeys.map(d => d === today) },
       { id: 'avg', label: '7-day average', kind: 'line', cls: 'c-avg', values: dau7 },
@@ -1252,7 +1282,7 @@ function keyMetrics(players: Player[], o: Overview | undefined, today: number, n
     xLabel: i => (dayTick(dayKeys.length, i, narrow) ? dateOf(dayKeys[i]).slice(5) : undefined), yFmt: v => compact(v),
     tip: i => {
       const d = dayKeys[i];
-      if (start === undefined || d < start) return { title: `${weekday(d)} ${dateOf(d)}`, rows: [], note: `Not recorded: active days begin ${start === undefined ? 'with the first player' : dateOf(start)}.` };
+      if (!dailyReady || !covered(d)) return { title: `${weekday(d)} ${dateOf(d)}`, rows: [], note: 'Unavailable: daily source missing or before complete-day coverage.' };
       const f = fresh.get(d);
       return {
         title: `${weekday(d)} ${dateOf(d)}${d === today ? ' (so far)' : ''}`,
@@ -1263,20 +1293,18 @@ function keyMetrics(players: Player[], o: Overview | undefined, today: number, n
     overlay: releases(dayKeys, 86_400),
   });
 
-  // MAU: rolling 30 days, faint while the window reaches back before the first recorded day.
+  // MAU: rolling 30 days, gaps until the full window is covered.
   const mauChart = timeChart({
-    aria: `Monthly active users (rolling 30 days), last ${dayKeys.length} UTC days`, width: W, height: H, counts: true,
-    series: [{ id: 'mau', label: 'MAU', kind: 'area', cls: 'c-mau', values: dayKeys.map(d => (start !== undefined && d >= start ? mau.get(d) : undefined)), faint: dayKeys.map(d => start !== undefined && d - 29 < start) }],
+    aria: `Monthly active users (rolling 30 days), last ${dayKeys.length} Taipei days`, width: W, height: H, counts: true,
+    series: [{ id: 'mau', label: 'MAU', kind: 'area', cls: 'c-mau', values: dayKeys.map(d => mau.get(d)) }],
     xLabel: i => (dayTick(dayKeys.length, i, narrow) ? dateOf(dayKeys[i]).slice(5) : undefined), yFmt: v => compact(v),
     tip: i => {
       const d = dayKeys[i], m = mau.get(d) ?? 0;
-      if (start === undefined || d < start) return undefined;
-      const part = d - 29 < start;
+      if (!dailyReady || !covered(d - 29, d)) return { title: `30 days to ${dateOf(d)}`, rows: [], note: 'Unavailable: requires daily source and 30 covered Taipei days.' };
       return {
         title: `30 days to ${dateOf(d)}`,
         rows: [{ key: 'c-mau', shape: 'line', value: num(m), label: 'MAU', detail: `${dateOf(d - 29).slice(5)} → ${dateOf(d).slice(5)}` },
           { key: 'c-dau', value: m ? pct((dau.get(d) ?? 0) / m) : '—', label: 'DAU / MAU that day' }],
-        note: part ? `Partial window: activity is recorded from ${dateOf(start)}, so it covers ${d - start + 1} of 30 days.` : undefined,
       };
     },
     overlay: releases(dayKeys, 86_400),
@@ -1310,23 +1338,22 @@ function keyMetrics(players: Player[], o: Overview | undefined, today: number, n
   // PCCU per day: the recorded peak, launch-week peaks rebuilt from PostHog where none was recorded, the average at once.
   const launch = new Map(LAUNCH_PEAKS.map(l => [launchDay(l.day), l]));
   const dayAvg = views.dayTime === 'on' ? sumByDay(players.map(p => p.daySeconds)) : undefined;
-  if (dayAvg) dayAvg.set(today, (dayAvg.get(today) ?? 0) + players.reduce((n, p) => n + p.openSeconds, 0));
   const ghost = (d: number) => { const l = launch.get(d), p = pccu.get(d); return l && (!p || p.partial) ? l : undefined; };
   const pccuChart = views.peak !== 'on' ? (needs('peak') ?? '') : timeChart({
-    aria: `Peak concurrent users per UTC day, last ${dayKeys.length} days`, width: Wide, height: narrow ? 220 : 230, counts: true, minMax: 4,
+    aria: `Peak concurrent users per Taipei day, last ${dayKeys.length} days`, width: Wide, height: narrow ? 220 : 230, counts: true, minMax: 4,
     series: [
       { id: 'peak', label: 'PCCU', kind: 'bar', cls: 'c-peak', values: dayKeys.map(d => pccu.get(d)?.peak), faint: dayKeys.map(d => d === today || !!pccu.get(d)?.partial) },
       { id: 'launch', label: 'Rebuilt from PostHog', kind: 'bar', cls: 'c-ghost', values: dayKeys.map(d => ghost(d)?.peak) },
-      { id: 'avg', label: 'Average at once', kind: 'tick', cls: 'c-avg-ccu', values: dayKeys.map(d => (dayAvg && (dayAvg.get(d) ?? 0) > 0 ? averageAtOnce(dayAvg.get(d)!, d, now) : undefined)) },
+      { id: 'avg', label: 'Average at once', kind: 'tick', cls: 'c-avg-ccu', values: dayKeys.map(d => (covered(d) && dayAvg && (dayAvg.get(d) ?? 0) > 0 ? averageAtOnce(dayAvg.get(d)!, d, now) : undefined)) },
     ],
     refs: [{ v: 12, label: '12 · one full 6v6 room' }],
     xLabel: i => (dayTick(dayKeys.length, i, narrow) ? dateOf(dayKeys[i]).slice(5) : undefined), yFmt: v => compact(v),
     tip: i => {
       const d = dayKeys[i], p = pccu.get(d), l = ghost(d), a = dayAvg?.get(d);
       const rows: TipRow[] = [];
-      if (p) rows.push({ key: 'c-peak', value: num(p.peak), label: 'PCCU', detail: p.atMs ? `at ${localTime(p.atMs)} your time` : 'nobody in rooms' });
+      if (p) rows.push({ key: 'c-peak', value: num(p.peak), label: 'PCCU', detail: p.atMs ? `at ${localTime(p.atMs)} Taipei` : 'nobody in rooms' });
       if (l) rows.push({ key: 'c-ghost', shape: 'ghost', value: num(l.peak), label: 'rebuilt from PostHog', detail: `Taipei day, at ${l.at}${l.partial ? ', to 13:00' : ''}; may read up to ~3 low` });
-      if (a) rows.push({ key: 'c-avg-ccu', shape: 'tick', value: fmtAvg(averageAtOnce(a, d, now)), label: 'average at once', detail: 'online play time ÷ the day' });
+      if (a && covered(d)) rows.push({ key: 'c-avg-ccu', shape: 'tick', value: fmtAvg(averageAtOnce(a, d, now)), label: 'average at once', detail: 'online play time ÷ the day' });
       const note = !p && !l ? `Not recorded: peaks begin ${cov.peak === undefined ? 'with the next player in a room' : localHour(cov.peak)}.` : p?.partial ? `Recording began during this day (${localHour(cov.peak!)}).` : d === today ? 'Today so far.' : undefined;
       return { title: `${weekday(d)} ${dateOf(d)}`, rows, note };
     },
@@ -1335,16 +1362,16 @@ function keyMetrics(players: Player[], o: Overview | undefined, today: number, n
 
   const daysNote = charts.range === '48h' ? ' (48 h: daily charts show 7 days)' : '';
   const cards = `<div class="grid2 even">
-      ${card('Daily active users', `DAU${tag ? ` (${bar} min+ of Online play)` : ''} per UTC day, last ${dayKeys.length} days${daysNote}`, legend([{ cls: 'c-dau', label: 'DAU' }, { cls: 'c-avg', label: '7-day average', shape: 'line' }, { cls: 'c-dau faint', label: 'today, so far' }]) + dauChart)}
-      ${card('Monthly active users', `rolling 30 UTC days, per day${tag ? ` · ${bar} min+ on a day` : ''}`, legend([{ cls: 'c-mau', label: 'MAU (rolling 30 d)', shape: 'line' }, { cls: 'c-mau faint', label: 'partial window', shape: 'line' }]) + mauChart)}
+      ${card('Daily active users', `DAU${tag ? ` (${bar} min+ of Online play)` : ''} per Taipei day, last ${dayKeys.length} days${daysNote}`, legend([{ cls: 'c-dau', label: 'DAU' }, { cls: 'c-avg', label: '7-day average', shape: 'line' }, { cls: 'c-dau faint', label: 'today, so far' }]) + dauChart)}
+      ${card('Monthly active users', `rolling 30 Taipei days, per day${tag ? ` · ${bar} min+ on a day` : ''}; gaps are Unavailable`, legend([{ cls: 'c-mau', label: 'MAU (rolling 30 d)', shape: 'line' }]) + mauChart)}
     </div>
-    ${card('Concurrent users per hour', `players in Online rooms, last ${hours >= 72 ? `${hours / 24} days` : `${hours} hours`}, in your time zone`, legend([{ cls: 'c-peak', label: 'Peak at once', shape: 'line' }, { cls: 'c-avg-ccu', label: 'Average at once' }, { cls: 'ref', label: 'One full 6v6 room', shape: 'ref' }]) + ccuChart)}
-    ${card('Peak concurrent users per day', `PCCU per UTC day, last ${dayKeys.length} days${daysNote}`, legend([{ cls: 'c-peak', label: 'PCCU' }, { cls: 'c-ghost', label: 'Launch week, rebuilt from PostHog', shape: 'ghost' }, { cls: 'c-avg-ccu', label: 'Average at once', shape: 'tick' }]) + pccuChart)}
+    ${card('Concurrent users per hour', `players in Online rooms, last ${hours >= 72 ? `${hours / 24} days` : `${hours} hours`}, Taipei time`, legend([{ cls: 'c-peak', label: 'Peak at once', shape: 'line' }, { cls: 'c-avg-ccu', label: 'Average at once' }, { cls: 'ref', label: 'One full 6v6 room', shape: 'ref' }]) + ccuChart)}
+    ${card('Peak concurrent users per day', `PCCU per Taipei day, last ${dayKeys.length} days${daysNote}`, legend([{ cls: 'c-peak', label: 'PCCU' }, { cls: 'c-ghost', label: 'Rebuilt from PostHog', shape: 'ghost' }, { cls: 'c-avg-ccu', label: 'Average at once', shape: 'tick' }]) + pccuChart)}
     ${coverageCard(cov)}`;
   const noTime = views.dayTime !== 'on';
   const pick = `<div class="active-pick"><span id="active-h">Active user</span>
     <div class="seg" role="group" aria-labelledby="active-h">${ACTIVE_MINUTES.map(m => `<button type="button" data-active="${m}" aria-pressed="${bar === m}"${m && noTime ? ' disabled title="This server\'s module has no per-day play time"' : ''}>${m ? `${m} min+` : 'Joined'}</button>`).join('')}</div>
-    <small>${bar ? `played at least ${bar} min Online that UTC day` : 'connected to Online that UTC day, any play time'} · applies to DAU, MAU and DAU / MAU</small></div>`;
+    <small>${bar ? `played at least ${bar} min Online that Taipei day` : 'connected to Online that Taipei day, any play time'} · applies to DAU, MAU and DAU / MAU</small></div>`;
   return group('metrics', 'Key metrics', intro, [], `${pick}<div class="kpis">${tiles.join('')}</div>${cards}`);
 }
 
@@ -1352,13 +1379,14 @@ function keyMetrics(players: Player[], o: Overview | undefined, today: number, n
 function coverageCard(cov: ReturnType<typeof coverage>) {
   const since = (v: string | undefined, none: string) => (v ? `<b>${v}</b>` : `<span class="muted">${none}</span>`);
   const rows = [
-    ['DAU, MAU', 'player_day: one row per player per UTC day active (hello, reconnect, room entry)', since(cov.day === undefined ? undefined : dateOf(cov.day), 'no rows yet'), 'kept forever; MAU windows are full 30 days after the first day'],
+    ['DAU, MAU', 'admin_taipei_player_day: one row per player per Taipei day active', since(cov.day === undefined ? undefined : dateOf(cov.day), 'Unavailable'), 'persisted admin_taipei_coverage defines the first fully recorded day; MAU needs 30 covered days'],
     ['CCU peak, PCCU', 'peak_hour: most players in rooms at once per hour, raised on every room entry and each room\'s minute flush', since(cov.peak === undefined ? undefined : localHour(cov.peak), views.peak === 'on' ? 'no rows yet' : 'view missing'), 'kept forever; hours without a row after this had nobody in rooms'],
     ['CCU average', 'room_hour: each live room adds its humans once a minute (human-minutes ÷ 60)', since(cov.room === undefined ? undefined : localHour(cov.room), views.roomHours === 'on' ? 'no rows yet' : 'view missing'), 'kept forever'],
     ['CCU average (fallback)', 'player_hour: play time credited per player per hour (seconds ÷ 3600)', since(cov.hour === undefined ? undefined : localHour(cov.hour), views.hours === 'on' ? 'no rows yet' : 'view missing'), 'kept two weeks; the view sends the last 7 days; used only before room_hour began'],
-    ['Active-user bars (3, 5, 10 min+), daily average at once', 'player_day_time: Online play time per player per UTC day', since(cov.dayTime === undefined ? undefined : dateOf(cov.dayTime), views.dayTime === 'on' ? 'no rows yet' : 'view missing'), 'kept forever'],
+    ['Active-user bars (3, 5, 10 min+), daily average at once', 'admin_taipei_player_day_time: Online play time per player per Taipei day', since(cov.dayTime === undefined ? undefined : dateOf(cov.dayTime), 'Unavailable'), 'same persisted coverage; open stretches split at Taipei midnight and clipped at recording start'],
+    ['Daily ping', 'admin_taipei_player_day_net: measured ping and corrections per Taipei day', since(cov.day === undefined || views.dayNet !== 'on' ? undefined : dateOf(cov.day), 'Unavailable'), 'same persisted coverage; no UTC fallback'],
   ];
-  return card('How these are measured', 'sources and the first record this server returns', `<div class="scroll"><table class="coverage"><thead><tr><th>Metric</th><th>Source</th><th>From</th><th>Notes</th></tr></thead><tbody>
+  return card('How these are measured', 'daily persisted coverage; hourly first returned records · Taipei time', `<div class="scroll"><table class="coverage"><thead><tr><th>Metric</th><th>Source</th><th>From</th><th>Notes</th></tr></thead><tbody>
     ${rows.map(r => `<tr><td><b>${r[0]}</b></td><td>${esc(r[1])}</td><td class="from">${r[2]}</td><td class="muted">${esc(r[3])}</td></tr>`).join('')}</tbody></table></div>
     <p class="table-note">Concurrent users are humans in Online rooms; the lobby is not counted, so CCU can be lower than "online". Every figure is this server only (Taipei and the legacy US East database are separate; nobody is de-duplicated across them). Launch-week peaks before peak_hour existed are rebuilt from PostHog joins and leaves (Taipei days, Oct 7–11).</p>`, 'coverage-card');
 }
@@ -1375,9 +1403,9 @@ function peakRows(): PeakOf[] {
 function peakFig(p: ReturnType<typeof peakBetween>, g: GroupId, when: 'time' | 'date'): Fig {
   if (views.peak !== 'on') return undefined;
   if (!p) return { v: '0' };
-  const at = new Date(p.atMs);
-  const sub = g !== 'all' ? undefined : when === 'time' ? `at ${pad2(at.getHours())}:${pad2(at.getMinutes())}` : `${pad2(at.getMonth() + 1)}-${pad2(at.getDate())} ${pad2(at.getHours())}:${pad2(at.getMinutes())}`;
-  return { v: num(peakFor(p, g)), sub, title: g === 'all' ? `reached ${at.toLocaleString()}` : undefined };
+  const at = taipeiTimestamp(p.atMs);
+  const sub = g !== 'all' ? undefined : when === 'time' ? `at ${at.slice(11, 16)}` : at.slice(5, 16);
+  return { v: num(peakFor(p, g)), sub, title: g === 'all' ? `reached ${at} Taipei` : undefined };
 }
 
 /**
@@ -1387,11 +1415,11 @@ function peakFig(p: ReturnType<typeof peakBetween>, g: GroupId, when: 'time' | '
 function benchmarks(players: Player[], peaks: PeakOf[], today: number) {
   const hasDays = views.days === 'on';
   const taiwan = players.filter(p => countryOf(p.tz) === 'Taiwan');
-  const peak7 = peakBetween(peaks, (today - 6) * 24, today * 24 + 23);
+  const peak7 = peakBetween(peaks, (today - 6) * 24 - 8, today * 24 + 15);
   const ours: Record<string, { all?: number; taiwan?: number }> = {
-    'MAU': hasDays ? { all: activeBetween(players, today - 29, today), taiwan: activeBetween(taiwan, today - 29, today) } : {},
-    'DAU': hasDays ? { all: Math.round(averageDaily(players, today - 7, today - 1)), taiwan: Math.round(averageDaily(taiwan, today - 7, today - 1)) } : {},
-    'Peak CCU': views.peak === 'on' ? { all: peak7?.all ?? 0 } : {},
+    'MAU': hasDays && covered(today - 29, today) ? { all: activeBetween(players, today - 29, today), taiwan: activeBetween(taiwan, today - 29, today) } : {},
+    'DAU': hasDays && covered(today - 7, today - 1) ? { all: Math.round(averageDaily(players, today - 7, today - 1)), taiwan: Math.round(averageDaily(taiwan, today - 7, today - 1)) } : {},
+    'Peak CCU': views.peak === 'on' && pccuByDay(peaks, today - 6, today).get(today - 6)?.partial === false ? { all: peak7?.all ?? 0 } : {},
     'Lifetime players': { all: players.length, taiwan: taiwan.length },
   };
   const mark = { below: 'below its range', within: 'within its range', above: 'above its range' };
@@ -1403,7 +1431,7 @@ function benchmarks(players: Player[], peaks: PeakOf[], today: number) {
       <td class="num">${b.begone}<br><small class="muted">${num(b.low)}–${num(b.high)}</small></td><td>${where ? `<span class="tag vs ${where}">${mark[where]}</span>` : '—'}</td></tr>`;
   }).join('');
   const table = `<div class="scroll"><table class="bench"><thead><tr><th>Metric</th><th class="num">Turf War</th><th class="num">Taiwan only</th><th class="num">BeGone, Taiwan</th><th>Turf War is</th></tr></thead><tbody>${rows}</tbody></table></div>
-    <p class="table-note">Turf War: this server, all players and those on a Taiwan time zone (the comparison uses Taiwan where there is one; peak CCU counts everyone in rooms). Days are UTC days.
+    <p class="table-note">Turf War: this server, all players and those on a Taiwan time zone (the comparison uses Taiwan where there is one; peak CCU counts everyone in rooms). Days are Taipei days; — means Unavailable when the full window is not covered.
     BeGone: estimated Taiwan figures at its peak (2012–14); each is good to about 2× either way.</p>`;
   const launch = `<ul class="launch">${LAUNCH_PEAKS.map(d => `<li><span>${d.day}${d.partial ? ' <small class="muted">to 13:00</small>' : ''}</span><b>${d.peak}</b><small class="muted">at ${d.at}</small></li>`).join('')}</ul>
     <p class="table-note">The most players in Online rooms at once per Taipei day, rebuilt from PostHog joins and leaves before the server recorded peaks (sessions without a leave event end at their last event, so these may read up to ~3 low).</p>`;
@@ -1480,8 +1508,8 @@ function adminLink(s: AdminServer, lost: () => void): ConnectLink {
       if (stopped) { cc.disconnect(); return; }
       store.set(key, token);
       for (const t of [
-        cc.db.adminStatus, cc.db.adminOverview, cc.db.adminRooms, cc.db.adminPlayers, cc.db.adminPlayerTime, cc.db.adminDailyTime, cc.db.adminPlayerNet,
-        cc.db.adminPlayerDevice, cc.db.adminPlayerDay, cc.db.adminPlayerDayTime, cc.db.adminPlayerDayNet, cc.db.adminPlayerHour, cc.db.adminPeakHour,
+        cc.db.adminStatus, cc.db.adminOverview, cc.db.adminRooms, cc.db.adminPlayers, cc.db.adminPlayerTime, cc.db.adminPlayerNet,
+        cc.db.adminPlayerDevice, cc.db.adminTaipeiPlayerDay, cc.db.adminTaipeiPlayerDayTime, cc.db.adminTaipeiPlayerDayNet, cc.db.adminTaipeiCoverage, cc.db.adminPlayerHour, cc.db.adminPeakHour,
         cc.db.adminPlayerPerf, cc.db.adminPlayerSource, cc.db.adminPlayerMilestone, cc.db.adminRoomHour, cc.db.adminErrors,
       ]) {
         t.onInsert(render); t.onDelete(render);
@@ -1502,7 +1530,7 @@ function adminLink(s: AdminServer, lost: () => void): ConnectLink {
           settle.resolve(); render();
         })
         .subscribe(['SELECT * FROM admin_status', 'SELECT * FROM admin_overview', 'SELECT * FROM admin_rooms', 'SELECT * FROM admin_players',
-          'SELECT * FROM admin_player_time', 'SELECT * FROM admin_daily_time']);
+          'SELECT * FROM admin_player_time']);
     })
     // A socket that fails before the handshake reports an error and then a close: `end` keeps the first.
     .onConnectError((_ctx, error) => end(error ?? new Error('Connection failed.')))

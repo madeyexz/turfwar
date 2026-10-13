@@ -92,6 +92,10 @@ import AdminPlayersRow from "./admin_players_table";
 import AdminRoomHourRow from "./admin_room_hour_table";
 import AdminRoomsRow from "./admin_rooms_table";
 import AdminStatusRow from "./admin_status_table";
+import AdminTaipeiCoverageRow from "./admin_taipei_coverage_table";
+import AdminTaipeiPlayerDayRow from "./admin_taipei_player_day_table";
+import AdminTaipeiPlayerDayNetRow from "./admin_taipei_player_day_net_table";
+import AdminTaipeiPlayerDayTimeRow from "./admin_taipei_player_day_time_table";
 import BodyRow from "./body_table";
 import FrameRow from "./frame_table";
 import MatchRow from "./match_table";
@@ -358,6 +362,34 @@ const tablesSchema = __schema({
     constraints: [
     ],
   }, AdminStatusRow),
+  adminTaipeiCoverage: __table({
+    name: 'admin_taipei_coverage',
+    indexes: [
+    ],
+    constraints: [
+    ],
+  }, AdminTaipeiCoverageRow),
+  adminTaipeiPlayerDay: __table({
+    name: 'admin_taipei_player_day',
+    indexes: [
+    ],
+    constraints: [
+    ],
+  }, AdminTaipeiPlayerDayRow),
+  adminTaipeiPlayerDayNet: __table({
+    name: 'admin_taipei_player_day_net',
+    indexes: [
+    ],
+    constraints: [
+    ],
+  }, AdminTaipeiPlayerDayNetRow),
+  adminTaipeiPlayerDayTime: __table({
+    name: 'admin_taipei_player_day_time',
+    indexes: [
+    ],
+    constraints: [
+    ],
+  }, AdminTaipeiPlayerDayTimeRow),
   myRoomCode: __table({
     name: 'my_room_code',
     indexes: [

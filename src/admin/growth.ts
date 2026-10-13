@@ -1,5 +1,6 @@
 import { median } from '../../shared/netstats';
 import { channelOf } from '../../shared/metrics';
+import { taipeiDay, taipeiDayOfHour } from '../../shared/taipei';
 
 /**
  * The growth scorecard on the admin page (pure, for tests): one question per stage of the funnel,
@@ -24,7 +25,7 @@ export const TARGETS = {
   growth: { good: 0, watch: -0.3, why: 'new players this week vs last week' },
   /** New players who made a kill within 24 hours of first connecting. */
   activation: { good: 0.6, watch: 0.4, why: 'a first kill in the first 24 h' },
-  /** New players back on the next UTC day. Mobile and web games: ~25–35% is healthy. */
+  /** New players back on the next Taipei day. Mobile and web games: ~25–35% is healthy. */
   d1: { good: 0.3, watch: 0.2, why: 'D1 of 30%+ is healthy for web and mobile games' },
   d7: { good: 0.1, watch: 0.05, why: 'D7 of 10%+ is healthy' },
   /** Online minutes per player per active day. */
@@ -80,7 +81,7 @@ export const FUNNEL_STEPS = [
   { key: 'round', label: 'Finished a round', hint: 'within 24 h', fix: 'Players leave before their first round ends: shorten freeze and buy time for newcomers, or make the first spawn closer to the fight.' },
   { key: 'kill', label: 'Made a kill', hint: 'within 24 h', fix: 'Players never land a kill: look at the first two minutes (spawn to first fight, rookie bots, touch aim assist).' },
   { key: 'match', label: 'Finished a match', hint: 'within 24 h', fix: 'Matches outlast new players: consider shorter matches for rookies, or reward stopping mid-match less harshly.' },
-  { key: 'back', label: 'Came back', hint: 'on a later UTC day', fix: '' },
+  { key: 'back', label: 'Came back', hint: 'on a later Taipei day', fix: '' },
 ] as const;
 export type StepKey = (typeof FUNNEL_STEPS)[number]['key'];
 export interface Step { key: StepKey; label: string; hint: string; fix: string; n: number; rate: number; fromPrev: number }
@@ -143,7 +144,7 @@ export interface ChannelRow {
  * in their first 24 hours, D1 and D7 (of those whose day is over) and their median online minutes.
  */
 export function channels(players: Iterable<GrowthPlayer>, fromDay: number, nowMs: number): ChannelRow[] {
-  const today = Math.floor(nowMs / DAY_MS);
+  const today = taipeiDay(nowMs);
   const by = new Map<string, GrowthPlayer[]>();
   let total = 0;
   for (const p of players) {
@@ -191,7 +192,7 @@ export function roundBuckets(players: Iterable<GrowthPlayer>) {
   };
 }
 
-/** Online minutes per player per active day from `from` to `to` (UTC days): play time over player-days with any play. */
+/** Online minutes per player per active day from `from` to `to` (Taipei days): play time over player-days with any play. */
 export function minutesPerActiveDay(players: Iterable<GrowthPlayer>, from: number, to: number): number | undefined {
   let seconds = 0, playerDays = 0;
   for (const p of players) for (const [d, s] of p.daySeconds ?? []) if (d >= from && d <= to && s > 0) { seconds += s; playerDays++; }
@@ -245,11 +246,11 @@ export function roomHealth(rows: Iterable<RoomHourOf>, from: number, to: number)
   };
 }
 
-/** Room health per bucket (hours, or UTC days of 24 hours). */
+/** Room health per bucket (epoch hours, or Taipei calendar days). */
 export function roomHealthBy(rows: readonly RoomHourOf[], keys: readonly number[], hourly: boolean): Map<number, RoomHealth> {
   const out = new Map<number, RoomHealth>();
   for (const k of keys) {
-    const h = hourly ? roomHealth(rows, k, k) : roomHealth(rows, k * 24, k * 24 + 23);
+    const h = hourly ? roomHealth(rows, k, k) : roomHealth(rows.filter(r => taipeiDayOfHour(r.hour) === k), -Infinity, Infinity);
     if (h.roomMinutes || h.joins) out.set(k, h);
   }
   return out;

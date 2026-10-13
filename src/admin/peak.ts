@@ -1,4 +1,5 @@
 import type { GroupId } from './groups';
+import { taipeiDayOfHour } from '../../shared/taipei';
 
 /**
  * Peak online on the admin page (pure, for tests): the most players in rooms at once, from the
@@ -13,11 +14,11 @@ const fold = (into: Peak | undefined, r: PeakOf): Peak => (!into
   ? { all: r.peak, phone: r.phone, computer: r.computer, atMs: r.atMs }
   : { all: Math.max(into.all, r.peak), phone: Math.max(into.phone, r.phone), computer: Math.max(into.computer, r.computer), atMs: r.peak > into.all ? r.atMs : into.atMs });
 
-/** The peak per bucket: per hour as recorded (hours since the epoch), or per UTC day (the highest hour of each). */
+/** The peak per bucket: per hour as recorded (hours since the epoch), or per Taipei day (the highest hour of each). */
 export function peaksBy(rows: Iterable<PeakOf>, hourly: boolean): Map<number, Peak> {
   const out = new Map<number, Peak>();
   for (const r of rows) {
-    const key = hourly ? r.hour : Math.floor(r.hour / 24);
+    const key = hourly ? r.hour : taipeiDayOfHour(r.hour);
     out.set(key, fold(out.get(key), r));
   }
   return out;
