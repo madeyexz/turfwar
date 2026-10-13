@@ -25,8 +25,8 @@ body.menu-open .touch-layer { display: none; }
 .tc-btn svg [fill="none"] { fill: none; }
 .tc-btn .tc-l { font-size: calc(10px * var(--tcs)); line-height: 1; max-width: 92%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .tc-btn.text .tc-l { font-size: calc(12px * var(--tcs)); }
-.tc-btn.small .tc-l { display: none; }
-.tc-btn.small svg { width: 52%; height: 52%; }
+.tc-btn:not(.text):not(.count) .tc-l { display: none; }
+.tc-btn:not(.text):not(.count) svg { width: 52%; height: 52%; }
 .tc-btn.active { opacity: 1; background: rgba(127, 246, 255, 0.28); border-color: var(--accent); color: #fff; transform: translate(-50%, -50%) scale(0.94); }
 .tc-btn.on { border-color: var(--accent); color: var(--accent); opacity: max(var(--op), 0.8); }
 .tc-btn.empty { opacity: calc(var(--op) * 0.5); }
