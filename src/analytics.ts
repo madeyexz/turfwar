@@ -50,7 +50,8 @@ export interface Events {
   match_joined: { online: boolean; room?: string; map: string; mode: Mode; size: string; team: 'swat' | 'militia'; server_choice?: ServerId; device: DeviceKind; rejoin?: boolean; touch?: boolean; upright?: boolean; in_app?: string; aim_assist?: boolean; private?: boolean; hosted?: boolean; wait_ms?: number };
   /** Online, also the match's connection quality (shared/netstats.ts): ping percentiles over the newest ≤600 samples, totals for the rest. */
   /** `sideways`: the page was turned at some point (an upright phone); `knife_kills` (the 藍白拖) and `bobas_drunk` (珍奶) over the stay. */
-  match_left: { seconds: number; kills: number; deaths: number; rounds_played: number; reason: Reason; exit?: Exit; sideways?: boolean; knife_kills?: number; bobas_drunk?: number; fps?: number; fps_low?: number; frames?: number } & Partial<Omit<NetFields, 'seconds'>>;
+  /** How it was drawn (MatchRender): the graphics card the browser names, the preset, the pixel ratio drawn at when leaving and its adaptive scale. */
+  match_left: { seconds: number; kills: number; deaths: number; rounds_played: number; reason: Reason; exit?: Exit; sideways?: boolean; knife_kills?: number; bobas_drunk?: number; fps?: number; fps_low?: number; frames?: number } & Partial<MatchRender> & Partial<Omit<NetFields, 'seconds'>>;
   round_ended: { won: boolean; mode: Mode; map: string };
   vehicle_entered: { kind: VehicleKind };
   store_purchase: { item: string; price: number };
@@ -234,13 +235,21 @@ export function roundEnded(props: Events['round_ended']) {
   track('round_ended', props);
 }
 
+/**
+ * How a match was drawn, for telling slow graphics cards apart: `gpu` is the renderer string WebGL gives
+ * (on Windows Chrome e.g. "ANGLE (Intel, Intel(R) UHD Graphics 620 Direct3D11 …)", which also shows a
+ * software renderer such as SwiftShader), `quality` the preset, `pixel_ratio` the ratio drawn at when
+ * leaving (preset cap × adaptive scale) and `dpr_scale` the adaptive scale alone (1 = never stepped down).
+ */
+export interface MatchRender { gpu: string; quality: string; pixel_ratio: number; dpr_scale: number }
+
 /** The match is over for us (menu, a dropped connection, or the tab closing); sent once. `net`: online connection quality; `exit`: exactly how. */
-export function matchLeft(reason: Reason, score: { kills: number; deaths: number }, net?: Omit<NetFields, 'seconds'>, exit?: Exit, frames?: { fps: number; low: number; frames: number }) {
+export function matchLeft(reason: Reason, score: { kills: number; deaths: number }, net?: Omit<NetFields, 'seconds'>, exit?: Exit, frames?: { fps: number; low: number; frames: number }, render?: MatchRender) {
   if (!match) return;
   const seconds = Math.round((performance.now() - match.start) / 1000);
   const { rounds, sideways, knifeKills, bobas } = match;
   match = undefined;
-  track('match_left', { seconds, kills: score.kills, deaths: score.deaths, rounds_played: rounds, reason, ...(exit ? { exit } : {}), sideways, knife_kills: knifeKills, bobas_drunk: bobas, ...(frames?.frames ? { fps: frames.fps, fps_low: frames.low, frames: frames.frames } : {}), ...net }, { beacon: reason === 'close' });
+  track('match_left', { seconds, kills: score.kills, deaths: score.deaths, rounds_played: rounds, reason, ...(exit ? { exit } : {}), sideways, knife_kills: knifeKills, bobas_drunk: bobas, ...(frames?.frames ? { fps: frames.fps, fps_low: frames.low, frames: frames.frames } : {}), ...render, ...net }, { beacon: reason === 'close' });
 }
 
 /** Counted into this stay's match_left: a knife (藍白拖) kill, a 珍奶 drunk, the page turned sideways. */
