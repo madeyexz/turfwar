@@ -2,6 +2,7 @@ import type { Vec3 } from '../../shared/math';
 import type { ClientReport, MatchEvent, MatchState, ShotClaim, VehicleReport } from '../../shared/match/state';
 import type { BuyItem } from '../../shared/match/economy';
 import type { AttachmentId, Slot, WeaponId } from '../../shared/weapons';
+import type { Skin } from '../../shared/skins';
 
 /**
  * The game client talks to a match through this interface. OfflineLink runs the shared
@@ -25,6 +26,8 @@ export interface GameLink {
   smoke(origin: Vec3, dir: Vec3): void;
   /** Throw the 藍白拖 in hand, wound up to `power` (0..1); the host checks we hold one. Hosts without it leave it out. */
   slipper?(origin: Vec3, dir: Vec3, power: number): void;
+  /** Wear a cosmetic skin (shared/skins.ts); the host cleans it. Hosts without skins leave it out. */
+  wear?(skin: Skin): void;
   /** Drink the carried 珍奶 (the sip has played; the host heals). */
   drink(): void;
   reload(): void;

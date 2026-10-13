@@ -1,9 +1,11 @@
 import * as THREE from 'three';
+import { mergeGeometries } from 'three/examples/jsm/utils/BufferGeometryUtils.js';
 
 /**
- * The National Day reskins' models, built in code (src/game/memeskins.ts): the 藍白拖 that stands in for
- * the knife (in the knife's model space: toe along -X, held by the heel at the origin, the sole's flat
- * face across Z so a swing lands flat) and the 珍奶 cup that stands in for the M18 (upright, centred).
+ * Models built in code: the knife skins (shared/skins.ts) in the knife's model space (held at the
+ * origin, reaching along -X, the flat face across Z so a swing lands flat): the 藍白拖 (toe along -X,
+ * held by the heel) and the 掃把 (held at the end of the handle, the brush at -X); and the 珍奶
+ * cup (upright, centred).
  */
 
 const BLUE = 0x2f6fe0, WHITE = 0xe4e8e4;
@@ -39,7 +41,7 @@ function treads(group: THREE.Group) {
 /** The 藍白拖: a white footbed on a blue outsole, one wide blue strap over the forefoot. */
 export function slipperModel() {
   const group = new THREE.Group();
-  group.name = 'Gun_Knife';
+  group.name = 'Knife_Slipper';
   group.add(new THREE.Mesh(slab(0.014, 0), mat(WHITE, 0.7)));
   group.add(new THREE.Mesh(slab(0.006, -0.008), mat(BLUE, 0.85)));
   treads(group);
@@ -64,6 +66,73 @@ export function slipperModel() {
     group.add(ridge);
   }
   group.traverse(o => { const m = o as THREE.Mesh; if (m.isMesh) { m.castShadow = true; m.receiveShadow = true; } });
+  return group;
+}
+
+/** Paint a geometry one colour (as a vertex colour attribute) so pieces of one material can be merged. */
+function painted(geo: THREE.BufferGeometry, color: number) {
+  const g = geo.index ? geo.toNonIndexed() : geo, c = new THREE.Color(color), n = g.getAttribute('position').count;
+  const colors = new Float32Array(n * 3);
+  for (let i = 0; i < n; i++) colors.set([c.r, c.g, c.b], i * 3);
+  g.setAttribute('color', new THREE.BufferAttribute(colors, 3));
+  g.deleteAttribute('uv');
+  return g;
+}
+
+/** A cylinder along -X from `x0` to `x1` (radius `r0` at x0, `r1` at x1). */
+const alongX = (x0: number, x1: number, r0: number, r1: number, segments = 10) =>
+  new THREE.CylinderGeometry(r1, r0, x0 - x1, segments).rotateZ(Math.PI / 2).translate((x0 + x1) / 2, 0, 0);
+
+/**
+ * The 掃把: the plastic broom in every Taiwanese home, held at the end of its red handle. A neon-green
+ * head (socket and crossbar, a white price sticker) carries pink and green bristles that splay and
+ * split at the ends (開叉) from years of sweeping. The bristles fan across Y with their flat side
+ * across Z, so a swing lands with the whole brush. About a metre long.
+ */
+/** How far up the broom's handle (from the butt) the hand holds it, as the swing does. */
+export const BROOM_CHOKE = 0.3;
+export function broomModel() {
+  const group = new THREE.Group();
+  group.name = 'Knife_Broom';
+  const plastic = (roughness: number) => new THREE.MeshStandardMaterial({ vertexColors: true, roughness, metalness: 0 });
+  let seed = 11;
+  const random = () => (seed = (seed * 16807) % 2147483647) / 2147483647;
+  // The handle: a red plastic-sleeved tube with a hanging cap at the butt.
+  const handle = [painted(alongX(0.06, -0.72, 0.0135, 0.0135, 12), 0xd23a3c), painted(alongX(0.075, 0.055, 0.0145, 0.015, 12), 0xb02a2e)];
+  group.add(new THREE.Mesh(mergeGeometries(handle), plastic(0.38)));
+  // The head: a socket round the handle, a neck flaring into the crossbar, and the sticker on its face.
+  const head = [
+    painted(alongX(-0.69, -0.76, 0.019, 0.022, 12), 0x3df03a),
+    painted(new THREE.BoxGeometry(0.05, 0.06, 0.04).translate(-0.775, 0, 0), 0x3df03a),
+    painted(new THREE.BoxGeometry(0.045, 0.3, 0.046).translate(-0.82, 0, 0), 0x46f53f),
+    painted(new THREE.BoxGeometry(0.012, 0.3, 0.05).translate(-0.84, 0, 0), 0x32d82f),
+    painted(new THREE.BoxGeometry(0.026, 0.05, 0.002).translate(-0.818, -0.075, 0.0235), 0xf2f2ec),
+  ];
+  group.add(new THREE.Mesh(mergeGeometries(head), plastic(0.45)));
+  // The bristles: rows of strands, green in the middle rows and pink outside, each bending outward at
+  // its tip so the brush splays wider than the bar and splits into tufts.
+  const bristles: THREE.BufferGeometry[] = [];
+  const pinks = [0xd8306f, 0xc42460, 0xe2457f], greens = [0x4fb83a, 0x3d9f2c, 0x67c94a];
+  const strand = (x: number, y: number, z: number, yaw: number, pitch: number, length: number, color: number) =>
+    painted(new THREE.BoxGeometry(length, 0.0036, 0.0036).translate(-length / 2, 0, 0).rotateY(pitch).rotateZ(-yaw).translate(x, y, z), color);
+  for (let row = 0; row < 4; row++) {
+    const z = (row - 1.5) * 0.011;
+    for (let i = 0; i < 48; i++) {
+      const across = (i + random() * 0.6) / 47.6 * 2 - 1, y = across * 0.142;
+      // Fan out toward the ends of the bar, and out of the bar's plane a little (the outer rows more).
+      const yaw = across * 0.38 + (random() - 0.5) * 0.12, pitch = (row - 1.5) * 0.14 + (random() - 0.5) * 0.14;
+      const base = 0.07 + random() * 0.03, tip = 0.05 + random() * 0.04;
+      const color = (row === 1 || row === 2) && Math.abs(across) < 0.85 && random() < 0.8 ? greens[i % 3] : pinks[i % 3];
+      bristles.push(strand(-0.845, y, z, yaw, pitch, base, color));
+      // 開叉: past the bend the tip kinks further out, to one side or the other.
+      const ex = -0.845 - Math.cos(yaw) * Math.cos(pitch) * base, ey = y + Math.cos(pitch) * Math.sin(yaw) * base, ez = z + Math.sin(pitch) * base;
+      const split = (random() < 0.5 ? -1 : 1) * (0.25 + random() * 0.45) + across * 0.3;
+      bristles.push(strand(ex, ey, ez, yaw + split, pitch + (random() - 0.5) * 0.5, tip, color));
+    }
+  }
+  group.add(new THREE.Mesh(mergeGeometries(bristles), plastic(0.6)));
+  // Choked up: the hand holds it a third of the way up the handle (the model's origin), the butt behind.
+  group.traverse(o => { const m = o as THREE.Mesh; if (m.isMesh) { m.position.x = BROOM_CHOKE; m.castShadow = true; m.receiveShadow = true; } });
   return group;
 }
 

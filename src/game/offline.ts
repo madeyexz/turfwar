@@ -2,12 +2,13 @@ import { isRookie, loadProgress } from './progress';
 import { rng, type Vec3 } from '../../shared/math';
 import {
   addSoldier, balanceTeams, buyAttachmentFor, buyItem, createContext, createMatch, enterVehicle, exitVehicle, fireShot, reload, reportState,
-  reportVehicle, switchTeam, switchWeapon, throwGrenade, drinkBoba, throwSlipper, throwSmoke, tickMatch, useAmmoCrate, TICK_RATE, type SimContext,
+  reportVehicle, setSkin, switchTeam, switchWeapon, throwGrenade, drinkBoba, throwSlipper, throwSmoke, tickMatch, useAmmoCrate, TICK_RATE, type SimContext,
 } from '../../shared/match/sim';
 import { ELIMINATION, PRACTICE_CONFIG, type ClientReport, type MatchConfig, type MatchEvent, type MatchState, type ShotClaim, type Team, type VehicleReport } from '../../shared/match/state';
 import type { BuyItem } from '../../shared/match/economy';
 import type { AttachmentId, Slot, WeaponId } from '../../shared/weapons';
 import type { GameLink } from './link';
+import type { Skin } from '../../shared/skins';
 import { t } from '../ui/i18n';
 
 /** Solo match: the authoritative simulation runs in this tab with bots on both teams. */
@@ -73,6 +74,7 @@ export class OfflineLink implements GameLink {
   grenade(origin: Vec3, dir: Vec3) { throwGrenade(this.match, this.ctx, this.me, origin, dir); }
   smoke(origin: Vec3, dir: Vec3) { throwSmoke(this.match, this.ctx, this.me, origin, dir); }
   slipper(origin: Vec3, dir: Vec3, power: number) { throwSlipper(this.match, this.ctx, this.me, origin, dir, power); }
+  wear(skin: Skin) { setSkin(this.match, this.me, skin); }
   drink() { drinkBoba(this.match, this.ctx, this.me); }
   reload() { reload(this.match, this.me); }
   switchWeapon(slot: Slot) { switchWeapon(this.match, this.me, slot); }

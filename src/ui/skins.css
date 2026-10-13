@@ -1,0 +1,25 @@
+/* ---------- 外觀 (src/ui/skinpanel.ts): the skin picker, the lobby dialog's shell from settingsmenu.css ---------- */
+.lb-settings.lobby.skins-dialog .panel { width: min(860px, calc(100 * var(--vw) - 32px)); height: auto; max-height: calc(100 * var(--vh) - 32px); }
+.lb-settings.lobby.skins-dialog header { padding-bottom: 0; }
+.skins { display: grid; grid-template-columns: minmax(0, 1.05fr) minmax(0, 1fr); gap: 0; min-height: 0; }
+.skins .stage { position: relative; min-height: 380px; border-right: 1px solid rgba(190, 236, 244, 0.12); }
+.skins .stage canvas { position: absolute; inset: 0; width: 100%; height: 100%; display: block; }
+.skins .picks { display: flex; flex-direction: column; gap: 10px; padding: 18px 22px 20px; }
+.skins h3 { margin: 4px 0 0; font-size: 13px; letter-spacing: 0.16em; color: var(--muted); }
+.skins .knives { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; }
+.skins .knife-pick { display: flex; flex-direction: column; align-items: center; gap: 4px; padding: 10px 6px 9px; background: rgba(255, 255, 255, 0.04); border: 1px solid var(--line); color: var(--muted); text-transform: none; }
+.skins .knife-pick b { font-size: 16px; letter-spacing: 0.08em; color: var(--ink); }
+.skins .knife-pick small { font-size: 11px; font-weight: 600; letter-spacing: 0.02em; text-align: center; line-height: 1.25; }
+.skins .knife-pick:hover { border-color: rgba(127, 246, 255, 0.5); }
+.skins .knife-pick.on { border-color: var(--accent); background: rgba(127, 246, 255, 0.12); }
+.skins .knife-pick.on b { color: var(--accent); }
+.skins .mark { width: 54px; height: 30px; background: center / contain no-repeat; }
+.skins .mark.slipper { background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='8 2 32 16'%3E%3Cpath d='M10 10c0-4.5 3-6.5 8-6.5h11c5.5 0 9.5 2.6 9.5 6.5s-4 6.5-9.5 6.5H18c-5 0-8-2-8-6.5z' fill='%23f4f6f4' stroke='%231f5bd1' stroke-width='1.6'/%3E%3Cpath d='M26 3.6c1.6 2 1.6 10.8 0 12.8M30.5 3.8c1.6 2 1.6 10.4 0 12.4' stroke='%232f6fe0' stroke-width='3.2' fill='none' stroke-linecap='round'/%3E%3C/svg%3E"); }
+.skins .mark.broom { background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='6 0 34 20'%3E%3Cpath d='M7 10h17' stroke='%23d23a3c' stroke-width='2.6' stroke-linecap='round'/%3E%3Cpath d='M23 7.5h3v5h-3z' fill='%233df03a'/%3E%3Cpath d='M26 3h3v14h-3z' fill='%2346f53f'/%3E%3Cpath d='M29 4l9-3M29 6.5l10-1.5M29 9l10 0M29 11.5l10 1.5M29 14l9 3M29 16l7 4' stroke='%23d8306f' stroke-width='1.1'/%3E%3Cpath d='M29 8l9-.5M29 10.5l9 1' stroke='%234fb83a' stroke-width='1.1'/%3E%3C/svg%3E"); }
+.skins .mark.knife { background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 40 20'%3E%3Cpath d='M4 11h11v-2.4H4z' fill='%233a3d33'/%3E%3Cpath d='M15 8.2h3v4h-3z' fill='%23222'/%3E%3Cpath d='M18 8.6h14l5 1.6-5 1.8H18z' fill='%23c9ced3'/%3E%3C/svg%3E"); }
+.skins .looks button { flex: 1 1 auto; }
+.skins .done { margin-top: auto; padding: 11px; font-size: 16px; font-weight: 700; letter-spacing: 0.3em; color: #031013; background: var(--accent); border: 0; }
+@media (max-width: 640px), (max-height: 520px) and (orientation: landscape) {
+  .skins { grid-template-columns: 1fr; }
+  .skins .stage { min-height: 220px; border-right: 0; border-bottom: 1px solid rgba(190, 236, 244, 0.12); }
+}

@@ -8,6 +8,7 @@ import { bragText, cardBlob, copyText, download, drawShareCard, shareLink, share
 import { shareActs, shareFlow, type ShareMethod } from './sharechoice';
 import { t } from './i18n';
 import './share.css';
+import type { KnifeSkin } from '../../shared/skins';
 
 export type { ShareMethod };
 
@@ -15,7 +16,8 @@ export interface ShareOptions {
   summary: MatchSummary;
   url: string;
   backdrop?: CanvasImageSource & { width: number; height: number };
-  meme: boolean;
+  /** The player's knife skin (names their knife kills). */
+  knife: KnifeSkin;
   /** The code of the private 1v1 room the link opens (the dialog then speaks of sending a challenge). */
   room?: boolean;
   /** A line over the card (e.g. the 1v1 room that is open). */
@@ -69,17 +71,17 @@ export async function openSharePanel(o: ShareOptions) {
 
   let blob: Blob | undefined;
   try {
-    const canvas = await drawShareCard({ summary: o.summary, url: o.url, backdrop: o.backdrop, meme: o.meme });
+    const canvas = await drawShareCard({ summary: o.summary, url: o.url, backdrop: o.backdrop, knife: o.knife });
     blob = await cardBlob(canvas);
     const img = new Image();
-    img.alt = bragText(o.summary, o.meme);
+    img.alt = bragText(o.summary, o.knife);
     img.src = URL.createObjectURL(blob);
     root.querySelector('.sp-card')!.replaceChildren(img);
   } catch {
     root.querySelector('.sp-card')!.textContent = t('share.failed');
   }
   const file = () => new File([blob!], `turfwar-${o.summary.name.replace(/[^\p{L}\p{N}]+/gu, '') || 'card'}.png`, { type: 'image/png' });
-  const text = bragText(o.summary, o.meme);
+  const text = bragText(o.summary, o.knife);
   const copyButton = () => root.querySelector<HTMLButtonElement>('[data-act="copy"]')!;
   const copied = () => {
     const b = copyButton();

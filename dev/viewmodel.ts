@@ -1,9 +1,11 @@
 // Development-only first-person weapon preview:
 // /dev/viewmodel.html?weapon=m4a1&att=acog,laser&ads=0&sprint=0&reload=0&team=0&slash=0.4&use=1&center&inspect[=first]&closeup&side&night
+//   &skin=slipper|broom|knife (the knife's skin; B cycles it)
 //   &zoom=1 (sniper second magnification) &scope=pip|overlay &color=red|green|amber|white &style=stock|dot|circle|chevron|cross &detail=high|low
 // Keys: 1–8 weapon · O optic · S suppressor · L laser · T torch · N counter · M mag · K pad · A ammo · X clear · F fire · R reload · Space aim · U use · Z zoom level
 import * as THREE from 'three';
-import { loadAssets } from '../src/assets';
+import { loadAssets, weaponModel } from '../src/assets';
+import { KNIFE_SKINS, type KnifeSkin } from '../shared/skins';
 import { LocalPlayer } from '../src/game/player';
 import { isMagnified, settings, type OpticDetail, type ReticleColor, type ReticleStyle, type ScopeMode } from '../src/game/settings';
 import { THEMES } from '../src/render/materials';
@@ -49,12 +51,13 @@ p.zoomLevel = params.get('zoom') === '1' ? 1 : 0;
 if (p.sprinting) { p.m.vx = 8; }
 const reload = Number(params.get('reload') ?? 0);
 if (reload) { p.reloadTotal = 2; p.reloadLeft = 2 * (1 - reload); }
-const vm = new ViewModel(assets, Number(params.get('team') ?? 0));
+let skin = (params.get('skin') ?? 'slipper') as KnifeSkin;
+const vm = new ViewModel(assets, Number(params.get('team') ?? 0), skin);
 vm.setWeapon(weapon, att, true);
 // ?inspect: a close 3/4 product shot of the gun with its attachments (as soldiers show it).
 let inspect: THREE.Object3D | undefined;
 if (params.has('inspect')) {
-  inspect = assets.weapons.get(WEAPONS[weapon].model)!.clone();
+  inspect = assets.weapons.get(weaponModel(WEAPONS[weapon].model, skin))!.clone();
   r.scene.add(inspect);
   inspect.position.set(0, 1.5, -1);
   inspect.updateMatrixWorld(true);
@@ -84,6 +87,7 @@ addEventListener('keydown', e => {
   const next = gearKey(e, weapon, att);
   if (next) { weapon = next.weapon; att = next.att; vm.setWeapon(weapon, att); show(); return; }
   if (e.key === 'f') vm.fire();
+  if (e.key === 'b') { skin = KNIFE_SKINS[(KNIFE_SKINS.indexOf(skin) + 1) % KNIFE_SKINS.length]; vm.setKnifeSkin(skin); }
   if (e.key === 'r') { p.reloadTotal = p.reloadLeft = weapon === 'knife' ? 0 : 2; }
   if (e.key === ' ') adsTarget = adsTarget ? 0 : 1;
   if (e.key === 'u') p.using = !p.using;

@@ -12,6 +12,7 @@ import { roundLength } from '../../shared/match/sim';
 import { decodeFrame, type DecodedFrame, type FramePose } from '../../shared/match/frame';
 import { DEFAULT_WEAPONS, STAMINA, WEAPONS, normalizeAttachments, weaponStats, type AttachmentId, type Attachments, type Slot, type WeaponId } from '../../shared/weapons';
 import { newRoundStats, type BuyItem } from '../../shared/match/economy';
+import { cleanSkin, type Skin } from '../../shared/skins';
 import { plural, t } from '../ui/i18n';
 import { setPerson, track } from '../analytics';
 import { NetReporter, SAMPLE_EVERY_MS, type NetFields, type NetReport } from '../../shared/netstats';
@@ -41,8 +42,11 @@ export function onlineAvailable(): { ok: boolean; reason: string } {
 }
 
 const weaponOr = (id: string, fallback: WeaponId): WeaponId => (id in WEAPONS && id !== 'knife' ? id as WeaponId : fallback);
-const gearOf = (json: string): { owned: WeaponId[]; attachments: Partial<Record<WeaponId, Attachments>>; smokes: number; bobas: number; slippers: number } => {
-  try { const g = JSON.parse(json); return { owned: g.owned ?? [...DEFAULT_WEAPONS], attachments: Object.fromEntries(Object.entries(g.attachments ?? {}).map(([w, a]) => [w, normalizeAttachments(a as Record<string, string>)])), smokes: Number(g.smokes) || 0, bobas: Number(g.bobas) || 0, slippers: g.slippers === 0 ? 0 : 1 }; } catch { return { owned: [...DEFAULT_WEAPONS], attachments: {}, smokes: 0, bobas: 0, slippers: 1 }; }
+const gearOf = (json: string): { owned: WeaponId[]; attachments: Partial<Record<WeaponId, Attachments>>; smokes: number; bobas: number; slippers: number; skin?: Skin } => {
+  try {
+    const g = JSON.parse(json);
+    return { owned: g.owned ?? [...DEFAULT_WEAPONS], attachments: Object.fromEntries(Object.entries(g.attachments ?? {}).map(([w, a]) => [w, normalizeAttachments(a as Record<string, string>)])), smokes: Number(g.smokes) || 0, bobas: Number(g.bobas) || 0, slippers: g.slippers === 0 ? 0 : 1, ...(g.skin ? { skin: cleanSkin(g.skin) } : {}) };
+  } catch { return { owned: [...DEFAULT_WEAPONS], attachments: {}, smokes: 0, bobas: 0, slippers: 1 }; }
 };
 
 /** Rebuild a shared Soldier from its roster row and its pose in the latest frame. */
@@ -58,6 +62,7 @@ function soldierFrom(r: RosterRow, p: FramePose, reloadLeft: number, sinceShot: 
     sinceHit: 99, lastAttacker: r.lastAttacker, kills: r.kills, deaths: r.deaths, assists: r.assists, score: r.score,
     sprint: p.sprint, ads: p.ads, sinceShot, using: p.using, corrections: r.corrections,
     idle: 0, moveSlack: 0, groundY: 0, round: newRoundStats(), roundsHere: 0,
+    ...(gear.skin ? { skin: gear.skin } : {}),
   };
 }
 
@@ -374,6 +379,7 @@ export class OnlineLink implements GameLink {
   say(text: string, team: boolean) { if (!this.inMatch()) return; void this.conn.reducers.say({ text, team }).catch(() => undefined); }
   smoke(o: Vec3, d: Vec3) { if (!this.inMatch()) return; try { void this.conn.reducers.smoke({ ox: o.x, oy: o.y, oz: o.z, dx: d.x, dy: d.y, dz: d.z }).catch(() => undefined); } catch { /* a server without smoke */ } }
   slipper(o: Vec3, d: Vec3, power: number) { if (!this.inMatch()) return; try { void this.conn.reducers.slipper({ ox: o.x, oy: o.y, oz: o.z, dx: d.x, dy: d.y, dz: d.z, power }).catch(() => undefined); } catch { /* a server without the thrown slipper */ } }
+  wear(skin: Skin) { if (!this.inMatch()) return; try { void this.conn.reducers.setSkin({ knife: skin.knife, look: skin.look }).catch(() => undefined); } catch { /* a server without skins */ } }
   drink() { if (!this.inMatch()) return; try { void this.conn.reducers.drink({}).catch(() => undefined); } catch { /* a server without bubble tea */ } }
   grenade(o: Vec3, d: Vec3) { if (!this.inMatch()) return; void this.conn.reducers.grenade({ ox: o.x, oy: o.y, oz: o.z, dx: d.x, dy: d.y, dz: d.z }).catch(() => undefined); }
   reload() { if (!this.inMatch()) return; void this.conn.reducers.reloadWeapon({}).catch(() => undefined); }

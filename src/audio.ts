@@ -1,6 +1,6 @@
 import type { WeaponId } from '../shared/weapons';
 import { Voice, VoicePool, unit } from './voices';
-import { MEME_SKINS } from './game/memeskins';
+import type { KnifeSkin } from '../shared/skins';
 import { assetUrl } from './assetUrl';
 
 type V3 = { x: number; y: number; z: number };
@@ -601,13 +601,36 @@ export class Audio {
     edge.frequency.setValueAtTime(2400, t + 0.02); edge.frequency.exponentialRampToValueAtTime(7000, t + 0.14);
   }
 
-  /** Knife: the swing, and on a hit a blunt stab into the target. */
-  knife(hit: boolean, listener?: Listener, at?: V3) {
+  /** The broom's swing: a broad, airy whoosh of straw, lower and longer than a blade's. */
+  private broomSwish(t: number, listener?: Listener, at?: V3) {
+    const out = this.out(listener ? 0.42 : 0.34, listener, at, 0.08);
+    const f = this.noiseBurst(out, t, 0.26, 'bandpass', 500, 1.2, 0.85, 0.07);
+    f.frequency.setValueAtTime(380, t); f.frequency.exponentialRampToValueAtTime(1500, t + 0.22);
+    if (!this.live) return;
+    this.noiseBurst(out, t + 0.05, 0.18, 'highpass', 3800, 0.8, 0.18, 0.06);
+  }
+
+  /** The broom landing: a dry crackle of straw over a dull THWUMP. */
+  private broomHit(t: number, listener?: Listener, at?: V3) {
+    const out = this.out(listener ? 0.7 : 0.6, listener, at, 0.12);
+    this.tone(out, t, 'sine', 170, 55, 0.14, 0.75);
+    this.noiseBurst(out, t, 0.09, 'lowpass', 700, 0.9, 0.7);
+    this.noiseBurst(out, t, 0.16, 'highpass', 2600, 0.6, 0.55, 0.01);
+    if (!this.live) return;
+    for (let i = 0; i < 5; i++) this.noiseBurst(out, t + 0.012 + i * 0.019 + Math.random() * 0.008, 0.012, 'bandpass', 2800 + Math.random() * 2600, 3, 0.3);
+  }
+
+  /** The knife skin in this player's hand (shared/skins.ts): their own swings and equips sound like it. */
+  knifeSkin: KnifeSkin = 'slipper';
+
+  /** Knife: the swing, and on a hit a blunt stab into the target (a slap for the 藍白拖, a THWUMP for the 掃把). */
+  knife(hit: boolean, listener?: Listener, at?: V3, skin: KnifeSkin = this.knifeSkin) {
     if (!this.ready) return;
     const t = this.now();
+    if (skin === 'broom') { this.broomSwish(t, listener, at); if (hit) this.broomHit(t + 0.1, listener, at); return; }
     this.swish(t, listener, at);
     if (!hit) return;
-    if (MEME_SKINS) return this.slap(t + 0.05, listener, at);
+    if (skin === 'slipper') return this.slap(t + 0.05, listener, at);
     const out = this.out(listener ? 0.55 : 0.45, listener, at, 0.06);
     this.tone(out, t + 0.06, 'sine', 140, 55, 0.12, 0.8);
     this.noiseBurst(out, t + 0.06, 0.07, 'lowpass', 900, 1, 0.7);
@@ -615,15 +638,16 @@ export class Audio {
     if (this.live) this.noiseBurst(out, t + 0.075, 0.12, 'bandpass', 420, 1.5, 0.35, 0.01);
   }
 
-  /** A thrown 藍白拖: the whoosh as it leaves the hand, or the THWACK as it strikes someone. */
-  slipper(action: 'throw' | 'hit', listener?: Listener, at?: V3) {
+  /** A thrown knife skin: the whoosh as it leaves the hand, or the THWACK as it strikes someone. */
+  slipper(action: 'throw' | 'hit', listener?: Listener, at?: V3, skin: KnifeSkin = this.knifeSkin) {
     if (!this.ready) return;
     const t = this.now();
+    if (skin === 'broom') { if (action === 'throw') this.broomSwish(t, listener, at); else this.broomHit(t, listener, at); return; }
     if (action === 'throw') this.swish(t, listener, at);
     else this.slap(t, listener, at);
   }
 
-  /** The 藍白拖 landing (src/game/memeskins.ts): a bright rubber THWACK with a little cartoon boing after it. */
+  /** The 藍白拖 landing: a bright rubber THWACK with a little cartoon boing after it. */
   private slap(t: number, listener?: Listener, at?: V3) {
     const out = this.out(listener ? 0.7 : 0.6, listener, at, 0.12);
     this.noiseBurst(out, t, 0.045, 'highpass', 1800, 0.7, 1.1);
@@ -696,6 +720,7 @@ export class Audio {
     if (!this.ready) return;
     const t = this.now(), out = this.out(0.36, undefined, undefined, 0.06);
     this.noiseBurst(out, t, 0.16, 'bandpass', 1300, 0.7, 0.28, 0.05);
+    if (weapon === 'knife' && this.knifeSkin === 'broom') { this.noiseBurst(out, t + 0.04, 0.2, 'highpass', 3000, 0.7, 0.3, 0.04); return; }
     if (weapon === 'knife') {
       const f = this.noiseBurst(out, t + 0.05, 0.22, 'bandpass', 3500, 6, 0.35, 0.03);
       f.frequency.setValueAtTime(3000, t + 0.05); f.frequency.exponentialRampToValueAtTime(7500, t + 0.25);

@@ -1,6 +1,7 @@
 import type { MapId } from '../../shared/maps/index';
 import type { AttachmentId, WeaponClass } from '../../shared/weapons';
-import { MEME_SKINS } from '../game/memeskins';
+import type { KnifeSkin, Look } from '../../shared/skins';
+import { mySkin, onSkinChange } from '../game/skins';
 
 /**
  * UI language: English or Traditional Chinese (Taiwan). `t(key)` looks a string up in the current
@@ -347,6 +348,12 @@ const en = {
   'news.title': 'Latest update', 'news.new': 'New',
   'hud.throwHint': 'Hold {key} to wind up · let go to throw', 'hud.windup': 'Winding up… let go to throw', 'hud.windupFull': 'Full power: one hit kills! Let go',
   'hud.slipperGone': 'Knife thrown: walk over it to pick it up', 'hud.slipperBack': 'Knife back in hand',
+  'card.broom': 'Broom kills', 'brag.broomMulti': 'Broom kills ×{n}', 'brag.broom': 'Swept someone off the map with a broom',
+  'skin.title': 'Skins', 'skin.open': 'Skins', 'skin.knife': 'Melee', 'skin.look': 'Militia character', 'skin.cosmetic': 'Looks only: the stats, the strike and the throw stay the knife\'s. Everyone sees your pick online.',
+  'skin.lookNote': 'SWAT keep their one operator so the sides stay easy to tell apart.', 'skin.done': 'Done',
+  'skin.k.slipper': 'Slipper', 'skin.k.broom': 'Broom', 'skin.k.knife': 'Knife',
+  'skin.k.slipperSub': 'Blue and white, the classic', 'skin.k.broomSub': 'Plastic broom, bristles splayed', 'skin.k.knifeSub': 'Combat knife',
+  'skin.l.auto': 'Rotate', 'skin.l.farmer': 'Farmer', 'skin.l.punk': 'Punk', 'skin.l.worker': 'Worker', 'skin.l.adventurer': 'Adventurer', 'skin.l.casual': 'Casual', 'skin.l.hoodie': 'Hoodie',
   'store.heals': 'Heals', 'store.sip': 'Sip', 'store.bobaNote': 'Drink one when hurt: +{heal} health. You can’t shoot while you sip. {key}', 'store.carryCup': 'One at a time',
 } as const;
 
@@ -664,30 +671,54 @@ const zhTW: Record<Key, string> = {
   'news.title': '最新更新', 'news.new': 'NEW',
   'hud.throwHint': '按住 {key} 蓄力 · 放開丟出', 'hud.windup': '蓄力中… 放開丟出', 'hud.windupFull': '蓄滿了！打中秒殺，放開丟出',
   'hud.slipperGone': '刀丟出去了，走過去撿回來', 'hud.slipperBack': '刀撿回來了',
+  'card.broom': '掃把擊殺', 'brag.broomMulti': '掃把擊殺 ×{n}', 'brag.broom': '拿掃把把人掃出去了',
+  'skin.title': '外觀', 'skin.open': '外觀', 'skin.knife': '近戰', 'skin.look': '民兵角色', 'skin.cosmetic': '只換外觀：數值、揮擊跟丟擲都跟刀一樣。連線時大家都看得到。',
+  'skin.lookNote': 'SWAT 維持同一套裝備，敵我才好分。', 'skin.done': '完成',
+  'skin.k.slipper': '藍白拖', 'skin.k.broom': '掃把', 'skin.k.knife': '刀',
+  'skin.k.slipperSub': '經典藍白', 'skin.k.broomSub': '塑膠掃把，刷毛開叉', 'skin.k.knifeSub': '軍刀',
+  'skin.l.auto': '輪流', 'skin.l.farmer': '農夫', 'skin.l.punk': '龐克', 'skin.l.worker': '工人', 'skin.l.adventurer': '冒險家', 'skin.l.casual': '路人', 'skin.l.hoodie': '帽T',
   'store.heals': '回血', 'store.sip': '喝的時間', 'store.bobaNote': '受傷時喝一杯：+{heal} 血，喝的時候不能開槍。{key}', 'store.carryCup': '一次 1 杯',
 };
 
 /**
- * The National Day reskin's names (src/game/memeskins.ts): the knife is a 藍白拖 / Slipper wherever it is
- * named (store, weapon bar, kill feed, scoreboard, keys).
+ * The knife skins' names (shared/skins.ts): the knife is called by the skin this player wears wherever it
+ * is named for them (store, weapon bar, keys, hints). The kill feed names the killer's skin (`knifeName`).
  */
-export const MEME_NAMES: Record<Lang, Partial<Record<Key, string>>> = {
-  en: {
-    'act.knife': 'Slipper', 'tc.knife': 'Slipper', 'hud.knife': 'SLIPPER', 'cause.knife': 'Slipper', 'store.knife': 'Slipper',
-    'hud.slipperGone': 'Slipper thrown: walk over it to pick it up', 'hud.slipperBack': 'Slipper back on',
+export const KNIFE_NAMES: Record<KnifeSkin, Record<Lang, Partial<Record<Key, string>>>> = {
+  knife: { en: {}, 'zh-TW': {} },
+  slipper: {
+    en: {
+      'act.knife': 'Slipper', 'tc.knife': 'Slipper', 'hud.knife': 'SLIPPER', 'cause.knife': 'Slipper', 'store.knife': 'Slipper',
+      'hud.slipperGone': 'Slipper thrown: walk over it to pick it up', 'hud.slipperBack': 'Slipper back on',
+    },
+    'zh-TW': {
+      'act.knife': '藍白拖', 'tc.knife': '藍白拖', 'hud.knife': '藍白拖', 'cause.knife': '藍白拖', 'store.knife': '藍白拖',
+      'hud.slipperGone': '藍白拖丟出去了，走過去撿回來', 'hud.slipperBack': '藍白拖撿回來了',
+    },
   },
-  'zh-TW': {
-    'act.knife': '藍白拖', 'tc.knife': '藍白拖', 'hud.knife': '藍白拖', 'cause.knife': '藍白拖', 'store.knife': '藍白拖',
-    'hud.slipperGone': '藍白拖丟出去了，走過去撿回來', 'hud.slipperBack': '藍白拖撿回來了',
+  broom: {
+    en: {
+      'act.knife': 'Broom', 'tc.knife': 'Broom', 'hud.knife': 'BROOM', 'cause.knife': 'Broom', 'store.knife': 'Broom',
+      'hud.slipperGone': 'Broom thrown: walk over it to pick it up', 'hud.slipperBack': 'Broom back in hand',
+    },
+    'zh-TW': {
+      'act.knife': '掃把', 'tc.knife': '掃把', 'hud.knife': '掃把', 'cause.knife': '掃把', 'store.knife': '掃把',
+      'hud.slipperGone': '掃把丟出去了，走過去撿回來', 'hud.slipperBack': '掃把撿回來了',
+    },
   },
 };
 
-/** The dictionaries in use: the reskins' names over the classic ones while they are on. */
-export const withMemeNames = (on: boolean): Record<Lang, Record<Key, string>> => on
-  ? { en: { ...en, ...MEME_NAMES.en }, 'zh-TW': { ...zhTW, ...MEME_NAMES['zh-TW'] } }
-  : { en, 'zh-TW': zhTW };
+/** The dictionaries with a knife skin's names over the classic ones. */
+export const withKnifeNames = (knife: KnifeSkin): Record<Lang, Record<Key, string>> =>
+  ({ en: { ...en, ...KNIFE_NAMES[knife].en }, 'zh-TW': { ...zhTW, ...KNIFE_NAMES[knife]['zh-TW'] } });
 
-export const DICTIONARIES: Record<Lang, Record<Key, string>> = withMemeNames(MEME_SKINS);
+/** The dictionaries in use: they follow this player's knife skin. */
+export const DICTIONARIES: Record<Lang, Record<Key, string>> = withKnifeNames(mySkin().knife);
+onSkinChange(skin => { const next = withKnifeNames(skin.knife); for (const { id } of LANGS) Object.assign(DICTIONARIES[id], next[id]); });
+
+/** A knife skin's name in the current language, whoever wears it (the kill feed names the killer's). */
+export const knifeName = (knife: KnifeSkin) => t(`skin.k.${knife}`);
+export const lookName = (look: Look) => t(`skin.l.${look}`);
 
 // ---- Names that live in shared/ data (English there; Chinese here) ----
 

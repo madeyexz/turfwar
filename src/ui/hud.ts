@@ -11,10 +11,11 @@ import type { ActionId } from '../game/keybinds';
 import { kbd } from './keys';
 import type { LocalPlayer } from '../game/player';
 import { isMagnified, settings } from '../game/settings';
-import { MEME_SKINS, SLIPPER_ICON } from '../game/memeskins';
+import { knifeIcon } from '../game/skins';
+import { skinOf, type KnifeSkin } from '../../shared/skins';
 import { RETICLE_CSS } from '../render/sights';
 import { UI_STACK } from './fonts';
-import { L, applyI18n, causeName, mapName, modeName, onLang, rewardReason, t, teamName, teamShort } from './i18n';
+import { L, applyI18n, causeName, knifeName, mapName, modeName, onLang, rewardReason, t, teamName, teamShort } from './i18n';
 import { scoreBarFit, scoreBarRoom } from './scorebarfit';
 import { viewHeight, viewRect, viewWidth } from './viewport';
 
@@ -36,7 +37,8 @@ const initials = (name: string) => {
   return parts.length > 1 ? parts[0][0] + parts[parts.length - 1][0] : (parts[0] ?? '?').slice(0, 2);
 };
 /** Kill feed label for a weapon id or cause ('knife', 'grenade', 'fall', 'bomb', 'vehicle', 'crash', 'roadkill'). */
-export const weaponLabel = (w: string) => causeName(w, w === 'grenade' ? 'M67' : w === 'knife' ? undefined : WEAPONS[w as WeaponId]?.name);
+/** A weapon's kill-feed name; `knife`: the killer's knife skin (otherwise this player's own names it). */
+export const weaponLabel = (w: string, knife?: KnifeSkin) => (w === 'knife' && knife ? knifeName(knife) : causeName(w, w === 'grenade' ? 'M67' : w === 'knife' ? undefined : WEAPONS[w as WeaponId]?.name));
 /** The weapon in hand: guns by name, the knife in the current language. */
 const heldName = (id: WeaponId, english: string) => id === 'knife' ? t('cause.knife') : english;
 const binoTicks = () => {
@@ -492,7 +494,9 @@ export class Hud {
     const item = document.createElement('div');
     if (mine) item.className = 'me';
     const name = (s?: Soldier) => s ? `<span class="t${s.team}">${escape(s.name)}</span>` : '';
-    item.innerHTML = `${killer && killer !== victim && killer.id !== victim?.id ? name(killer) : ''}<span class="wpn${weapon === 'knife' && MEME_SKINS ? ' slap' : ''}">${weapon === 'knife' && MEME_SKINS ? SLIPPER_ICON : ''}${escape(weaponLabel(weapon))}${head ? `<span class="hs" title="${t('hud.headshot')}"></span>` : ''}</span>${name(victim)}`;
+    // A knife kill names and draws the killer's knife skin (a 藍白拖 slap, a 掃把 swat, or the knife).
+    const knife = weapon === 'knife' ? (killer ? skinOf(killer) : undefined)?.knife ?? 'slipper' : undefined, icon = knife ? knifeIcon(knife) : '';
+    item.innerHTML = `${killer && killer !== victim && killer.id !== victim?.id ? name(killer) : ''}<span class="wpn${icon ? ' slap' : ''}${knife === 'broom' ? ' swat' : ''}">${icon}${escape(weaponLabel(weapon, knife))}${head ? `<span class="hs" title="${t('hud.headshot')}"></span>` : ''}</span>${name(victim)}`;
     const feed = this.el.feed;
     feed.prepend(item);
     while (feed.children.length > 6) feed.lastElementChild!.remove();

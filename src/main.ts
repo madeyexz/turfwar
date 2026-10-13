@@ -26,6 +26,7 @@ import { LevelView } from './render/level';
 import { THEMES } from './render/materials';
 import { QUALITY, Renderer } from './render/renderer';
 import { renderTheme, THEME_START } from './theme';
+import { SkinPanel } from './ui/skinpanel';
 import { SettingsMenu, type GraphicsQuality, type SettingsFocus, type SettingsTab } from './ui/settingsmenu';
 import { cjkFontReady } from './ui/fonts';
 import { drawMapThumb } from './ui/mapthumb';
@@ -87,6 +88,8 @@ const online = onlineAvailable();
 const FEATURED = ['taipei', 'xinyi', ...maps.map(m => m.id).filter(id => id !== 'taipei' && id !== 'xinyi')];
 
 const GEAR = '<svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="3.2"/><path d="M12 2.8v2.6M12 18.6v2.6M21.2 12h-2.6M5.4 12H2.8M18.5 5.5l-1.84 1.84M7.34 16.66 5.5 18.5M18.5 18.5l-1.84-1.84M7.34 7.34 5.5 5.5"/><circle cx="12" cy="12" r="6.4"/></svg>';
+/** A T-shirt: the 外觀 (skins) dialog. */
+const SHIRT = '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M8.5 3.5 3 6.5l2 4 2.2-1V20.5h9.6V9.5l2.2 1 2-4-5.5-3c-.6 1.6-1.9 2.6-3.5 2.6S9.1 5.1 8.5 3.5z"/></svg>';
 const PLAY = '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M7 4.5v15l12.5-7.5z"/></svg>';
 const CARET = '<svg class="caret" viewBox="0 0 24 24" aria-hidden="true"><path d="m6 9 6 6 6-6"/></svg>';
 /** GitHub's mark, for the footer's source link. */
@@ -140,6 +143,7 @@ menu.innerHTML = `
       ${choice('teams', 'team', [['auto', L('lobby.auto')], ['0', L('team.0', 'span', 'class="swat"')], ['1', L('team.1', 'span', 'class="militia"')]], 'lobby.team')}
       <div class="icons">
         <a class="icon-btn discord" id="discord-top" href="${DISCORD_URL}" target="_blank" rel="noopener" data-tip="${t('lobby.discord')}" data-i18n-tip="lobby.discord" aria-label="${t('lobby.discordTitle')}" data-i18n-aria-label="lobby.discordTitle">${DISCORD}</a>
+        <button type="button" class="icon-btn" id="open-skins" data-tip="${t('skin.open')}" data-i18n-tip="skin.open" aria-label="${t('skin.title')}" data-i18n-aria-label="skin.title" aria-haspopup="dialog">${SHIRT}</button>
         <button type="button" class="icon-btn" id="open-controls" data-tip="${t('lobby.controls')}" data-i18n-tip="lobby.controls" aria-label="${t('lobby.controls')}" data-i18n-aria-label="lobby.controls" aria-haspopup="dialog">?</button>
         <button type="button" class="icon-btn" id="open-settings" data-tip="${t('lobby.settings')}" data-i18n-tip="lobby.settings" aria-label="${t('lobby.settings')}" data-i18n-aria-label="lobby.settings" aria-haspopup="dialog">${GEAR}</button>
       </div>
@@ -970,6 +974,9 @@ const openOptions = (tab: SettingsTab, focus?: SettingsFocus) => {
 };
 for (const id of ['#quick-server', '#rooms-server']) $(id).addEventListener('click', () => openOptions('options', 'server'));
 $('#open-settings').addEventListener('click', () => openOptions('options'));
+// 外觀: the knife skin and Militia character (src/ui/skinpanel.ts), previewed on the lobby's loaded models.
+const skinPanel = new SkinPanel(document.body, () => assets);
+$('#open-skins').addEventListener('click', () => { if (assets) skinPanel.show(); });
 $('#discord-top').addEventListener('click', () => track('discord_clicked', { where: 'lobby' }));
 $('#open-controls').addEventListener('click', () => openOptions('controls'));
 

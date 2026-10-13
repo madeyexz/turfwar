@@ -7,8 +7,9 @@ import { GUN_FIT, fitAttachments, overlayFor, vec, type Fitted, type Overlay } f
 import { opticFov, settings } from '../game/settings';
 import { requestScope } from './sights';
 import { createArms } from './soldier';
-import { MEME_SKINS } from '../game/memeskins';
-import { bobaCupModel } from './meme';
+import { BROOM_CHOKE, bobaCupModel } from './meme';
+import { weaponModel } from '../assets';
+import type { KnifeSkin } from '../../shared/skins';
 
 /** Where the weapon rests at the hip (gun-group space) and how far ahead of the eye it sits when aimed (fitted sights set their own eye relief). */
 const HOLD: Record<WeaponId, { hip: THREE.Vector3; adsZ: number }> = {
@@ -36,7 +37,7 @@ const BACKHAND: Key[] = [
 ];
 
 /**
- * The 藍白拖 (src/game/memeskins.ts), held by the heel: at guard the toe points up with the white
+ * The 藍白拖 (shared/skins.ts), held by the heel: at guard the toe points up with the white
  * footbed and blue strap towards you; the slap cocks it high on the right, then whips it flat across
  * the screen strap-first and lets it fly through. Quicker and flatter than the knife's cut.
  */
@@ -45,6 +46,23 @@ const SLAP: Key[] = [
   [0, ...SLIPPER_GUARD], [0.22, [0.26, -0.04, -0.3], [1.5, -0.9, 0]], [0.42, [-0.02, -0.08, -0.48], [0.15, 1.45, 0]],
   [0.62, [-0.2, -0.2, -0.42], [-0.3, 1.9, 0]], [1, ...SLIPPER_GUARD],
 ];
+
+/**
+ * The 掃把, held at the end of its handle with the straw fanned out flat across the view (rolled a
+ * quarter turn): at guard it leans up and out to the right, clear of the crosshair; the swat lifts it back over the shoulder, brings
+ * it down flat through the middle of the screen like a mother after a cockroach, and lets it swing on.
+ */
+const BROOM_GUARD: [number[], number[]] = [[0.3, -0.36, -0.42], [0.82, -0.18, 1.35]];
+const SWAT: Key[] = [
+  [0, ...BROOM_GUARD], [0.3, [0.24, -0.22, -0.34], [1.75, 0.1, 1.5]], [0.55, [0.04, -0.3, -0.38], [0.5, 0.2, 1.55]],
+  [0.75, [0.02, -0.4, -0.36], [-0.1, 0.3, 1.6]], [1, ...BROOM_GUARD],
+];
+/** Each knife skin's guard pose, swing, and how long a swing takes. */
+const KNIFE_MOTION: Record<KnifeSkin, { guard?: [number[], number[]]; swing?: Key[]; time: number }> = {
+  knife: { time: 0.34 },
+  slipper: { guard: SLIPPER_GUARD, swing: SLAP, time: 0.28 },
+  broom: { guard: BROOM_GUARD, swing: SWAT, time: 0.36 },
+};
 
 /** Spring-damped scalar for weapon motion. */
 class Spring {
@@ -80,6 +98,8 @@ export class ViewModel {
   private fit!: Fitted;
   private mags = new Map<string, THREE.Object3D>();
   private current: WeaponId = 'mp5';
+  /** The knife skin in hand (shared/skins.ts). */
+  private knifeSkin: KnifeSkin = 'knife';
   private attachments: Attachments = {};
   private arms: { root: THREE.Object3D; bones: Bones; bindPose: Map<string, THREE.Quaternion> };
   private grenade: THREE.Object3D;
@@ -103,16 +123,12 @@ export class ViewModel {
   /** Eyepiece overlay of the fitted optic (x6 sniper scope, ACOG/x4 prism); the 3D model hides behind it. */
   overlay: Overlay;
 
-  constructor(private assets: Assets, team: number) {
+  constructor(private assets: Assets, team: number, knife: KnifeSkin = 'slipper') {
+    this.knifeSkin = knife;
     this.root.add(this.rig);
     this.rig.add(this.gun);
     for (const id of WEAPON_IDS) {
-      const model = assets.weapons.get(WEAPONS[id].model)!.clone();
-      model.rotation.y = -Math.PI / 2;
-      model.traverse(o => { const m = o as THREE.Mesh; if (m.isMesh) { m.castShadow = false; m.receiveShadow = false; m.frustumCulled = false; } });
-      model.visible = false;
-      this.gun.add(model);
-      this.models.set(id, model);
+      this.addModel(id);
     }
     for (const name of ['Gun_SMG_Ammo']) {
       const mag = assets.weapons.get(name)!.clone();
@@ -140,6 +156,25 @@ export class ViewModel {
     this.flash = makeFlash();
     this.gun.add(this.flash);
     this.setWeapon('mp5', {}, true);
+  }
+
+  private addModel(id: WeaponId) {
+    const model = this.assets.weapons.get(weaponModel(WEAPONS[id].model, this.knifeSkin))!.clone();
+    model.rotation.y = -Math.PI / 2;
+    model.traverse(o => { const m = o as THREE.Mesh; if (m.isMesh) { m.castShadow = false; m.receiveShadow = false; m.frustumCulled = false; } });
+    model.visible = false;
+    this.gun.add(model);
+    this.models.set(id, model);
+  }
+
+  /** Hold the knife slot as `skin` (shared/skins.ts): swaps its model in place. */
+  setKnifeSkin(skin: KnifeSkin) {
+    if (skin === this.knifeSkin) return;
+    this.knifeSkin = skin;
+    const old = this.models.get('knife')!, shown = old.visible;
+    old.removeFromParent();
+    this.addModel('knife');
+    if (this.current === 'knife') { this.models.get('knife')!.visible = shown; this.models.get('knife')!.add(this.fit.group); }
   }
 
   /** Show weapon `id` with its fitted attachments (rebuilt when they change). */
@@ -212,7 +247,8 @@ export class ViewModel {
     const adsPos = new THREE.Vector3(0, -(this.fit.sightLine - fit.grip[1]), adsZ);
     const pos = new THREE.Vector3().lerpVectors(hold.hip, adsPos, ads);
     let rx = 0.04 * (1 - ads), ry = 0.085 * (1 - ads), rz = 0.03 * (1 - ads);
-    if (knife && MEME_SKINS) { pos.set(SLIPPER_GUARD[0][0], SLIPPER_GUARD[0][1], SLIPPER_GUARD[0][2]); [rx, ry, rz] = SLIPPER_GUARD[1]; }
+    const motion = KNIFE_MOTION[this.knifeSkin];
+    if (knife && motion.guard) { pos.set(motion.guard[0][0], motion.guard[0][1], motion.guard[0][2]); [rx, ry, rz] = motion.guard[1]; }
     else if (knife) { rx = 0.35; ry = 0.25; rz = -0.35; }
     pos.x -= sprint * 0.02; pos.y -= sprint * 0.03; pos.z += sprint * 0.06;
     rx += sprint * -0.2; ry += sprint * 0.4; rz += sprint * 0.3;
@@ -222,8 +258,8 @@ export class ViewModel {
     pos.y -= p.landDip * 0.25;
     // ---- Knife slash: wind up, a fast diagonal cut across the screen, follow through; forehand and backhand alternate ----
     if (knife && this.slashT < 1) {
-      this.slashT = Math.min(1, this.slashT + dt / (MEME_SKINS ? 0.28 : 0.34));
-      const keys = MEME_SKINS ? SLAP : this.slashDir > 0 ? SLASH : BACKHAND, t = this.slashT;
+      this.slashT = Math.min(1, this.slashT + dt / motion.time);
+      const keys = motion.swing ?? (this.slashDir > 0 ? SLASH : BACKHAND), t = this.slashT;
       let i = 0;
       while (i < keys.length - 2 && t > keys[i + 1][0]) i++;
       const [t0, p0, r0] = keys[i], [t1, p1, r1] = keys[i + 1], k = ease(Math.min(1, (t - t0) / (t1 - t0)));
@@ -281,8 +317,9 @@ export class ViewModel {
     const gunFwd = new THREE.Vector3(0, 0, -1).transformDirection(gunMatrix);
     const gunUp = new THREE.Vector3(0, 1, 0).transformDirection(gunMatrix);
     const gunRight = new THREE.Vector3(1, 0, 0).transformDirection(gunMatrix);
-    // The knife leaves the support hand free: it hangs low, out of the way.
-    if (knife) foreW = new THREE.Vector3(-0.24, -0.52 + Math.sin(this.time * 1.6) * 0.004, -0.16);
+    // The knife leaves the support hand free: it hangs low, out of the way. The broom takes both hands, the left down by the butt.
+    const broom = knife && this.knifeSkin === 'broom' && p.windup <= 0 && p.slipperFollow <= 0;
+    if (knife) foreW = broom ? g([BROOM_CHOKE - 0.08, 0, 0]).applyMatrix4(gunMatrix) : new THREE.Vector3(-0.24, -0.52 + Math.sin(this.time * 1.6) * 0.004, -0.16);
     if (p.throwLeft > 0) foreW = new THREE.Vector3(-0.2, -0.08 + Math.sin(throwing * Math.PI) * 0.25, -0.3 - throwing * 0.25);
     if (knife) solveArm(bones, 'r', gripW.clone().addScaledVector(gunFwd, -0.07).addScaledVector(gunUp, -0.02).addScaledVector(gunRight, 0.02), new THREE.Vector3(0.6, -0.7, 0.2));
     else solveArm(bones, 'r', gripW.clone().addScaledVector(gunRight, 0.03).addScaledVector(gunUp, -0.02), new THREE.Vector3(0.6, -0.7, 0.2));
@@ -290,11 +327,12 @@ export class ViewModel {
     // A knife is held in a fist, wrist behind the handle; guns with the wrist under the grip.
     orientHand(bones, 'r', gunFwd.clone().addScaledVector(gunUp, knife ? -0.3 : -1.1).normalize(), gunRight.clone().negate());
     if (p.throwLeft > 0) orientHand(bones, 'l', new THREE.Vector3(0.2, 0.6, -1).normalize(), new THREE.Vector3(0.6, 0, -0.4));
+    else if (broom) orientHand(bones, 'l', gunFwd.clone().addScaledVector(gunUp, -0.3).normalize(), gunRight.clone());
     else if (knife) orientHand(bones, 'l', new THREE.Vector3(0.2, -0.6, -0.8).normalize(), new THREE.Vector3(1, 0, 0));
     else if (pistol && !leftTarget) orientHand(bones, 'l', gunFwd.clone().addScaledVector(gunUp, -0.9).normalize(), gunRight);
     else orientHand(bones, 'l', gunFwd.clone().addScaledVector(gunRight, 0.5).addScaledVector(gunUp, 0.3).normalize(), gunUp.clone().add(gunRight).normalize());
     curlFingers(bones, 'r', knife ? 0.9 : 0.62, 0.55);
-    curlFingers(bones, 'l', leftTarget ? 0.75 : knife ? 0.3 : 0.62, 0.45);
+    curlFingers(bones, 'l', leftTarget || broom ? 0.75 : knife ? 0.3 : 0.62, 0.45);
 
     // ---- Held objects ----
     const lh = bones.get('hand_l')!;
