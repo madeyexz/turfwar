@@ -1,5 +1,6 @@
 import { CollisionWorld } from '../../shared/collision';
 import { clamp, dirFromAngles, type Vec3 } from '../../shared/math';
+import { PEEK, easePeek, peekOver, peekShift, peekSide, type PeekSide } from '../../shared/peek';
 import { MOVE, createMoveState, eyeHeight, isSprinting, stepMovement, type MoveEvents, type MoveInput, type MoveState } from '../../shared/movement';
 import type { Obstacle } from '../../shared/obstacles';
 import type { Soldier } from '../../shared/match/state';
@@ -86,6 +87,9 @@ export class LocalPlayer {
   stamina: number = STAMINA.max;
   /** Binoculars up (Z): 10× zoom, no weapon. */
   binoculars = false;
+  /** Auto-peek: the lean as rendered (-1 left .. 1 right) and the side it eases toward (shared/peek.ts). */
+  lean = 0;
+  peekSide: PeekSide = 0;
   alive = false;
   sprinting = false;
   private sprintBlock = 0;
@@ -144,7 +148,7 @@ export class LocalPlayer {
     this.yaw = s.yaw; this.pitch = 0; this.team = s.team; this.slot = 0; this.lastSlot = 1;
     this.weapons = [...s.weapons]; this.attachments = structuredClone(s.attachments); this.reserve = [...s.reserve];
     this.ammo = [this.statsOf(0).magazine, this.statsOf(1).magazine];
-    this.reloadLeft = 0; this.switchLeft = this.statsOf(0).equipTime; this.fireCooldown = 0; this.bloom = 0; this.ads = 0;
+    this.reloadLeft = 0; this.switchLeft = this.statsOf(0).equipTime; this.fireCooldown = 0; this.bloom = 0; this.ads = 0; this.lean = 0; this.peekSide = 0;
     this.grenades = s.grenades; this.smokes = s.smokes; this.bobas = s.bobas; this.drinkLeft = 0; this.slippers = s.slippers ?? 1; this.slipperCharge = -1; this.slipperFollow = 0; this.health = s.health; this.alive = true; this.recoilDebt = 0; this.accumulator = 0;
     this.stamina = STAMINA.max; this.binoculars = false; this.zoomLevel = 0;
   }
@@ -212,7 +216,10 @@ export class LocalPlayer {
     };
   }
 
-  eye(): Vec3 { const p = this.renderPos(); return { x: p.x, y: p.y + eyeHeight(p) + this.stepOffset - this.landDip, z: p.z }; }
+  eye(): Vec3 {
+    const p = this.renderPos(), shift = peekShift(this.yaw, this.lean);
+    return { x: p.x + shift.x, y: p.y + eyeHeight(p) + this.stepOffset - this.landDip - Math.abs(this.lean) * PEEK.drop, z: p.z + shift.z };
+  }
   aimDir(): Vec3 { return dirFromAngles(this.yaw, this.pitch); }
 
   /** `obstacles`: the vehicles' bodies as we see them (they block, carry us on their roofs and push us aside). */
@@ -256,7 +263,8 @@ export class LocalPlayer {
       // Keys are all or nothing; the touch stick walks at any speed up to a run.
       forward: input!.amount('forward') - input!.amount('back'),
       strafe: input!.amount('right') - input!.amount('left'),
-      yaw: this.yaw, jump: jumpKey, crouch: input!.down('crouch'),
+      // Aiming crouched behind low cover stands you up over it (auto-peek).
+      yaw: this.yaw, jump: jumpKey, crouch: input!.down('crouch') && !(this.ads > 0.5 && !this.riding && peekOver(world, this.m.x, this.m.y, this.m.z, this.yaw, this.team)),
       sprint: sprintKey && canSprint && this.sprintBlock <= 0,
       ads: (input!.aim && w.class !== 'melee' && this.reloadLeft <= 0 && this.switchLeft < 0.1 && !this.rider) || this.binoculars,
       speed: w.speed * (this.tired ? 0.8 : 1) * (this.slipperCharge >= 0 ? 0.75 : 1),
@@ -282,6 +290,11 @@ export class LocalPlayer {
     const adsTarget = moveInput.ads && !this.sprinting && this.alive ? 1 : 0;
     this.ads = clamp(this.ads + Math.sign(adsTarget - this.ads) * dt / w.adsTime, 0, 1);
     if (this.ads < 0.3) this.zoomLevel = 0;
+    // Auto-peek: aiming with cover right in front leans out past its edge. The server judges the
+    // same lean from the pose we report (ads above 0.5), so the head we lean out is where we are hit.
+    const aiming = this.alive && !this.riding && this.ads > 0.5;
+    this.peekSide = aiming ? peekSide(world, this.m.x, this.m.y, this.m.z, this.m.crouch, this.yaw, this.team, this.peekSide) : 0;
+    this.lean = easePeek(this.lean, this.peekSide, dt);
 
     // ---- Weapon actions ----
     if (can) {

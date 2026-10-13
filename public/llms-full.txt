@@ -49,7 +49,7 @@ Starting money $1,000 per match; maximum $16,000. Kill $500 (knife kill $600, gr
 - Knife (free, always carried): 33 anywhere at about 2 m; by default shown as a blue-and-white slipper (藍白拖, a National Day reskin that changes looks, name and sound only). With the slipper in hand, holding aim winds up a throw (飛拖) of up to 0.8 s; only a full wind-up kills outright.
 - M67 grenade ($1,000): 70 damage with falloff, 2.1 s fuse. M18 smoke ($300): a 9 m cloud for 15 s that blocks sight, not bullets (not in BeGone). 珍奶 bubble tea ($400): a 1.4 s sip, then +50 health up to 100 (not in BeGone).
 - Attachments (one per category per weapon, kept for the match): optics Iron Sight (free), Reflex $800, Holographic $1,000, ACOG $1,100, Zoom x4 $600 (M9A1 only), Zoom x6 $1,200 (M110 only); tactical Ammo Counter $200, Laser Sight $800, Flashlight $600, Suppressor from $600 to $1,100; mods Extended Clip $900, Recoil Pad $1,200; ammo Explosive $1,600, Incendiary $1,400.
-- Gunplay is hitscan with per-weapon fire rate, magazine, reload, recoil, zoom and move speed. Right mouse button zooms through the fitted optic; Z raises binoculars (10× zoom).
+- Gunplay is hitscan with per-weapon fire rate, magazine, reload, recoil, zoom and move speed. Right mouse button zooms through the fitted optic; Z raises binoculars (10× zoom). Auto-peek: aiming right behind cover leans you out past its edge, and aiming crouched behind low cover stands you up over it, with no extra key.
 
 ## Maps (13 offered)
 

@@ -1,4 +1,5 @@
 import { rayCapsule, raySphere, type Vec3 } from './math';
+import { PEEK, peekShift } from './peek';
 import type { HitZone } from './weapons';
 
 /**
@@ -7,13 +8,15 @@ import type { HitZone } from './weapons';
  */
 export interface HitShape { head: Vec3; headR: number; chestTop: Vec3; chestBottom: Vec3; chestR: number; hip: Vec3; foot: Vec3; legR: number }
 
-export function hitShape(feet: Vec3, crouch: number, yaw: number): HitShape {
+/** `peek`: auto-peek lean, -1 (left) to 1 (right): the head and chest top lean out sideways (peek.ts). */
+export function hitShape(feet: Vec3, crouch: number, yaw: number, peek = 0): HitShape {
   const s = 1 - 0.34 * crouch;
   // Crouching soldiers lean forward slightly; shift upper volumes along the facing direction.
   const lean = 0.12 * crouch, fx = -Math.sin(yaw) * lean, fz = -Math.cos(yaw) * lean;
+  const side = peekShift(yaw, peek), drop = Math.abs(peek) * PEEK.drop;
   return {
-    head: { x: feet.x + fx * 1.4, y: feet.y + 1.66 * s, z: feet.z + fz * 1.4 }, headR: 0.17,
-    chestTop: { x: feet.x + fx, y: feet.y + 1.42 * s, z: feet.z + fz }, chestBottom: { x: feet.x, y: feet.y + 0.98 * s, z: feet.z }, chestR: 0.27,
+    head: { x: feet.x + fx * 1.4 + side.x, y: feet.y + 1.66 * s - drop, z: feet.z + fz * 1.4 + side.z }, headR: 0.17,
+    chestTop: { x: feet.x + fx + side.x * PEEK.chest, y: feet.y + 1.42 * s - drop, z: feet.z + fz + side.z * PEEK.chest }, chestBottom: { x: feet.x, y: feet.y + 0.98 * s, z: feet.z }, chestR: 0.27,
     hip: { x: feet.x, y: feet.y + 0.9 * s, z: feet.z }, foot: { x: feet.x, y: feet.y + 0.12, z: feet.z }, legR: 0.2,
   };
 }

@@ -1,4 +1,4 @@
-import { hitShape } from '../hitbox';
+import type { hitShape } from '../hitbox';
 import { STEP_HEIGHT } from '../collision';
 import { loadMap, loadNav } from '../maps/index';
 import type { MapDef } from '../maps/types';
@@ -11,7 +11,7 @@ import {
   CASH, award, botShop, buy, buyAttachment, finishReload, newRoundStats, refillAmmo, resetInventory, statsOf, useCrate, type BuyItem,
 } from './economy';
 import {
-  MOVE_SLACK, TICK_RATE, applyDamage, crewTeam, explode, eyeOf, feetOf, killSoldier, onSite, pickUpSlippers, popSmoke, resolvePellets, resolveShot, seatOf, shieldedIds, sideOf, slipperStrike, spawnSoldier, throwSmokeFrom,
+  MOVE_SLACK, TICK_RATE, applyDamage, shapeOf, crewTeam, explode, eyeOf, feetOf, killSoldier, onSite, pickUpSlippers, popSmoke, resolvePellets, resolveShot, seatOf, shieldedIds, sideOf, slipperStrike, spawnSoldier, throwSmokeFrom,
   throwGrenadeFrom, throwSlipperFrom, traceShot, weaponOf, type SimContext, type TraceResult,
 } from './combat';
 import { ATTACKERS, targetVehicle, type ClientReport, type MatchConfig, type MatchEvent, type MatchState, type RoundEnd, type ShotClaim, type Soldier, type Team } from './state';
@@ -251,7 +251,7 @@ export function fireShot(state: MatchState, ctx: SimContext, id: number, claim: 
   // A soldier inside a car or the helicopter cannot be hit directly: the body takes those shots.
   if (target && target.alive && target.team !== s.team && claim.zone && !shieldedIds(state).has(target.id)) {
     const distance = dist3(origin, claim.point);
-    const shape = hitShape(feetOf(target), target.m.crouch, target.yaw);
+    const shape = shapeOf(ctx, target);
     const nearest = Math.min(
       segmentPointDistance(claim.point, shape.chestBottom, shape.chestTop).distance,
       segmentPointDistance(claim.point, shape.foot, shape.hip).distance,

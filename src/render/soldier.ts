@@ -209,6 +209,8 @@ export interface SoldierPose {
   using?: boolean;
   /** Riding a scooter: the hips and legs face the bike's heading (yaw) while the torso turns to the aim. */
   hips?: number;
+  /** Auto-peek lean, -1 (left) to 1 (right): the torso tilts out sideways (shared/peek.ts). */
+  peek?: number;
 }
 
 type ClipName = 'idle' | 'walk' | 'jog' | 'sprint' | 'crouchIdle' | 'crouchWalk' | 'air' | 'slide' | 'death';
@@ -469,6 +471,14 @@ export class SoldierView {
     if (p.hips !== undefined) rotateWorld(this.bones.get('neck_01')!, up, riderTwist(p.yaw, p.hips));
     const right = v3.set(Math.cos(p.yaw), 0, -Math.sin(p.yaw));
     if (squat > 0.01) rotateWorld(spine1, right, -0.25 * squat);
+    // Auto-peek: tilt the spine out about the facing axis (the head ends near the hit volume's
+    // PEEK.offset); the neck takes back some of it so the eyes stay level-ish.
+    const peek = p.peek ?? 0;
+    if (Math.abs(peek) > 0.01) {
+      const facing = v4.set(-sin, 0, -cos);
+      rotateWorld(spine1, facing, peek * 0.2); rotateWorld(spine2, facing, peek * 0.2); rotateWorld(spine3, facing, peek * 0.16);
+      rotateWorld(this.bones.get('neck_01')!, facing, -peek * 0.3);
+    }
     const fit = GUN_FIT[p.weapon];
     const pistol = fit.kind !== 'long';
     if (using) {
