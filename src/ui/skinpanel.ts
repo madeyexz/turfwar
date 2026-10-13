@@ -66,13 +66,7 @@ export class SkinPanel {
     this.returnFocus = document.activeElement as HTMLElement | null;
     this.root.hidden = false;
     this.refresh();
-    const canvas = this.root.querySelector<HTMLCanvasElement>('canvas')!;
-    if (!this.renderer) {
-      this.renderer = new THREE.WebGLRenderer({ canvas, antialias: true });
-      this.renderer.toneMapping = THREE.ACESFilmicToneMapping;
-      this.renderer.outputColorSpace = THREE.SRGBColorSpace;
-      this.scene.environment = new THREE.PMREMGenerator(this.renderer).fromScene(new RoomEnvironment(), 0.04).texture;
-    }
+    this.attach();
     this.last = performance.now();
     const loop = () => { if (this.open) { this.render(); this.frame = requestAnimationFrame(loop); } };
     this.frame = requestAnimationFrame(loop);
@@ -85,13 +79,39 @@ export class SkinPanel {
     cancelAnimationFrame(this.frame);
     for (const v of this.views) { v.dispose(); v.gun.removeFromParent(); }
     this.views = []; this.shown = '';
-    this.scene.environment?.dispose(); this.scene.environment = null;
-    this.renderer?.dispose(); this.renderer?.forceContextLoss(); this.renderer = undefined;
+    this.release();
     this.returnFocus?.focus({ preventScroll: true });
     this.onClose?.();
   }
 
+  /** A renderer on the dialog's canvas (made on opening). */
+  private attach() {
+    if (this.renderer) return;
+    const canvas = this.root.querySelector<HTMLCanvasElement>('canvas')!;
+    this.renderer = new THREE.WebGLRenderer({ canvas, antialias: true });
+    this.renderer.toneMapping = THREE.ACESFilmicToneMapping;
+    this.renderer.outputColorSpace = THREE.SRGBColorSpace;
+    this.scene.environment = new THREE.PMREMGenerator(this.renderer).fromScene(new RoomEnvironment(), 0.04).texture;
+  }
+
+  /**
+   * Give the GPU context back. A canvas whose context was lost cannot get a new one (the browser draws
+   * its broken-graphics mark there instead), so the next opening draws on a fresh canvas.
+   */
+  private release() {
+    const renderer = this.renderer;
+    if (!renderer) return;
+    this.renderer = undefined;
+    this.scene.environment?.dispose(); this.scene.environment = null;
+    renderer.dispose(); renderer.forceContextLoss();
+    const canvas = renderer.domElement;
+    if (canvas.isConnected) canvas.replaceWith(document.createElement('canvas'));
+  }
+
   private build() {
+    // A new language rebuilds the markup, canvas included: an open preview moves to the new canvas.
+    const live = this.open;
+    this.release();
     const knives = KNIFE_SKINS.map(k => `<button type="button" class="knife-pick" data-knife="${k}"><i class="mark ${k}"></i><b>${escapeHtml(knifeName(k))}</b><small>${escapeHtml(t(`skin.k.${k}Sub`))}</small></button>`).join('');
     const looks = LOOKS.map(l => `<button type="button" data-look="${l}">${escapeHtml(lookName(l))}</button>`).join('');
     this.root.innerHTML = `
@@ -113,6 +133,7 @@ export class SkinPanel {
           </div>
         </div>
       </div>`;
+    if (live) this.attach();
   }
 
   private refresh() {
