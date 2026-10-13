@@ -20,7 +20,7 @@ import { onlineAvailable, connectOnline, watchRooms, ConnectError, OnlineLink, t
 import { PING_WINDOW, PingMonitor, hostAnswers, pingAllowed, pingTone, pingUrl, serverHost, serverRegion } from './net/ping';
 import { currentServer, gameServerList, onServer, type GameServer, type ServerId } from './net/servers';
 import { ConnectDriver, connectSeconds, type ConnectState } from './net/connect';
-import { matchJoined, matchLeft, matchNote, setSuper, startAnalytics, track, type PlayKind, type Exit, type Reason } from './analytics';
+import { benchFinished, matchJoined, matchLeft, matchNote, setSuper, startAnalytics, track, type PlayKind, type Exit, type Reason } from './analytics';
 import { frameTook, lobbyReady, matchFrameStats, matchStarted, noteArrival, playFailed, playPressed } from './growth';
 import { LevelView } from './render/level';
 import { THEMES } from './render/materials';
@@ -1361,7 +1361,9 @@ async function rejoinAfterDrop(old: OnlineLink) {
 function leftMatch(reason: Reason, exit?: Exit) {
   const link = game?.link, me = link?.state()?.soldiers.find(s => s.id === link.myId());
   // Online: the match's connection quality, and its last report to the server.
-  matchLeft(reason, { kills: me?.kills ?? 0, deaths: me?.deaths ?? 0 }, link instanceof OnlineLink ? link.netLeft() : undefined, exit, matchFrameStats());
+  matchLeft(reason, { kills: me?.kills ?? 0, deaths: me?.deaths ?? 0 }, link instanceof OnlineLink ? link.netLeft() : undefined, exit, matchFrameStats(), renderer && {
+    gpu: renderer.gpuName(), quality, pixel_ratio: renderer.pixelRatio(), dpr_scale: renderer.quality.adaptive ? Math.round(renderer.adaptive.multiplier * 100) / 100 : 1,
+  });
 }
 // Closing the tab mid-match: match_left goes out by beacon.
 addEventListener('pagehide', () => leftMatch('close', 'close'));
@@ -1447,7 +1449,7 @@ function startBench(g: Game) {
   benchBanner = document.createElement('div');
   benchBanner.className = 'bench-banner';
   app.appendChild(benchBanner);
-  bench.onDone = result => { benchBanner?.remove(); showBenchResult(result); };
+  bench.onDone = result => { benchBanner?.remove(); showBenchResult(result); benchFinished(result); };
 }
 
 let benchPanel: HTMLElement | undefined;

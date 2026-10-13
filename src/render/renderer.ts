@@ -107,6 +107,7 @@ export class Renderer {
   private qualityListeners = new Set<(q: Quality) => void>();
   private frames = 0;
   private lastFrameAt = 0;
+  private gpu?: string;
   quality: Quality;
 
   constructor(container: HTMLElement, quality: Quality) {
@@ -214,6 +215,17 @@ export class Renderer {
     vmSun.color.copy(theme.sunColor); vmSun.intensity = theme.sunIntensity * 0.7; vmSun.position.copy(dir);
     const vmHemi = this.viewScene.getObjectByName('vmHemi') as THREE.HemisphereLight;
     vmHemi.color.copy(theme.hemiSky); vmHemi.groundColor.copy(theme.hemiGround); vmHemi.intensity = theme.hemiIntensity;
+  }
+
+  /** The graphics card as WebGL names it (the unmasked renderer where the browser allows), at most 160 characters. */
+  gpuName(): string {
+    if (this.gpu === undefined) {
+      try {
+        const gl = this.renderer.getContext(), ext = gl.getExtension('WEBGL_debug_renderer_info');
+        this.gpu = String(gl.getParameter(ext ? ext.UNMASKED_RENDERER_WEBGL : gl.RENDERER) ?? '').slice(0, 160);
+      } catch { this.gpu = ''; }
+    }
+    return this.gpu;
   }
 
   /** The pixel ratio drawn at: the preset's cap for this screen, times the adaptive scale. */
