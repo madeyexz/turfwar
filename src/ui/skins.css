@@ -17,9 +17,21 @@
 .skins .mark.slipper { background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='8 2 32 16'%3E%3Cpath d='M10 10c0-4.5 3-6.5 8-6.5h11c5.5 0 9.5 2.6 9.5 6.5s-4 6.5-9.5 6.5H18c-5 0-8-2-8-6.5z' fill='%23f4f6f4' stroke='%231f5bd1' stroke-width='1.6'/%3E%3Cpath d='M26 3.6c1.6 2 1.6 10.8 0 12.8M30.5 3.8c1.6 2 1.6 10.4 0 12.4' stroke='%232f6fe0' stroke-width='3.2' fill='none' stroke-linecap='round'/%3E%3C/svg%3E"); }
 .skins .mark.broom { background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='6 0 34 20'%3E%3Cpath d='M7 10h17' stroke='%23d23a3c' stroke-width='2.6' stroke-linecap='round'/%3E%3Cpath d='M23 7.5h3v5h-3z' fill='%233df03a'/%3E%3Cpath d='M26 3h3v14h-3z' fill='%2346f53f'/%3E%3Cpath d='M29 4l9-3M29 6.5l10-1.5M29 9l10 0M29 11.5l10 1.5M29 14l9 3M29 16l7 4' stroke='%23d8306f' stroke-width='1.1'/%3E%3Cpath d='M29 8l9-.5M29 10.5l9 1' stroke='%234fb83a' stroke-width='1.1'/%3E%3C/svg%3E"); }
 .skins .mark.knife { background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 40 20'%3E%3Cpath d='M4 11h11v-2.4H4z' fill='%233a3d33'/%3E%3Cpath d='M15 8.2h3v4h-3z' fill='%23222'/%3E%3Cpath d='M18 8.6h14l5 1.6-5 1.8H18z' fill='%23c9ced3'/%3E%3C/svg%3E"); }
-.skins .looks button { flex: 1 1 auto; }
 .skins .done { margin-top: auto; padding: 11px; font-size: 16px; font-weight: 700; letter-spacing: 0.3em; color: #031013; background: var(--accent); border: 0; }
-@media (max-width: 640px), (max-height: 520px) and (orientation: landscape) {
-  .skins { grid-template-columns: 1fr; }
-  .skins .stage { min-height: 220px; border-right: 0; border-bottom: 1px solid rgba(190, 236, 244, 0.12); }
-}
+.skins .looks { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); }
+.skins .looks button { justify-content: center; min-height: 36px; }
+/* Phones: upright, the preview sits above the choices (no tabs here, so the title stays); sideways, side by side, tighter. */
+:where(.view-narrow) .lb-settings.lobby.skins-dialog h2 { display: block; padding-bottom: 12px; }
+:where(.view-narrow) .lb-settings.lobby.skins-dialog .panel { height: auto; max-height: calc(100 * var(--vh) - 32px); }
+:where(.view-narrow) .skins { grid-template-columns: 1fr; }
+:where(.view-narrow) .skins .stage { min-height: 230px; border-right: 0; border-bottom: 1px solid rgba(190, 236, 244, 0.12); }
+:where(.view-narrow) .skins .picks { padding: 14px 16px 16px; }
+:where(.view-short) .lb-settings.lobby.skins-dialog .panel { height: calc(100 * var(--vh) - 16px - var(--safe-t) - var(--safe-b)); max-height: none; }
+:where(.view-short) .skins { flex: 1 1 auto; min-height: 0; }
+:where(.view-short) .skins .stage { min-height: 0; }
+:where(.view-short) .skins .picks { gap: 6px; padding: 10px 14px 12px; overflow-y: auto; }
+:where(.view-short) .skins h3 { margin: 0; font-size: 12px; }
+:where(.view-short) .skins .knife-pick { padding: 6px 4px; gap: 2px; }
+:where(.view-short) .skins .knife-pick small, :where(.view-short) .skins .row-note { display: none; }
+:where(.view-short) .skins .mark { height: 22px; }
+:where(.view-short) .skins .done { min-height: 44px; padding: 0; }

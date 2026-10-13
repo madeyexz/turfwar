@@ -352,7 +352,7 @@ const en = {
   'skin.title': 'Skins', 'skin.open': 'Skins', 'skin.knife': 'Melee', 'skin.look': 'Militia character', 'skin.cosmetic': 'Looks only: the stats, the strike and the throw stay the knife\'s. Everyone sees your pick online.',
   'skin.lookNote': 'SWAT keep their one operator so the sides stay easy to tell apart.', 'skin.done': 'Done',
   'skin.k.slipper': 'Slipper', 'skin.k.broom': 'Broom', 'skin.k.knife': 'Knife',
-  'skin.k.slipperSub': 'Blue and white, the classic', 'skin.k.broomSub': 'Plastic broom, bristles splayed', 'skin.k.knifeSub': 'Combat knife',
+  'skin.k.slipperSub': 'Blue and white, the classic', 'skin.k.broomSub': 'Plastic, splayed bristles', 'skin.k.knifeSub': 'Combat knife',
   'skin.l.auto': 'Rotate', 'skin.l.farmer': 'Farmer', 'skin.l.punk': 'Punk', 'skin.l.worker': 'Worker', 'skin.l.adventurer': 'Adventurer', 'skin.l.casual': 'Casual', 'skin.l.hoodie': 'Hoodie',
   'store.heals': 'Heals', 'store.sip': 'Sip', 'store.bobaNote': 'Drink one when hurt: +{heal} health. You can’t shoot while you sip. {key}', 'store.carryCup': 'One at a time',
 } as const;
@@ -675,7 +675,7 @@ const zhTW: Record<Key, string> = {
   'skin.title': '外觀', 'skin.open': '外觀', 'skin.knife': '近戰', 'skin.look': '民兵角色', 'skin.cosmetic': '只換外觀：數值、揮擊跟丟擲都跟刀一樣。連線時大家都看得到。',
   'skin.lookNote': 'SWAT 維持同一套裝備，敵我才好分。', 'skin.done': '完成',
   'skin.k.slipper': '藍白拖', 'skin.k.broom': '掃把', 'skin.k.knife': '刀',
-  'skin.k.slipperSub': '經典藍白', 'skin.k.broomSub': '塑膠掃把，刷毛開叉', 'skin.k.knifeSub': '軍刀',
+  'skin.k.slipperSub': '經典藍白', 'skin.k.broomSub': '塑膠的，開叉了', 'skin.k.knifeSub': '軍刀',
   'skin.l.auto': '輪流', 'skin.l.farmer': '農夫', 'skin.l.punk': '龐克', 'skin.l.worker': '工人', 'skin.l.adventurer': '冒險家', 'skin.l.casual': '路人', 'skin.l.hoodie': '帽T',
   'store.heals': '回血', 'store.sip': '喝的時間', 'store.bobaNote': '受傷時喝一杯：+{heal} 血，喝的時候不能開槍。{key}', 'store.carryCup': '一次 1 杯',
 };
