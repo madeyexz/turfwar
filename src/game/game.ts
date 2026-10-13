@@ -1280,8 +1280,10 @@ export class Game {
       case 'slipper': {
         const at = new THREE.Vector3(e.x, e.y, e.z);
         if (e.action === 'pickup') { if (e.id === myId) { this.hud.toast(t('hud.slipperBack'), 1500); this.audio.ui(); } break; }
-        // A hit names its victim: the thrower is the owner of the slipper body that struck there.
-        const owner = e.action === 'hit' ? state.bodies.find(b => b.kind === 'slipper' && Math.hypot(b.x - e.x, b.z - e.z) < 2)?.owner : e.id;
+        // The new thrown body arrives with this event: note whose it is (online frames do not say).
+        if (e.action === 'throw') this.bodies.noteThrow(e.id, e);
+        // A hit names its victim: the thrower is whoever threw the slipper that struck there.
+        const owner = e.action === 'hit' ? this.bodies.throwerNear(e.x, e.z) : e.id;
         const thrower = owner === undefined ? undefined : find(owner), knife = thrower && skinOf(thrower).knife;
         if (e.action === 'hit') { this.audio.slipper('hit', this.listener(), at, knife); this.effects.hitSpark(at, false); break; }
         if (e.id !== myId) { this.remotes.get(e.id)?.view.shoot(); this.audio.slipper('throw', this.listener(), at, knife); }
