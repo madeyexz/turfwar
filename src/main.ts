@@ -20,7 +20,7 @@ import { onlineAvailable, connectOnline, watchRooms, ConnectError, OnlineLink, t
 import { PING_WINDOW, PingMonitor, hostAnswers, pingAllowed, pingTone, pingUrl, serverHost, serverRegion } from './net/ping';
 import { currentServer, gameServerList, onServer, type GameServer, type ServerId } from './net/servers';
 import { ConnectDriver, connectSeconds, type ConnectState } from './net/connect';
-import { matchJoined, matchLeft, matchNote, setSuper, startAnalytics, track, type PlayKind, type Exit, type Reason } from './analytics';
+import { benchFinished, matchJoined, matchLeft, matchNote, setSuper, startAnalytics, track, type PlayKind, type Exit, type Reason } from './analytics';
 import { frameTook, lobbyReady, matchFrameStats, matchStarted, noteArrival, playFailed, playPressed } from './growth';
 import { LevelView } from './render/level';
 import { THEMES } from './render/materials';
@@ -1449,7 +1449,7 @@ function startBench(g: Game) {
   benchBanner = document.createElement('div');
   benchBanner.className = 'bench-banner';
   app.appendChild(benchBanner);
-  bench.onDone = result => { benchBanner?.remove(); showBenchResult(result); };
+  bench.onDone = result => { benchBanner?.remove(); showBenchResult(result); benchFinished(result); };
 }
 
 let benchPanel: HTMLElement | undefined;
