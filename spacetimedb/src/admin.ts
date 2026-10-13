@@ -46,6 +46,109 @@ export function taipeiPlayStore<K>(base: PlayStore<K>, sink: TaipeiPlaySink<K>, 
   };
 }
 
+/** A `player_hour` row (identity hex): presence, play seconds and folded net reports in one UTC hour. */
+export interface HourRecord { id: string; hour: number; seconds: number; reports: number; netSeconds: number; p50Sum: number; p95Sum: number; corrections: number }
+export interface TaipeiRebuild {
+  /** First Taipei day rebuilt wholly from hourly records (undefined: no hourly records). */
+  exactFrom: number | undefined;
+  /** First Taipei day estimated from UTC-day records (undefined: nothing before `exactFrom`). */
+  estimatedFrom: number | undefined;
+  active: Map<string, { id: string; day: number }>;
+  time: Map<string, { id: string; day: number; seconds: number }>;
+  net: Map<string, NetDay & { id: string; day: number }>;
+}
+
+/**
+ * Taipei days from the records kept before Taipei collection began. Taipei is a whole-hour offset,
+ * so every Taipei day whose hours are all in `player_hour` is exact. Earlier days only have UTC-day
+ * rows: UTC day U is hours 0–15 of Taipei day U and 16–23 of Taipei day U + 1. A row whose late hours
+ * are hourly-covered keeps only what those hours do not explain; otherwise it lands on U (most of its
+ * hours), or the true Taipei day of the player's firstSeen when that falls inside it.
+ */
+export function rebuildTaipeiDays(src: {
+  hours: HourRecord[];
+  days: { id: string; day: number }[];
+  time: { id: string; day: number; seconds: number }[];
+  net: (NetDay & { id: string; day: number })[];
+  /** Epoch microseconds per identity hex. */
+  firstSeen: Map<string, bigint>;
+}): TaipeiRebuild {
+  const out: TaipeiRebuild = { exactFrom: undefined, estimatedFrom: undefined, active: new Map(), time: new Map(), net: new Map() };
+  let minHour = Infinity;
+  for (const h of src.hours) minHour = Math.min(minHour, h.hour);
+  const exactFrom = minHour === Infinity ? Infinity : Math.ceil((minHour + 8) / 24);
+  const firstHour = exactFrom * 24 - 8; // UTC hour where `exactFrom` begins
+  out.exactFrom = exactFrom === Infinity ? undefined : exactFrom;
+
+  const mark = (id: string, day: number) => {
+    out.active.set(`${id}:${day}`, { id, day });
+    if (day < exactFrom) out.estimatedFrom = Math.min(out.estimatedFrom ?? day, day);
+  };
+  const addTime = (id: string, day: number, seconds: number) => {
+    if (seconds <= 0) return;
+    const key = `${id}:${day}`, r = out.time.get(key);
+    out.time.set(key, { id, day, seconds: (r?.seconds ?? 0) + seconds });
+  };
+  const addNet = (id: string, day: number, n: NetDay) => {
+    if (n.reports <= 0) return;
+    const key = `${id}:${day}`, r = out.net.get(key);
+    out.net.set(key, {
+      id, day, reports: (r?.reports ?? 0) + n.reports, seconds: (r?.seconds ?? 0) + n.seconds,
+      p50Sum: (r?.p50Sum ?? 0) + n.p50Sum, p95Sum: (r?.p95Sum ?? 0) + n.p95Sum, corrections: (r?.corrections ?? 0) + n.corrections,
+    });
+  };
+
+  // Exact days, and what the hourly records explain of the UTC day that straddles `exactFrom`.
+  const late = new Map<string, { seconds: number; net: NetDay }>();
+  for (const h of src.hours) {
+    if (h.hour < firstHour) continue;
+    const day = taipeiDayOfHour(h.hour), net = { reports: h.reports, seconds: h.netSeconds, p50Sum: h.p50Sum, p95Sum: h.p95Sum, corrections: h.corrections };
+    mark(h.id, day);
+    addTime(h.id, day, h.seconds);
+    addNet(h.id, day, net);
+    if (h.hour < firstHour + 8) {
+      const key = h.id, r = late.get(key) ?? { seconds: 0, net: { reports: 0, seconds: 0, p50Sum: 0, p95Sum: 0, corrections: 0 } };
+      r.seconds += h.seconds;
+      r.net = { reports: r.net.reports + h.reports, seconds: r.net.seconds + h.netSeconds, p50Sum: r.net.p50Sum + h.p50Sum, p95Sum: r.net.p95Sum + h.p95Sum, corrections: r.net.corrections + h.corrections };
+      late.set(key, r);
+    }
+  }
+
+  // Estimated days from UTC rows. `straddle` is the UTC day whose last 8 hours open `exactFrom`.
+  const straddle = exactFrom - 1;
+  const seenDay = (id: string, u: number) => {
+    const at = src.firstSeen.get(id);
+    if (at === undefined) return undefined;
+    const ms = Number(at / 1000n);
+    return Math.floor(ms / 86_400_000) === u ? taipeiDay(ms) : undefined;
+  };
+  const target = (id: string, u: number) => seenDay(id, u) ?? u;
+  const timeOf = new Map(src.time.map(r => [`${r.id}:${r.day}`, r.seconds]));
+  const netOf = new Map(src.net.map(r => [`${r.id}:${r.day}`, r]));
+  for (const { id, day: u } of src.days) {
+    if (u > straddle) continue;
+    let seconds = timeOf.get(`${id}:${u}`) ?? 0, net: NetDay | undefined = netOf.get(`${id}:${u}`);
+    let day = target(id, u);
+    if (u === straddle) {
+      const l = late.get(id);
+      if (l) {
+        seconds = Math.max(0, seconds - l.seconds);
+        net = net && net.reports > l.net.reports ? {
+          reports: net.reports - l.net.reports, seconds: Math.max(0, net.seconds - l.net.seconds), p50Sum: Math.max(0, net.p50Sum - l.net.p50Sum),
+          p95Sum: Math.max(0, net.p95Sum - l.net.p95Sum), corrections: Math.max(0, net.corrections - l.net.corrections),
+        } : undefined;
+        // Active in the early hours only with evidence: time or reports the late hours do not explain, or first seen then.
+        if (seconds <= 0 && !net && seenDay(id, u) !== u) continue;
+      }
+      day = u; // The late hours belong to `exactFrom`, already exact.
+    }
+    mark(id, day);
+    addTime(id, day, seconds);
+    if (net) addNet(id, day, net);
+  }
+  return out;
+}
+
 /**
  * The owner's admin dashboard (`/admin`), checked inside the module: no owner token anywhere.
  * The owner holds a secret admin key; only its SHA-256 lives here. `admin_login(key)` hashes the
