@@ -7,7 +7,7 @@ import { InterpBuffer } from './interp';
 interface View {
   object: THREE.Object3D; buffer: InterpBuffer<{ x: number; y: number; z: number }>; trail: Trail; light?: THREE.Mesh; seen: number;
   /** A thrown 藍白拖: its model spins inside `object`; once it lies still, `ring` marks it for picking up. */
-  slipper?: { spin: THREE.Object3D; ring: THREE.Mesh; still: number; last: THREE.Vector3 };
+  slipper?: { spin: THREE.Object3D; ring: THREE.Mesh; still: number; last: THREE.Vector3; owner: number; born: number };
 }
 
 /** Fading trail of recent positions, so a thrown grenade reads in flight. */
@@ -38,6 +38,27 @@ class Trail {
 }
 
 /**
+ * Which recent throw (index into `throws`, or -1) a thrown slipper with no owner came from. Online frames
+ * leave the owner out, and a client may first see the body well down its path (the throw event and the
+ * body arrive together, but a slow frame rate draws it late): the throw whose spot lies behind the body
+ * on its line of flight, closest to that line; failing that (it bounced off a wall, or lies still), the
+ * nearest throw. Within 40 m either way.
+ */
+export function throwOwner(b: Pick<Body, 'x' | 'z' | 'vx' | 'vz'>, throws: readonly { x: number; z: number }[]) {
+  const speed = Math.hypot(b.vx, b.vz);
+  let best = -1, bestMiss = 2, near = -1, nearD = 40;
+  throws.forEach((t, i) => {
+    const dx = b.x - t.x, dz = b.z - t.z, d = Math.hypot(dx, dz);
+    if (d < nearD) { nearD = d; near = i; }
+    if (d > 40 || speed < 0.5) return;
+    // Off the line of flight (sideways), plus how far the spot lies ahead of the body.
+    const miss = Math.abs(dx * b.vz - dz * b.vx) / speed + Math.max(0, -(dx * b.vx + dz * b.vz) / speed - 1);
+    if (miss < bestMiss) { bestMiss = miss; best = i; }
+  });
+  return best >= 0 ? best : near;
+}
+
+/**
  * Renders thrown M67 frags (blinking fuse light), M18 smoke canisters and 藍白拖 with a trail; popped
  * clouds are SmokeView's. A slipper lying still gets a pulsing ring so it can be found and picked up.
  */
@@ -45,8 +66,35 @@ export class BodiesView {
   readonly group = new THREE.Group();
   private views = new Map<number, View>();
   private frame = 0;
+  /** Recent throws (from the match's `slipper` throw events), to tell whose a new thrown slipper is. */
+  private throws: { owner: number; x: number; y: number; z: number; at: number }[] = [];
 
   constructor(private assets: Assets) {}
+
+  /** Someone threw their knife skin from `from` (the `slipper` throw event, which comes with the new body). */
+  noteThrow(owner: number, from: { x: number; y: number; z: number }) {
+    const now = performance.now();
+    this.throws = this.throws.filter(t => now - t.at < 3000);
+    this.throws.push({ owner, x: from.x, y: from.y, z: from.z, at: now });
+  }
+
+  /** Whose thrown slipper `b` is (`throwOwner`); a matched throw is used up. */
+  private ownerOf(b: Body) {
+    if (b.owner >= 0) return b.owner;
+    const pick = throwOwner(b, this.throws);
+    return pick < 0 ? -1 : this.throws.splice(pick, 1)[0].owner;
+  }
+
+  /** The thrower of the thrown slipper nearest (x, z), if it is known. */
+  throwerNear(x: number, z: number) {
+    let owner: number | undefined, bestD = 2;
+    for (const v of this.views.values()) {
+      if (!v.slipper || v.slipper.owner < 0) continue;
+      const d = Math.hypot(v.object.position.x - x, v.object.position.z - z);
+      if (d < bestD) { bestD = d; owner = v.slipper.owner; }
+    }
+    return owner;
+  }
 
   /** `knifeOf`: the knife skin of a thrown slipper's owner (it flies as what they hold). */
   sync(bodies: Body[], t: number, knifeOf: (owner: number) => KnifeSkin = () => 'slipper') {
@@ -54,7 +102,16 @@ export class BodiesView {
     for (const b of bodies) {
       if (b.kind === 'smokeCloud') continue;
       let v = this.views.get(b.id);
-      if (!v) { v = this.create(b, b.kind === 'slipper' ? knifeOf(b.owner) : 'slipper'); this.views.set(b.id, v); }
+      if (!v) {
+        const owner = b.kind === 'slipper' ? this.ownerOf(b) : -1;
+        v = this.create(b, owner >= 0 ? knifeOf(owner) : 'slipper', owner);
+        this.views.set(b.id, v);
+      }
+      // Still nobody's (its throw event came late): attribute it now and show the thrower's skin.
+      if (v.slipper && v.slipper.owner < 0 && performance.now() - v.slipper.born < 1000) {
+        const owner = this.ownerOf(b);
+        if (owner >= 0) { v.slipper.owner = owner; v.slipper.spin.clear(); v.slipper.spin.add(this.thrownModel(knifeOf(owner))); }
+      }
       v.buffer.push(t, { x: b.x, y: b.y, z: b.z });
       v.seen = this.frame;
     }
@@ -95,16 +152,20 @@ export class BodiesView {
     v.trail.line.visible = !resting;
   }
 
-  private create(b: Body, knife: KnifeSkin): View {
+  /** The thrown knife skin (藍白拖, 掃把 or knife) lying flat, its middle on the pivot; the long broom is drawn at its own size. */
+  private thrownModel(knife: KnifeSkin) {
+    const source = this.assets.weapons.get(KNIFE_MODELS[knife])!, model = source.clone(), box = modelBox(source);
+    const scale = knife === 'broom' ? 1 : 1.35;
+    model.scale.setScalar(scale);
+    model.rotation.x = -Math.PI / 2;
+    model.position.set(-(box.min.x + box.max.x) / 2 * scale, -0.005, 0);
+    return model;
+  }
+
+  private create(b: Body, knife: KnifeSkin, owner = -1): View {
     if (b.kind === 'slipper') {
-      // The thrown knife skin (藍白拖, 掃把 or knife) lying flat, its middle on the pivot; the long broom is drawn at its own size.
-      const source = this.assets.weapons.get(KNIFE_MODELS[knife])!, model = source.clone(), box = modelBox(source);
-      const scale = knife === 'broom' ? 1 : 1.35;
-      model.scale.setScalar(scale);
-      model.rotation.x = -Math.PI / 2;
-      model.position.set(-(box.min.x + box.max.x) / 2 * scale, -0.005, 0);
       const spin = new THREE.Group();
-      spin.add(model);
+      spin.add(this.thrownModel(knife));
       const ring = new THREE.Mesh(new THREE.RingGeometry(0.28, 0.34, 32), new THREE.MeshBasicMaterial({ color: new THREE.Color(0x6fb4ff).multiplyScalar(2), transparent: true, opacity: 0.6, depthWrite: false, side: THREE.DoubleSide }));
       ring.rotation.x = -Math.PI / 2;
       ring.position.y = -0.04;
@@ -114,7 +175,7 @@ export class BodiesView {
       const trail = new Trail(new THREE.Color(0x8cc4ff).multiplyScalar(0.7), 40);
       object.position.set(b.x, b.y, b.z);
       this.group.add(object, trail.line);
-      return { object, buffer: new InterpBuffer(), trail, seen: this.frame, slipper: { spin, ring, still: 0, last: new THREE.Vector3(b.x, b.y, b.z) } };
+      return { object, buffer: new InterpBuffer(), trail, seen: this.frame, slipper: { spin, ring, still: 0, last: new THREE.Vector3(b.x, b.y, b.z), owner, born: performance.now() } };
     }
     if (b.kind === 'smoke') {
       // An olive canister with a pale band (the M18's look), tumbling, with a grey trail.

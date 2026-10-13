@@ -275,7 +275,8 @@ export class SoldierView {
   private suppressed = false;
   readonly flash: THREE.Mesh;
   flashLeft = 0;
-  private bindPose: Map<string, THREE.Quaternion>;
+  /** Every bone as the animation mixer last left it (before the procedural layer). */
+  private mixed: Map<string, THREE.Quaternion>;
   /** Dev inspection of IK targets. */
   debug?: { chest: THREE.Vector3; grip: THREE.Vector3; fore: THREE.Vector3 };
 
@@ -311,7 +312,7 @@ export class SoldierView {
       gear.position.copy(body.position); gear.quaternion.copy(body.quaternion); gear.scale.copy(body.scale);
       body.parent!.add(gear);
     }
-    this.bindPose = snapshotPose(this.bones);
+    this.mixed = snapshotPose(this.bones);
     this.root.add(this.model);
     // The rig faces +Z; our yaw 0 faces -Z.
     this.model.rotation.y = Math.PI;
@@ -417,12 +418,14 @@ export class SoldierView {
     // Distant and hidden soldiers animate at a reduced rate; between updates they only move.
     const every = LOD_INTERVAL[this.lod];
     this.pending += dt;
-    if (this.lod === 3 || (++this.frame % every !== 0 && p.alive === this.wasAlive)) {
+    // A body that has finished falling just lies there: nothing left to animate.
+    const settled = !p.alive && !this.wasAlive && !!this.actions.get('death')?.paused;
+    if (this.lod === 3 || settled || (++this.frame % every !== 0 && p.alive === this.wasAlive)) {
       const dx = p.x - this.root.position.x, dy = p.y - this.root.position.y, dz = p.z - this.root.position.z;
       this.root.position.set(p.x, p.y, p.z);
       this.root.rotation.y = this.bodyYaw(p);
       this.gun.position.x += dx; this.gun.position.y += dy; this.gun.position.z += dz;
-      if (this.lod === 3) this.pending = Math.min(this.pending, 0.25);
+      if (this.lod === 3 || settled) this.pending = Math.min(this.pending, 0.25);
       return;
     }
     dt = this.pending; this.pending = 0;
@@ -470,12 +473,15 @@ export class SoldierView {
       const natural = (this.crew ? CREW_CLIP_SPEED : CLIP_SPEED)[name];
       if (natural) action.timeScale = Math.max(0.4, Math.min(1.8, speed / natural)) * (backwards ? -1 : 1);
     }
-    // Fingers are not animated by the clips; restore them before posing the grip.
-    // (The crew's clips leave out the bones that never move, so every bone returns to its rest pose or the procedural layer would pile up on it.)
-    restorePose(this.bones, this.bindPose, this.crew ? undefined : n => /^(index|middle|ring|pinky|thumb)_/.test(n));
+    // Undo last frame's procedural layer (grip, aim, IK, finger curls) by putting every bone back where the
+    // mixer left it, not at its rest pose: the mixer rewrites a bone only when its clip value changes, so a
+    // bone whose track holds still (the hips once a dying soldier lies flat, any bone a clip leaves out)
+    // must already hold the clip's value, or it snaps to the rest pose (the dead knelt up again).
+    restorePose(this.bones, this.mixed);
     // Undo last frame's squat first: a clip without a hip track would never reset it, and the drop would pile up.
     if (this.squatDrop) { this.bones.get('Body')!.position.y += this.squatDrop; this.squatDrop = 0; }
     this.mixer.update(dt);
+    for (const [name, q] of this.mixed) q.copy(this.bones.get(name)!.quaternion);
     if (!p.alive) { this.gun.visible = false; return; }
     if (squat > 0.01) this.squat(squat);
 
