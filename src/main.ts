@@ -1361,7 +1361,9 @@ async function rejoinAfterDrop(old: OnlineLink) {
 function leftMatch(reason: Reason, exit?: Exit) {
   const link = game?.link, me = link?.state()?.soldiers.find(s => s.id === link.myId());
   // Online: the match's connection quality, and its last report to the server.
-  matchLeft(reason, { kills: me?.kills ?? 0, deaths: me?.deaths ?? 0 }, link instanceof OnlineLink ? link.netLeft() : undefined, exit, matchFrameStats());
+  matchLeft(reason, { kills: me?.kills ?? 0, deaths: me?.deaths ?? 0 }, link instanceof OnlineLink ? link.netLeft() : undefined, exit, matchFrameStats(), renderer && {
+    gpu: renderer.gpuName(), quality, pixel_ratio: renderer.pixelRatio(), dpr_scale: renderer.quality.adaptive ? Math.round(renderer.adaptive.multiplier * 100) / 100 : 1,
+  });
 }
 // Closing the tab mid-match: match_left goes out by beacon.
 addEventListener('pagehide', () => leftMatch('close', 'close'));

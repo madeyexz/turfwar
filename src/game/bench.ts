@@ -174,15 +174,13 @@ export class Bench {
     const at = (list: number[], q: number) => list[Math.min(list.length - 1, Math.floor(q * list.length))];
     const total = this.frames.reduce((a, b) => a + b, 0);
     const worst = sorted.slice(Math.floor(n * 0.99));
-    const gl = this.renderer.renderer.getContext();
-    const ext = gl.getExtension('WEBGL_debug_renderer_info');
     const size = this.renderer.renderer.getDrawingBufferSize(new Vector2());
     const avgFps = n / (total / 1000), p95 = at(sorted, 0.95);
     this.done = {
       map: this.game.mapId,
       quality: this.quality,
       resolution: `${size.x}×${size.y}`,
-      gpu: String(ext ? gl.getParameter(ext.UNMASKED_RENDERER_WEBGL) : gl.getParameter(gl.RENDERER)),
+      gpu: this.renderer.gpuName(),
       userAgent: navigator.userAgent,
       frames: n,
       seconds: round(total / 1000),
