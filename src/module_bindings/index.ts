@@ -36,6 +36,7 @@ import {
 // Import all reducer arg schemas
 import AdminLoginReducer from "./admin_login_reducer";
 import AdminLogoutReducer from "./admin_logout_reducer";
+import AdminRebuildTaipeiDaysReducer from "./admin_rebuild_taipei_days_reducer";
 import AdminRevokeAllReducer from "./admin_revoke_all_reducer";
 import BuyReducer from "./buy_reducer";
 import BuyAttachmentReducer from "./buy_attachment_reducer";
@@ -96,6 +97,7 @@ import AdminTaipeiCoverageRow from "./admin_taipei_coverage_table";
 import AdminTaipeiPlayerDayRow from "./admin_taipei_player_day_table";
 import AdminTaipeiPlayerDayNetRow from "./admin_taipei_player_day_net_table";
 import AdminTaipeiPlayerDayTimeRow from "./admin_taipei_player_day_time_table";
+import AdminTaipeiRebuildRow from "./admin_taipei_rebuild_table";
 import BodyRow from "./body_table";
 import FrameRow from "./frame_table";
 import MatchRow from "./match_table";
@@ -390,6 +392,13 @@ const tablesSchema = __schema({
     constraints: [
     ],
   }, AdminTaipeiPlayerDayTimeRow),
+  adminTaipeiRebuild: __table({
+    name: 'admin_taipei_rebuild',
+    indexes: [
+    ],
+    constraints: [
+    ],
+  }, AdminTaipeiRebuildRow),
   myRoomCode: __table({
     name: 'my_room_code',
     indexes: [
@@ -403,6 +412,7 @@ const tablesSchema = __schema({
 const reducersSchema = __reducers(
   __reducerSchema("admin_login", AdminLoginReducer),
   __reducerSchema("admin_logout", AdminLogoutReducer),
+  __reducerSchema("admin_rebuild_taipei_days", AdminRebuildTaipeiDaysReducer),
   __reducerSchema("admin_revoke_all", AdminRevokeAllReducer),
   __reducerSchema("buy", BuyReducer),
   __reducerSchema("buy_attachment", BuyAttachmentReducer),

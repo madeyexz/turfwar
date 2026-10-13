@@ -384,18 +384,28 @@ Elapsed-time windows (24 hours, activation's first 24 hours, play durations and 
 The private tables `taipei_player_day`, `taipei_player_day_time` and `taipei_player_day_net` collect separate
 Taipei daily activity, play seconds and connection quality, exposed only to authenticated admins through
 `admin_taipei_player_day`, `admin_taipei_player_day_time` and `admin_taipei_player_day_net`.
-The private `taipei_coverage` table persists the first collecting transaction's `startedAt` once;
+The private `taipei_coverage` table persists the first collecting transaction's `startedAt`;
 `admin_taipei_coverage` exposes it to admins. Opening a view does not start or move coverage.
 If collection starts mid-day, the first fully covered day is the next Taipei midnight; if it starts exactly
-at midnight, that day is covered. Older daily metrics and rolling metrics whose windows extend before
-coverage are **unavailable, not zero**; retention targets likewise require recorded coverage.
-The existing UTC daily tables and views remain intact: there is **no backfill and no reinterpretation of
-UTC history** as Taipei days. Lifetime totals and retained epoch-hour records remain usable independently.
+at midnight, that day is covered. The UTC daily tables and views remain intact.
+
+History from before Taipei collection is rebuilt once per database by `admin_rebuild_taipei_days` (admins only;
+`TURFWAR_ADMIN_KEY=… bun scripts/taipei-rebuild.ts <wss://server> <db>`; a second call is refused). Taipei is a
+whole-hour offset, so every Taipei day whose hours are all in `player_hour` (kept two weeks) is rebuilt
+**exactly**; the launch days before hourly records are **estimated** from the UTC-day rows (a UTC day counts on the
+Taipei day holding 16 of its 24 hours, or on the true Taipei day of the player's firstSeen when that falls in it;
+the UTC day straddling the first exact day keeps only what its hourly-covered late hours do not explain). It merges
+with live Taipei rows (union of days, the larger play time, the fuller ping record), moves `taipei_coverage` back to
+the first exact day, and records both boundaries in private `taipei_rebuild` (`admin_taipei_rebuild`). Production
+Taipei: hourly records began 2026-10-10 00:00 Taipei (the first ~25 minutes predate the module), launch days
+2026-10-06 to 10-09 are estimated. The dashboard draws estimated days faint and says so in their tooltips; rolling
+windows (MAU) start at the first recorded day and are faint until 30 days are recorded. Before a database is
+rebuilt, days before its coverage show as gaps.
 
 It opens on **Key metrics** (`src/admin/activity.ts`, charts in `src/admin/chart.ts`):
 KPI tiles (value, change against the period before, sparkline) and charts for **DAU** (players with a `taipei_player_day` row on
 the Taipei day: they said `hello`, reconnected or entered a room, so Solo-only players never count), **MAU** (rolling: players
-active on any of the 30 Taipei days ending that day; unavailable until the entire window is covered),
+active on any of the 30 Taipei days ending that day; faint while the window reaches back before the first recorded day),
 DAU/MAU, **CCU per hour** (humans in Online rooms; the average at once is `room_hour` human-minutes ÷ 60, sampled
 once a minute per live room, falling back to `player_hour` play time ÷ 3600 for hours before `room_hour` began; the peak
 at once is `peak_hour`) and **PCCU per day** (the highest `peak_hour` of the Taipei day, with launch-week peaks rebuilt from

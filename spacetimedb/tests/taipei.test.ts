@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { beginPlay, endPlay, flushPlay, type PlayStore, type PlayTime } from '../../shared/playtime';
-import { taipeiPlayStore } from '../src/admin';
+import { rebuildTaipeiDays, taipeiPlayStore, type HourRecord } from '../src/admin';
 
 const SECOND = 1_000_000n;
 const midnight = BigInt(Date.parse('2026-10-13T16:00:00Z')) * 1000n;
@@ -94,5 +94,69 @@ describe('Taipei play-time collection', () => {
     expect(r.active).toEqual(new Set([day]));
     expect(r.taipei.size).toBe(0);
     expect(r.times.get('player')).toEqual({ seconds: 0n, since: now });
+  });
+});
+
+describe('rebuilding Taipei days from records kept before Taipei collection', () => {
+  // Oct 10 Taipei begins at UTC hour H0 (16:00 on UTC day D0 = Oct 9).
+  const D0 = Date.UTC(2026, 9, 9) / 86_400_000, T = D0 + 1, H0 = D0 * 24 + 16;
+  const hour = (id: string, h: number, seconds = 0, net = { reports: 0, netSeconds: 0, p50Sum: 0, p95Sum: 0, corrections: 0 }): HourRecord => ({ id, hour: h, seconds, ...net });
+  const at = (h: number) => BigInt(h) * 3_600_000_000n;
+  const none = new Map<string, bigint>();
+  const days = (r: ReturnType<typeof rebuildTaipeiDays>, id: string) => [...r.active.values()].filter(a => a.id === id).map(a => a.day).sort();
+
+  it('rebuilds every Taipei day with hourly records exactly, splitting at Taipei (not UTC) midnight', () => {
+    const r = rebuildTaipeiDays({
+      hours: [hour('a', H0, 600), hour('a', H0 + 23, 60, { reports: 2, netSeconds: 100, p50Sum: 4000, p95Sum: 9000, corrections: 1 }), hour('a', H0 + 24, 30)],
+      days: [], time: [], net: [], firstSeen: none,
+    });
+    expect(r.exactFrom).toBe(T);
+    expect(r.estimatedFrom).toBeUndefined();
+    expect(days(r, 'a')).toEqual([T, T + 1]);
+    expect(r.time.get(`a:${T}`)?.seconds).toBe(660);
+    expect(r.time.get(`a:${T + 1}`)?.seconds).toBe(30);
+    expect(r.net.get(`a:${T}`)).toMatchObject({ reports: 2, seconds: 100, corrections: 1 });
+  });
+
+  it('keeps what the straddling UTC day leaves unexplained for the Taipei day before hourly records', () => {
+    const r = rebuildTaipeiDays({
+      hours: [hour('a', H0 + 2, 300), hour('b', H0 + 3, 120), hour('d', H0, 0)],
+      // a: 900 s that UTC day, 300 of them hourly: 600 s in the early hours. b: all of it hourly. c: no late hours at all.
+      days: [{ id: 'a', day: D0 }, { id: 'b', day: D0 }, { id: 'c', day: D0 }, { id: 'd', day: D0 }],
+      time: [{ id: 'a', day: D0, seconds: 900 }, { id: 'b', day: D0, seconds: 120 }],
+      net: [],
+      // d joined in the early hours (first seen then) without play time, and again after.
+      firstSeen: new Map([['d', at(D0 * 24 + 5)]]),
+    });
+    expect(r.exactFrom).toBe(T);
+    expect(r.estimatedFrom).toBe(D0);
+    expect(days(r, 'a')).toEqual([D0, T]);
+    expect(r.time.get(`a:${D0}`)?.seconds).toBe(600);
+    expect(days(r, 'b')).toEqual([T]);
+    expect(days(r, 'c')).toEqual([D0]);
+    expect(days(r, 'd')).toEqual([D0, T]);
+  });
+
+  it('estimates earlier UTC days as the Taipei day holding most of their hours, or the true day of firstSeen', () => {
+    const r = rebuildTaipeiDays({
+      hours: [hour('x', H0, 10)],
+      days: [{ id: 'a', day: D0 - 2 }, { id: 'b', day: D0 - 2 }, { id: 'b', day: D0 - 1 }],
+      time: [{ id: 'b', day: D0 - 2, seconds: 500 }],
+      net: [{ id: 'b', day: D0 - 2, reports: 1, seconds: 100, p50Sum: 3000, p95Sum: 6000, corrections: 0 }],
+      // b was first seen at 20:00 UTC: already the next Taipei day.
+      firstSeen: new Map([['b', at((D0 - 2) * 24 + 20)]]),
+    });
+    expect(days(r, 'a')).toEqual([D0 - 2]);
+    expect(days(r, 'b')).toEqual([D0 - 1]);
+    expect(r.time.get(`b:${D0 - 1}`)?.seconds).toBe(500);
+    expect(r.net.get(`b:${D0 - 1}`)?.reports).toBe(1);
+    expect(r.estimatedFrom).toBe(D0 - 2);
+  });
+
+  it('estimates everything from UTC days when no hourly records exist', () => {
+    const r = rebuildTaipeiDays({ hours: [], days: [{ id: 'a', day: D0 }], time: [], net: [], firstSeen: none });
+    expect(r.exactFrom).toBeUndefined();
+    expect(days(r, 'a')).toEqual([D0]);
+    expect(r.estimatedFrom).toBe(D0);
   });
 });
