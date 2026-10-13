@@ -1,9 +1,9 @@
 import type { CollisionWorld } from './collision';
-import { MOVE, eyeHeight } from './movement';
+import { eyeHeight } from './movement';
 
 /**
  * Auto-peek (三角洲行動-style 自動探頭): aiming down sights with cover right in front of you leans
- * your head and shoulders out past its edge, or, crouched behind low cover, stands you up over it.
+ * your head and shoulders out past its edge.
  * No key: the lean is a pure function of the soldier's pose (feet, crouch, yaw, aiming) and the
  * map, so the client, the server and every other client work out the same lean from what they
  * already have, and the leaning head is where shots land (hitbox.ts).
@@ -62,20 +62,6 @@ export function peekSide(world: CollisionWorld, x: number, y: number, z: number,
     if (!best || view > bestView + 0.5 || (Math.abs(view - bestView) <= 0.5 && side === prefer)) { best = side; bestView = view; }
   }
   return best;
-}
-
-/**
- * Crouched behind cover lower than your eyes standing: aiming stands you up to see over it. Judged
- * from the crouched eye whatever the current crouch, so it holds steady while you rise.
- */
-export function peekOver(world: CollisionWorld, x: number, y: number, z: number, yaw: number, team = -1) {
-  const f = forwardOf(yaw);
-  const low = { x, y: y + eyeHeight({ crouch: 1 }), z };
-  if (free(world, low, f, PEEK.block, team) >= PEEK.block) return false;
-  const high = { x, y: y + eyeHeight({ crouch: 0 }), z };
-  // Room to stand, and a clear view from up there.
-  if (world.ceilingHeight(x, z, y, MOVE.radius) < y + MOVE.standHeight + 0.05) return false;
-  return free(world, high, f, PEEK.clear, team) >= PEEK.clear;
 }
 
 /** What auto-peek needs to know about a soldier. */

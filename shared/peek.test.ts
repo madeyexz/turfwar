@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { CollisionWorld, type Heightfield, type Solid } from './collision';
 import { hitShape, raycastSoldier } from './hitbox';
-import { PEEK, easePeek, peekOf, peekOver, peekSide } from './peek';
+import { PEEK, easePeek, peekOf, peekSide } from './peek';
 
 const flat: Heightfield = { x0: -100, z0: -100, spacing: 4, n: 51, heights: new Float32Array(51 * 51) };
 const bounds = { minX: -90, maxX: 90, minZ: -90, maxZ: 90 };
@@ -35,13 +35,6 @@ describe('auto-peek', () => {
   it('turns with the yaw: facing +x, cover on the near side of the edge leans left', () => {
     // Facing +x (yaw -π/2), the right is +z; the wall covers +z, so the open side is -z (left).
     expect(peekSide(world(box(0.6, 0, -0.15, 1.2, 3, 3)), 0, 0, 0, 0, -Math.PI / 2)).toBe(-1);
-  });
-
-  it('stands up over cover lower than the standing eye, but not under a wall or a roof', () => {
-    expect(peekOver(world(box(-2, 0, -1, 2, 1.3, -0.6)), 0, 0, 0, 0)).toBe(true);
-    expect(peekOver(world(box(-2, 0, -1, 2, 3, -0.6)), 0, 0, 0, 0)).toBe(false);
-    expect(peekOver(world(), 0, 0, 0, 0)).toBe(false);
-    expect(peekOver(world(box(-2, 0, -1, 2, 1.3, -0.6), box(-2, 1.5, -0.5, 2, 2, 0.5)), 0, 0, 0, 0)).toBe(false);
   });
 
   it('only aiming humans peek, and the leaning head is where shots land', () => {

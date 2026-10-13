@@ -1,6 +1,6 @@
 import { CollisionWorld } from '../../shared/collision';
 import { clamp, dirFromAngles, type Vec3 } from '../../shared/math';
-import { PEEK, easePeek, peekOver, peekShift, peekSide, type PeekSide } from '../../shared/peek';
+import { PEEK, easePeek, peekShift, peekSide, type PeekSide } from '../../shared/peek';
 import { MOVE, createMoveState, eyeHeight, isSprinting, stepMovement, type MoveEvents, type MoveInput, type MoveState } from '../../shared/movement';
 import type { Obstacle } from '../../shared/obstacles';
 import type { Soldier } from '../../shared/match/state';
@@ -263,8 +263,7 @@ export class LocalPlayer {
       // Keys are all or nothing; the touch stick walks at any speed up to a run.
       forward: input!.amount('forward') - input!.amount('back'),
       strafe: input!.amount('right') - input!.amount('left'),
-      // Aiming crouched behind low cover stands you up over it (auto-peek).
-      yaw: this.yaw, jump: jumpKey, crouch: input!.down('crouch') && !(this.ads > 0.5 && !this.riding && peekOver(world, this.m.x, this.m.y, this.m.z, this.yaw, this.team)),
+      yaw: this.yaw, jump: jumpKey, crouch: input!.down('crouch'),
       sprint: sprintKey && canSprint && this.sprintBlock <= 0,
       ads: (input!.aim && w.class !== 'melee' && this.reloadLeft <= 0 && this.switchLeft < 0.1 && !this.rider) || this.binoculars,
       speed: w.speed * (this.tired ? 0.8 : 1) * (this.slipperCharge >= 0 ? 0.75 : 1),
