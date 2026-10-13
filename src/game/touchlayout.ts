@@ -12,7 +12,7 @@ import { readEnv, touchEnabled, type TouchPref } from './device';
  */
 
 export type ControlId =
-  | 'fire' | 'aim' | 'jump' | 'crouch' | 'reload' | 'use' | 'zoom' | 'binoculars'
+  | 'fire' | 'hipfire' | 'aim' | 'jump' | 'crouch' | 'reload' | 'use' | 'zoom' | 'binoculars'
   | 'knife' | 'secondary' | 'primary' | 'grenade' | 'smoke' | 'drink'
   | 'handbrake' | 'climb' | 'descend' | 'view' | 'exit'
   | 'spectate' | 'menu' | 'scoreboard' | 'chat' | 'store'
@@ -41,6 +41,8 @@ export interface ControlDef {
 /** Every control. `chat` opens the quick-chat sheet (and the keyboard) instead of pressing its key. */
 export const CONTROLS: Record<ControlId, ControlDef> = {
   fire: { action: 'fire', kind: 'hold', x: 0.875, y: 0.62, size: 88 },
+  /** A second trigger for the left thumb that never raises the sights (fire's hold-to-aim is on the right). */
+  hipfire: { action: 'fire', kind: 'hold', x: 0.1, y: 0.4, size: 64 },
   aim: { action: 'aim', kind: 'toggle', x: 0.745, y: 0.8, size: 60 },
   jump: { action: 'jump', kind: 'hold', x: 0.955, y: 0.37, size: 56 },
   crouch: { action: 'crouch', kind: 'hold', x: 0.955, y: 0.86, size: 52 },
@@ -65,7 +67,7 @@ export const CONTROLS: Record<ControlId, ControlDef> = {
   chat: { action: 'chat', kind: 'tap', x: 0.14, y: 0.075, size: 40, small: true },
   store: { action: 'store', kind: 'tap', x: 0.195, y: 0.075, size: 40, small: true },
   custom1: { action: 'lastWeapon', kind: 'tap', x: 0.655, y: 0.3, size: 48, custom: true },
-  custom2: { action: 'fire', kind: 'hold', x: 0.12, y: 0.36, size: 64, custom: true },
+  custom2: { action: 'fire', kind: 'hold', x: 0.2, y: 0.28, size: 64, custom: true },
 };
 export const CONTROL_IDS = Object.keys(CONTROLS) as ControlId[];
 export const PLACE_IDS: readonly PlaceId[] = [...CONTROL_IDS, 'stick'];
@@ -144,7 +146,7 @@ export function contextControls(ctx: TouchContext): Set<ControlId> {
   if (ctx.scope === 'none') return out;
   const add = (...ids: ControlId[]) => { for (const id of ids) out.add(id); };
   add('menu', 'scoreboard', 'chat', 'store');
-  const weapons = () => { add('fire', 'secondary', 'primary'); if (!ctx.melee) add('reload'); };
+  const weapons = () => { add('fire', 'hipfire', 'secondary', 'primary'); if (!ctx.melee) add('reload'); };
   switch (ctx.scope) {
     case 'foot':
       weapons(); add('jump', 'crouch', 'knife', 'grenade', 'smoke', 'drink', 'binoculars');
@@ -386,7 +388,7 @@ export function touchSensFromSlider(position: number) {
 
 /**
  * Hold fire to aim (`lawbreaker.touchAutoAim`, on unless switched off): holding the fire button
- * raises the sights as it shoots (`holdfire.ts`). The Aim button still toggles them by itself.
+ * raises the sights as it shoots (`holdfire.ts`). Hip fire never does; the Aim button still toggles them by itself.
  */
 export function touchAutoAim() { return read('lawbreaker.touchAutoAim') !== '0'; }
 export function setTouchAutoAim(on: boolean) { write('lawbreaker.touchAutoAim', on ? '1' : '0'); notify(); }

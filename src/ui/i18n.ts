@@ -178,7 +178,7 @@ const en = {
   'kb.clash': 'Also bound to {others}',
 
   // ---- Touch controls (phones and tablets) ----
-  'tc.fire': 'Fire', 'tc.aim': 'Aim', 'tc.jump': 'Jump', 'tc.crouch': 'Crouch', 'tc.reload': 'Reload', 'tc.use': 'Use',
+  'tc.fire': 'Fire', 'tc.hipfire': 'Hip fire', 'tc.aim': 'Aim', 'tc.jump': 'Jump', 'tc.crouch': 'Crouch', 'tc.reload': 'Reload', 'tc.use': 'Use',
   'tc.zoom': 'Zoom', 'tc.binoculars': 'Binos', 'tc.knife': 'Knife', 'tc.secondary': 'Secondary', 'tc.primary': 'Primary',
   'tc.grenade': 'Grenade', 'tc.smoke': 'Smoke', 'tc.handbrake': 'Drift', 'tc.climb': 'Up', 'tc.descend': 'Down', 'tc.view': 'View', 'tc.exit': 'Get out',
   'tc.spectate': 'Next', 'tc.menu': 'Menu', 'tc.scoreboard': 'Scores', 'tc.chat': 'Chat', 'tc.store': 'Store',
@@ -195,7 +195,7 @@ const en = {
   'ts.autoOn': 'Auto: on for this touch screen', 'ts.autoOff': 'Auto: off here (keyboard and mouse)',
   'ts.sens': 'Touch look speed', 'ts.edit': 'Edit touch layout', 'ts.sensDefault': 'Default {n}',
   'ts.autoAim': 'Aim down sights when firing',
-  'ts.autoAimNote': 'Hold fire to aim down sights while you shoot; a quick tap fires from the hip. Snipers aim while you hold and fire when you let go.',
+  'ts.autoAimNote': 'Hold fire to aim down sights while you shoot; a quick tap fires from the hip. Snipers aim while you hold and fire when you let go. Hip fire (left) never aims.',
   'ts.assist': 'Aim assist', 'ts.assistNote': 'Slows the crosshair over an enemy you can see and pulls it onto them while you fire. Touch screens only.',
   'ts.note': 'Layout saved on this device.',
   'rot.title': 'Rotate to landscape', 'rot.sideways': 'Turn your phone sideways',
@@ -501,7 +501,7 @@ const zhTW: Record<Key, string> = {
   'kb.readonly': '按鍵設定需要鍵盤與滑鼠，觸控裝置上僅供檢視。',
   'kb.clash': '同時綁定於「{others}」',
 
-  'tc.fire': '射擊', 'tc.aim': '瞄準', 'tc.jump': '跳躍', 'tc.crouch': '蹲下', 'tc.reload': '換彈', 'tc.use': '互動',
+  'tc.fire': '射擊', 'tc.hipfire': '腰射', 'tc.aim': '瞄準', 'tc.jump': '跳躍', 'tc.crouch': '蹲下', 'tc.reload': '換彈', 'tc.use': '互動',
   'tc.zoom': '倍率', 'tc.binoculars': '望遠鏡', 'tc.knife': '刀', 'tc.secondary': '副武器', 'tc.primary': '主武器',
   'tc.grenade': '手榴彈', 'tc.smoke': '煙霧', 'tc.handbrake': '甩尾', 'tc.climb': '上升', 'tc.descend': '下降', 'tc.view': '視角', 'tc.exit': '下車',
   'tc.spectate': '下一位', 'tc.menu': '選單', 'tc.scoreboard': '計分板', 'tc.chat': '聊天', 'tc.store': '商店',
@@ -518,7 +518,7 @@ const zhTW: Record<Key, string> = {
   'ts.autoOn': '自動：此觸控螢幕已開啟', 'ts.autoOff': '自動：此處關閉（鍵盤與滑鼠）',
   'ts.sens': '觸控視角速度', 'ts.edit': '編輯觸控配置', 'ts.sensDefault': '預設 {n}',
   'ts.autoAim': '開火時舉槍瞄準',
-  'ts.autoAimNote': '按住開火會舉槍瞄準並持續射擊，快速輕點則為腰射。狙擊槍按住時開鏡瞄準，放開時射擊。',
+  'ts.autoAimNote': '按住開火會舉槍瞄準並持續射擊，快速輕點則為腰射。狙擊槍按住時開鏡瞄準，放開時射擊。左側的「腰射」鍵永遠不開鏡。',
   'ts.assist': '輔助瞄準', 'ts.assistNote': '準星靠近看得到的敵人時會放慢，開火時會往敵人身上拉。僅限觸控螢幕。',
   'ts.note': '操作配置儲存在這台裝置上。',
   'rot.title': '請將手機轉為橫向', 'rot.sideways': '把手機橫過來玩',
