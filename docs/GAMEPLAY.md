@@ -392,7 +392,8 @@ the rest is a look pad, and fire also looks while held. **Auto-aim when firing**
 sights while it keeps firing, and letting go lowers them; the M110 sniper instead raises its scope while
 held and fires one aimed shot on release (a quick tap fires from the hip). The knife, binoculars, a
 grenade throw, a scooter rider and a toggled Aim keep the plain trigger; the Aim button still works on
-its own. Aim is a toggle; Crouch is held, as the key is (held while sprinting it slides; letting go stands up). The HUD keeps clear of notches and the home bar, but
+its own. A second trigger, **Hip fire** (left thumb, above the stick), always shoots from the hip and never
+raises the sights, so one button aims on a long press and the other never does. Aim is a toggle; Crouch is held, as the key is (held while sprinting it slides; letting go stands up). The HUD keeps clear of notches and the home bar, but
 the crosshair, scope and markers stay on the screen's true centre where shots go. Buttons press the same actions as keys (`src/game/touchlayout.ts` →
 `Input.touchHeld` / `touchPress`), and only those that matter are shown: Use appears near a vehicle,
 crate or bomb site (hold it to arm or defuse), vehicle buttons replace the on-foot ones while seated, a

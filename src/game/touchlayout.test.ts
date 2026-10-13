@@ -81,7 +81,7 @@ describe('only the controls that matter are shown', () => {
   const layout = defaultLayout();
   it('on foot: weapons and movement; Use only near something; zoom only scoped; no aim with the knife', () => {
     const foot = visibleControls({ scope: 'foot' }, layout);
-    for (const id of ['fire', 'aim', 'jump', 'crouch', 'reload', 'knife', 'secondary', 'primary', 'grenade', 'binoculars', 'menu', 'scoreboard', 'chat', 'store'] as const) expect(foot.has(id), id).toBe(true);
+    for (const id of ['fire', 'hipfire', 'aim', 'jump', 'crouch', 'reload', 'knife', 'secondary', 'primary', 'grenade', 'binoculars', 'menu', 'scoreboard', 'chat', 'store'] as const) expect(foot.has(id), id).toBe(true);
     for (const id of ['use', 'zoom', 'handbrake', 'climb', 'exit', 'spectate', 'custom1', 'custom2'] as const) expect(foot.has(id), id).toBe(false);
     expect(visibleControls({ scope: 'foot', use: true }, layout).has('use')).toBe(true);
     expect(visibleControls({ scope: 'foot', scoped: true }, layout).has('zoom')).toBe(true);

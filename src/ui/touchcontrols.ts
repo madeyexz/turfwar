@@ -15,6 +15,7 @@ const svg = (body: string) => `<svg viewBox="0 0 24 24" aria-hidden="true">${bod
 /** Icons for the controls that have one (the rest show their label only). */
 export const ICONS: Partial<Record<PlaceId, string>> = {
   fire: svg('<circle cx="12" cy="12" r="7" fill="none"/><path d="M12 2v5M12 17v5M2 12h5M17 12h5"/><circle cx="12" cy="12" r="1.6" class="f"/>'),
+  hipfire: svg('<path d="M12 2.5v5.5M12 16v5.5M2.5 12h5.5M16 12h5.5"/><circle cx="12" cy="12" r="1.6" class="f"/>'),
   aim: svg('<circle cx="12" cy="12" r="8.5" fill="none"/><circle cx="12" cy="12" r="3.5" fill="none"/><path d="M12 3.5v4M12 16.5v4M3.5 12h4M16.5 12h4"/>'),
   jump: svg('<path d="M5 15l7-7 7 7" fill="none"/><path d="M5 20h14"/>'),
   crouch: svg('<path d="M5 9l7 7 7-7" fill="none"/><path d="M5 4h14"/>'),
@@ -62,7 +63,9 @@ export function controlHtml(id: PlaceId, layout: TouchLayout, extraClass = '') {
   const label = id === 'stick' ? '' : `<span class="tc-l">${esc(shortLabel(id, layout))}</span>`;
   const icon = ICONS[id] ?? (id !== 'stick' && CONTROLS[id].custom ? ICONS[controlAction(id, layout).action as PlaceId] ?? '' : '');
   const style = `left:${(p.x * 100).toFixed(2)}%;top:${(p.y * 100).toFixed(2)}%;--d:${(d * p.size).toFixed(1)}`;
-  return `<div class="tc-btn${small ? ' small' : ''}${icon ? '' : ' text'} ${extraClass}" data-c="${id}" style="${style}">${icon}${label}</div>`;
+  // Icons speak for themselves: only text-only buttons (weapon names, Use) and the counts under the throwables keep their text.
+  const count = id === 'grenade' || id === 'smoke' || id === 'drink';
+  return `<div class="tc-btn${small ? ' small' : ''}${icon ? '' : ' text'}${count ? ' count' : ''} ${extraClass}" data-c="${id}" style="${style}">${icon}${label}</div>`;
 }
 
 /** Information the buttons show besides the context: weapon names, which is in hand, grenades, what Use does. */
@@ -273,7 +276,8 @@ export class TouchControls {
     navigator.vibrate?.(8);
     if (id === 'chat') { this.openSheet(); return; }
     // Hold fire to aim: the hold decides when to shoot and when to raise the sights (a second fire control adds nothing).
-    if (action === 'fire' && kind === 'hold' && touchAutoAim()) {
+    // Hip fire is a plain trigger: it shoots on the press and never raises the sights.
+    if (action === 'fire' && kind === 'hold' && id !== 'hipfire' && touchAutoAim()) {
       if (!this.holdId) { this.holdId = id; this.hold.press(performance.now(), this.holdMode(), this.info.slot); }
     }
     // A held control is also a press, as a key is: Use gets in a vehicle on the press and arms the bomb while held.
