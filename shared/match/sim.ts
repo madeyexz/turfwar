@@ -6,6 +6,7 @@ import { clamp, dist3, normalize3, segmentPointDistance, type Vec3 } from '../ma
 import { MOVE, createMoveState } from '../movement';
 import { BOBA, FALL, HEALTH, STAMINA, oneHanded, type AttachmentId, type Slot, type WeaponId } from '../weapons';
 import { PHYSICS_STEP, stepBodies, type Body } from '../world';
+import { cleanSkin, isDefaultSkin } from '../skins';
 import { botName, createBrain, updateBot } from './bots';
 import {
   CASH, award, botShop, buy, buyAttachment, finishReload, newRoundStats, refillAmmo, resetInventory, statsOf, useCrate, type BuyItem,
@@ -321,6 +322,15 @@ export function buyAttachmentFor(state: MatchState, id: number, weapon: WeaponId
 export function useAmmoCrate(state: MatchState, ctx: SimContext, id: number, index: number) {
   const s = state.soldiers.find(x => x.id === id);
   return !!s && Number.isInteger(index) && useCrate(state, ctx.map, s, index);
+}
+
+/** Wear `skin` (cosmetic only; unknown parts fall back to the defaults). Any soldier, any time. */
+export function setSkin(state: MatchState, id: number, skin: unknown) {
+  const s = state.soldiers.find(x => x.id === id);
+  if (!s) return false;
+  const clean = cleanSkin(skin);
+  if (isDefaultSkin(clean)) delete s.skin; else s.skin = clean;
+  return true;
 }
 
 /**

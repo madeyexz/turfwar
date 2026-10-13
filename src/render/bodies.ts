@@ -1,5 +1,6 @@
 import * as THREE from 'three';
-import type { Assets } from '../assets';
+import { KNIFE_MODELS, modelBox, type Assets } from '../assets';
+import type { KnifeSkin } from '../../shared/skins';
 import type { Body } from '../../shared/world';
 import { InterpBuffer } from './interp';
 
@@ -47,12 +48,13 @@ export class BodiesView {
 
   constructor(private assets: Assets) {}
 
-  sync(bodies: Body[], t: number) {
+  /** `knifeOf`: the knife skin of a thrown slipper's owner (it flies as what they hold). */
+  sync(bodies: Body[], t: number, knifeOf: (owner: number) => KnifeSkin = () => 'slipper') {
     this.frame++;
     for (const b of bodies) {
       if (b.kind === 'smokeCloud') continue;
       let v = this.views.get(b.id);
-      if (!v) { v = this.create(b); this.views.set(b.id, v); }
+      if (!v) { v = this.create(b, b.kind === 'slipper' ? knifeOf(b.owner) : 'slipper'); this.views.set(b.id, v); }
       v.buffer.push(t, { x: b.x, y: b.y, z: b.z });
       v.seen = this.frame;
     }
@@ -93,13 +95,14 @@ export class BodiesView {
     v.trail.line.visible = !resting;
   }
 
-  private create(b: Body): View {
+  private create(b: Body, knife: KnifeSkin): View {
     if (b.kind === 'slipper') {
-      // The 藍白拖 (or the knife, with the reskin off) lying flat, its middle on the pivot.
-      const model = this.assets.weapons.get('Gun_Knife')!.clone();
-      model.scale.setScalar(1.35);
+      // The thrown knife skin (藍白拖, 掃把 or knife) lying flat, its middle on the pivot; the long broom is drawn at its own size.
+      const source = this.assets.weapons.get(KNIFE_MODELS[knife])!, model = source.clone(), box = modelBox(source);
+      const scale = knife === 'broom' ? 1 : 1.35;
+      model.scale.setScalar(scale);
       model.rotation.x = -Math.PI / 2;
-      model.position.set(0.095 * 1.35, -0.005, 0);
+      model.position.set(-(box.min.x + box.max.x) / 2 * scale, -0.005, 0);
       const spin = new THREE.Group();
       spin.add(model);
       const ring = new THREE.Mesh(new THREE.RingGeometry(0.28, 0.34, 32), new THREE.MeshBasicMaterial({ color: new THREE.Color(0x6fb4ff).multiplyScalar(2), transparent: true, opacity: 0.6, depthWrite: false, side: THREE.DoubleSide }));

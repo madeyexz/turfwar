@@ -3,6 +3,7 @@ import type { MoveState } from '../movement';
 import type { Attachments, Slot, WeaponId } from '../weapons';
 import type { Vehicle } from '../vehicles';
 import type { Body } from '../world';
+import type { Skin } from '../skins';
 
 export type Team = 0 | 1;
 /** Team 0 is SWAT, team 1 Militia (BeGone). In Sabotage, Militia arms the bomb and SWAT defends. */
@@ -71,6 +72,8 @@ export interface Soldier {
   bobas: number;
   /** 藍白拖 in hand (0 or 1; SLIPPER in shared/weapons.ts): 1 at every spawn, 0 once thrown until one is picked up. */
   slippers: number;
+  /** Chosen cosmetic skin (shared/skins.ts); absent = the defaults (bots wear one from their id). */
+  skin?: Skin;
   stamina: number;
   money: number;
   sinceHit: number;

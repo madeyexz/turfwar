@@ -42,7 +42,8 @@ import { noteDuel, noteKill, noteShare } from '../growth';
 import { challengeUrl, shareRef } from './challenge';
 import { MatchTally, type MatchSummary } from './matchstats';
 import { openSharePanel } from '../ui/sharepanel';
-import { MEME_SKINS } from './memeskins';
+import { mySkin } from './skins';
+import { skinOf } from '../../shared/skins';
 import { TouchControls, type TouchInfo } from '../ui/touchcontrols';
 import { holdAimMode } from './holdfire';
 import { onTouchLayout, touchActive, touchAimAssist, type TouchContext } from './touchlayout';
@@ -189,7 +190,7 @@ export class Game {
   private viewmodelFor(team: number) {
     if (team === this.myTeam) return this.viewmodel;
     if (!this.otherViewmodel) {
-      this.otherViewmodel = new ViewModel(this.assets, team);
+      this.otherViewmodel = new ViewModel(this.assets, team, mySkin().knife);
       this.renderer.viewCamera.add(this.otherViewmodel.root);
     }
     return this.otherViewmodel;
@@ -229,7 +230,7 @@ export class Game {
     this.input.sensitivity = settings.sensitivity;
     const me = link.state()?.soldiers.find(s => s.id === link.myId());
     this.myTeam = me?.team ?? 0;
-    this.viewmodel = new ViewModel(assets, this.myTeam);
+    this.viewmodel = new ViewModel(assets, this.myTeam, mySkin().knife);
     renderer.viewCamera.add(this.viewmodel.root);
     // The other side's arms (watching an enemy after death) are built now, not at the first death. Both
     // share the renderer's one flashlight light (Renderer.torch), which is in the scene all match or not
@@ -343,6 +344,7 @@ export class Game {
     const myId = link.myId();
     const me = state.soldiers.find(s => s.id === myId);
     if (me && this.buying.length) this.confirmPurchases(me, !!state.config.freeBuy);
+    this.wearSkin(me);
     if (state.phase === 'ended' && !this.endShown) { this.endShown = true; this.buymenu.close(); this.input.release(); }
     if (state.phase !== 'ended') {
       // Touch: a new match starts playing again by itself (there is no click to recapture the mouse).
@@ -497,7 +499,7 @@ export class Game {
     if (link.version() !== this.lastVersion) {
       this.lastVersion = link.version();
       this.syncRemotes(state, myId, now);
-      this.bodies.sync(state.bodies, now);
+      this.bodies.sync(state.bodies, now, owner => { const s = state.soldiers.find(x => x.id === owner); return s ? skinOf(s).knife : 'slipper'; });
       this.smoke.sync(state.bodies, now);
       this.vehicles.sync(state.vehicles, now);
     }
@@ -735,7 +737,7 @@ export class Game {
     this.input.release();
     track('share_card_opened', { ref, solo: summary.solo, result: summary.result, room: !!o.room });
     await openSharePanel({
-      summary, url, backdrop: this.renderer.snapshot(), meme: MEME_SKINS, room: !!o.room,
+      summary, url, backdrop: this.renderer.snapshot(), knife: mySkin().knife, room: !!o.room,
       note: o.room ? t('chal.room', { code: o.room }) : undefined,
       onShared: method => { noteShare(); track('share_card_shared', { ref, method, room: !!o.room }); },
       // Closed mid-match (the 1v1 room): back to play, the close tap capturing the mouse again.
@@ -874,16 +876,32 @@ export class Game {
     return { name: vehicleName(v), speed: speedOf(v), altitude: v.kind === 'heli' ? v.y - floor : undefined, health: host.health, max: spec.health, keys };
   }
 
+  /**
+   * Our skin (src/game/skins.ts): our own views and sounds wear it at once; the host is told whenever
+   * its copy differs (a new soldier after a rejoin, an older server restarting), at most every 2 s.
+   */
+  private wearSkin(me: Soldier | undefined) {
+    const skin = mySkin();
+    // Dead, the view model may be showing a watched teammate's hands (spectate sets their skin).
+    if (this.player.alive) this.viewmodel.setKnifeSkin(skin.knife);
+    this.audio.knifeSkin = skin.knife;
+    if (!me || !this.link.wear) return;
+    const worn = skinOf(me), now = performance.now();
+    if ((worn.knife !== skin.knife || worn.look !== skin.look) && now - this.woreAt > 2000) { this.woreAt = now; this.link.wear(skin); }
+  }
+  private woreAt = -Infinity;
+
   /** On a scooter the chase camera sees us riding: a third-person body on the seat. */
   private updateSelfView(dt: number) {
     const v = this.driving.renderPose();
     const show = !!v && v.kind === 'scooter' && !this.driving.firstPerson && this.player.alive;
     if (!show) { if (this.selfView) { this.selfView.root.visible = false; this.selfView.gun.visible = false; } return; }
-    if (!this.selfView || this.selfView.team !== this.myTeam) {
+    if (!this.selfView || this.selfView.team !== this.myTeam || this.selfView.look !== mySkin().look) {
       if (this.selfView) { this.selfView.dispose(); this.selfView.root.removeFromParent(); this.selfView.gun.removeFromParent(); }
-      this.selfView = new SoldierView(this.assets, this.myTeam);
+      this.selfView = new SoldierView(this.assets, this.myTeam, mySkin());
       this.renderer.scene.add(this.selfView.root, this.selfView.gun);
     }
+    this.selfView.setKnifeSkin(mySkin().knife);
     const p = seatPosition(v!, 0), held = this.player.slot === 2 ? 'knife' : this.player.weapons[this.player.slot];
     const pl = this.player;
     this.selfView.root.visible = true;
@@ -1006,6 +1024,7 @@ export class Game {
       cam.rotation.set(r.pitch, r.yaw, 0, 'YXZ');
       r.view.root.visible = false; r.view.gun.visible = false;
       const vm = this.viewmodelFor(target.team);
+      vm.setKnifeSkin(skinOf(target).knife);
       this.showWeapon(vm, w);
       const look = { x: wrapAngle(this.lastWatchedYaw - r.yaw) * 300, y: (r.pitch - this.lastWatchedPitch) * -300 };
       this.lastWatchedYaw = r.yaw; this.lastWatchedPitch = r.pitch;
@@ -1033,13 +1052,15 @@ export class Game {
       if (s.id === myId) continue;
       seen.add(s.id);
       let r = this.remotes.get(s.id);
-      if (!r || r.view.team !== s.team) {
+      const skin = skinOf(s);
+      if (!r || r.view.team !== s.team || r.view.look !== skin.look) {
         if (r) { r.view.dispose(); r.view.gun.removeFromParent(); }
-        const view = new SoldierView(this.assets, s.team);
+        const view = new SoldierView(this.assets, s.team, skin);
         this.renderer.scene.add(view.root, view.gun);
         r = { view, buffer: new InterpBuffer(), pos: new THREE.Vector3(s.m.x, s.m.y, s.m.z), crouch: 0, yaw: s.yaw, pitch: 0, stepDist: 0 };
         this.remotes.set(s.id, r);
       }
+      r.view.setKnifeSkin(skin.knife);
       // New rounds teleport everyone home: never interpolate across the map.
       const last = r.buffer.latest();
       if (last && Math.hypot(last.x - s.m.x, last.z - s.m.z) > 6) r.buffer.clear();
@@ -1146,7 +1167,7 @@ export class Game {
           const vm = this.viewmodelFor(this.watched.team), now = performance.now();
           if (now - (this.lastReport.get(e.shooter) ?? -1e9) >= 40) vm.fire();
         }
-        if (e.weapon === 'knife') { r?.view.shoot(); if (shooterDistance < 12) this.audio.knife(e.hit > 0); break; }
+        if (e.weapon === 'knife') { r?.view.shoot(); if (shooterDistance < 12) this.audio.knife(e.hit > 0, undefined, undefined, shooter && skinOf(shooter).knife); break; }
         const suppressed = !!shooter && weaponStats(e.weapon, shooter.attachments[e.weapon]).suppressed;
         // A shotgun blast arrives as one event per pellet: one report and muzzle flash per trigger pull.
         const now = performance.now(), pellet = now - (this.lastReport.get(e.shooter) ?? -1e9) < 40;
@@ -1185,7 +1206,7 @@ export class Game {
         this.hud.killfeed(killer, victim, e.weapon, e.head, e.killer === myId || e.victim === myId);
         if (e.killer === myId && e.victim !== myId && e.weapon === 'knife') matchNote('knife_kill');
         if (e.killer === myId && e.victim !== myId) { noteKill(this.link.mode === 'online'); this.hud.hit('kill'); this.audio.hitmarker(e.head, true); this.progress({ type: 'kill', head: e.head }); }
-        if (e.victim === myId) this.hud.announce(t('hud.youDied'), killer && killer.id !== myId ? `${killer.name} · ${weaponLabel(e.weapon)}` : '', 'var(--crimson)');
+        if (e.victim === myId) this.hud.announce(t('hud.youDied'), killer && killer.id !== myId ? `${killer.name} · ${weaponLabel(e.weapon, e.weapon === 'knife' ? skinOf(killer).knife : undefined)}` : '', 'var(--crimson)');
         break;
       }
       case 'reward': if (e.id === myId) { this.hud.reward(e.amount, e.reason); this.audio.cash(); } break;
@@ -1253,8 +1274,11 @@ export class Game {
       case 'slipper': {
         const at = new THREE.Vector3(e.x, e.y, e.z);
         if (e.action === 'pickup') { if (e.id === myId) { this.hud.toast(t('hud.slipperBack'), 1500); this.audio.ui(); } break; }
-        if (e.action === 'hit') { this.audio.slipper('hit', this.listener(), at); this.effects.hitSpark(at, false); break; }
-        if (e.id !== myId) { this.remotes.get(e.id)?.view.shoot(); this.audio.slipper('throw', this.listener(), at); }
+        // A hit names its victim: the thrower is the owner of the slipper body that struck there.
+        const owner = e.action === 'hit' ? state.bodies.find(b => b.kind === 'slipper' && Math.hypot(b.x - e.x, b.z - e.z) < 2)?.owner : e.id;
+        const thrower = owner === undefined ? undefined : find(owner), knife = thrower && skinOf(thrower).knife;
+        if (e.action === 'hit') { this.audio.slipper('hit', this.listener(), at, knife); this.effects.hitSpark(at, false); break; }
+        if (e.id !== myId) { this.remotes.get(e.id)?.view.shoot(); this.audio.slipper('throw', this.listener(), at, knife); }
         break;
       }
       case 'drink': {

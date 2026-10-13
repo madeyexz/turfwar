@@ -60,12 +60,20 @@ Back to the [README](../README.md) · [Architecture](ARCHITECTURE.md) · [Develo
 | Tactical (5 / X) | M18 smoke grenade | $300 | — | One carried; a 9 m cloud for 15 s that blocks sight, not bullets (not in BeGone) |
 | Tactical (6 / Y) | 珍奶 bubble tea | $400 | +50 health | One carried; drink when hurt: a 1.4 s sip (no shooting), then +50 health up to 100; the server applies it (`drinkBoba`, not in BeGone) |
 
-**National Day reskin** (`src/game/memeskins.ts`, on by default): the knife is a **藍白拖 / Slipper**
-(the blue-and-white rubber slipper, built in code, swung as a flat slap with a cartoon slap sound and
-its own kill-feed mark). Looks, name and sound only: the weapon id, stats and rules are unchanged.
-`?classic=1` shows the original knife; `DEFAULT = false` in `memeskins.ts` turns it off for everyone.
+**Skins (外觀; cosmetic only, `shared/skins.ts`)**: the lobby's 外觀 button (the T-shirt) picks how the
+knife looks and which street character a Militia soldier is. Knife skins: **藍白拖 / Slipper** (the default:
+the blue-and-white rubber slipper, swung as a flat slap with a cartoon slap sound), **掃把 / Broom** (the
+red-handled plastic broom with a neon-green head and splayed pink-and-green bristles, held two-handed and
+brought down flat in an overhead swat, with a straw whoosh and THWUMP) and the classic **knife**. The knife
+slot is called by your skin wherever it is named for you, and the kill feed names and marks the killer's.
+Militia characters: Rotate (the default) or one of Farmer, Punk, Worker, Adventurer, Casual, Hoodie; SWAT
+keep their one operator so the sides stay easy to tell apart. Looks, names and sounds only: the weapon id,
+stats, strike, throw and pick-up are the knife's whatever the skin. The choice is saved per browser
+(`src/game/skins.ts`; `?classic=1` shows the knife for one visit). Online the client sends it with the
+`set_skin` reducer; the tick cleans it (`setSkin`) and keeps it in the soldier's gear JSON, and every client
+draws it from the roster. Bots wear a skin picked from their id (`botSkin`).
 
-**飛拖 (thrown slipper; not in BeGone)**: with the knife (藍白拖) in hand, hold aim (right mouse; the aim
+**飛拖 (thrown slipper; not in BeGone)**: with the knife (藍白拖, or whatever its skin) in hand, hold aim (right mouse; the aim
 button on phones) to wind it up for up to 0.8 s, and let go to throw it (`SLIPPER` in `shared/weapons.ts`:
 10 m/s at no wind-up, 30 m/s at full). In flight it hurts the first enemy it strikes: 30 thrown without a
 wind-up, rising with it to 100, and only a full wind-up kills outright (`slipperDamage`); a kill with it counts

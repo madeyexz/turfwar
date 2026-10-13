@@ -1,14 +1,15 @@
 import * as THREE from 'three';
-import { MEME_SKINS } from '../game/memeskins';
 import { RoundedBoxGeometry } from 'three/examples/jsm/geometries/RoundedBoxGeometry.js';
 import { mergeGeometries } from 'three/examples/jsm/utils/BufferGeometryUtils.js';
 import * as SkeletonUtils from 'three/examples/jsm/utils/SkeletonUtils.js';
-import type { Assets } from '../assets';
+import { weaponModel, type Assets } from '../assets';
+import { DEFAULT_SKIN, MILITIA_LOOKS, type KnifeSkin, type Skin } from '../../shared/skins';
 import { dirFromAngles } from '../../shared/math';
 import { riderTwist } from '../../shared/vehicles';
 import { curlFingers, orientHand, restorePose, rotateWorld, snapshotPose, solveArm, solveLimb } from './rig';
 import { ATTACHMENT_SLOTS, WEAPONS, type Attachments, type WeaponId } from '../../shared/weapons';
 import { GUN_FIT, fitAttachments, vec, type Fitted } from './optics';
+import { BROOM_CHOKE } from './meme';
 
 /**
  * BeGone's two sides, painted onto the shared CC0 character: SWAT (team 0) in dark navy tactical
@@ -28,12 +29,14 @@ const lookOf = (team: number, variant: number) => team === 0 ? SWAT : MILITIA[va
 
 /**
  * The default crew (src/game/crew.ts, Quaternius' CC0 Modular Men): the SWAT operator is team 0, the
- * Militia are street-gang irregulars picked in rotation. Their bones carry the classic rig's names
- * (tools/import-modular.ts), so the IK below drives them unchanged; the colours are baked in the
- * mesh (one skinned mesh, one draw call per soldier).
+ * Militia are street-gang irregulars: the one the player picked (shared/skins.ts `look`), else in
+ * rotation. Their bones carry the classic rig's names (tools/import-modular.ts), so the IK below
+ * drives them unchanged; the colours are baked in the mesh (one skinned mesh, one draw call per soldier).
  */
 const CREW_MILITIA = ['Farmer', 'Punk', 'Worker', 'Adventurer', 'Casual_2', 'Casual_Hoodie'];
 const crewMaterial = new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.84, metalness: 0.04 });
+/** Which Militia variant a skin asks for, or the next in rotation. */
+const variantOf = (skin: Skin) => { const i = MILITIA_LOOKS.indexOf(skin.look as (typeof MILITIA_LOOKS)[number]); return i >= 0 ? i : spawned++; };
 function crewModel(assets: Assets, team: number, variant: number) {
   const name = team === 0 ? 'Swat' : CREW_MILITIA[variant % CREW_MILITIA.length];
   const model = SkeletonUtils.clone(assets.crew!.getObjectByName(name)!);
@@ -277,14 +280,22 @@ export class SoldierView {
   private crew: boolean;
   private squatDrop = 0;
 
-  constructor(private assets: Assets, readonly team: number) {
+  /** The knife skin this soldier holds (shared/skins.ts). */
+  private knifeSkin: KnifeSkin;
+  /** The character look it was built with ('auto' = rotation): a change needs a new view. */
+  readonly look: Skin['look'];
+
+  constructor(private assets: Assets, readonly team: number, skin: Skin = DEFAULT_SKIN) {
     this.crew = !!assets.crew;
+    this.knifeSkin = skin.knife;
+    this.look = skin.look;
+    const variant = variantOf(skin);
     if (assets.crew) {
-      this.model = crewModel(assets, team, spawned++);
+      this.model = crewModel(assets, team, variant);
       this.model.traverse(o => { if ((o as THREE.Bone).isBone) this.bones.set(o.name, o as THREE.Bone); });
     } else {
       const kit = gearOf(assets, team);
-      const look = lookOf(team, spawned++);
+      const look = lookOf(team, variant);
       this.model = SkeletonUtils.clone(assets.soldier.scene);
       const body = bodyOf(this.model);
       this.model.traverse(o => { if ((o as THREE.Bone).isBone) this.bones.set(o.name, o as THREE.Bone); });
@@ -318,6 +329,15 @@ export class SoldierView {
     this.muzzle.add(this.flash);
   }
 
+  /** Hold the knife slot as `skin` (shared/skins.ts): its model is rebuilt on next show. */
+  setKnifeSkin(skin: KnifeSkin) {
+    if (skin === this.knifeSkin) return;
+    this.knifeSkin = skin;
+    this.guns.get('knife')?.removeFromParent();
+    this.guns.delete('knife');
+    if (this.currentGun === 'knife') this.shown = '';
+  }
+
   /** Show weapon `id` with `attachments` (models and fitted parts are built on first use). */
   private showGun(id: WeaponId, attachments?: Attachments) {
     const key = `${id}|${attachKey(attachments)}`;
@@ -325,7 +345,7 @@ export class SoldierView {
     this.shown = key;
     let gun = this.guns.get(id);
     if (!gun) {
-      gun = this.assets.weapons.get(WEAPONS[id].model)!.clone();
+      gun = this.assets.weapons.get(weaponModel(WEAPONS[id].model, this.knifeSkin))!.clone();
       gun.traverse(o => { if ((o as THREE.Mesh).isMesh) o.castShadow = this.lod === 0; });
       this.gun.add(gun);
       this.guns.set(id, gun);
@@ -510,10 +530,15 @@ export class SoldierView {
     this.recoil = Math.max(0, this.recoil - dt * 12);
     this.stab = Math.max(0, this.stab - dt * 3.2);
     // Stab: a quick thrust out and back (peaks early).
-    const slapping = MEME_SKINS && knife && this.stab > 0;
-    const thrust = this.stab > 0 && !slapping ? Math.sin((1 - this.stab) * Math.PI) ** 0.7 : 0;
-    // The 藍白拖 (src/game/memeskins.ts) slaps instead: raised out to the right, then swept flat across the chest.
-    const arc = slapping ? (1 - this.stab) * Math.PI : 0, side = slapping ? Math.cos(arc) * 0.24 : 0, lift = slapping ? Math.sin(arc) * 0.14 : 0;
+    const skin = knife ? this.knifeSkin : undefined, swinging = this.stab > 0;
+    const slapping = skin === 'slipper' && swinging, broom = skin === 'broom';
+    const thrust = swinging && skin === 'knife' ? Math.sin((1 - this.stab) * Math.PI) ** 0.7 : 0;
+    // The 藍白拖 slaps instead: raised out to the right, then swept flat across the chest.
+    const arc = slapping ? (1 - this.stab) * Math.PI : 0, side = slapping ? Math.cos(arc) * 0.24 : 0;
+    // The 掃把 stands up at guard; the swat lifts it back over the head and brings it down flat in front.
+    const u = broom && swinging ? 1 - this.stab : 0;
+    const chop = broom ? (u < 0.35 ? -1.05 - (u / 0.35) * 0.9 : u < 0.75 ? -1.95 + ((u - 0.35) / 0.4) * 2.4 : 0.45 - ((u - 0.75) / 0.25) * 1.5) : 0;
+    const lift = slapping ? Math.sin(arc) * 0.14 : broom ? 0.06 + Math.max(0, -chop - 1.05) * 0.12 : 0;
     const chest = spine3.getWorldPosition(v1);
     const aimDir = dirFromAngles(p.yaw, pitch);
     const fwd = v2.set(aimDir.x, aimDir.y, aimDir.z);
@@ -527,7 +552,8 @@ export class SoldierView {
     // Gun basis: barrel (-X model) along fwd, +Y up; the knife points a little upward.
     const basis = new THREE.Matrix4().makeBasis(fwd.clone().negate(), gunUp, new THREE.Vector3().crossVectors(fwd.clone().negate(), gunUp));
     q1.setFromRotationMatrix(basis);
-    if (knife) q1.multiply(q2.setFromEuler(new THREE.Euler(0, slapping ? Math.cos(arc) * -1.1 : 0, -0.35 + thrust * 0.3)));
+    if (broom) q1.multiply(q2.setFromEuler(new THREE.Euler(Math.PI / 2, 0, chop, 'ZYX')));
+    else if (knife) q1.multiply(q2.setFromEuler(new THREE.Euler(0, slapping ? Math.cos(arc) * -1.1 : 0, -0.35 + thrust * 0.3)));
     if (lowReady) q1.multiply(q2.setFromEuler(new THREE.Euler(0.5, 0.6, 0)));
     this.gun.quaternion.copy(q1);
     this.gun.position.copy(gripPos).sub(grip.clone().applyQuaternion(q1));
@@ -536,7 +562,9 @@ export class SoldierView {
     const gripWorld = grip.applyMatrix4(this.gun.matrixWorld);
     let foreWorld = fore.applyMatrix4(this.gun.matrixWorld);
     // The knife leaves the support hand at guard by the chest.
-    if (knife) foreWorld = chest.clone().addScaledVector(right, -0.14).addScaledVector(fwd, 0.22).addScaledVector(gunUp, -0.12);
+    // The broom takes both hands, the left down by the butt.
+    if (broom) foreWorld = vec([BROOM_CHOKE - 0.08, 0, 0]).applyMatrix4(this.gun.matrixWorld);
+    else if (knife) foreWorld = chest.clone().addScaledVector(right, -0.14).addScaledVector(fwd, 0.22).addScaledVector(gunUp, -0.12);
     if (p.reloading > 0 && !knife) {
       const t = Math.sin(Math.min(1, p.reloading) * Math.PI);
       foreWorld = foreWorld.lerp(chest.clone().addScaledVector(gunUp, -0.25).addScaledVector(right, -0.05), t * 0.8);
