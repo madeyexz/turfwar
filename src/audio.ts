@@ -842,6 +842,74 @@ export class Audio {
   }
 
   /**
+   * A 燃燒彈 breaking: glass shattering, then (`burst`) the whoosh of the fuel catching. `fizzle`: it broke
+   * without a fire (in the air or in smoke), a short hiss; `out`: smoke put a fire out, a long one.
+   */
+  molotov(action: 'burst' | 'fizzle' | 'out', listener: Listener, at: V3) {
+    if (!this.ready) return;
+    const t = this.now(), out = this.out(0.8, listener, at, 0.3);
+    if (action !== 'out') {
+      for (let i = 0; i < 5; i++) this.noiseBurst(out, t + i * 0.018 + Math.random() * 0.01, 0.06 + Math.random() * 0.12, 'bandpass', 3200 + Math.random() * 3800, 6, 0.55 - i * 0.07);
+      this.tone(out, t + 0.01, 'triangle', 5200, 4100, 0.09, 0.08);
+      this.tone(out, t + 0.04, 'triangle', 6900, 6100, 0.07, 0.05);
+    }
+    if (action === 'burst') {
+      this.noiseBurst(out, t + 0.04, 0.9, 'lowpass', 900, 0.8, 1.1, 0.09);
+      this.noiseBurst(out, t + 0.06, 0.5, 'bandpass', 1800, 0.7, 0.35, 0.05);
+    } else this.noiseBurst(out, t + 0.03, action === 'out' ? 1.6 : 0.5, 'highpass', 2600, 0.6, 0.4, 0.04);
+  }
+
+  /**
+   * A burning 燃燒彈 fire: a low roar under a fast irregular crackle (bright hiss chopped by three
+   * square waves out of step). `set(level, listener, at)` (0..1) follows the fire's size and our
+   * distance; `stop` fades it out. Undefined until audio has started.
+   */
+  fire(): EngineVoice | undefined {
+    const ctx = this.ctx;
+    if (!(ctx instanceof AudioContext) || !this.live) return undefined;
+    const t = this.now();
+    const out = ctx.createGain(); out.gain.value = 0;
+    const pan = ctx.createStereoPanner();
+    const voice = new Voice();
+    out.connect(pan);
+    voice.route(pan, this.world);
+    const roar = ctx.createBufferSource(); roar.buffer = this.noise; roar.loop = true; roar.playbackRate.value = 0.55;
+    const lp = ctx.createBiquadFilter(); lp.type = 'lowpass'; lp.frequency.value = 380; lp.Q.value = 0.6;
+    const rg = ctx.createGain(); rg.gain.value = 1.1;
+    roar.connect(lp).connect(rg).connect(out);
+    const crackle = ctx.createBufferSource(); crackle.buffer = this.noise; crackle.loop = true;
+    const hp = ctx.createBiquadFilter(); hp.type = 'highpass'; hp.frequency.value = 2400;
+    const cg = ctx.createGain(); cg.gain.value = 0.04;
+    crackle.connect(hp).connect(cg).connect(out);
+    const lfos = [[7.3, 0.11], [12.7, 0.09], [3.1, 0.07]].map(([f, depth]) => {
+      const o = ctx.createOscillator(); o.type = 'square'; o.frequency.value = f;
+      const d = ctx.createGain(); d.gain.value = depth;
+      o.connect(d).connect(cg.gain);
+      return o;
+    });
+    for (const n of [roar, crackle, ...lfos]) { n.start(t, n instanceof AudioBufferSourceNode ? Math.random() * 1.5 : 0); voice.track(n); }
+    voice.seal();
+    let stopped = false;
+    return {
+      set: (level, listener, at) => {
+        if (stopped) return;
+        const now = ctx.currentTime;
+        let gain = 0.5 * unit(level), p = 0;
+        if (listener && at) { const sp = this.spatial(listener, at); gain /= 1 + sp.d * 0.12; p = sp.pan; }
+        out.gain.setTargetAtTime(this.muted ? 0 : gain, now, 0.08);
+        pan.pan.setTargetAtTime(p, now, 0.05);
+      },
+      stop: () => {
+        if (stopped) return;
+        stopped = true;
+        const now = ctx.currentTime;
+        out.gain.setTargetAtTime(0, now, 0.15);
+        voice.stop(now + 0.8);
+      },
+    };
+  }
+
+  /**
    * A jet formation going over (the National Day flyover, render/flyover.ts): heard over the whole sky,
    * a roar swelling to its loudest `peak` s from now and dying away by `length` s, the engines' whine
    * falling a few semitones as the jets go by (Doppler) and the roar darkening with it.

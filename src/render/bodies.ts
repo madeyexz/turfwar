@@ -3,9 +3,12 @@ import { KNIFE_MODELS, modelBox, type Assets } from '../assets';
 import type { KnifeSkin } from '../../shared/skins';
 import type { Body } from '../../shared/world';
 import { InterpBuffer } from './interp';
+import { flicker, molotovModel } from './molotov';
 
 interface View {
   object: THREE.Object3D; buffer: InterpBuffer<{ x: number; y: number; z: number }>; trail: Trail; light?: THREE.Mesh; seen: number;
+  /** A thrown 燃燒彈's burning rag. */
+  rag?: THREE.Sprite;
   /** A thrown 藍白拖: its model spins inside `object`; once it lies still, `ring` marks it for picking up. */
   slipper?: { spin: THREE.Object3D; ring: THREE.Mesh; still: number; last: THREE.Vector3; owner: number; born: number };
 }
@@ -59,8 +62,8 @@ export function throwOwner(b: Pick<Body, 'x' | 'z' | 'vx' | 'vz'>, throws: reado
 }
 
 /**
- * Renders thrown M67 frags (blinking fuse light), M18 smoke canisters and 藍白拖 with a trail; popped
- * clouds are SmokeView's. A slipper lying still gets a pulsing ring so it can be found and picked up.
+ * Renders thrown M67 frags (blinking fuse light), M18 smoke canisters, 燃燒彈 (rag alight) and 藍白拖
+ * with a trail; popped clouds are SmokeView's, fires FireView's. A slipper lying still gets a pulsing ring so it can be found and picked up.
  */
 export class BodiesView {
   readonly group = new THREE.Group();
@@ -100,7 +103,7 @@ export class BodiesView {
   sync(bodies: Body[], t: number, knifeOf: (owner: number) => KnifeSkin = () => 'slipper') {
     this.frame++;
     for (const b of bodies) {
-      if (b.kind === 'smokeCloud') continue;
+      if (b.kind === 'smokeCloud' || b.kind === 'fire') continue;
       let v = this.views.get(b.id);
       if (!v) {
         const owner = b.kind === 'slipper' ? this.ownerOf(b) : -1;
@@ -128,6 +131,7 @@ export class BodiesView {
       if (v.slipper) { this.updateSlipper(v, v.slipper, dt, time); continue; }
       v.object.rotation.x += dt * 9;
       if (v.light) v.light.visible = Math.sin(time * 18) > 0;
+      if (v.rag) flicker(v.rag, time);
       v.trail.push(v.object.position);
     }
   }
@@ -187,6 +191,17 @@ export class BodiesView {
       object.position.set(b.x, b.y, b.z);
       this.group.add(object, trail.line);
       return { object, buffer: new InterpBuffer(), trail, seen: this.frame };
+    }
+    if (b.kind === 'molotov') {
+      // The bottle tumbling end over end round its middle, the rag alight, a fiery trail.
+      const object = new THREE.Group(), bottle = molotovModel(1.15, true);
+      bottle.position.y = -0.14;
+      object.add(bottle);
+      const rag = bottle.getObjectByName('rag') as THREE.Sprite;
+      const trail = new Trail(new THREE.Color(0xff8a30).multiplyScalar(0.7), 40);
+      object.position.set(b.x, b.y, b.z);
+      this.group.add(object, trail.line);
+      return { object, buffer: new InterpBuffer(), trail, rag, seen: this.frame };
     }
     const object = this.assets.weapons.get('Prop_Grenade')!.clone();
     object.scale.setScalar(1.1);

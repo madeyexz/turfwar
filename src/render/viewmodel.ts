@@ -8,6 +8,7 @@ import { opticFov, settings } from '../game/settings';
 import { requestScope } from './sights';
 import { createArms } from './soldier';
 import { BROOM_CHOKE, bobaCupModel } from './meme';
+import { flicker, molotovModel } from './molotov';
 import { weaponModel } from '../assets';
 import type { KnifeSkin } from '../../shared/skins';
 
@@ -104,6 +105,9 @@ export class ViewModel {
   private attachments: Attachments = {};
   private arms: { root: THREE.Object3D; bones: Bones; bindPose: Map<string, THREE.Quaternion> };
   private grenade: THREE.Object3D;
+  /** The 燃燒彈, rag alight, in the left hand while throwing one. */
+  private bottle: THREE.Object3D;
+  private rag: THREE.Sprite;
   /** The 珍奶 cup, in the left hand while drinking. */
   private boba: THREE.Object3D;
   private flash: THREE.Group;
@@ -150,6 +154,11 @@ export class ViewModel {
     this.grenade = assets.weapons.get('Prop_Grenade')!.clone();
     this.grenade.visible = false;
     this.root.add(this.grenade);
+    this.bottle = molotovModel(0.85, true);
+    this.bottle.traverse(o => { const m = o as THREE.Mesh; if (m.isMesh) { m.castShadow = false; m.frustumCulled = false; } });
+    this.rag = this.bottle.getObjectByName('rag') as THREE.Sprite;
+    this.bottle.visible = false;
+    this.root.add(this.bottle);
     this.boba = bobaCupModel(0.9);
     this.boba.traverse(o => { const m = o as THREE.Mesh; if (m.isMesh) { m.castShadow = false; m.frustumCulled = false; } });
     this.boba.visible = false;
@@ -341,11 +350,18 @@ export class ViewModel {
       const t = 1 - p.reloadLeft / p.reloadTotal;
       if (t > 0.2 && t < 0.76) { mag.visible = true; lh.getWorldPosition(mag.position).add(new THREE.Vector3(0.02, -0.05, -0.04)); mag.quaternion.copy(this.gun.getWorldQuaternion(new THREE.Quaternion())); mag.rotateY(-Math.PI / 2); }
     }
-    this.grenade.visible = p.throwLeft > 0;
+    this.grenade.visible = p.throwLeft > 0 && p.throwing !== 'molotov';
+    this.bottle.visible = p.throwLeft > 0 && p.throwing === 'molotov';
     // The thrown 藍白拖 has left the hand.
     if (knife) this.models.get('knife')!.visible = p.slipperFollow <= 0 && p.slippers > 0;
     this.boba.visible = raised > 0;
     if (this.grenade.visible) lh.getWorldPosition(this.grenade.position).add(new THREE.Vector3(0.02, 0.03, -0.06));
+    if (this.bottle.visible) {
+      // Held by the neck, tipping forward as the arm comes over.
+      lh.getWorldPosition(this.bottle.position).add(new THREE.Vector3(0.02, -0.12, -0.05));
+      this.bottle.rotation.set(-0.3 - throwing * 0.9, 0.2, 0.15);
+      flicker(this.rag, this.time);
+    }
     if (this.boba.visible) {
       // Up from below to just under the eyes, tipping towards us, with a little bob as it is sipped.
       const gulp = Math.sin(sip * Math.PI * 6) * 0.006 * raised;

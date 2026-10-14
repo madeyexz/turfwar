@@ -1,6 +1,6 @@
 import type { MapDef } from '../maps/types';
 import {
-  ATTACHMENTS, BOBA, DEFAULT_WEAPONS, GRENADE, HIGH_EXPLOSIVE, SMOKE, WEAPONS, attachmentPrice, fitsWeapon, weaponStats,
+  ATTACHMENTS, BOBA, DEFAULT_WEAPONS, GRENADE, HIGH_EXPLOSIVE, MOLOTOV, SMOKE, WEAPONS, attachmentPrice, fitsWeapon, weaponStats,
   type AttachmentId, type WeaponDef, type WeaponId,
 } from '../weapons';
 import type { MatchState, RoundStats, Soldier, Team } from './state';
@@ -20,7 +20,7 @@ export const CASH = {
   loyalty: 1000, loyaltyEvery: 5, bomb: 500, crate: 300,
 };
 
-export type BuyItem = WeaponId | 'grenade' | 'highExplosive' | 'smoke' | 'boba';
+export type BuyItem = WeaponId | 'grenade' | 'highExplosive' | 'smoke' | 'molotov' | 'boba';
 
 /** Distance (m) within which an ammo crate can be used. */
 export const CRATE_REACH = 2.4;
@@ -38,7 +38,7 @@ export function resetInventory(s: Soldier) {
   s.weapons = [...DEFAULT_WEAPONS];
   s.owned = [...DEFAULT_WEAPONS];
   s.attachments = {};
-  s.grenades = 0; s.grenadeHE = false; s.smokes = 0; s.bobas = 0;
+  s.grenades = 0; s.grenadeHE = false; s.smokes = 0; s.molotovs = 0; s.bobas = 0;
   s.money = CASH.matchBonus;
 }
 
@@ -71,7 +71,7 @@ export function canBuyWeapons(state: MatchState, map: MapDef, s: Soldier, side: 
 const ok = (message: string) => ({ ok: true, message });
 const no = (message: string) => ({ ok: false, message });
 
-/** Buy (or, if owned, equip for free) a weapon, the M67 or its High Explosive mod, or the M18 smoke. */
+/** Buy (or, if owned, equip for free) a weapon, the M67 or its High Explosive mod, the M18 smoke, the 燃燒彈 or a 珍奶. */
 export function buy(state: MatchState, map: MapDef, s: Soldier | undefined, item: BuyItem, side: Team): { ok: boolean; message: string } {
   if (!s || state.phase === 'ended') return no('Not in a match.');
   const free = !!state.config.freeBuy;
@@ -81,6 +81,13 @@ export function buy(state: MatchState, map: MapDef, s: Soldier | undefined, item
     if (!free) s.money -= SMOKE.price;
     s.smokes++;
     return ok('M18 smoke');
+  }
+  if (item === 'molotov') {
+    if (s.molotovs >= MOLOTOV.max) return no('You already carry a molotov.');
+    if (!free && s.money < MOLOTOV.price) return no('Not enough cash.');
+    if (!free) s.money -= MOLOTOV.price;
+    s.molotovs++;
+    return ok('Molotov');
   }
   if (item === 'boba') {
     if (s.bobas >= BOBA.max) return no('You already carry a bubble tea.');
@@ -187,4 +194,5 @@ export function botShop(s: Soldier, random: () => number) {
     }
   }
   if (s.grenades < GRENADE.max && s.money > 3000 && random() < 0.5) { s.money -= GRENADE.price; s.grenades = 1; }
+  if (s.molotovs < MOLOTOV.max && s.money > 2000 && random() < 0.35) { s.money -= MOLOTOV.price; s.molotovs = 1; }
 }

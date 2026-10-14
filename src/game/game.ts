@@ -15,6 +15,7 @@ import type { Assets } from '../assets';
 import { Audio, type EngineVoice } from '../audio';
 import { BodiesView } from '../render/bodies';
 import { SmokeView } from '../render/smoke';
+import { FireView } from '../render/fire';
 import { Flyover, overheadPass } from '../render/flyover';
 import { BombSitesView } from '../render/bombsite';
 import { Effects } from '../render/effects';
@@ -71,6 +72,8 @@ export class Game {
   private effects = new Effects();
   private bodies: BodiesView;
   private smoke = new SmokeView();
+  /** 燃燒彈 fires (their crackle from the audio, once it has started). */
+  private fire = new FireView(() => this.audio.fire());
   /** Development only (?flyover): the National Day flyover going over now and then (render/flyover.ts). */
   private flyover?: Flyover;
   private flyoverAt = -Infinity;
@@ -220,7 +223,7 @@ export class Game {
     this.level = new LevelView(assets, def, theme);
     renderer.scene.add(this.level.group, this.effects.group);
     this.bodies = new BodiesView(assets);
-    renderer.scene.add(this.bodies.group, this.smoke.group);
+    renderer.scene.add(this.bodies.group, this.smoke.group, this.fire.group);
     if (import.meta.env.DEV && new URLSearchParams(location.search).has('flyover')) {
       this.flyover = new Flyover(overheadPass());
       this.flyover.setHaze(theme.fog, theme.fogDensity * 0.2);
@@ -312,8 +315,9 @@ export class Game {
     this.buymenu.dispose?.();
     this.buymenu.root.remove();
     this.menu.dispose();
-    this.renderer.scene.remove(this.level.group, this.effects.group, this.bodies.group, this.smoke.group, this.crates.group, this.sites.group, this.vehicles.group);
+    this.renderer.scene.remove(this.level.group, this.effects.group, this.bodies.group, this.smoke.group, this.fire.group, this.crates.group, this.sites.group, this.vehicles.group);
     this.smoke.clear();
+    this.fire.clear();
     this.flyover?.dispose();
     this.vehicles.dispose();
     this.renderer.scene.remove(this.skids.mesh); this.skids.dispose();
@@ -475,6 +479,7 @@ export class Game {
     if (result.zoomed) this.player.binoculars ? this.audio.binoculars() : this.audio.ui();
     if (result.grenade) link.grenade(result.grenade.origin, result.grenade.dir);
     if (result.smoke) link.smoke(result.smoke.origin, result.smoke.dir);
+    if (result.molotov) link.molotov(result.molotov.origin, result.molotov.dir);
     if (result.slipper) { link.slipper?.(result.slipper.origin, result.slipper.dir, result.slipper.power); this.audio.slipper('throw'); }
     if (result.noSlipper) this.hud.toast(t('hud.slipperGone'), 1800);
     if (result.drinkStarted) this.audio.drink();
@@ -504,6 +509,7 @@ export class Game {
       this.syncRemotes(state, myId, now);
       this.bodies.sync(state.bodies, now, owner => { const s = state.soldiers.find(x => x.id === owner); return s ? skinOf(s).knife : 'slipper'; });
       this.smoke.sync(state.bodies, now);
+      this.fire.sync(state.bodies, now, this.map.world);
       this.vehicles.sync(state.vehicles, now);
     }
     const renderTime = now - link.interpDelay - 0.02;
@@ -610,6 +616,8 @@ export class Game {
     this.updateEngines(state);
     // Smoke after the camera is placed: standing in a cloud greys the whole screen.
     this.hud.smokeFog(this.smoke.update(performance.now() / 1000, cam.position));
+    const p = this.player, feet = p.alive && !watching ? { x: p.m.x, y: p.m.y, z: p.m.z } : undefined;
+    this.hud.burn(this.fire.update(performance.now() / 1000, this.listener(), feet));
     if (this.flyover) this.flyPass(performance.now() / 1000);
     // One flashlight light for whichever view model is shown.
     this.renderer.torch.intensity = Math.max(this.viewmodel.torch, this.otherViewmodel?.torch ?? 0);
@@ -680,7 +688,7 @@ export class Game {
       scope: ctx.scope, melee: p.slot === 2, sniper: p.weapon.class === 'sniper', rider: p.rider, binoculars: p.binoculars, throwing: p.throwLeft > 0,
     });
     this.touch!.update(ctx, {
-      slot: p.slot, weapons: [WEAPONS[p.weapons[0]].name, WEAPONS[p.weapons[1]].name], grenades: p.grenades, smokes: p.smokes, bobas: p.bobas, use,
+      slot: p.slot, weapons: [WEAPONS[p.weapons[0]].name, WEAPONS[p.weapons[1]].name], grenades: p.grenades, smokes: p.smokes, molotovs: p.molotovs, bobas: p.bobas, use,
       storeHot: !!me && buyWindow && (free || inBase(me, this.map.def, sideOf(state, this.map.def, me.team))), reloading: p.reloading,
       holdAim, shots: this.shotCount,
     });
@@ -1212,15 +1220,16 @@ export class Game {
         if (e.attacker === myId && e.target !== myId) {
           const now = performance.now();
           this.predictedHits = this.predictedHits.filter(h => now - h.at < 1000);
-          const shown = e.zone === 'blast' ? -1 : this.predictedHits.findIndex(h => h.target === e.target);
+          const shown = e.zone === 'blast' || e.zone === 'burn' ? -1 : this.predictedHits.findIndex(h => h.target === e.target);
           if (shown >= 0) this.predictedHits.splice(shown, 1);
-          else { this.hud.hit(e.zone === 'head' ? 'head' : 'body'); this.audio.hitmarker(e.zone === 'head', false); }
+          // Burning goes on four times a second: no hit marker for each lick of the flames.
+          else if (e.zone !== 'burn') { this.hud.hit(e.zone === 'head' ? 'head' : 'body'); this.audio.hitmarker(e.zone === 'head', false); }
         }
         if (e.target === myId) {
           const angle = Math.atan2(-(e.x - this.player.m.x), -(e.z - this.player.m.z));
-          if (e.zone !== 'fall') this.hud.damage(angle);
+          if (e.zone !== 'fall' && e.zone !== 'burn') this.hud.damage(angle);
           this.audio.damage(false);
-          this.player.shake = Math.min(3, this.player.shake + e.amount * 0.05);
+          this.player.shake = Math.min(3, this.player.shake + e.amount * (e.zone === 'burn' ? 0.02 : 0.05));
           this.player.punchVel -= e.amount * 0.08;
         } else this.remotes.get(e.target)?.view.hit(Math.random() < 0.5);
         break;
@@ -1294,6 +1303,12 @@ export class Game {
       }
       case 'smoke': {
         this.audio.smoke(this.listener(), new THREE.Vector3(e.x, e.y, e.z));
+        break;
+      }
+      case 'molotov': {
+        const at = new THREE.Vector3(e.x, e.y, e.z);
+        this.audio.molotov(e.action, this.listener(), at);
+        if (e.action !== 'out') this.effects.hitSpark(at, false);
         break;
       }
       case 'slipper': {

@@ -1,16 +1,18 @@
 import { CollisionWorld, terrainHeight } from './collision';
 import { near, raycastObstacle, type Obstacle } from './obstacles';
 
-/** Thrown M67 frags, M18 smoke grenades and 藍白拖, integrated under plain gravity; smoke clouds stay put. */
+/** Thrown M67 frags, M18 smoke grenades, 燃燒彈 and 藍白拖, integrated under plain gravity; smoke clouds and fires stay put. */
 export const PHYSICS_STEP = 1 / 120;
 export const GRAVITY = 9.8;
 
 /**
  * `smokeCloud`: a smoke grenade that has popped (still, `timer` = seconds left). `slipper`: a thrown
  * 藍白拖 (SLIPPER in weapons.ts; `hp` the damage it does in flight, 0 once it has touched anything).
+ * `molotov`: a thrown 燃燒彈 (`hp` 1 in flight, 0 once it has landed on a floor and broken). `fire`: the
+ * fire it lit (still, on the floor; `timer` = seconds left).
  * Keep the order: the frame sends the index.
  */
-export type BodyKind = 'grenade' | 'smoke' | 'smokeCloud' | 'slipper';
+export type BodyKind = 'grenade' | 'smoke' | 'smokeCloud' | 'slipper' | 'molotov' | 'fire';
 
 export interface Body {
   id: number;
@@ -24,11 +26,11 @@ export interface Body {
   team: number;
   /** 2 = carries the High Explosive mod; for a slipper, the damage it still does (0 once harmless). */
   hp: number;
-  /** Fuse remaining (seconds); for a smoke cloud, the seconds it has left. */
+  /** Fuse remaining (seconds); for a smoke cloud or a fire, the seconds it has left. */
   timer: number;
 }
 
-export const BODY_RADIUS: Record<BodyKind, number> = { grenade: 0.09, smoke: 0.09, smokeCloud: 0.09, slipper: 0.06 };
+export const BODY_RADIUS: Record<BodyKind, number> = { grenade: 0.09, smoke: 0.09, smokeCloud: 0.09, slipper: 0.06, molotov: 0.09, fire: 0.09 };
 const RESTITUTION = 0.38;
 
 /**
@@ -39,8 +41,10 @@ export function stepBodies(bodies: Body[], dt: number, world: CollisionWorld | u
   if (dt <= 0) return;
   for (let i = bodies.length - 1; i >= 0; i--) {
     const b = bodies[i];
-    // Smoke clouds stay put, and so does a slipper once it has come to rest (it may lie there all round).
-    if (b.kind === 'smokeCloud' || (b.kind === 'slipper' && b.vx === 0 && b.vy === 0 && b.vz === 0)) { b.age += dt; continue; }
+    // Smoke clouds and fires stay put, and so does a slipper once it has come to rest (it may lie there
+    // all round) and a molotov that has broken on a floor (it lights its fire at the end of the tick).
+    if (b.kind === 'smokeCloud' || b.kind === 'fire' || (b.kind === 'molotov' && b.hp <= 0)
+      || (b.kind === 'slipper' && b.vx === 0 && b.vy === 0 && b.vz === 0)) { b.age += dt; continue; }
     b.vy -= GRAVITY * dt;
     const ox = b.x, oy = b.y, oz = b.z;
     b.x += b.vx * dt; b.y += b.vy * dt; b.z += b.vz * dt;
@@ -75,6 +79,7 @@ function collide(b: Body, ox: number, oy: number, oz: number, world: CollisionWo
       const back = Math.max(0, hit.t - r);
       b.x = ox + dir.x * back + n.x * 0.01; b.y = oy + dir.y * back + n.y * 0.01; b.z = oz + dir.z * back + n.z * 0.01;
       if (n.y > 0.5) settle(b);
+      if (n.y > 0.5) shatter(b);
     }
   }
   const g = terrainHeight(world.terrain, b.x, b.z);
@@ -83,7 +88,13 @@ function collide(b: Body, ox: number, oy: number, oz: number, world: CollisionWo
     if (b.kind === 'slipper') b.hp = 0;
     if (b.vy < 0) { b.vy = -b.vy * RESTITUTION; b.vx *= 0.8; b.vz *= 0.8; }
     settle(b);
+    shatter(b);
   }
+}
+
+/** A molotov breaks on the first floor it lands on (walls only bounce it): it stops there. */
+function shatter(b: Body) {
+  if (b.kind === 'molotov') { b.hp = 0; b.vx = 0; b.vy = 0; b.vz = 0; }
 }
 
 /** A slipper slowed to a crawl on a floor lies still (and is no longer simulated). */
