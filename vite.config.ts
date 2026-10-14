@@ -28,7 +28,6 @@ function releases(): Release[] {
   return mergeReleases(snapshot, fromGit, building);
 }
 
-/**
 /** The static pages for search and answer engines (docs/SEO.md): each at /<page> (繁體中文) and /en/<page> (English). */
 const INFO_PAGES = ['about', 'guide', 'maps', 'begone'];
 
