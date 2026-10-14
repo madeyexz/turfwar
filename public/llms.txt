@@ -15,6 +15,7 @@ Two names, one game: 角頭械鬥 (Traditional Chinese) and Turf War: Taipei (En
 - Maps (13): Ximending (西門町), Taipei 101 · Xinyi, Taipei 101 · 88F (an office floor inside the tower), Memorial Hall (中正紀念堂), Sanchong (三重), Ochre Quarter, Citadel Keep, Railyard, Skyline Rooftops, Meridian District, Warehouse, Pipeline, Timbertown.
 - Vehicles on some maps: cars, taxis, scooters and a helicopter.
 - Languages: English and Traditional Chinese (繁體中文).
+- Playing with classmates (電腦課、上課跟同學一起玩): a browser based game like .io games, nothing to install and no account, so it works as a multiplayer game for a school computer lab or phones; one student opens a private room and shares the 4-letter code (6v6 holds 12 players, 24v24 holds 48); Graphics: Low helps older computers.
 - Multiplayer: the server decides damage, cash, purchases, rounds and the bomb; movement is predicted by the client and validated by the server. The default game server is in Taiwan (Taipei).
 - Controls (defaults, rebindable): WASD move, mouse look, left click fire, right click aim, Shift sprint, Space jump, C or Ctrl crouch, 1/2/3 weapon slots, R reload, E use (arm or disarm the bomb, ammo crate, vehicles), B store, Tab scoreboard, Esc or P menu. Phones and tablets get touch controls with an editable layout.
 

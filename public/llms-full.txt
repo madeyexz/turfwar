@@ -22,6 +22,7 @@ A browser game: no install, no account, no ads, free. Two teams, SWAT (navy tact
 - Practice: a range with a free store and no bots.
 - 單挑我 / 發起單挑 (duel challenge): after an online match a player can open a private 1v1 room on the same map and share a link; a friend who opens it joins the room, or plays a Solo 1v1 against a bot carrying the challenger's name if the room is gone.
 - Room sizes: 1v1 (duel), 6v6 (squad), 24v24 (war). 24v24 needs a big map (Meridian District, Taipei 101 · Xinyi). Bots fill every slot without a human; private rooms can turn bots off.
+- With classmates (電腦課、上課跟同學一起玩): it is a browser based game, like .io games, with nothing to install and no account, so a class can play it as a multiplayer game on school computers or phones: one student opens a private room and reads out the 4-letter code (6v6 holds 12, 24v24 holds 48 on the big maps); Settings → Graphics → Low helps older computers.
 - Default online server: Taiwan (Taipei). US East can be chosen in Settings → Server.
 
 ## Rules
