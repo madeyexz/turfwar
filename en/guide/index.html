@@ -1,0 +1,209 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="theme-color" content="#05090c" />
+    <title>Turf War: Taipei guide (角頭械鬥): weapon stats, attachment prices, cash and Sabotage tips</title>
+    <meta name="description" content="A Turf War: Taipei (角頭械鬥) guide: prices and damage of the MP5, M4A1, M1014, M110, M249, M9A1 and MP7, attachments, grenades, smoke, bubble tea and the thrown slipper, the cash awards, what to buy first and how to play Sabotage." />
+    <link rel="canonical" href="https://turfwar.ianhsiao.me/en/guide" />
+    <link rel="alternate" hreflang="zh-TW" href="https://turfwar.ianhsiao.me/guide" />
+    <link rel="alternate" hreflang="en" href="https://turfwar.ianhsiao.me/en/guide" />
+    <link rel="alternate" hreflang="x-default" href="https://turfwar.ianhsiao.me/en/guide" />
+    <meta property="og:type" content="article" />
+    <meta property="og:site_name" content="角頭械鬥 · Turf War: Taipei" />
+    <meta property="og:title" content="Turf War: Taipei guide: weapons, attachments, cash and Sabotage tips" />
+    <meta property="og:description" content="Every gun's price and damage, which attachments to fit, how cash is earned and what to buy first in Turf War: Taipei (角頭械鬥)." />
+    <meta property="og:url" content="https://turfwar.ianhsiao.me/en/guide" />
+    <meta property="og:locale" content="en_US" />
+    <meta property="og:locale:alternate" content="zh_TW" />
+    <meta property="og:image" content="https://turfwar.ianhsiao.me/og/og-en.jpg" />
+    <meta property="og:image:type" content="image/jpeg" />
+    <meta property="og:image:width" content="1200" />
+    <meta property="og:image:height" content="630" />
+    <meta property="og:image:alt" content="Turf War: Taipei (角頭械鬥): a first-person firefight on Cinema Street in Ximending, Taipei" />
+    <meta name="twitter:card" content="summary_large_image" />
+    <meta name="twitter:title" content="Turf War: Taipei guide: weapons, attachments, cash and Sabotage tips" />
+    <meta name="twitter:description" content="Every gun's price and damage, which attachments to fit, how cash is earned and what to buy first." />
+    <meta name="twitter:image" content="https://turfwar.ianhsiao.me/og/og-en.jpg" />
+    <link rel="icon" type="image/png" sizes="16x16" href="/icons/favicon-16.png" />
+    <link rel="icon" type="image/png" sizes="32x32" href="/icons/favicon-32.png" />
+    <link rel="apple-touch-icon" href="/icons/apple-touch-icon.png" />
+    <!--preload:rajdhani-600,rajdhani-700-->
+    <link rel="manifest" href="/manifest.webmanifest" />
+    <link rel="stylesheet" href="/src/about/about.css" />
+    <!--
+      The English guide: weapons with their prices and numbers, attachments, the cash awards, items and tips.
+      /guide says the same in Traditional Chinese: keep both in step, and every number true to docs/GAMEPLAY.md,
+      shared/weapons.ts and shared/match/economy.ts. The JSON-LD FAQ must repeat the visible FAQ word for word
+      (src/seo.test.ts). No script runs on this page; its canonical URL is the clean one.
+    -->
+    <script type="application/ld+json">
+    {
+      "@context": "https://schema.org",
+      "@graph": [
+        {
+          "@type": "WebPage",
+          "@id": "https://turfwar.ianhsiao.me/en/guide#webpage",
+          "url": "https://turfwar.ianhsiao.me/en/guide",
+          "name": "Turf War: Taipei guide: weapons, attachments, cash and Sabotage tips",
+          "inLanguage": "en",
+          "isPartOf": { "@id": "https://turfwar.ianhsiao.me/#website" },
+          "author": { "@id": "https://ianhsiao.me/about#person" },
+          "about": { "@id": "https://turfwar.ianhsiao.me/#game" },
+          "primaryImageOfPage": { "@type": "ImageObject", "url": "https://turfwar.ianhsiao.me/og/og-en.jpg", "width": 1200, "height": 630 }
+        },
+        {
+          "@type": "FAQPage",
+          "@id": "https://turfwar.ianhsiao.me/en/guide#faq",
+          "url": "https://turfwar.ianhsiao.me/en/guide",
+          "inLanguage": "en",
+          "mainEntity": [
+            { "@type": "Question", "name": "What should I buy in the first round of Turf War: Taipei?", "acceptedAnswer": { "@type": "Answer", "text": "You start with $1,000 and already carry the MP5 and the M9A1. The best value is a smoke grenade ($300) and a bubble tea ($400), or saving; buy the M4A1 once you have $3,400, because a weapon you buy stays yours for the whole match." } },
+            { "@type": "Question", "name": "How do I earn the most cash?", "acceptedAnswer": { "@type": "Answer", "text": "A kill pays $500, a knife kill $600 and a grenade kill $900; the round's first kill, first damage and the last enemy each add $300; every headshot bullet adds $100 (at most 3 per opponent per round); a round win pays every player $500, and arming or disarming the bomb $500. Cash is capped at $16,000." } },
+            { "@type": "Question", "name": "What do I do when I run out of ammo?", "acceptedAnswer": { "@type": "Answer", "text": "Every map has ammo crates, plus one in each base. Stand within 2.4 m and press E: the first use each round costs $300, after that it is free, and each use restocks half a magazine." } },
+            { "@type": "Question", "name": "Which gun is best for beginners?", "acceptedAnswer": { "@type": "Answer", "text": "The default MP5 fires fast (12 rounds a second) and moves quickly, which suits close and mid range; switch to the M4A1 (9 rounds a second, more damage) when you can afford it. On phones, aim assist and auto-aim while holding fire are on by default." } }
+          ]
+        },
+        { "@type": "Person", "@id": "https://ianhsiao.me/about#person", "name": "Ian Hsiao", "url": "https://ianhsiao.me/", "sameAs": ["https://github.com/madeyexz"] },
+        {
+          "@type": "BreadcrumbList",
+          "itemListElement": [
+            { "@type": "ListItem", "position": 1, "name": "角頭械鬥 · Turf War: Taipei", "item": "https://turfwar.ianhsiao.me/" },
+            { "@type": "ListItem", "position": 2, "name": "Guide", "item": "https://turfwar.ianhsiao.me/en/guide" }
+          ]
+        }
+      ]
+    }
+    </script>
+  </head>
+  <body>
+    <header class="bar">
+      <a class="home" href="/"><img class="mark" src="/icons/icon-192.png" width="32" height="32" alt=""><span>Turf War: Taipei</span></a>
+      <nav aria-label="Language / 語言"><a class="alt-lang" href="/guide" hreflang="zh-TW" lang="zh-TW">繁體中文</a></nav>
+    </header>
+    <nav class="pages" aria-label="Pages"><a href="/en/about">About</a><a href="/en/guide" aria-current="page">Guide</a><a href="/en/maps">Maps</a><a href="/en/begone">BeGone</a></nav>
+
+    <main>
+      <article>
+        <h1><span>Turf War: Taipei</span> <span>guide</span> · <span lang="zh-TW">角頭械鬥</span></h1>
+        <p class="lead"><strong>Turf War: Taipei (角頭械鬥)</strong> is a round-based browser shooter: one life a round, and cash you earn buys guns and attachments in the store. This page lists every weapon's price and damage, the attachments and the cash awards, and answers what new players ask most: what to buy first, how to earn cash and how to play Sabotage. Prices, damage, fire rates, magazines and reloads are BeGone's numbers, taken from the game's code.</p>
+        <a class="play" href="/">Play now</a>
+
+        <h2>Five things to know first</h2>
+        <ol>
+          <li><strong>Guns are sold for 20 seconds</strong>: every round starts with a 4 s freeze, and for the first 20 s you can press <kbd>B</kbd> in your own base to buy guns; after that, or outside the base, wait for the next round. Grenades, smoke, bubble tea and attachments can be bought anywhere, any time.</li>
+          <li><strong>What you buy stays yours</strong>: weapons and attachments last the whole match, even when you die, and a weapon you own swaps in free during buy time. A good gun bought early pays for itself every round after.</li>
+          <li><strong>Aim for the head</strong>: headshots do the most damage, and every bullet that hits a head adds $100 (at most 3 per opponent per round).</li>
+          <li><strong>One life</strong>: after dying you wait for the next round; surviving the round pays $200, and being the last one standing $300 more. When unsure, push with your team.</li>
+          <li><strong>Losing still pays</strong>: from the 4th loss in a row, every lost round adds $500, so a team that is behind can save and buy everything in one round.</li>
+        </ol>
+
+        <h2>How cash is earned</h2>
+        <p>A new match starts with $1,000; cash is capped at $16,000. The server works out every award:</p>
+        <div class="table-wrap">
+          <table>
+            <thead><tr><th>For</th><th class="num">Cash</th></tr></thead>
+            <tbody>
+              <tr><td>Kill · knife kill (thrown slipper included) · grenade kill</td><td class="num">$500 · $600 · $900</td></tr>
+              <tr><td>First kill of the round · first damage (first blood) · last enemy alive</td><td class="num">+$300 each</td></tr>
+              <tr><td>Multi-kill (kills under 4 s apart)</td><td class="num">+$300 × kills in the chain</td></tr>
+              <tr><td>Every 5th kill of a streak</td><td class="num">+$100 × (streak ÷ 5)</td></tr>
+              <tr><td>Headshot (per bullet, at most 3 per opponent per round)</td><td class="num">+$100</td></tr>
+              <tr><td>Assist (you hit the victim in its last 3 s) · trade (both kill each other)</td><td class="num">$200 · +$100</td></tr>
+              <tr><td>Arm or disarm the bomb</td><td class="num">$500</td></tr>
+              <tr><td>Round won (each player) · survived · last man standing</td><td class="num">$500 · $200 · $300</td></tr>
+              <tr><td>Loss bonus (4th loss in a row onward, per round)</td><td class="num">$500</td></tr>
+              <tr><td>Loyalty (every 5 rounds on the same server)</td><td class="num">$1,000</td></tr>
+            </tbody>
+          </table>
+        </div>
+
+        <h2>Weapon stats</h2>
+        <p>Everyone carries the MP5, the M9A1 and the knife (the blue-and-white slipper by default). Damage is head / body / limb against 100 health. Movement is relative to the M4A1 (100%).</p>
+        <div class="table-wrap">
+          <table>
+            <thead><tr><th>Weapon</th><th>Type</th><th class="num">Price</th><th class="num">Damage head / body / limb</th><th class="num">Magazine + reserve</th><th class="num">Reload</th><th class="num">Move</th></tr></thead>
+            <tbody>
+              <tr><td>MP5</td><td>SMG · automatic, 12 rounds/s</td><td class="num">default</td><td class="num">30 / 18 / 12</td><td class="num">32 + 96</td><td class="num">3.1 s</td><td class="num">105%</td></tr>
+              <tr><td>M4A1</td><td>Assault rifle · automatic, 9 rounds/s</td><td class="num">$3,400</td><td class="num">33 / 21 / 15</td><td class="num">30 + 90</td><td class="num">3.1 s</td><td class="num">100%</td></tr>
+              <tr><td>M1014</td><td>Shotgun · semi-auto, 14 pellets a shot</td><td class="num">$2,800</td><td class="num">24 / 10 / 8 per pellet</td><td class="num">6 + 18</td><td class="num">2.5 s</td><td class="num">102%</td></tr>
+              <tr><td>M110</td><td>Sniper rifle · semi-auto</td><td class="num">$4,000</td><td class="num">90 / 40 / 30</td><td class="num">6 + 18</td><td class="num">3.1 s</td><td class="num">100%</td></tr>
+              <tr><td>M249</td><td>Light machine gun · automatic</td><td class="num">$3,800</td><td class="num">43 / 33 / 21</td><td class="num">86 + 86</td><td class="num">4 s</td><td class="num">90%</td></tr>
+              <tr><td>M9A1</td><td>Pistol · semi-auto (secondary)</td><td class="num">default</td><td class="num">29 / 22 / 15</td><td class="num">12 + 36</td><td class="num">3.1 s</td><td class="num">107%</td></tr>
+              <tr><td>MP7</td><td>SMG · automatic, 13 rounds/s (secondary)</td><td class="num">$1,800</td><td class="num">18 / 12 / 8</td><td class="num">20 + 60</td><td class="num">2.4 s</td><td class="num">102%</td></tr>
+              <tr><td>Knife (slipper)</td><td>Melee · 2 swings/s</td><td class="num">free</td><td class="num">33 / 33 / 33</td><td class="num">—</td><td class="num">—</td><td class="num">110%</td></tr>
+            </tbody>
+          </table>
+        </div>
+        <h3>How to use each gun</h3>
+        <ul>
+          <li><strong>MP5</strong>: fast to fire and to run with, the close-to-mid-range workhorse. You start with it; no need to replace it in the first rounds.</li>
+          <li><strong>M4A1</strong>: every bullet hurts more than the MP5's and it is steadier aimed; the safest buy once you have $3,400.</li>
+          <li><strong>M1014</strong>: 14 pellets can deal up to 140 to the body, so up close one shot usually does it; strong indoors (Taipei 101 · 88F, Memorial Hall's galleries), weak at range.</li>
+          <li><strong>M110</strong>: the most accurate gun when aimed, 90 to the head and 40 to the body; only 6 rounds, so move after a miss. It takes the M110-only 6× zoom.</li>
+          <li><strong>M249</strong>: high damage per bullet and an 86-round box, good for holding a bomb site; the price is the slowest movement and a 4 s reload.</li>
+          <li><strong>MP7</strong>: an SMG in the secondary slot, faster than the M9A1, insurance for when the primary runs dry.</li>
+        </ul>
+
+        <h2>Attachments</h2>
+        <p>One attachment per category per weapon; bought once, kept for the match.</p>
+        <div class="table-wrap">
+          <table>
+            <thead><tr><th>Category</th><th>Attachment</th><th class="num">Price</th><th>Notes</th></tr></thead>
+            <tbody>
+              <tr><td>Optic</td><td>Iron sight · Reflex · Holographic · ACOG</td><td class="num">free · $800 · $1,000 · $1,100</td><td>All firearms (no ACOG on the M9A1)</td></tr>
+              <tr><td>Optic</td><td>Zoom ×4 · Zoom ×6</td><td class="num">$600 · $1,200</td><td>×4 on the M9A1 only, ×6 on the M110 only</td></tr>
+              <tr><td>Tactical</td><td>Ammo counter · Laser sight · Flashlight</td><td class="num">$200 · $800 · $600</td><td>The laser improves hip-fire accuracy, but enemies see the beam too</td></tr>
+              <tr><td>Tactical</td><td>Suppressor</td><td class="num">$1,100 (MP7 $1,000, M9A1 $600)</td><td>Less recoil and damage; no tracer or muzzle flash, quieter</td></tr>
+              <tr><td>Mod</td><td>Extended clip · Recoil pad</td><td class="num">$900 · $1,200</td><td>All firearms</td></tr>
+              <tr><td>Ammo</td><td>Explosive · Incendiary</td><td class="num">$1,600 · $1,400</td><td>More damage, a smaller magazine and more recoil</td></tr>
+            </tbody>
+          </table>
+        </div>
+
+        <h2>Grenades, bubble tea and the thrown slipper</h2>
+        <ul>
+          <li><strong>M67 grenade</strong> ($1,000, <kbd>4</kbd> or <kbd>G</kbd>): up to 70 damage, less with distance; one carried, not restocked. The High Explosive mod ($1,500) adds 45 body damage with a smaller radius. A grenade kill pays $900, the biggest single kill award.</li>
+          <li><strong>M18 smoke grenade</strong> ($300, <kbd>5</kbd> or <kbd>X</kbd>): a 9 m cloud for 15 s that blocks sight, not bullets. Use it to blind a sniper's lane or to cover arming and disarming the bomb.</li>
+          <li><strong>Bubble tea (珍奶)</strong> ($400, <kbd>6</kbd> or <kbd>Y</kbd>): drink it when hurt: a 1.4 s sip (no shooting), then +50 health up to 100. Get behind cover first.</li>
+          <li><strong>Thrown slipper (飛拖)</strong> (free): with the slipper in hand, hold aim (right mouse) to wind up for up to 0.8 s and let go to throw. Without a wind-up a hit does 30; only a full wind-up kills outright, and it counts as a knife kill ($600). You have one a round: once thrown, walk over it to pick it up (a lying slipper shows a pulsing ring).</li>
+        </ul>
+
+        <h2>When to buy what</h2>
+        <ul>
+          <li><strong>Round one ($1,000)</strong>: fight with the default MP5 and M9A1 and buy a smoke and a bubble tea ($700 together), or save.</li>
+          <li><strong>At $3,400</strong>: buy the M4A1. Spend later spare cash on attachments, such as a Reflex or Holographic sight ($800 / $1,000) or the recoil pad ($1,200).</li>
+          <li><strong>When rich</strong>: restock a grenade and a smoke every round; thrown items are gone once used.</li>
+          <li><strong>Holding a site</strong>: the M249, or the M110 with the 6× zoom; <strong>attacking</strong>: the M4A1, or the M1014 up close.</li>
+        </ul>
+
+        <h2>Sabotage tips</h2>
+        <ul>
+          <li>Militia arm the bomb by holding <kbd>E</kbd> for 5 s on site A or B, unable to move or shoot meanwhile, so have teammates cut the sightlines first (smoke helps).</li>
+          <li>Once armed, the round has 40 s left and the other site is dead; SWAT can now only win by disarming, again by holding <kbd>E</kbd> for 5 s.</li>
+          <li>The Taipei maps (Ximending, Taipei 101, Memorial Hall, Sanchong) are built so SWAT reach each site about 2 s before Militia: SWAT can be waiting on site, so Militia should fake or stack on one site together.</li>
+          <li>Before the bomb is armed, Militia lose if they are all dead or time runs out, and SWAT lose if they are all dead. Sabotage has no draws.</li>
+          <li>On Memorial Hall, site B is above site A: you arm and disarm a site only on its own floor.</li>
+        </ul>
+        <p>All the keys and the phone controls are on the <a href="/en/about">about page</a>; each map's routes and bomb sites are on the <a href="/en/maps">maps page</a>.</p>
+
+        <h2>FAQ</h2>
+        <h3>What should I buy in the first round of Turf War: Taipei?</h3>
+        <p>You start with $1,000 and already carry the MP5 and the M9A1. The best value is a smoke grenade ($300) and a bubble tea ($400), or saving; buy the M4A1 once you have $3,400, because a weapon you buy stays yours for the whole match.</p>
+        <h3>How do I earn the most cash?</h3>
+        <p>A kill pays $500, a knife kill $600 and a grenade kill $900; the round's first kill, first damage and the last enemy each add $300; every headshot bullet adds $100 (at most 3 per opponent per round); a round win pays every player $500, and arming or disarming the bomb $500. Cash is capped at $16,000.</p>
+        <h3>What do I do when I run out of ammo?</h3>
+        <p>Every map has ammo crates, plus one in each base. Stand within 2.4 m and press E: the first use each round costs $300, after that it is free, and each use restocks half a magazine.</p>
+        <h3>Which gun is best for beginners?</h3>
+        <p>The default MP5 fires fast (12 rounds a second) and moves quickly, which suits close and mid range; switch to the M4A1 (9 rounds a second, more damage) when you can afford it. On phones, aim assist and auto-aim while holding fire are on by default.</p>
+
+        <h2>Sources</h2>
+        <p>The numbers come from the game's source code (<a href="https://github.com/madeyexz/turfwar" rel="noopener">github.com/madeyexz/turfwar</a>); the rules and numbers are an homage to nPlay's BeGone, see <a href="/en/begone">Turf War: Taipei and BeGone</a>. Made by <a href="https://ianhsiao.me/" rel="author noopener">Ian Hsiao</a>.</p>
+      </article>
+    </main>
+    <footer class="site">
+      <a href="/">Play</a><a href="/guide" hreflang="zh-TW" lang="zh-TW">繁體中文</a><a href="/privacy?lang=en">Privacy</a><a href="https://github.com/madeyexz/turfwar" rel="noopener">GitHub</a>
+    </footer>
+  </body>
+</html>
