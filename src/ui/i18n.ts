@@ -102,7 +102,7 @@ const en = {
   'lobby.unableToStart': 'Could not start the game: {error}',
   'lobby.noServer': 'No SpacetimeDB server is configured for this build. Solo skirmish works offline.',
   'lobby.bench': 'Run the {n}-second performance check',
-  'lobby.credits': 'Characters, weapons and props: CC0 packs by Quaternius. Gunshots: CC0 Free Firearm Sound Library. Textures: CC0 Poly Haven. Fonts: Rajdhani, Barlow and Noto Sans TC (OFL). No proprietary game assets.',
+  'lobby.credits': 'Characters, weapons and props: CC0 packs by Quaternius. Gunshots: CC0 Free Firearm Sound Library. Textures: CC0 Poly Haven. Fonts: Rajdhani, Oswald and Noto Sans TC (OFL). No proprietary game assets.',
 
   // ---- Online connection ----
   'net.connecting': 'Connecting…', 'net.joining': 'Joining the battlefield…',
@@ -447,7 +447,7 @@ const zhTW: Record<Key, string> = {
   'lobby.unableToStart': '無法啟動遊戲：{error}',
   'lobby.noServer': '此版本未設定 SpacetimeDB 伺服器，仍可離線對戰電腦。',
   'lobby.bench': '執行 {n} 秒效能檢測',
-  'lobby.credits': '角色、武器與道具：Quaternius 的 CC0 素材包。槍聲：CC0 Free Firearm Sound Library。貼圖：CC0 Poly Haven。字型：Rajdhani、Barlow 與 Noto Sans TC（OFL）。未使用任何專有遊戲素材。',
+  'lobby.credits': '角色、武器與道具：Quaternius 的 CC0 素材包。槍聲：CC0 Free Firearm Sound Library。貼圖：CC0 Poly Haven。字型：Rajdhani、Oswald 與 Noto Sans TC（OFL）。未使用任何專有遊戲素材。',
 
   'net.connecting': '連線中…', 'net.joining': '正在進入戰場…',
   'net.timeout': '連線至對戰伺服器逾時。', 'net.subscription': '無法載入對戰資料。',

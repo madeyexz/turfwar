@@ -74,7 +74,7 @@ Phones and tablets: on-screen controls (a floating stick on the left, a look pad
 
 - English and Traditional Chinese (繁體中文): follows the browser, can be switched in Settings, and ?lang=en or ?lang=zh-TW picks one for a visit.
 - Privacy: no accounts or passwords. Settings and an anonymous game ID are kept in the browser; gameplay stats are kept on the game server; anonymous analytics are used. See https://turfwar.ianhsiao.me/privacy.
-- Licence: code MIT (Copyright 2026 Ian Hsiao). The names 角頭械鬥 and Turf War: Taipei and the logo are not licensed for reuse; forks are welcome under a different name. Third-party assets keep their own licences (CC0 for Quaternius models and animations, Poly Haven textures and The Free Firearm Sound Library; SIL OFL for the Rajdhani, Barlow and Noto Sans TC fonts). No proprietary game assets are used.
+- Licence: code MIT (Copyright 2026 Ian Hsiao). The names 角頭械鬥 and Turf War: Taipei and the logo are not licensed for reuse; forks are welcome under a different name. Third-party assets keep their own licences (CC0 for Quaternius models and animations, Poly Haven textures and The Free Firearm Sound Library; SIL OFL for the Rajdhani, Oswald and Noto Sans TC fonts). No proprietary game assets are used.
 
 ## Credits
 
