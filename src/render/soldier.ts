@@ -3,7 +3,7 @@ import { RoundedBoxGeometry } from 'three/examples/jsm/geometries/RoundedBoxGeom
 import { mergeGeometries } from 'three/examples/jsm/utils/BufferGeometryUtils.js';
 import * as SkeletonUtils from 'three/examples/jsm/utils/SkeletonUtils.js';
 import { weaponModel, type Assets } from '../assets';
-import { DEFAULT_SKIN, MILITIA_LOOKS, type KnifeSkin, type Skin } from '../../shared/skins';
+import { DEFAULT_SKIN, isSlipper, MILITIA_LOOKS, type KnifeSkin, type Skin } from '../../shared/skins';
 import { dirFromAngles } from '../../shared/math';
 import { riderTwist } from '../../shared/vehicles';
 import { curlFingers, orientHand, restorePose, rotateWorld, snapshotPose, solveArm, solveLimb } from './rig';
@@ -547,7 +547,7 @@ export class SoldierView {
     this.stab = Math.max(0, this.stab - dt * 3.2);
     // Stab: a quick thrust out and back (peaks early).
     const skin = knife ? this.knifeSkin : undefined, swinging = this.stab > 0;
-    const slapping = skin === 'slipper' && swinging, broom = skin === 'broom';
+    const slapping = !!skin && isSlipper(skin) && swinging, broom = skin === 'broom';
     const thrust = swinging && skin === 'knife' ? Math.sin((1 - this.stab) * Math.PI) ** 0.7 : 0;
     // The 藍白拖 slaps instead: raised out to the right, then swept flat across the chest.
     const arc = slapping ? (1 - this.stab) * Math.PI : 0, side = slapping ? Math.cos(arc) * 0.24 : 0;

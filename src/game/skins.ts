@@ -1,9 +1,9 @@
-import { cleanSkin, type KnifeSkin, type Skin } from '../../shared/skins';
+import { cleanSkin, wearable, type KnifeSkin, type Skin } from '../../shared/skins';
 
 /**
  * This player's cosmetic skin (shared/skins.ts), picked in the lobby's 外觀 panel and saved per browser.
- * The knife is a 藍白拖 unless they pick the 掃把 or the classic knife; `?classic=1` still shows the
- * knife for one visit. Matches send it to the host (GameLink.wear), which every client draws from.
+ * The knife is a 藍白拖 unless they pick the 金拖 (once unlocked: `invitedFriends`), the 掃把 or the classic
+ * knife; `?classic=1` still shows the knife for one visit. Matches send it to the host (GameLink.wear), which every client draws from.
  */
 
 const KEY = 'lawbreaker.skin';
@@ -23,7 +23,22 @@ const stored = () => { try { return localStorage.getItem(KEY); } catch { return 
 let current = loadSkin(stored(), typeof location === 'undefined' ? '' : location.search);
 const listeners = new Set<(skin: Skin) => void>();
 
-export const mySkin = (): Skin => current;
+const INVITED = 'turfwar.invited';
+/** Friends who came through this player's links and entered a room (the server's `my_invites`; kept for Solo). */
+let invited = (() => { try { const n = Number(localStorage.getItem(INVITED)); return Number.isFinite(n) && n > 0 ? Math.floor(n) : 0; } catch { return 0; } })();
+export const invitedFriends = () => invited;
+/** The server's count of friends this player brought (a locked 金拖 is worn as the 藍白拖 until it reaches GOLD_INVITES). */
+export function setInvitedFriends(n: number) {
+  if (n === invited) return;
+  invited = n;
+  try { localStorage.setItem(INVITED, String(n)); } catch { /* this visit only */ }
+  for (const f of listeners) f(mySkin());
+}
+
+/** The skin this player wears: the pick, with a locked 金拖 worn as the 藍白拖. */
+export const mySkin = (): Skin => wearable(current, invited);
+/** The skin this player picked (a 金拖 may still be locked). */
+export const pickedSkin = (): Skin => current;
 
 /** Wear `skin` from now on (saved; listeners such as the names and the lobby preview follow). */
 export function chooseSkin(skin: Skin) {
@@ -48,5 +63,8 @@ export const BROOM_ICON = '<svg class="slipper broom" viewBox="0 0 40 20" aria-h
   + '<path d="M28 6.8L39 1.5v17L28 13.2z" fill="#e2c26a" stroke="#9b7a2c" stroke-width="1"/>'
   + '<path d="M30 6.5l8-3M30 10h8.5M30 13.5l8 3" stroke="#9b7a2c" stroke-width="0.8"/></svg>';
 
+/** Kill-feed mark for a 金拖 kill: the slipper in gold. */
+export const GOLD_ICON = SLIPPER_ICON.replace('class="slipper"', 'class="slipper gold"').replace('#f4f6f4', '#ffe7a3').replace('#1f5bd1', '#a8740f').replace('#2f6fe0', '#e8b42a');
+
 /** The kill-feed mark for a knife skin ('' for the plain knife). */
-export const knifeIcon = (knife: KnifeSkin) => knife === 'slipper' ? SLIPPER_ICON : knife === 'broom' ? BROOM_ICON : '';
+export const knifeIcon = (knife: KnifeSkin) => knife === 'slipper' ? SLIPPER_ICON : knife === 'gold' ? GOLD_ICON : knife === 'broom' ? BROOM_ICON : '';

@@ -2,8 +2,8 @@ import * as THREE from 'three';
 import { RoomEnvironment } from 'three/examples/jsm/environments/RoomEnvironment.js';
 import type { Assets } from '../assets';
 import { SoldierView } from '../render/soldier';
-import { KNIFE_SKINS, LOOKS, type Skin } from '../../shared/skins';
-import { chooseSkin, mySkin, onSkinChange } from '../game/skins';
+import { GOLD_INVITES, KNIFE_SKINS, LOOKS, type KnifeSkin, type Skin } from '../../shared/skins';
+import { chooseSkin, invitedFriends, mySkin, onSkinChange } from '../game/skins';
 import { escapeHtml, knifeName, lookName, onLang, t } from './i18n';
 import './skins.css';
 
@@ -26,7 +26,11 @@ export class SkinPanel {
   private time = 0;
   private sinceSwing = 0;
   private returnFocus: HTMLElement | null = null;
+  /** A locked 金拖 being tried on: the preview wears it, the pick stays. */
+  private trying?: KnifeSkin;
   onClose?: () => void;
+  /** 邀請朋友 under a locked 金拖 (main.ts opens the invite room). */
+  onInvite?: () => void;
 
   constructor(parent: HTMLElement, private assets: () => Assets | undefined) {
     this.root.className = 'lb-settings lobby skins-dialog';
@@ -38,8 +42,15 @@ export class SkinPanel {
       const btn = (e.target as HTMLElement).closest<HTMLButtonElement>('button');
       if (!btn) return;
       if (btn.dataset.act === 'close') return this.close();
+      if (btn.dataset.act === 'invite') { this.close(); this.onInvite?.(); return; }
       const skin = mySkin();
-      if (btn.dataset.knife) chooseSkin({ ...skin, knife: btn.dataset.knife as Skin['knife'] });
+      if (btn.dataset.knife) {
+        const knife = btn.dataset.knife as KnifeSkin;
+        // The 金拖 before enough friends came: try it on in the preview, and say how to get it.
+        if (knife === 'gold' && invitedFriends() < GOLD_INVITES) { this.trying = knife; this.refresh(); this.swing(); return; }
+        this.trying = undefined;
+        chooseSkin({ ...skin, knife });
+      }
       if (btn.dataset.look) chooseSkin({ ...skin, look: btn.dataset.look as Skin['look'] });
     });
     this.root.addEventListener('keydown', e => {
@@ -78,7 +89,7 @@ export class SkinPanel {
     this.root.hidden = true;
     cancelAnimationFrame(this.frame);
     for (const v of this.views) { v.dispose(); v.gun.removeFromParent(); }
-    this.views = []; this.shown = '';
+    this.views = []; this.shown = ''; this.trying = undefined;
     this.release();
     this.returnFocus?.focus({ preventScroll: true });
     this.onClose?.();
@@ -112,7 +123,7 @@ export class SkinPanel {
     // A new language rebuilds the markup, canvas included: an open preview moves to the new canvas.
     const live = this.open;
     this.release();
-    const knives = KNIFE_SKINS.map(k => `<button type="button" class="knife-pick" data-knife="${k}"><i class="mark ${k}"></i><b>${escapeHtml(knifeName(k))}</b><small>${escapeHtml(t(`skin.k.${k}Sub`))}</small></button>`).join('');
+    const knives = KNIFE_SKINS.map(k => `<button type="button" class="knife-pick" data-knife="${k}"><i class="mark ${k}"></i><b>${escapeHtml(knifeName(k))}</b><small>${escapeHtml(t(`skin.k.${k}Sub`, { n: GOLD_INVITES }))}</small></button>`).join('');
     const looks = LOOKS.map(l => `<button type="button" data-look="${l}">${escapeHtml(lookName(l))}</button>`).join('');
     this.root.innerHTML = `
       <div class="panel" role="dialog" aria-modal="true" aria-labelledby="skins-title">
@@ -125,6 +136,7 @@ export class SkinPanel {
           <div class="picks">
             <h3>${escapeHtml(t('skin.knife'))}</h3>
             <div class="knives">${knives}</div>
+            <div class="gold-lock" hidden><span></span><button type="button" data-act="invite">${escapeHtml(t('lobby.invite'))}</button></div>
             <p class="row-note">${escapeHtml(t('skin.cosmetic'))}</p>
             <h3>${escapeHtml(t('skin.look'))}</h3>
             <div class="seg looks">${looks}</div>
@@ -137,8 +149,15 @@ export class SkinPanel {
   }
 
   private refresh() {
-    const skin = mySkin();
-    this.root.querySelectorAll<HTMLButtonElement>('[data-knife]').forEach(b => { b.setAttribute('aria-pressed', String(b.dataset.knife === skin.knife)); b.classList.toggle('on', b.dataset.knife === skin.knife); });
+    const skin = mySkin(), knife = this.trying ?? skin.knife, have = invitedFriends(), locked = have < GOLD_INVITES;
+    this.root.querySelectorAll<HTMLButtonElement>('[data-knife]').forEach(b => {
+      b.setAttribute('aria-pressed', String(b.dataset.knife === knife)); b.classList.toggle('on', b.dataset.knife === knife);
+      if (b.dataset.knife === 'gold') b.classList.toggle('locked', locked);
+    });
+    const lock = this.root.querySelector<HTMLElement>('.gold-lock')!;
+    lock.hidden = knife !== 'gold';
+    lock.classList.toggle('open', !locked);
+    lock.querySelector('span')!.textContent = locked ? t('skin.k.goldLocked', { n: GOLD_INVITES, have: Math.min(have, GOLD_INVITES) }) : t('skin.k.goldOpen');
     this.root.querySelectorAll<HTMLButtonElement>('[data-look]').forEach(b => { b.setAttribute('aria-pressed', String(b.dataset.look === skin.look)); b.classList.toggle('on', b.dataset.look === skin.look); });
   }
 
@@ -150,7 +169,7 @@ export class SkinPanel {
     if (!renderer || !assets) return;
     const now = performance.now(), dt = Math.min(0.05, (now - this.last) / 1000);
     this.last = now; this.time += dt; this.sinceSwing += dt;
-    const skin = mySkin(), key = `${skin.knife}|${skin.look}`;
+    const picked = mySkin(), skin = { ...picked, knife: this.trying ?? picked.knife }, key = `${skin.knife}|${skin.look}`;
     if (key !== this.shown) {
       // A new look needs new characters; a new knife is swapped in the hands.
       if (this.shown.split('|')[1] !== skin.look) {

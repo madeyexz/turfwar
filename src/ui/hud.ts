@@ -56,7 +56,7 @@ export class Hud {
   /** The end screen's 分享戰績 and 約朋友單挑 (share.ts); the latter opens a 1v1 room where online play is available, else shares a link the bot double answers. */
   onShare?: () => void;
   onDuel?: () => void;
-  /** A 單挑我 match: the challenger, for the end screen's "you beat …" line. */
+  /** A 發起單挑 match: the challenger, for the end screen's "you beat …" line. */
   rival?: string;
   onMenu?: () => void;
   private el: Record<string, HTMLElement> = {};
