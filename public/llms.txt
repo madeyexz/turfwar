@@ -35,7 +35,7 @@ Two names, one game: 角頭械鬥 (Traditional Chinese) and Turf War: Taipei (En
 ## License and credits
 
 - The code is MIT licensed (Copyright 2026 Ian Hsiao). The names 角頭械鬥 and Turf War: Taipei and the logo are not licensed for reuse; forks are welcome under a different name.
-- No proprietary game assets. Models, animations, textures and sounds are original or CC0 (Quaternius, Poly Haven, The Free Firearm Sound Library); fonts are Rajdhani and Noto Sans TC (SIL Open Font License). The rules are an homage to BeGone by nPlay.
+- No proprietary game assets. Models, animations, textures and sounds are original or CC0 (Quaternius, Poly Haven, The Free Firearm Sound Library); fonts are Rajdhani, Noto Sans and Noto Sans TC (SIL Open Font License). The rules are an homage to BeGone by nPlay.
 - Created by Ian Hsiao (https://ianhsiao.me/, GitHub: https://github.com/madeyexz).
 
 ## Optional

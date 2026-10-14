@@ -50,7 +50,7 @@ const en = {
   'lobby.solo': 'Solo vs bots', 'lobby.sub.range': 'Practice',
   'lobby.invite': 'Invite friends', 'lobby.roomCode': 'Room code', 'lobby.codeShort': 'Code', 'lobby.codeHint': 'Join a private room with its four-letter code',
   'lobby.startMatch': 'Start match',
-  'lobby.botsHint': 'Your own match, offline: bots fill both teams. Uses the game type, size and map from Create room.',
+  'lobby.botsHint': 'Your own match, offline: bots fill both teams.',
   'lobby.rangeHint': 'No bots, a free store and no round limit: try every gun and attachment on the map chosen in Create room.',
   'lobby.controls': 'Controls', 'lobby.settings': 'Settings',
   'lobby.joining': 'Joining…', 'lobby.starting': 'Starting…',
@@ -102,7 +102,7 @@ const en = {
   'lobby.unableToStart': 'Could not start the game: {error}',
   'lobby.noServer': 'No SpacetimeDB server is configured for this build. Solo skirmish works offline.',
   'lobby.bench': 'Run the {n}-second performance check',
-  'lobby.credits': 'Characters, weapons and props: CC0 packs by Quaternius. Gunshots: CC0 Free Firearm Sound Library. Textures: CC0 Poly Haven. Fonts: Rajdhani and Noto Sans TC (OFL). No proprietary game assets.',
+  'lobby.credits': 'Characters, weapons and props: CC0 packs by Quaternius. Gunshots: CC0 Free Firearm Sound Library. Textures: CC0 Poly Haven. Fonts: Rajdhani, Noto Sans and Noto Sans TC (OFL). No proprietary game assets.',
 
   // ---- Online connection ----
   'net.connecting': 'Connecting…', 'net.joining': 'Joining the battlefield…',
@@ -400,7 +400,7 @@ const zhTW: Record<Key, string> = {
   'lobby.solo': '單人對戰電腦', 'lobby.sub.range': '練習場',
   'lobby.invite': '邀請朋友', 'lobby.roomCode': '房間代碼', 'lobby.codeShort': '代碼', 'lobby.codeHint': '輸入四碼代碼加入私人房間',
   'lobby.startMatch': '開始對戰',
-  'lobby.botsHint': '離線自訂對戰：雙方空位都由電腦玩家補滿。採用「開設房間」中的模式、人數與地圖。',
+  'lobby.botsHint': '離線自訂對戰：雙方空位都由電腦玩家補滿。',
   'lobby.rangeHint': '沒有電腦玩家、商店免費、不限回合：在「開設房間」選的地圖試遍每把槍與配件。',
   'lobby.controls': '操作說明', 'lobby.settings': '設定',
   'lobby.joining': '加入中…', 'lobby.starting': '啟動中…',
@@ -447,7 +447,7 @@ const zhTW: Record<Key, string> = {
   'lobby.unableToStart': '無法啟動遊戲：{error}',
   'lobby.noServer': '此版本未設定 SpacetimeDB 伺服器，仍可離線對戰電腦。',
   'lobby.bench': '執行 {n} 秒效能檢測',
-  'lobby.credits': '角色、武器與道具：Quaternius 的 CC0 素材包。槍聲：CC0 Free Firearm Sound Library。貼圖：CC0 Poly Haven。字型：Rajdhani 與 Noto Sans TC（OFL）。未使用任何專有遊戲素材。',
+  'lobby.credits': '角色、武器與道具：Quaternius 的 CC0 素材包。槍聲：CC0 Free Firearm Sound Library。貼圖：CC0 Poly Haven。字型：Rajdhani、Noto Sans 與 Noto Sans TC（OFL）。未使用任何專有遊戲素材。',
 
   'net.connecting': '連線中…', 'net.joining': '正在進入戰場…',
   'net.timeout': '連線至對戰伺服器逾時。', 'net.subscription': '無法載入對戰資料。',

@@ -7,6 +7,11 @@
  * menu. No glow, no neon: white text, grey labels, a selected option is a white chip, the main action a
  * white button. The map picker and Solo's options are popovers (bottom sheets on phones).
  */
+/* The lobby and its dialogs are set in Noto Sans (Latin) and Noto Sans TC: one family in both languages. */
+#menu, .lb-settings.lobby, .share-panel, .challenge-banner, .ask-dialog {
+  --font: 'Noto Sans', 'Noto Sans TC', 'PingFang TC', 'Microsoft JhengHei', 'Segoe UI', system-ui, sans-serif;
+  font-family: var(--font);
+}
 #menu {
   --accent: #ffffff; --line: rgba(255, 255, 255, 0.14); --muted: #a9b1b6; --glass: rgba(10, 12, 14, 0.74);
   --side: clamp(300px, 30 * var(--vw), 420px); --pad: clamp(24px, 3.4 * var(--vw), 56px);
@@ -111,6 +116,8 @@
 #menu #quick-go .deploy-r { display: none; }
 #menu .deploy.queued { background: transparent; color: var(--ink); border-color: rgba(255, 255, 255, 0.6); }
 #menu #quick-line { margin: 2px 0 12px; }
+/* Under Quick Play only the connection dot and the server: what it will do needs no words. */
+#menu #quick-line .line-text { display: none; }
 #menu .way {
   position: relative; display: flex; align-items: center; gap: 14px; min-height: 52px; padding: 0 0 0 4px; border: 0; background: none;
   color: rgba(255, 255, 255, 0.86); text-align: left; text-shadow: 0 2px 14px rgba(0, 0, 0, 0.7); cursor: pointer; transition: color 0.15s, transform 0.15s;
@@ -405,6 +412,9 @@
 
 /* 開設房間's maps: one row of picture cards that scrolls sideways. */
 #menu #view-start .mapline { flex-direction: column; align-items: stretch; height: auto; gap: 6px; }
+#menu #solo-pop { width: min(560px, calc(100 * var(--vw) - 24px)); }
+#menu #solo-pop .segmented { height: 40px; }
+#menu #solo-maps { grid-template-columns: none; grid-auto-flow: column; grid-auto-columns: 132px; overflow-x: auto; overflow-y: hidden; padding: 2px 2px 8px; }
 #menu #view-start .map-grid { grid-template-columns: none; grid-auto-flow: column; grid-auto-columns: clamp(136px, 12 * var(--vw), 176px); overflow-x: auto; overflow-y: hidden; padding: 2px 2px 8px; }
 #menu .mcard { border-color: rgba(255, 255, 255, 0.12); background: rgba(255, 255, 255, 0.03); }
 #menu .mcard:hover:not(:disabled) { border-color: rgba(255, 255, 255, 0.45); background: rgba(255, 255, 255, 0.06); }
@@ -564,3 +574,9 @@
 .gfx-lost p { margin: 0; }
 .gfx-lost button { flex: none; height: 38px; padding: 0 14px; font: inherit; font-weight: 700; color: #031013; background: var(--accent); border: 0; cursor: pointer; }
 
+
+/* English in Noto Sans: wider letters than Rajdhani's, so the big lines are tracked tighter. */
+:lang(en) #menu .way b, :lang(en) #menu .deploy-l { letter-spacing: 0.02em; }
+:lang(en) #menu .logo-name { letter-spacing: 0.01em; }
+:lang(en) #menu .mark-name, :lang(en) #menu .page-head, :lang(en) .lb-settings.lobby.skins-dialog h2 { letter-spacing: 0.01em; }
+:lang(en) #menu .choice b, :lang(en) #menu .label, :lang(en) #menu .pop-head b { letter-spacing: 0.06em; }

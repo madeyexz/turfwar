@@ -223,6 +223,9 @@ menu.innerHTML = `
     <div class="field">${L('lobby.team', 'span', 'class="label"')}${choice('teams', 'team', [['auto', L('lobby.auto')], ['0', L('team.0', 'span', 'class="swat"')], ['1', L('team.1', 'span', 'class="militia"')]], 'lobby.team')}</div>
     <div class="field">${L('set.server', 'span', 'class="label"')}${serverChip('profile-server')}</div>`)}
   ${pop('solo-pop', 'lobby.solo', `<div class="pop-head"><b>${L('lobby.solo')}</b><small class="rules" id="solo-rules"></small></div>
+    <div class="field">${L('start.field.mode', 'span', 'class="label"')}${choice('solo-modes', 'smode', [['elimination', modeTag('elimination')], ['sabotage', modeTag('sabotage')]], 'start.field.mode')}</div>
+    <div class="field">${L('lobby.field.size', 'span', 'class="label"')}${choice('solo-sizes', 'ssize', SIZES.map(s => [s.id, s.label] as [string, string]), 'lobby.roomSize')}</div>
+    <div class="field">${L('lobby.field.map', 'span', 'class="label"')}<div class="map-grid" id="solo-maps" role="group" aria-label="${t('lobby.field.map')}" data-i18n-aria-label="lobby.field.map"></div></div>
     <div class="field">${L('lobby.field.skill', 'span', 'class="label"')}${choice('skills', 'skill', [['0.25', L('lobby.skill.recruit')], ['0.45', L('lobby.skill.veteran')], ['0.75', L('lobby.skill.elite')]], 'lobby.field.skill')}</div>
     <button type="button" class="go" id="solo-go">${t('lobby.startMatch')}</button>${L('lobby.botsHint', 'p', 'class="hint"')}`)}`;
 app.appendChild(menu);
@@ -685,6 +688,10 @@ function renderOthers() {
   solo.textContent = !ready ? loadingText() : starting === 'solo' ? t('lobby.starting') : t('lobby.startMatch');
   range.disabled = offlineBusy;
   $('#solo-rules').textContent = rulesText();
+  // Solo's own mode, size and map: the same choices as 開設房間 (one form, remembered for both).
+  select('solo-modes', 'smode', mode);
+  select('solo-sizes', 'ssize', size);
+  if (openPop?.id === 'solo-pop') renderMapGrid($('#solo-maps'));
 }
 
 /** Everything on screen follows the current choices. */
@@ -745,7 +752,7 @@ onClick('smode', v => { mode = v === 'sabotage' ? 'sabotage' : 'elimination'; ch
 onClick('ssize', v => { size = sizeOf(v).id; checkMap('size'); changed(); });
 onClick('svis', v => { isPublic = v !== 'private'; changed(); });
 onClick('sbots', v => { bots = v !== 'off'; changed(); });
-onClick('pick', v => { if (mapOk(v)) map = v; notice(''); changed(); closePop(); });
+onClick('pick', v => { if (mapOk(v)) map = v; notice(''); changed(); });
 onClick('jsize', v => { joinSize = SIZES.some(s => s.id === v) ? v as SizeId : ''; changed(); });
 onClick('jmode', v => { joinMode = v === 'elimination' || v === 'sabotage' ? v : ''; changed(); });
 onClick('clear', () => { joinSize = ''; joinMode = ''; changed(); });
@@ -830,7 +837,7 @@ function closePop(restore = true) {
   if (restore && popAnchor && openPop.contains(document.activeElement)) popAnchor.focus({ preventScroll: true });
   openPop = undefined; popAnchor = undefined;
 }
-$('#open-solo').addEventListener('click', e => { audio.ui(); showPop('solo-pop', e.currentTarget as HTMLElement); });
+$('#open-solo').addEventListener('click', e => { audio.ui(); showPop('solo-pop', e.currentTarget as HTMLElement); renderMapGrid($('#solo-maps')); placePop(); });
 $('#open-profile').addEventListener('click', e => { audio.ui(); showPop('profile-pop', e.currentTarget as HTMLElement); });
 document.addEventListener('pointerdown', e => {
   if (!openPop) return;
@@ -848,8 +855,9 @@ menu.addEventListener('focusout', e => {
 
 /**
  * A map card's picture: the map's screenshot (public/media/maps/<id>.webp, shot by scripts/mapshots.ts),
- * or its top-down plan when there is none or it fails to load. Kept per map, so redraws (live
- * counts arrive often) move the same loaded element instead of loading it again.
+ * or its top-down plan when there is none or it fails to load. Kept per map and per row (開設房間's
+ * and Solo's each hold their own), so redraws (live counts arrive often) move the same loaded element
+ * instead of loading it again.
  */
 const thumbs = new Map<string, HTMLElement>();
 function plan(id: string) {
@@ -858,22 +866,24 @@ function plan(id: string) {
   drawMapThumb(c, id);
   return c;
 }
-function thumb(id: string) {
-  let el = thumbs.get(id);
+function thumb(id: string, row: string) {
+  const key = `${row}:${id}`;
+  let el = thumbs.get(key);
   if (!el) {
     const img = document.createElement('img');
     img.loading = 'lazy'; img.decoding = 'async'; img.width = 480; img.height = 270;
-    img.addEventListener('error', () => { const c = plan(id); thumbs.set(id, c); img.replaceWith(c); }, { once: true });
+    img.addEventListener('error', () => { const c = plan(id); thumbs.set(key, c); img.replaceWith(c); }, { once: true });
     img.src = assetUrl(`media/maps/${id}.webp`);
-    thumbs.set(id, el = img);
+    thumbs.set(key, el = img);
   }
   if (el instanceof HTMLImageElement) el.alt = mapName(id);
   return el;
 }
-/** The map picker: every map the form's size plays, with its picture, its bomb sites in Sabotage and who is playing; maps the mode cannot host are disabled. */
-/** 開設房間's maps: a row of picture cards the room size can play (rebuilt only when what they show changes). */
-function renderMapGrid() {
-  const grid = $('#map-grid');
+/**
+ * A row of map picture cards (開設房間's and Solo's): every map the form's size plays, with its picture, its
+ * bomb sites in Sabotage and who is playing; maps the mode cannot host are disabled. Rebuilt only when what it shows changes.
+ */
+function renderMapGrid(grid = $('#map-grid')) {
   const live = liveByMap();
   // Under the name: the bomb sites in Sabotage, nothing in Elimination (the line keeps its height either way).
   const sites = (m: (typeof maps)[number]) => mode === 'sabotage' ? t(m.sites > 1 ? 'lobby.sitesAB' : m.sites ? 'lobby.siteA' : 'lobby.noSites') : '';
@@ -891,14 +901,14 @@ function renderMapGrid() {
       <span class="live${n ? ' on' : ''}">${n ? `<i></i>${esc(t('lobby.playing', { n }))}` : '&nbsp;'}</span>
     </button>`;
   }).join('');
-  grid.querySelectorAll<HTMLElement>('[data-thumb]').forEach(el => el.appendChild(thumb(el.dataset.thumb!)));
+  grid.querySelectorAll<HTMLElement>('[data-thumb]').forEach(el => el.appendChild(thumb(el.dataset.thumb!, grid.id)));
   grid.querySelector('[aria-pressed="true"]')?.scrollIntoView({ block: 'nearest', inline: 'nearest' });
 }
 // Arrow keys move through the map cards (by rows and columns as laid out).
-$('#map-grid').addEventListener('keydown', e => {
+for (const id of ['#map-grid', '#solo-maps']) $(id).addEventListener('keydown', e => {
   const keys = ['ArrowLeft', 'ArrowRight', 'ArrowUp', 'ArrowDown', 'Home', 'End'];
   if (!keys.includes(e.key)) return;
-  const cards = Array.from($('#map-grid').querySelectorAll<HTMLButtonElement>('.mcard:not(:disabled)'));
+  const cards = Array.from((e.currentTarget as HTMLElement).querySelectorAll<HTMLButtonElement>('.mcard:not(:disabled)'));
   const i = cards.indexOf(document.activeElement as HTMLButtonElement);
   if (i < 0) return;
   e.preventDefault();
