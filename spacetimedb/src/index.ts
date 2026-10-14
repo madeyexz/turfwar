@@ -6,7 +6,7 @@ import { cleanCode, filterError, isRoomSize, mapsFor, newRoomRules, nextRoomRule
 import type { SimContext } from '../../shared/match/combat';
 import { encodeFrame } from '../../shared/match/frame';
 import {
-  ROOKIE_ROUNDS, addSoldier, balanceTeams, buyAttachmentFor, buyItem, createMatch, drinkBoba, enterVehicle as getIn, exitVehicle as getOut, fireShot, reload, removeSoldier, reportState, setSkin as wearSkin, switchTeam, throwSlipper, throwSmoke,
+  addSoldier, balanceTeams, buyAttachmentFor, buyItem, createMatch, drinkBoba, enterVehicle as getIn, exitVehicle as getOut, fireShot, reload, removeSoldier, reportState, setSkin as wearSkin, switchTeam, throwSlipper, throwSmoke,
   reportVehicle, resetMatch, switchWeapon, throwGrenade, tickMatch, useAmmoCrate, TICK_RATE,
 } from '../../shared/match/sim';
 import {
@@ -361,7 +361,9 @@ interface Gear {
   bobas?: number;
   /** 藍白拖 in hand; written only when 0 (thrown), so older rows read as carrying one. */
   slippers?: number;
-  /** A new player: bots go easier on them (no column of its own). */
+  /** A new player's career rounds when they joined: bots go easier on them (no column of its own). */
+  rookieRounds?: number;
+  /** Rows written before rookieRounds: a rookie with no rounds counted. */
   rookie?: boolean;
   /** Cosmetic skin (shared/skins.ts); written only when not the defaults. */
   skin?: Skin;
@@ -386,7 +388,7 @@ function soldierFromRow(r: SoldierRow, brain?: BotBrain): Soldier {
     sinceHit: r.sinceHit, lastAttacker: r.lastAttacker, kills: r.kills, deaths: r.deaths, assists: gear.assists ?? 0, score: r.score,
     sprint: r.sprint, ads: r.ads, sinceShot: r.sinceShot, using: gear.using ?? false, corrections: r.corrections,
     moveSlack: r.moveSlack, groundY: r.groundY, idle: r.idle, round: gear.round ?? newRoundStats(), roundsHere: gear.roundsHere ?? 0, brain,
-    ...(gear.rookie ? { rookie: true } : {}),
+    ...(typeof gear.rookieRounds === 'number' ? { rookieRounds: gear.rookieRounds } : gear.rookie ? { rookieRounds: 0 } : {}),
     ...(gear.skin ? { skin: cleanSkin(gear.skin) } : {}),
   };
 }
@@ -400,7 +402,7 @@ function soldierToRow(s: Soldier, room: number): SoldierRow {
     assists: s.assists, roundsHere: s.roundsHere, using: s.using, round: s.round, smokes: s.smokes,
     ...(s.bobas ? { bobas: s.bobas } : {}),
     ...(s.slippers <= 0 ? { slippers: 0 } : {}),
-    ...(s.rookie ? { rookie: true } : {}),
+    ...(s.rookieRounds !== undefined ? { rookieRounds: s.rookieRounds } : {}),
     ...(s.skin ? { skin: s.skin } : {}),
   };
   return {
@@ -836,8 +838,8 @@ function enterRoom(ctx: Ctx, room: number, name: string, team: number) {
   if (humansIn(ctx, room) >= configOf(row).teamSize * 2) throw new SenderError('That room is full');
   withMatch(ctx, room, (state, sim) => {
     // A rookie (few rounds on this server's career stats) gets easier bots (bots.ts).
-    const rookie = (ctx.db.profile.identity.find(ctx.sender)?.roundsPlayed ?? 0) < ROOKIE_ROUNDS;
-    const soldier = addSoldier(state, sim, { name: clean, bot: false, team: team === 0 || team === 1 ? team : undefined, rookie });
+    const rounds = ctx.db.profile.identity.find(ctx.sender)?.roundsPlayed ?? 0;
+    const soldier = addSoldier(state, sim, { name: clean, bot: false, team: team === 0 || team === 1 ? team : undefined, rounds });
     balanceTeams(state, sim);
     const player = { identity: ctx.sender, soldierId: soldier.id, lastReportMicros: micros(ctx), room };
     if (existing) ctx.db.player.identity.update({ ...existing, ...player });

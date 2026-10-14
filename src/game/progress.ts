@@ -1,9 +1,7 @@
-import { ROOKIE_ROUNDS } from '../../shared/match/sim';
-
 /**
  * The player's progress on this browser: XP and a level, and one goal per day. Kept in localStorage
  * only (nothing is sent anywhere), fed by the match's own events (game.ts) in Solo and Online alike.
- * It also decides whether Solo treats the player as a rookie (online, the server's career stats do).
+ * Its round count also decides how much Solo's bots ease off a rookie (online, the server's career stats do).
  */
 
 export type GoalKind = 'winRounds' | 'kills' | 'headshots' | 'playRounds';
@@ -82,10 +80,8 @@ export function apply(prev: Progress, e: ProgressEvent, day = today()): { next: 
   return { next, gained, goalDone };
 }
 
-/** A new player: bots go easier on them (Solo; online the server decides from its career stats). */
 /** Until this many rounds are in the books, the first round's end points out the store (game.ts). */
 export const NUDGE_ROUNDS = 2;
-export const isRookie = (p: Progress) => p.rounds < ROOKIE_ROUNDS;
 
 // ---- Storage --------------------------------------------------------------------------------------
 

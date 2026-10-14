@@ -7,7 +7,7 @@ import { MOVE, createMoveState } from '../movement';
 import { BOBA, FALL, HEALTH, STAMINA, oneHanded, type AttachmentId, type Slot, type WeaponId } from '../weapons';
 import { PHYSICS_STEP, stepBodies, type Body } from '../world';
 import { cleanSkin, isDefaultSkin } from '../skins';
-import { botName, createBrain, updateBot } from './bots';
+import { ROOKIE_ROUNDS, botName, createBrain, updateBot } from './bots';
 import {
   CASH, award, botShop, buy, buyAttachment, finishReload, newRoundStats, refillAmmo, resetInventory, statsOf, useCrate, type BuyItem,
 } from './economy';
@@ -44,16 +44,17 @@ export function createMatch(mapId: string, config: MatchConfig): MatchState {
 /** Sabotage needs bomb sites on the map; anywhere else the match is played as Elimination. */
 export const modeOf = (state: MatchState, map: MapDef) => state.config.mode === 'sabotage' && map.sabotage?.sites.length ? 'sabotage' : 'elimination';
 
-/** Rounds played before a player stops being a rookie (bots go easier on rookies). */
-export const ROOKIE_ROUNDS = 10;
+export { ROOKIE_ROUNDS } from './bots';
 /** A human who joins within this many seconds of a round's start deploys at once instead of waiting a round. */
 export const LATE_JOIN_SECONDS = 30;
 
-export function addSoldier(state: MatchState, ctx: SimContext, opts: { name: string; team?: Team; bot: boolean; rookie?: boolean }): Soldier {
+/** `rounds`: a human's career rounds (bots go easier on them under ROOKIE_ROUNDS); omit it for no easing. */
+export function addSoldier(state: MatchState, ctx: SimContext, opts: { name: string; team?: Team; bot: boolean; rounds?: number }): Soldier {
   const counts = [0, 1].map(t => state.soldiers.filter(s => s.team === t && !s.bot).length);
   const team: Team = opts.team ?? (counts[0] <= counts[1] ? 0 : 1);
   const s: Soldier = {
-    id: state.nextId++, name: opts.name.slice(0, 20), team, bot: opts.bot, ...(opts.rookie && !opts.bot ? { rookie: true } : {}),
+    id: state.nextId++, name: opts.name.slice(0, 20), team, bot: opts.bot,
+    ...(!opts.bot && opts.rounds !== undefined && opts.rounds < ROOKIE_ROUNDS ? { rookieRounds: Math.max(0, Math.floor(opts.rounds)) } : {}),
     m: createMoveState(0, 0, 0), yaw: 0, pitch: 0, alive: false, health: 0, weapon: 0,
     weapons: ['mp5', 'm9a1'], owned: [], attachments: {}, ammo: [0, 0], reserve: [0, 0],
     reloadLeft: 0, fireCooldown: 0, switchLeft: 0, grenades: 0, grenadeHE: false, smokes: 0, bobas: 0, slippers: 1, stamina: STAMINA.max, money: 0,
