@@ -7,9 +7,9 @@
  * menu. No glow, no neon: white text, grey labels, a selected option is a white chip, the main action a
  * white button. The map picker and Solo's options are popovers (bottom sheets on phones).
  */
-/* The lobby and its dialogs are set in Noto Sans (Latin) and Noto Sans TC: one family in both languages. */
+/* The lobby and its dialogs are set in Barlow (Latin) and Noto Sans TC (Chinese). */
 #menu, .lb-settings.lobby, .share-panel, .challenge-banner, .ask-dialog {
-  --font: 'Noto Sans', 'Noto Sans TC', 'PingFang TC', 'Microsoft JhengHei', 'Segoe UI', system-ui, sans-serif;
+  --font: 'Barlow', 'Noto Sans TC', 'PingFang TC', 'Microsoft JhengHei', 'Segoe UI', system-ui, sans-serif;
   font-family: var(--font);
 }
 #menu {
@@ -575,7 +575,7 @@
 .gfx-lost button { flex: none; height: 38px; padding: 0 14px; font: inherit; font-weight: 700; color: #031013; background: var(--accent); border: 0; cursor: pointer; }
 
 
-/* English in Noto Sans: wider letters than Rajdhani's, so the big lines are tracked tighter. */
+/* English in Barlow: wider letters than Rajdhani's, so the big lines are tracked tighter. */
 :lang(en) #menu .way b, :lang(en) #menu .deploy-l { letter-spacing: 0.02em; }
 :lang(en) #menu .logo-name { letter-spacing: 0.01em; }
 :lang(en) #menu .mark-name, :lang(en) #menu .page-head, :lang(en) .lb-settings.lobby.skins-dialog h2 { letter-spacing: 0.01em; }

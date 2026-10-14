@@ -179,3 +179,9 @@
 .lb-settings.lobby .seg .swatch { box-shadow: none; }
 .lb-settings.lobby .close:hover { border-color: rgba(255, 255, 255, 0.45); }
 .lb-settings.lobby .resume, .lb-settings.lobby .done { color: #0a0b0c; background: #fff; }
+/* The title, the tabs and the close button on one line: the title's and the tabs' text share a baseline, the tabs' underline sits on the header's rule. */
+.lb-settings.lobby:not(.skins-dialog) header { align-items: baseline; }
+.lb-settings.lobby:not(.skins-dialog) h2 { padding-bottom: 8px; line-height: 1; }
+.lb-settings.lobby:not(.skins-dialog) .tabs { align-self: auto; }
+.lb-settings.lobby:not(.skins-dialog) .tabs button { line-height: 1; }
+.lb-settings.lobby:not(.skins-dialog) .close { align-self: center; margin-bottom: 0; }
