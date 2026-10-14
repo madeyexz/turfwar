@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { GOALS, XP, apply, fresh, goalFor, isRookie, levelOf, rollDay } from './progress';
+import { GOALS, XP, apply, fresh, goalFor, levelOf, rollDay } from './progress';
 
 describe('progress: XP, levels and the daily goal', () => {
   it('levels need 100, then 60 more each', () => {
@@ -42,12 +42,5 @@ describe('progress: XP, levels and the daily goal', () => {
   it('goals rotate across days', () => {
     const kinds = new Set(['2026-10-09', '2026-10-10', '2026-10-11', '2026-10-12'].map(goalFor));
     expect(kinds.size).toBe(4);
-  });
-
-  it('a new player is a rookie until they have played a few rounds', () => {
-    let p = fresh('2026-10-09');
-    expect(isRookie(p)).toBe(true);
-    for (let i = 0; i < 10; i++) p = apply(p, { type: 'round', won: false }, '2026-10-09').next;
-    expect(isRookie(p)).toBe(false);
   });
 });

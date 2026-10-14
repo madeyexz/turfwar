@@ -10,8 +10,19 @@ import { ATTACKERS, type BotBrain, type MatchState, type Soldier } from './state
 
 /** Distance (m) from a bomb site's centre at which a bot stops to arm or disarm. */
 const SITE_STOP = 3;
-/** How much easier bots are on rookies: extra reaction time (s), and multipliers on the first aim error and on spread. */
-export const ROOKIE_EASE = { reaction: 0.35, aimError: 2, spread: 1.5 };
+/** Rounds played before a player stops being a rookie (bots go easier on rookies). */
+export const ROOKIE_ROUNDS = 10;
+/**
+ * How much easier bots are on rookies: extra reaction time (s) for a brand-new player, tapering to none
+ * at ROOKIE_ROUNDS (rookieEase), and multipliers on the first aim error and on spread while still a rookie.
+ */
+export const ROOKIE_EASE = { reaction: 0.6, aimError: 2, spread: 1.5 };
+
+/** 1 for a player with no rounds yet, falling evenly to 0 at ROOKIE_ROUNDS (career rounds at joining + rounds here). */
+export function rookieEase(s: Soldier): number {
+  if (s.rookieRounds === undefined) return 0;
+  return clamp(1 - (s.rookieRounds + s.roundsHere) / ROOKIE_ROUNDS, 0, 1);
+}
 
 /** Path hops this short that rise or drop more than 1.5 m are ladders (see nav). */
 const SPACING_LADDER = 2;
@@ -174,8 +185,9 @@ export function updateBot(state: MatchState, ctx: SimContext, bot: Soldier, dt: 
       if (seen.id !== brain.target) {
         brain.target = seen.id;
         // Rookies (new players) get a beat longer and a looser first aim, so their first fights are winnable.
-        brain.reaction = 0.22 + (1 - brain.skill) * 0.38 + ctx.random() * 0.16 + (seen.rookie ? ROOKIE_EASE.reaction : 0);
-        const scale = (1.25 - brain.skill) * (0.03 + ctx.random() * 0.05) * (seen.rookie ? ROOKIE_EASE.aimError : 1);
+        const ease = rookieEase(seen);
+        brain.reaction = 0.22 + (1 - brain.skill) * 0.38 + ctx.random() * 0.16 + ease * ROOKIE_EASE.reaction;
+        const scale = (1.25 - brain.skill) * (0.03 + ctx.random() * 0.05) * (ease > 0 ? ROOKIE_EASE.aimError : 1);
         brain.errYaw = (ctx.random() < 0.5 ? -1 : 1) * scale; brain.errPitch = (ctx.random() - 0.3) * scale;
       }
       brain.lastSeen = state.time; brain.seenX = seen.m.x; brain.seenY = seen.m.y; brain.seenZ = seen.m.z;
@@ -256,7 +268,7 @@ export function updateBot(state: MatchState, ctx: SimContext, bot: Soldier, dt: 
     if (brain.reaction <= 0 && aligned && bot.reloadLeft <= 0 && bot.switchLeft <= 0 && bot.fireCooldown <= 0 && brain.burstPause <= 0 && distance < w.range * 0.6) {
       if (bot.weapon !== 2 && bot.ammo[bot.weapon] <= 0) { bot.reloadLeft = w.reload; }
       else {
-        const spread = (w.pellets > 1 ? 0.8 : spreadFor({ ...bot, ads: wantAds }, w)) * (1.35 - brain.skill * 0.55) * (target.rookie ? ROOKIE_EASE.spread : 1) * Math.PI / 180;
+        const spread = (w.pellets > 1 ? 0.8 : spreadFor({ ...bot, ads: wantAds }, w)) * (1.35 - brain.skill * 0.55) * (rookieEase(target) > 0 ? ROOKIE_EASE.spread : 1) * Math.PI / 180;
         const yaw = bot.yaw + (ctx.random() - 0.5) * 2 * spread, pitch = bot.pitch + (ctx.random() - 0.5) * 2 * spread;
         if (w.pellets > 1) resolvePellets(state, ctx, bot, w, eye, dirFromAngles(yaw, pitch), wantAds);
         else resolveShot(state, ctx, bot, w, eye, traceShot(state, ctx, bot, eye, dirFromAngles(yaw, pitch), w.range));

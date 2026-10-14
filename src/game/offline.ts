@@ -1,4 +1,4 @@
-import { isRookie, loadProgress } from './progress';
+import { loadProgress } from './progress';
 import { rng, type Vec3 } from '../../shared/math';
 import {
   addSoldier, balanceTeams, buyAttachmentFor, buyItem, createContext, createMatch, enterVehicle, exitVehicle, fireShot, reload, reportState,
@@ -36,7 +36,7 @@ export class OfflineLink implements GameLink {
     this.match = createMatch(mapId, practice ? { ...PRACTICE_CONFIG, ...config } : { ...ELIMINATION, ...config });
     this.practice = practice;
     // A new player (few rounds on this browser) gets easier bots, as online (progress.ts).
-    this.me = addSoldier(this.match, this.ctx, { name, team, bot: false, rookie: !practice && isRookie(loadProgress()) }).id;
+    this.me = addSoldier(this.match, this.ctx, { name, team, bot: false, ...(practice ? {} : { rounds: loadProgress().rounds }) }).id;
     balanceTeams(this.match, this.ctx);
     this.nameRival();
   }
