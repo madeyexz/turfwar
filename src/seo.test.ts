@@ -14,9 +14,15 @@ const OWNER_SITE = 'https://ianhsiao.me';
 const OWNER_ID = `${OWNER_SITE}/about#person`;
 const read = (file: string) => readFileSync(join(ROOT, file), 'utf8');
 
+/** The static info pages, each at /<page> (繁體中文) and /en/<page> (English), as listed in vite.config.ts INFO_PAGES. */
+const INFO = ['about', 'guide', 'maps', 'begone'];
+const infoPaths = INFO.flatMap(p => [`/${p}`, `/en/${p}`]);
+/** An info page's HTML file. */
+const infoFile = (path: string) => `${path.slice(1)}/index.html`;
+const INFO_FILES = infoPaths.map(infoFile);
 /** The public routes: URL path → the HTML file Vite builds for it. */
-const PAGES: Record<string, string> = { '/': 'index.html', '/about': 'about/index.html', '/en/about': 'en/about/index.html', '/privacy': 'privacy/index.html' };
-const INDEXED = ['/', '/about', '/en/about', '/privacy'];
+const PAGES: Record<string, string> = { '/': 'index.html', ...Object.fromEntries(infoPaths.map(p => [p, infoFile(p)])), '/privacy': 'privacy/index.html' };
+const INDEXED = Object.keys(PAGES);
 
 const attr = (html: string, tag: string, key: string, value: string, want: string) => {
   const re = new RegExp(`<${tag}\\b[^>]*\\b${key}="${value}"[^>]*>`, 'i');
@@ -66,7 +72,7 @@ describe('canonical URLs stay clean', () => {
   });
 
   it('og:url, hreflang and JSON-LD urls never carry utm_*, other query strings or fragments', () => {
-    for (const file of ['index.html', 'about/index.html', 'en/about/index.html']) {
+    for (const file of ['index.html', ...INFO_FILES]) {
       const html = read(file);
       const urls = [meta(html, 'property', 'og:url'), meta(html, 'property', 'og:image'), meta(html, 'name', 'twitter:image'), ...alternates(html).map(a => a[1]), ...urlsIn(jsonLd(html))];
       for (const url of urls) {
@@ -131,22 +137,38 @@ describe('the game page', () => {
   });
 });
 
-describe('the about pages', () => {
-  const zh = read('about/index.html'), en = read('en/about/index.html');
-
-  it('point at each other with reciprocal hreflang and an x-default', () => {
-    for (const html of [zh, en]) {
-      expect(alternates(html)).toEqual([['zh-TW', `${SITE}/about`], ['en', `${SITE}/en/about`], ['x-default', `${SITE}/en/about`]]);
+describe('the info pages (/about, /guide, /maps, /begone and their /en/ twins)', () => {
+  it('point at each other with reciprocal hreflang and an x-default, in their own language', () => {
+    for (const page of INFO) {
+      const zh = read(`${page}/index.html`), en = read(`en/${page}/index.html`);
+      for (const html of [zh, en]) {
+        expect(alternates(html), page).toEqual([['zh-TW', `${SITE}/${page}`], ['en', `${SITE}/en/${page}`], ['x-default', `${SITE}/en/${page}`]]);
+      }
+      expect(zh, page).toMatch(/<html lang="zh-TW">/);
+      expect(en, page).toMatch(/<html lang="en">/);
+      expect(meta(zh, 'property', 'og:image'), page).toBe(`${SITE}/og/og-zh-TW.jpg`);
+      expect(meta(en, 'property', 'og:image'), page).toBe(`${SITE}/og/og-en.jpg`);
+      expect(zh, page).toContain(`hreflang="en" lang="en"`);
+      expect(en, page).toContain(`href="/${page}" hreflang="zh-TW" lang="zh-TW"`);
     }
-    expect(zh).toMatch(/<html lang="zh-TW">/);
-    expect(en).toMatch(/<html lang="en">/);
-    expect(meta(zh, 'property', 'og:image')).toBe(`${SITE}/og/og-zh-TW.jpg`);
-    expect(meta(en, 'property', 'og:image')).toBe(`${SITE}/og/og-en.jpg`);
   });
 
-  it('carry a FAQPage whose questions and answers are the visible FAQ, word for word', () => {
-    for (const html of [zh, en]) {
-      const faq = jsonLd(html).find(n => n['@type'] === 'FAQPage') as { mainEntity: { name: string; acceptedAnswer: { text: string } }[] };
+  it('link every info page of their language, marking themselves as the current one', () => {
+    for (const path of infoPaths) {
+      const nav = /<nav class="pages"[^>]*>([\s\S]*?)<\/nav>/.exec(read(infoFile(path)))?.[1] ?? '';
+      const prefix = path.startsWith('/en/') ? '/en/' : '/';
+      expect([...nav.matchAll(/href="([^"]+)"/g)].map(m => m[1]), path).toEqual(INFO.map(p => `${prefix}${p}`));
+      expect([...nav.matchAll(/<a href="([^"]+)" aria-current="page">/g)].map(m => m[1]), path).toEqual([path]);
+    }
+  });
+
+  it('carry a FAQPage, when they have a FAQ, whose questions and answers are the visible FAQ, word for word', () => {
+    for (const file of INFO_FILES) {
+      const html = read(file);
+      const faq = jsonLd(html).find(n => n['@type'] === 'FAQPage') as { mainEntity: { name: string; acceptedAnswer: { text: string } }[] } | undefined;
+      const hasFaq = /<h2>(FAQ|常見問題)<\/h2>/.test(html);
+      expect(!!faq, file).toBe(hasFaq);
+      if (!faq) continue;
       expect(faq.mainEntity.length).toBeGreaterThan(0);
       const body = html.slice(Math.max(html.indexOf('<h2>FAQ</h2>'), html.indexOf('<h2>常見問題</h2>')));
       const visible = [...body.matchAll(/<h3>([\s\S]*?)<\/h3>\s*<p>([\s\S]*?)<\/p>/g)].map(m => ({ q: text(m[1]), a: text(m[2]) }));
@@ -159,8 +181,9 @@ describe('the about pages', () => {
   });
 
   it('name both games the same way and have one h1', () => {
-    for (const html of [zh, en]) {
-      expect(html.match(/<h1>/g)).toHaveLength(1);
+    for (const file of INFO_FILES) {
+      const html = read(file);
+      expect(html.match(/<h1>/g), file).toHaveLength(1);
       expect(text(/<h1>([\s\S]*?)<\/h1>/.exec(html)![1])).toMatch(/角頭械鬥/);
       expect(text(/<h1>([\s\S]*?)<\/h1>/.exec(html)![1])).toMatch(/Turf War: Taipei/);
     }
@@ -169,7 +192,7 @@ describe('the about pages', () => {
 
 describe('the author', () => {
   it('is one Person, Ian Hsiao, linked to the personal site and GitHub, and the pages point at it', () => {
-    for (const file of ['index.html', 'about/index.html', 'en/about/index.html']) {
+    for (const file of ['index.html', ...INFO_FILES]) {
       const html = read(file), graph = jsonLd(html);
       const person = graph.find(n => n['@type'] === 'Person')!;
       expect(person, file).toMatchObject({ '@id': OWNER_ID, name: 'Ian Hsiao', url: `${OWNER_SITE}/`, sameAs: ['https://github.com/madeyexz'] });
@@ -182,14 +205,14 @@ describe('the author', () => {
   });
 
   it('is credited with a plain link, no tracking parameters, on both about pages and in llms files', () => {
-    for (const file of ['about/index.html', 'en/about/index.html']) expect(read(file)).toContain(`<a href="${OWNER_SITE}/" rel="author noopener">Ian Hsiao</a>`);
+    for (const file of INFO_FILES) expect(read(file), file).toContain(`<a href="${OWNER_SITE}/" rel="author noopener">Ian Hsiao</a>`);
     for (const file of ['public/llms.txt', 'public/llms-full.txt']) expect(read(file)).toContain(`${OWNER_SITE}/`);
   });
 });
 
 describe('structured data does not invent social proof', () => {
   it('has no ratings, reviews or awards anywhere', () => {
-    for (const file of ['index.html', 'about/index.html', 'en/about/index.html']) {
+    for (const file of ['index.html', ...INFO_FILES]) {
       const keys = keysIn(jsonLd(read(file)));
       for (const bad of ['aggregateRating', 'review', 'reviewRating', 'ratingValue', 'ratingCount', 'reviewCount', 'award', 'interactionStatistic']) expect(keys, `${file}: ${bad}`).not.toContain(bad);
     }
@@ -212,10 +235,14 @@ describe('sitemap.xml', () => {
     expect(new Set(locs).size).toBe(locs.length);
   });
 
-  it('gives the about pages their language alternates, matching the pages', () => {
-    for (const block of xml.split('<url>').slice(1).filter(b => /\/about<\/loc>/.test(b))) {
-      const hrefs = [...block.matchAll(/hreflang="([^"]+)" href="([^"]+)"/g)].map(m => [m[1], m[2]]);
-      expect(hrefs).toEqual([['zh-TW', `${SITE}/about`], ['en', `${SITE}/en/about`], ['x-default', `${SITE}/en/about`]]);
+  it('gives the info pages their language alternates, matching the pages', () => {
+    for (const page of INFO) {
+      const blocks = xml.split('<url>').slice(1).filter(b => new RegExp(`/${page}</loc>`).test(b));
+      expect(blocks, page).toHaveLength(2);
+      for (const block of blocks) {
+        const hrefs = [...block.matchAll(/hreflang="([^"]+)" href="([^"]+)"/g)].map(m => [m[1], m[2]]);
+        expect(hrefs, page).toEqual([['zh-TW', `${SITE}/${page}`], ['en', `${SITE}/en/${page}`], ['x-default', `${SITE}/en/${page}`]]);
+      }
     }
   });
 });
@@ -272,7 +299,7 @@ describe('vercel.json', () => {
   const config = JSON.parse(read('vercel.json')) as { rewrites: { source: string; destination: string }[]; headers: { source: string; headers: { key: string; value: string }[] }[]; redirects?: unknown[] };
 
   it('rewrites each extensionless page to its built file', () => {
-    for (const path of ['/admin', '/privacy', '/about', '/en/about']) {
+    for (const path of ['/admin', '/privacy', ...infoPaths]) {
       expect(config.rewrites).toContainEqual({ source: path, destination: `${path}/index.html` });
     }
   });

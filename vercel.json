@@ -7,7 +7,13 @@
     { "source": "/admin", "destination": "/admin/index.html" },
     { "source": "/privacy", "destination": "/privacy/index.html" },
     { "source": "/about", "destination": "/about/index.html" },
-    { "source": "/en/about", "destination": "/en/about/index.html" }
+    { "source": "/en/about", "destination": "/en/about/index.html" },
+    { "source": "/guide", "destination": "/guide/index.html" },
+    { "source": "/en/guide", "destination": "/en/guide/index.html" },
+    { "source": "/maps", "destination": "/maps/index.html" },
+    { "source": "/en/maps", "destination": "/en/maps/index.html" },
+    { "source": "/begone", "destination": "/begone/index.html" },
+    { "source": "/en/begone", "destination": "/en/begone/index.html" }
   ],
   "headers": [
     { "source": "/(.*)", "headers": [

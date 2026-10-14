@@ -16,6 +16,42 @@
     <xhtml:link rel="alternate" hreflang="x-default" href="https://turfwar.ianhsiao.me/en/about" />
   </url>
   <url>
+    <loc>https://turfwar.ianhsiao.me/guide</loc>
+    <xhtml:link rel="alternate" hreflang="zh-TW" href="https://turfwar.ianhsiao.me/guide" />
+    <xhtml:link rel="alternate" hreflang="en" href="https://turfwar.ianhsiao.me/en/guide" />
+    <xhtml:link rel="alternate" hreflang="x-default" href="https://turfwar.ianhsiao.me/en/guide" />
+  </url>
+  <url>
+    <loc>https://turfwar.ianhsiao.me/en/guide</loc>
+    <xhtml:link rel="alternate" hreflang="zh-TW" href="https://turfwar.ianhsiao.me/guide" />
+    <xhtml:link rel="alternate" hreflang="en" href="https://turfwar.ianhsiao.me/en/guide" />
+    <xhtml:link rel="alternate" hreflang="x-default" href="https://turfwar.ianhsiao.me/en/guide" />
+  </url>
+  <url>
+    <loc>https://turfwar.ianhsiao.me/maps</loc>
+    <xhtml:link rel="alternate" hreflang="zh-TW" href="https://turfwar.ianhsiao.me/maps" />
+    <xhtml:link rel="alternate" hreflang="en" href="https://turfwar.ianhsiao.me/en/maps" />
+    <xhtml:link rel="alternate" hreflang="x-default" href="https://turfwar.ianhsiao.me/en/maps" />
+  </url>
+  <url>
+    <loc>https://turfwar.ianhsiao.me/en/maps</loc>
+    <xhtml:link rel="alternate" hreflang="zh-TW" href="https://turfwar.ianhsiao.me/maps" />
+    <xhtml:link rel="alternate" hreflang="en" href="https://turfwar.ianhsiao.me/en/maps" />
+    <xhtml:link rel="alternate" hreflang="x-default" href="https://turfwar.ianhsiao.me/en/maps" />
+  </url>
+  <url>
+    <loc>https://turfwar.ianhsiao.me/begone</loc>
+    <xhtml:link rel="alternate" hreflang="zh-TW" href="https://turfwar.ianhsiao.me/begone" />
+    <xhtml:link rel="alternate" hreflang="en" href="https://turfwar.ianhsiao.me/en/begone" />
+    <xhtml:link rel="alternate" hreflang="x-default" href="https://turfwar.ianhsiao.me/en/begone" />
+  </url>
+  <url>
+    <loc>https://turfwar.ianhsiao.me/en/begone</loc>
+    <xhtml:link rel="alternate" hreflang="zh-TW" href="https://turfwar.ianhsiao.me/begone" />
+    <xhtml:link rel="alternate" hreflang="en" href="https://turfwar.ianhsiao.me/en/begone" />
+    <xhtml:link rel="alternate" hreflang="x-default" href="https://turfwar.ianhsiao.me/en/begone" />
+  </url>
+  <url>
     <loc>https://turfwar.ianhsiao.me/privacy</loc>
   </url>
 </urlset>
