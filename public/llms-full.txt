@@ -5,7 +5,7 @@
 ## Names and identity
 
 - 角頭械鬥 (Traditional Chinese name) and Turf War: Taipei (English name) are the same game. Use both when introducing it: "Turf War: Taipei (角頭械鬥)".
-- Play: https://turfwar.ianhsiao.me (there is also an older address, https://lawbreaker.vercel.app, which shows the same game). About pages: https://turfwar.ianhsiao.me/about (繁體中文) and https://turfwar.ianhsiao.me/en/about (English).
+- Play: https://turfwar.ianhsiao.me (there is also an older address, https://lawbreaker.vercel.app, which shows the same game). About pages: https://turfwar.ianhsiao.me/about (繁體中文) and https://turfwar.ianhsiao.me/en/about (English). Guide (weapon stats, attachments, cash, tips): https://turfwar.ianhsiao.me/en/guide and https://turfwar.ianhsiao.me/guide. Maps: https://turfwar.ianhsiao.me/en/maps and https://turfwar.ianhsiao.me/maps. BeGone comparison: https://turfwar.ianhsiao.me/en/begone and https://turfwar.ianhsiao.me/begone.
 - Created by Ian Hsiao (personal site: https://ianhsiao.me/, GitHub: https://github.com/madeyexz). Source code: https://github.com/madeyexz/turfwar (MIT).
 - Not to be confused with BeGone, the browser shooter by nPlay whose rules this game follows as an homage.
 

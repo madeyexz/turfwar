@@ -1,0 +1,209 @@
+<!doctype html>
+<html lang="zh-TW">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="theme-color" content="#05090c" />
+    <title>角頭械鬥攻略｜武器數值、配件價格、賺錢與爆破戰技巧：Turf War: Taipei 新手指南</title>
+    <meta name="description" content="角頭械鬥（Turf War: Taipei）攻略：MP5、M4A1、M1014、M110、M249、M9A1、MP7 的價格與傷害，配件、手榴彈、煙霧彈、珍奶與飛拖怎麼用，現金獎勵怎麼算，第一回合買什麼、爆破戰怎麼打。" />
+    <link rel="canonical" href="https://turfwar.ianhsiao.me/guide" />
+    <link rel="alternate" hreflang="zh-TW" href="https://turfwar.ianhsiao.me/guide" />
+    <link rel="alternate" hreflang="en" href="https://turfwar.ianhsiao.me/en/guide" />
+    <link rel="alternate" hreflang="x-default" href="https://turfwar.ianhsiao.me/en/guide" />
+    <meta property="og:type" content="article" />
+    <meta property="og:site_name" content="角頭械鬥 · Turf War: Taipei" />
+    <meta property="og:title" content="角頭械鬥攻略｜武器、配件、賺錢與爆破戰技巧" />
+    <meta property="og:description" content="每把槍的價格與傷害、配件怎麼配、現金怎麼賺、第一回合買什麼：角頭械鬥 Turf War: Taipei 新手指南。" />
+    <meta property="og:url" content="https://turfwar.ianhsiao.me/guide" />
+    <meta property="og:locale" content="zh_TW" />
+    <meta property="og:locale:alternate" content="en_US" />
+    <meta property="og:image" content="https://turfwar.ianhsiao.me/og/og-zh-TW.jpg" />
+    <meta property="og:image:type" content="image/jpeg" />
+    <meta property="og:image:width" content="1200" />
+    <meta property="og:image:height" content="630" />
+    <meta property="og:image:alt" content="角頭械鬥 Turf War: Taipei：台北西門町電影街的第一人稱槍戰畫面" />
+    <meta name="twitter:card" content="summary_large_image" />
+    <meta name="twitter:title" content="角頭械鬥攻略｜武器、配件、賺錢與爆破戰技巧" />
+    <meta name="twitter:description" content="每把槍的價格與傷害、配件怎麼配、現金怎麼賺、第一回合買什麼。" />
+    <meta name="twitter:image" content="https://turfwar.ianhsiao.me/og/og-zh-TW.jpg" />
+    <link rel="icon" type="image/png" sizes="16x16" href="/icons/favicon-16.png" />
+    <link rel="icon" type="image/png" sizes="32x32" href="/icons/favicon-32.png" />
+    <link rel="apple-touch-icon" href="/icons/apple-touch-icon.png" />
+    <!--preload:rajdhani-600,rajdhani-700-->
+    <link rel="manifest" href="/manifest.webmanifest" />
+    <link rel="stylesheet" href="/src/about/about.css" />
+    <!--
+      The Traditional Chinese guide (攻略): weapons with their prices and numbers, attachments, the cash awards, items and
+      tips. /en/guide says the same in English: keep both in step, and every number true to docs/GAMEPLAY.md,
+      shared/weapons.ts and shared/match/economy.ts. The JSON-LD FAQ must repeat the visible FAQ word for word
+      (src/seo.test.ts). No script runs on this page; its canonical URL is the clean one.
+    -->
+    <script type="application/ld+json">
+    {
+      "@context": "https://schema.org",
+      "@graph": [
+        {
+          "@type": "WebPage",
+          "@id": "https://turfwar.ianhsiao.me/guide#webpage",
+          "url": "https://turfwar.ianhsiao.me/guide",
+          "name": "角頭械鬥攻略：武器、配件、賺錢與爆破戰技巧",
+          "inLanguage": "zh-TW",
+          "isPartOf": { "@id": "https://turfwar.ianhsiao.me/#website" },
+          "author": { "@id": "https://ianhsiao.me/about#person" },
+          "about": { "@id": "https://turfwar.ianhsiao.me/#game" },
+          "primaryImageOfPage": { "@type": "ImageObject", "url": "https://turfwar.ianhsiao.me/og/og-zh-TW.jpg", "width": 1200, "height": 630 }
+        },
+        {
+          "@type": "FAQPage",
+          "@id": "https://turfwar.ianhsiao.me/guide#faq",
+          "url": "https://turfwar.ianhsiao.me/guide",
+          "inLanguage": "zh-TW",
+          "mainEntity": [
+            { "@type": "Question", "name": "角頭械鬥第一回合該買什麼？", "acceptedAnswer": { "@type": "Answer", "text": "開局有 $1,000，預設已經有 MP5 和 M9A1。最划算的是買一顆煙霧彈（$300）加一杯珍奶（$400），或存起來；第二、三回合累積到 $3,400 再買 M4A1，因為買過的武器整場比賽都保留。" } },
+            { "@type": "Question", "name": "角頭械鬥怎麼賺最多錢？", "acceptedAnswer": { "@type": "Answer", "text": "擊殺 $500、刀殺 $600、手榴彈擊殺 $900；每回合第一殺、第一個造成傷害、殺掉最後一個敵人各加 $300；每顆爆頭子彈加 $100（每回合對同一人最多 3 次）；贏回合每人 $500，安裝或拆除炸彈 $500。現金上限 $16,000。" } },
+            { "@type": "Question", "name": "子彈打完怎麼辦？", "acceptedAnswer": { "@type": "Answer", "text": "每張地圖都有彈藥箱，基地裡也有一個。走到 2.4 公尺內按 E，每回合第一次 $300，之後免費，每次補半個彈匣。" } },
+            { "@type": "Question", "name": "角頭械鬥哪把槍最適合新手？", "acceptedAnswer": { "@type": "Answer", "text": "預設的 MP5 射速快（每秒 12 發）、移動快，近中距離很好用；有錢後換 M4A1（每秒 9 發、傷害更高）。手機玩家有輔助瞄準，按住開火會自動瞄準。" } }
+          ]
+        },
+        { "@type": "Person", "@id": "https://ianhsiao.me/about#person", "name": "Ian Hsiao", "url": "https://ianhsiao.me/", "sameAs": ["https://github.com/madeyexz"] },
+        {
+          "@type": "BreadcrumbList",
+          "itemListElement": [
+            { "@type": "ListItem", "position": 1, "name": "角頭械鬥 · Turf War: Taipei", "item": "https://turfwar.ianhsiao.me/" },
+            { "@type": "ListItem", "position": 2, "name": "攻略", "item": "https://turfwar.ianhsiao.me/guide" }
+          ]
+        }
+      ]
+    }
+    </script>
+  </head>
+  <body>
+    <header class="bar">
+      <a class="home" href="/"><img class="mark" src="/icons/icon-192.png" width="32" height="32" alt=""><span>角頭械鬥</span></a>
+      <nav aria-label="語言 / Language"><a class="alt-lang" href="/en/guide" hreflang="en" lang="en">English</a></nav>
+    </header>
+    <nav class="pages" aria-label="頁面"><a href="/about">玩法介紹</a><a href="/guide" aria-current="page">攻略</a><a href="/maps">地圖</a><a href="/begone">BeGone</a></nav>
+
+    <main>
+      <article>
+        <h1><span>角頭械鬥攻略</span> · <span>Turf War: Taipei</span></h1>
+        <p class="lead"><strong>角頭械鬥（Turf War: Taipei）</strong>是回合制的網頁射擊遊戲：每回合一條命，用賺來的現金在商店買槍和配件。這頁整理每把武器的價格與傷害、配件、現金獎勵，以及新手最常問的「第一回合買什麼」「錢怎麼賺」「爆破戰怎麼打」。價格、傷害、射速、彈匣與換彈都沿用 BeGone 的數值，取自遊戲程式碼。</p>
+        <a class="play" href="/">開始遊戲</a>
+
+        <h2>新手先知道這五件事</h2>
+        <ol>
+          <li><strong>槍只有前 20 秒能買</strong>：每回合開始先凍結 4 秒，前 20 秒在自己的基地按 <kbd>B</kbd> 開商店買槍；離開基地或時間過了就要等下一回合。手榴彈、煙霧彈、珍奶和配件則隨時隨地都能買。</li>
+          <li><strong>買過就是你的</strong>：武器和配件整場比賽都保留，死掉也不會掉；已經擁有的武器在購買時間內可以免費切換。所以早點買一把好槍，會在之後每一回合回本。</li>
+          <li><strong>瞄頭</strong>：爆頭傷害最高，每顆打中頭的子彈另外加 $100（每回合對同一個人最多算 3 次）。</li>
+          <li><strong>一條命</strong>：死亡後要等下一回合；活到回合結束有 $200，當最後一個活著的人再加 $300。不確定時，等隊友一起推進。</li>
+          <li><strong>輸了也有錢</strong>：連輸到第 4 回合起，每輸一回合多給 $500，所以落後時可以先存錢、下一回合一次買齊。</li>
+        </ol>
+
+        <h2>現金怎麼賺</h2>
+        <p>新比賽起始現金 $1,000，上限 $16,000。所有獎勵都由伺服器計算：</p>
+        <div class="table-wrap">
+          <table>
+            <thead><tr><th>行為</th><th class="num">現金</th></tr></thead>
+            <tbody>
+              <tr><td>擊殺・刀殺（含飛拖）・手榴彈擊殺</td><td class="num">$500・$600・$900</td></tr>
+              <tr><td>本回合第一殺・第一個造成傷害（首殺血）・殺掉最後一個敵人</td><td class="num">各 +$300</td></tr>
+              <tr><td>連殺（4 秒內接連擊殺）</td><td class="num">+$300 × 連殺數</td></tr>
+              <tr><td>連續擊殺每滿 5 殺</td><td class="num">+$100 × (連殺數 ÷ 5)</td></tr>
+              <tr><td>爆頭（每顆子彈，每回合對同一人最多 3 次）</td><td class="num">+$100</td></tr>
+              <tr><td>助攻（對方死前 3 秒內你打過他）・互換（雙方同歸於盡）</td><td class="num">$200・+$100</td></tr>
+              <tr><td>安裝或拆除炸彈</td><td class="num">$500</td></tr>
+              <tr><td>贏下回合（每人）・存活・最後一人存活</td><td class="num">$500・$200・$300</td></tr>
+              <tr><td>連敗補償（連輸第 4 回合起，每回合）</td><td class="num">$500</td></tr>
+              <tr><td>忠誠獎勵（在同一個伺服器每打滿 5 回合）</td><td class="num">$1,000</td></tr>
+            </tbody>
+          </table>
+        </div>
+
+        <h2>武器數值</h2>
+        <p>每個人預設帶 MP5、M9A1 和小刀（預設造型是藍白拖）。傷害是頭／身體／四肢，血量 100。移動速度以 M4A1 為 100%。</p>
+        <div class="table-wrap">
+          <table>
+            <thead><tr><th>武器</th><th>類型</th><th class="num">價格</th><th class="num">傷害 頭／身／四肢</th><th class="num">彈匣＋備彈</th><th class="num">換彈</th><th class="num">移動</th></tr></thead>
+            <tbody>
+              <tr><td>MP5</td><td>衝鋒槍・全自動，每秒 12 發</td><td class="num">預設</td><td class="num">30／18／12</td><td class="num">32＋96</td><td class="num">3.1 秒</td><td class="num">105%</td></tr>
+              <tr><td>M4A1</td><td>突擊步槍・全自動，每秒 9 發</td><td class="num">$3,400</td><td class="num">33／21／15</td><td class="num">30＋90</td><td class="num">3.1 秒</td><td class="num">100%</td></tr>
+              <tr><td>M1014</td><td>霰彈槍・半自動，每發 14 顆彈丸</td><td class="num">$2,800</td><td class="num">每顆 24／10／8</td><td class="num">6＋18</td><td class="num">2.5 秒</td><td class="num">102%</td></tr>
+              <tr><td>M110</td><td>狙擊步槍・半自動</td><td class="num">$4,000</td><td class="num">90／40／30</td><td class="num">6＋18</td><td class="num">3.1 秒</td><td class="num">100%</td></tr>
+              <tr><td>M249</td><td>輕機槍・全自動</td><td class="num">$3,800</td><td class="num">43／33／21</td><td class="num">86＋86</td><td class="num">4 秒</td><td class="num">90%</td></tr>
+              <tr><td>M9A1</td><td>手槍・半自動（副武器）</td><td class="num">預設</td><td class="num">29／22／15</td><td class="num">12＋36</td><td class="num">3.1 秒</td><td class="num">107%</td></tr>
+              <tr><td>MP7</td><td>衝鋒槍・全自動，每秒 13 發（副武器）</td><td class="num">$1,800</td><td class="num">18／12／8</td><td class="num">20＋60</td><td class="num">2.4 秒</td><td class="num">102%</td></tr>
+              <tr><td>小刀（藍白拖）</td><td>近戰・每秒揮 2 次</td><td class="num">免費</td><td class="num">33／33／33</td><td class="num">—</td><td class="num">—</td><td class="num">110%</td></tr>
+            </tbody>
+          </table>
+        </div>
+        <h3>每把槍怎麼用</h3>
+        <ul>
+          <li><strong>MP5</strong>：射速快、跑得快，近中距離的主力。開局就有，前幾回合不用急著換。</li>
+          <li><strong>M4A1</strong>：每一發都比 MP5 痛，瞄準時更準，是存到 $3,400 之後最穩的選擇。</li>
+          <li><strong>M1014</strong>：14 顆彈丸打在身上最多 140 點，近距離幾乎一發解決；室內地圖（台北101・88F、中正紀念堂的展廳）特別好用，遠距離就很弱。</li>
+          <li><strong>M110</strong>：瞄準時最準的槍，爆頭 90、身體 40；只有 6 發，打不中要趕快換位置。可以裝 M110 專用的 6 倍鏡。</li>
+          <li><strong>M249</strong>：每發傷害高、彈匣 86 發，適合守爆破點壓制；代價是跑得最慢、換彈要 4 秒。</li>
+          <li><strong>MP7</strong>：副武器裡的衝鋒槍，比 M9A1 射得快，主武器沒子彈時的保險。</li>
+        </ul>
+
+        <h2>配件</h2>
+        <p>每把槍每一類配件只能裝一個，買了整場比賽都在。</p>
+        <div class="table-wrap">
+          <table>
+            <thead><tr><th>類別</th><th>配件</th><th class="num">價格</th><th>說明</th></tr></thead>
+            <tbody>
+              <tr><td>瞄具</td><td>機械瞄具・紅點・全像・ACOG</td><td class="num">免費・$800・$1,000・$1,100</td><td>所有槍都能裝（M9A1 不能裝 ACOG）</td></tr>
+              <tr><td>瞄具</td><td>4 倍鏡・6 倍鏡</td><td class="num">$600・$1,200</td><td>4 倍鏡只限 M9A1，6 倍鏡只限 M110</td></tr>
+              <tr><td>戰術</td><td>彈藥計數器・雷射瞄準器・戰術槍燈</td><td class="num">$200・$800・$600</td><td>雷射提升腰射精準度，但敵人也看得到光束</td></tr>
+              <tr><td>戰術</td><td>消音器</td><td class="num">$1,100（MP7 $1,000、M9A1 $600）</td><td>後座力和傷害降低；沒有曳光和槍口火光，聲音更小</td></tr>
+              <tr><td>改裝</td><td>擴充彈匣・後座力緩衝墊</td><td class="num">$900・$1,200</td><td>所有槍都能裝</td></tr>
+              <tr><td>彈藥</td><td>爆裂彈・燃燒彈</td><td class="num">$1,600・$1,400</td><td>傷害更高，但彈匣變小、後座力變大</td></tr>
+            </tbody>
+          </table>
+        </div>
+
+        <h2>投擲物、珍奶與飛拖</h2>
+        <ul>
+          <li><strong>M67 手榴彈</strong>（$1,000，按 <kbd>4</kbd> 或 <kbd>G</kbd>）：最高 70 點傷害、離越遠越低，只能帶一顆、用了不會補。加買「高爆強化」（$1,500）身體傷害 +45、範圍變小。手榴彈擊殺給 $900，是單次最多的擊殺獎勵。</li>
+          <li><strong>M18 煙霧彈</strong>（$300，<kbd>5</kbd> 或 <kbd>X</kbd>）：9 公尺的煙霧維持 15 秒，擋視線但擋不住子彈。用來封住狙擊位，或掩護安裝、拆除炸彈。</li>
+          <li><strong>珍奶</strong>（$400，<kbd>6</kbd> 或 <kbd>Y</kbd>）：受傷時喝，吸 1.4 秒（這段時間不能開槍），之後回 50 血、最多到 100。先躲到掩體後面再喝。</li>
+          <li><strong>飛拖</strong>（免費）：手上拿著藍白拖時按住瞄準（右鍵）蓄力，最多 0.8 秒，放開就丟出去。沒蓄力打中是 30 點，蓄滿才會一擊斃命，算刀殺（$600）。每回合只有一隻，丟出去之後要走過去撿回來（地上的拖鞋有閃爍的圈）。</li>
+        </ul>
+
+        <h2>買槍節奏</h2>
+        <ul>
+          <li><strong>第一回合（$1,000）</strong>：用預設的 MP5＋M9A1 打，買煙霧彈和珍奶（共 $700），或乾脆存起來。</li>
+          <li><strong>存到 $3,400</strong>：買 M4A1。之後每回合多的錢再補配件，例如紅點或全像（$800／$1,000）、後座力緩衝墊（$1,200）。</li>
+          <li><strong>錢很多時</strong>：每回合補一顆手榴彈和煙霧彈，因為投擲物用了就沒了。</li>
+          <li><strong>守點的人</strong>：M249 或 M110＋6 倍鏡；<strong>進攻的人</strong>：M4A1 或近距離的 M1014。</li>
+        </ul>
+
+        <h2>爆破戰技巧</h2>
+        <ul>
+          <li>民兵在 A 或 B 點按住 <kbd>E</kbd> 5 秒安裝炸彈，安裝時不能移動和開槍，所以先讓隊友封好視線（煙霧彈很好用）。</li>
+          <li>炸彈裝好後回合剩 40 秒，另一個點失效；特警只剩拆彈一條路，同樣按住 <kbd>E</kbd> 5 秒。</li>
+          <li>台北的地圖（西門町、台北101、中正紀念堂、三重）都設計成特警比民兵早大約 2 秒到每個爆破點，所以特警可以先到點上等，民兵要用假動作或多人同時壓一個點。</li>
+          <li>沒裝炸彈前，民兵全滅或時間到是特警贏；特警全滅是民兵贏。爆破戰沒有平手。</li>
+          <li>中正紀念堂的 B 點在 A 點樓上：要在爆破點所在的那一層才能安裝或拆除。</li>
+        </ul>
+        <p>完整的按鍵與手機操作請看<a href="/about">玩法介紹</a>，每張地圖的路線與爆破點請看<a href="/maps">地圖介紹</a>。</p>
+
+        <h2>常見問題</h2>
+        <h3>角頭械鬥第一回合該買什麼？</h3>
+        <p>開局有 $1,000，預設已經有 MP5 和 M9A1。最划算的是買一顆煙霧彈（$300）加一杯珍奶（$400），或存起來；第二、三回合累積到 $3,400 再買 M4A1，因為買過的武器整場比賽都保留。</p>
+        <h3>角頭械鬥怎麼賺最多錢？</h3>
+        <p>擊殺 $500、刀殺 $600、手榴彈擊殺 $900；每回合第一殺、第一個造成傷害、殺掉最後一個敵人各加 $300；每顆爆頭子彈加 $100（每回合對同一人最多 3 次）；贏回合每人 $500，安裝或拆除炸彈 $500。現金上限 $16,000。</p>
+        <h3>子彈打完怎麼辦？</h3>
+        <p>每張地圖都有彈藥箱，基地裡也有一個。走到 2.4 公尺內按 E，每回合第一次 $300，之後免費，每次補半個彈匣。</p>
+        <h3>角頭械鬥哪把槍最適合新手？</h3>
+        <p>預設的 MP5 射速快（每秒 12 發）、移動快，近中距離很好用；有錢後換 M4A1（每秒 9 發、傷害更高）。手機玩家有輔助瞄準，按住開火會自動瞄準。</p>
+
+        <h2>資料來源</h2>
+        <p>數值來自遊戲原始碼（<a href="https://github.com/madeyexz/turfwar" rel="noopener">github.com/madeyexz/turfwar</a>），規則與數值向 nPlay 的 BeGone 致敬，詳見 <a href="/begone">角頭械鬥與 BeGone</a>。製作：<a href="https://ianhsiao.me/" rel="author noopener">Ian Hsiao</a>。</p>
+      </article>
+    </main>
+    <footer class="site">
+      <a href="/">開始遊戲</a><a href="/en/guide" hreflang="en" lang="en">English</a><a href="/privacy?lang=zh-TW">隱私權</a><a href="https://github.com/madeyexz/turfwar" rel="noopener">GitHub</a>
+    </footer>
+  </body>
+</html>

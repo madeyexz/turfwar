@@ -1,4 +1,4 @@
-/* The /about and /en/about pages: the privacy page's look, a wider column, tables and a Play button. No script runs on them. */
+/* The about-family pages (/about, /guide, /maps, /begone and their /en/ twins): the privacy page's look, a wider column, tables and a Play button. No script runs on them. */
 @import '../privacy/privacy.css';
 
 /* Preloaded (vite.config.ts) and never swapped in late: a late swap would shift the headings (layout shift). */
@@ -6,6 +6,13 @@
 @font-face { font-family: 'Rajdhani'; font-weight: 700; font-display: optional; src: url('/fonts/rajdhani-700.woff2') format('woff2'); }
 
 .bar, main { max-width: 860px; }
+/* The section links under the bar: one row of text links, the current page bright. */
+.pages { display: flex; flex-wrap: wrap; gap: 4px 20px; max-width: 860px; margin: 0 auto; padding: 14px 24px 0; font: 700 15px var(--display); letter-spacing: 0.08em; }
+.pages a { color: var(--muted); text-decoration: none; }
+.pages a:hover { color: var(--accent); }
+.pages a[aria-current='page'] { color: var(--ink); box-shadow: inset 0 -2px 0 var(--accent); }
+.note { color: var(--muted); font-size: 14px; }
+td.num, th.num { text-align: right; white-space: nowrap; }
 .bar nav { display: flex; align-items: center; gap: 12px; }
 .bar nav a.alt-lang {
   padding: 6px 12px; border: 1px solid var(--line); border-radius: 3px; color: var(--muted); text-decoration: none;
