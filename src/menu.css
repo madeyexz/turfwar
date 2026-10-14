@@ -1,80 +1,146 @@
-/* ---------- Home page / lobby ----------
- * Top: the brand, then callsign, team, Controls (?) and Settings (gear).
- * Left panel: three tabs, QUICK PLAY (one big button), START A SERVER (a form and START) and JOIN A
- * SERVER (every live room, optional filters, a private room code), then the offline row (Solo, Practice).
- * Right: the live battlefield backdrop with the map in view.
- * The map picker and Solo's options open as popovers (bottom sheets on phones).
+/* ---------- Home page / lobby: the city full screen, the menu over it ----------
+ * Home: the live 3D street fills the screen; the big title and a short menu sit bottom-left (Quick
+ * Play as the one white button, then 邀請朋友, 開設房間, 加入房間, Solo, Practice); the profile chip
+ * (callsign · level; its popover holds the callsign, progress, team and server) and the icon buttons
+ * top-right; the latest update bottom-right. Pages (開設房間, 加入房間): the city dims and blurs, the
+ * title shrinks to the mark top-left (the way back), and the page opens in one dark panel beside the
+ * menu. No glow, no neon: white text, grey labels, a selected option is a white chip, the main action a
+ * white button. The map picker and Solo's options are popovers (bottom sheets on phones).
  */
 #menu {
-  --panel-w: clamp(540px, 40 * var(--vw), 680px);
+  --accent: #ffffff; --line: rgba(255, 255, 255, 0.14); --muted: #a9b1b6; --glass: rgba(10, 12, 14, 0.74);
+  --side: clamp(300px, 30 * var(--vw), 420px); --pad: clamp(24px, 3.4 * var(--vw), 56px);
   position: fixed; inset: 0; z-index: 5;
-  display: grid; grid-template-columns: var(--panel-w) minmax(0, 1fr); grid-template-rows: auto minmax(0, 1fr);
+  display: grid; grid-template-columns: var(--side) minmax(0, 1fr); grid-template-rows: auto minmax(0, 1fr) auto; column-gap: clamp(20px, 2.4 * var(--vw), 40px);
+  padding: 0 var(--pad);
   background:
-    linear-gradient(90deg, rgba(4, 9, 12, 0.94) 0, rgba(4, 9, 12, 0.86) var(--panel-w), rgba(4, 9, 12, 0.2) 66%, rgba(4, 9, 12, 0) 82%),
-    linear-gradient(0deg, rgba(4, 9, 12, 0.8) 0, rgba(4, 9, 12, 0) 30%),
-    linear-gradient(180deg, rgba(4, 9, 12, 0.7) 0, rgba(4, 9, 12, 0) 110px);
+    linear-gradient(90deg, rgba(5, 7, 9, 0.72) 0, rgba(5, 7, 9, 0.35) calc(var(--side) + 120px), rgba(5, 7, 9, 0) 62%),
+    linear-gradient(0deg, rgba(5, 7, 9, 0.6) 0, rgba(5, 7, 9, 0) 34%),
+    linear-gradient(180deg, rgba(5, 7, 9, 0.45) 0, rgba(5, 7, 9, 0) 120px);
 }
-#menu :focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+/* A page dims and blurs the city behind it. */
+#menu::before { content: ''; position: absolute; inset: 0; z-index: -1; pointer-events: none; opacity: 0; background: rgba(5, 7, 9, 0.5); backdrop-filter: blur(14px); -webkit-backdrop-filter: blur(14px); transition: opacity 0.25s; }
+#menu:not([data-tab='quick'])::before { opacity: 1; }
+#menu :focus-visible { outline: 2px solid var(--accent); outline-offset: 3px; }
 #menu input:focus-visible { outline: none; }
 #menu .label { font-size: 11px; letter-spacing: 0.2em; color: var(--muted); font-weight: 700; text-transform: uppercase; white-space: nowrap; }
 #menu .mtag { color: var(--accent); letter-spacing: 0.02em; }
 #menu .swat { color: var(--aegis); }
 #menu .militia { color: var(--crimson); }
+#menu .dot { color: var(--muted); }
 
-/* ---- Top bar ---- */
-#menu .top { grid-column: 1 / -1; display: flex; align-items: center; justify-content: space-between; gap: 20px; padding: 18px 28px 12px 32px; min-width: 0; }
-#menu .brand { min-width: 0; display: flex; align-items: center; gap: 12px; }
-#menu .brand-icon { flex: none; width: 56px; height: 56px; border-radius: 10px; }
-#menu .brand-text { min-width: 0; }
-/* Level and the day's goal (src/ui/progressbadge.ts). */
-#menu .prog { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 10px; margin-top: 8px; font-size: 12px; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; color: var(--muted); }
-#menu .prog .lv { color: var(--accent); font-size: 13px; }
-#menu .prog .bar { position: relative; width: 84px; height: 6px; background: rgba(190, 236, 244, 0.14); }
-#menu .prog .bar i { position: absolute; inset: 0 auto 0 0; background: var(--accent); }
-#menu .prog .goal b { color: var(--ink); }
-#menu .prog.done .goal b { color: var(--cash); }
-/* Brand lockup: the name large (Noto Sans TC 900 for 角頭械鬥, Rajdhani for TURF WAR: TAIPEI), its second
-   half in the accent; under it the other language's name, a tick, and the two sides. */
-#menu .logo { display: flex; flex-direction: column; gap: 5px; margin: 0; line-height: 1; white-space: nowrap; }
-#menu .logo-name { display: flex; align-items: baseline; font-weight: 700; font-size: clamp(28px, 2.3 * var(--vw), 36px); letter-spacing: 0.06em; text-transform: uppercase; text-shadow: 0 0 24px rgba(127, 246, 255, 0.18); }
-#menu .logo-name em { font-style: normal; color: var(--accent); margin-left: 0.32em; }
-#menu .logo-name.cjk { font-family: 'Noto Sans TC', var(--font); font-weight: 900; letter-spacing: 0.1em; font-size: clamp(30px, 2.5 * var(--vw), 38px); }
-#menu .logo-name.cjk em { margin-left: 0; }
-#menu .logo-sub { display: flex; align-items: center; gap: 9px; color: var(--muted); font-size: 11px; font-weight: 700; letter-spacing: 0.24em; text-transform: uppercase; }
-#menu .logo-alt { color: var(--accent); opacity: 0.85; }
-#menu .logo-alt.cjk { font-family: 'Noto Sans TC', var(--font); font-weight: 900; font-size: 13px; letter-spacing: 0.3em; }
-#menu .logo-sub i { width: 14px; height: 1px; background: rgba(127, 246, 255, 0.5); }
-#menu .logo-sub b { font-weight: 700; color: var(--ink); opacity: 0.75; }
+/* ---- Top bar: the mark (home: the logo alone; a page: the logo, ‹ and the name, the way back) and the profile and icons ---- */
+#menu .top { grid-column: 1 / -1; grid-row: 1; display: flex; align-items: center; justify-content: space-between; gap: 16px; padding: 22px 0 10px; min-width: 0; }
+#menu .mark { display: flex; align-items: center; gap: 10px; padding: 0; border: 0; background: none; color: var(--ink); cursor: pointer; }
+#menu .mark img { width: 40px; height: 40px; border-radius: 8px; }
+#menu .mark-back, #menu .mark-name { display: none; }
+#menu[data-tab='quick'] .mark { cursor: default; }
+#menu:not([data-tab='quick']) .mark-back { display: block; font-size: 26px; font-weight: 600; line-height: 1; color: var(--muted); }
+#menu:not([data-tab='quick']) .mark-name { display: block; font-family: 'Noto Sans TC', var(--font); font-size: 22px; font-weight: 900; letter-spacing: 0.08em; }
+#menu:not([data-tab='quick']) .mark:hover .mark-back { color: var(--ink); }
 #menu .who { display: flex; align-items: center; gap: 8px; min-width: 0; }
-#menu .callsign {
-  display: flex; align-items: center; gap: 10px; width: 250px; min-width: 0; height: 38px; padding: 0 0 0 11px;
-  border: 1px solid var(--line); border-radius: 3px; background: rgba(6, 12, 16, 0.6); backdrop-filter: blur(4px); transition: border-color 0.15s;
+#menu .profile {
+  display: flex; align-items: center; gap: 8px; height: 40px; max-width: 280px; padding: 0 10px 0 14px;
+  border: 1px solid var(--line); background: rgba(10, 12, 14, 0.6); color: var(--ink); font-size: 15px; font-weight: 700; letter-spacing: 0.04em; cursor: pointer; transition: border-color 0.15s;
 }
-#menu .callsign:focus-within { border-color: var(--accent); }
-#menu .callsign .label { flex: none; font-size: 10px; letter-spacing: 0.18em; }
-#menu .callsign input { flex: 1; min-width: 0; height: 100%; padding: 0 10px 0 0; border: none; background: none; font-size: 16px; font-weight: 600; letter-spacing: 0.04em; outline: none; }
-#menu .who .segmented { flex: none; width: 176px; height: 38px; grid-template-columns: 0.8fr 0.95fr 1.1fr; background: rgba(6, 12, 16, 0.6); }
-#menu .who .segmented .choice { padding: 0 2px; justify-content: center; }
-#menu .who .segmented .choice b { font-size: 11px; letter-spacing: 0.06em; }
-#menu .icons { display: flex; gap: 8px; margin-left: 4px; }
+#menu .profile b { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+#menu .profile #profile-lv { flex: none; font-size: 13px; color: var(--muted); letter-spacing: 0.08em; }
+#menu .profile .caret { width: 14px; height: 14px; margin-left: 2px; stroke: var(--muted); }
+#menu .profile:hover, #menu .profile[aria-expanded='true'] { border-color: rgba(255, 255, 255, 0.4); }
+#menu .icons { display: flex; gap: 8px; }
 #menu .icon-btn {
-  position: relative; display: grid; place-items: center; width: 38px; height: 38px; padding: 0;
-  border: 1px solid var(--line); border-radius: 3px; background: rgba(6, 12, 16, 0.6); backdrop-filter: blur(4px);
-  color: var(--ink); font-size: 18px; font-weight: 700; line-height: 1; transition: border-color 0.15s, color 0.15s, background 0.15s;
+  position: relative; display: grid; place-items: center; width: 40px; height: 40px; padding: 0;
+  border: 1px solid var(--line); background: rgba(10, 12, 14, 0.6); color: var(--ink); font-size: 18px; font-weight: 700; line-height: 1; transition: border-color 0.15s, background 0.15s;
 }
 #menu .icon-btn svg { width: 20px; height: 20px; fill: none; stroke: currentColor; stroke-width: 1.8; stroke-linecap: round; }
-#menu .icon-btn:hover { border-color: rgba(127, 246, 255, 0.6); color: var(--accent); background: rgba(6, 12, 16, 0.8); }
+#menu .icon-btn:hover { border-color: rgba(255, 255, 255, 0.4); background: rgba(10, 12, 14, 0.8); }
 /* Tooltip: the button's name, under it. */
 #menu .icon-btn::after {
   content: attr(data-tip); position: absolute; top: calc(100% + 6px); right: 0; z-index: 3; padding: 3px 8px; white-space: nowrap; pointer-events: none;
-  border: 1px solid var(--line); border-radius: 3px; background: rgba(6, 12, 16, 0.92); color: var(--ink);
+  border: 1px solid var(--line); background: rgba(10, 12, 14, 0.94); color: var(--ink);
   font-size: 11px; font-weight: 700; letter-spacing: 0.16em; text-transform: uppercase; opacity: 0; transform: translateY(-2px); transition: opacity 0.12s, transform 0.12s;
 }
 #menu .icon-btn:hover::after, #menu .icon-btn:focus-visible::after { opacity: 1; transform: none; }
-/* Discord: a link styled as an icon button, its filled mark in Discord's blurple on hover. */
 #menu a.icon-btn { text-decoration: none; }
 #menu .icon-btn.discord svg { fill: currentColor; stroke: none; }
 #menu .icon-btn.discord:hover, #menu .icon-btn.discord:focus-visible { color: #8b95ff; border-color: rgba(88, 101, 242, 0.75); }
+
+/* ---- The profile popover: callsign, level and the day's goal (src/ui/progressbadge.ts), team, server ---- */
+#menu #profile-pop { width: 320px; }
+#menu .callsign { display: flex; flex-direction: column; gap: 6px; }
+#menu .callsign input {
+  height: 42px; padding: 0 12px; border: 1px solid var(--line); background: rgba(0, 0, 0, 0.35); color: var(--ink);
+  font-size: 17px; font-weight: 700; letter-spacing: 0.04em; outline: none; transition: border-color 0.15s;
+}
+#menu .callsign input:focus { border-color: rgba(255, 255, 255, 0.6); }
+#menu .prog { display: grid; grid-template-columns: auto minmax(0, 1fr) auto; align-items: center; gap: 8px 10px; font-size: 13px; font-weight: 700; color: var(--muted); }
+#menu .prog .lv { color: var(--ink); }
+#menu .prog .bar { position: relative; height: 5px; background: rgba(255, 255, 255, 0.12); }
+#menu .prog .bar i { position: absolute; inset: 0 auto 0 0; background: var(--ink); }
+#menu .prog .goal { grid-column: 1 / -1; }
+#menu .prog .goal b { color: var(--ink); }
+#menu .prog.done .goal b { color: var(--cash); }
+#menu #profile-pop .segmented { height: 40px; }
+#menu #profile-pop .server-chip { align-self: flex-start; padding: 6px 10px; font-size: 13px; }
+
+/* ---- Home: the title and the menu, bottom-left over the city ---- */
+#menu .side { grid-column: 1; grid-row: 2; display: flex; flex-direction: column; justify-content: center; gap: 14px; min-height: 0; padding-bottom: 4vh; }
+#menu .logo { display: flex; flex-direction: column; gap: 10px; margin: 0 0 clamp(12px, 3vh, 36px); line-height: 1; white-space: nowrap; text-shadow: 0 4px 30px rgba(0, 0, 0, 0.55); }
+#menu .logo-name { display: flex; align-items: baseline; font-weight: 700; font-size: clamp(44px, 5.2 * var(--vw), 92px); letter-spacing: 0.04em; text-transform: uppercase; }
+#menu .logo-name em { font-style: normal; color: #7ff6ff; margin-left: 0.24em; }
+#menu .logo-name.cjk { font-family: 'Noto Sans TC', var(--font); font-weight: 900; letter-spacing: 0.06em; font-size: clamp(52px, 6 * var(--vw), 104px); }
+#menu .logo-name.cjk em { margin-left: 0; }
+#menu .logo-sub { display: flex; padding-left: 0.3em; color: var(--ink); font-size: clamp(14px, 1.15 * var(--vw), 20px); font-weight: 700; letter-spacing: 0.42em; text-transform: uppercase; }
+#menu .logo-alt.cjk { font-family: 'Noto Sans TC', var(--font); font-weight: 900; letter-spacing: 0.3em; }
+#menu .logo-sub > i, #menu .logo-sub > span:not(.logo-alt) { display: none; }
+#menu:not([data-tab='quick']) .logo { display: none; }
+
+/* The menu: Quick Play, the one white button; then plain lines of text. */
+#menu .ways { display: flex; flex-direction: column; align-items: flex-start; gap: 2px; }
+#menu .deploy {
+  display: inline-flex; align-items: center; gap: 14px; min-width: 0; max-width: 100%; min-height: 60px; padding: 0 22px 0 26px;
+  border: 1px solid #fff; background: #fff; color: #0a0b0c; transition: background 0.15s, transform 0.15s;
+}
+#menu .deploy::after { content: '›'; flex: none; font-size: 30px; font-weight: 600; line-height: 1; margin-top: -3px; }
+#menu .deploy:hover:not(:disabled) { background: #e9ecee; }
+#menu .deploy:active:not(:disabled) { transform: translateY(1px); }
+#menu .deploy:disabled { background: transparent; color: var(--muted); border-color: var(--line); cursor: not-allowed; }
+#menu .deploy-l { display: flex; align-items: center; min-width: 0; font-size: 27px; font-weight: 800; letter-spacing: 0.14em; white-space: nowrap; }
+#menu .deploy-l svg { display: none; }
+#menu .deploy-r { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 13px; font-weight: 700; letter-spacing: 0.08em; opacity: 0.55; }
+#menu #quick-go .deploy-r { display: none; }
+#menu .deploy.queued { background: transparent; color: var(--ink); border-color: rgba(255, 255, 255, 0.6); }
+#menu #quick-line { margin: 2px 0 12px; }
+#menu .way {
+  position: relative; display: flex; align-items: center; gap: 14px; min-height: 52px; padding: 0 0 0 4px; border: 0; background: none;
+  color: rgba(255, 255, 255, 0.86); text-align: left; text-shadow: 0 2px 14px rgba(0, 0, 0, 0.7); cursor: pointer; transition: color 0.15s, transform 0.15s;
+}
+#menu .way b { font-size: clamp(22px, 1.7 * var(--vw), 28px); font-weight: 700; letter-spacing: 0.12em; white-space: nowrap; }
+#menu .way:hover:not(:disabled) { color: #fff; transform: translateX(4px); }
+#menu .way:disabled { opacity: 0.45; cursor: not-allowed; }
+#menu .way[hidden] { display: none; }
+#menu .way[aria-current='page'], #menu .way[aria-expanded='true'] { color: #fff; }
+#menu .way[aria-current='page']::before { content: ''; position: absolute; left: -16px; top: 12px; bottom: 12px; width: 3px; background: #fff; }
+/* On a page the menu dims, the open page's line stays white. */
+#menu:not([data-tab='quick']) .way:not([aria-current='page']) { color: rgba(255, 255, 255, 0.55); }
+/* 邀請朋友's corner: friends toward the 金拖. */
+#menu .ig-goal {
+  padding: 4px 9px 4px 30px; font-size: 13px; font-weight: 800; letter-spacing: 0.04em; color: #ffd27a; white-space: nowrap; text-shadow: none;
+  border: 1px solid rgba(255, 196, 90, 0.4); background: rgba(10, 12, 14, 0.7) 7px center / 20px 12px no-repeat url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='8 2 32 16'%3E%3Cpath d='M10 10c0-4.5 3-6.5 8-6.5h11c5.5 0 9.5 2.6 9.5 6.5s-4 6.5-9.5 6.5H18c-5 0-8-2-8-6.5z' fill='%23ffe7a3' stroke='%23a8740f' stroke-width='1.6'/%3E%3Cpath d='M26 3.6c1.6 2 1.6 10.8 0 12.8M30.5 3.8c1.6 2 1.6 10.4 0 12.4' stroke='%23e8b42a' stroke-width='3.2' fill='none' stroke-linecap='round'/%3E%3C/svg%3E");
+}
+#menu .ig-goal.done { color: var(--cash); border-color: rgba(156, 240, 138, 0.45); }
+
+/* ---- Pages: one dark panel beside the menu ---- */
+#menu .page { grid-column: 2; grid-row: 2; display: flex; flex-direction: column; justify-content: center; min-width: 0; min-height: 0; padding-bottom: 4vh; }
+#menu .view {
+  display: flex; flex-direction: column; gap: 16px; width: 100%; max-width: 980px; min-height: 0; max-height: 100%; overflow-y: auto;
+  padding: clamp(20px, 2.4 * var(--vw), 36px); border: 1px solid rgba(255, 255, 255, 0.1); background: var(--glass);
+  scrollbar-width: thin; scrollbar-color: rgba(255, 255, 255, 0.2) transparent;
+}
+#menu .view[hidden] { display: none; }
+#menu .page-head { display: flex; align-items: baseline; gap: 16px; margin: 0 0 4px; font-family: 'Noto Sans TC', var(--font); font-size: clamp(28px, 2.4 * var(--vw), 40px); font-weight: 900; letter-spacing: 0.06em; }
+#menu .page-head .count { font-family: var(--font); font-size: 14px; font-weight: 700; letter-spacing: 0.06em; color: var(--muted); }
+#menu #view-start .deploy { align-self: flex-start; margin-top: 4px; }
 
 /* ---- Segmented choices (filters, team, popover options) ---- */
 #menu .choices { display: grid; }
@@ -91,11 +157,7 @@
 #menu .choices.segmented { grid-template-columns: repeat(var(--n, 3), minmax(0, 1fr)); border: 1px solid var(--line); border-radius: 3px; overflow: hidden; }
 #menu .segmented .choice + .choice { border-left: 1px solid var(--line); }
 
-/* ---- Panel ---- */
-#menu .panel {
-  grid-column: 1; grid-row: 2; display: flex; flex-direction: column; gap: 14px; min-height: 0;
-  padding: 10px 32px 18px; border-right: 1px solid rgba(190, 236, 244, 0.08);
-}
+
 
 /* Filters: label column, then the controls. */
 #menu .filters { display: grid; grid-template-columns: auto minmax(0, 1fr); gap: 8px 14px; align-items: center; }
@@ -109,69 +171,12 @@
 #menu .join-filters .choice b { font-size: 12px; }
 
 #menu .mapline { position: relative; display: flex; align-items: center; gap: 8px; min-width: 0; height: 44px; }
-#menu .map-trigger {
-  position: relative; flex: none; display: flex; align-items: center; gap: 9px; height: 100%; min-width: 190px; max-width: 62%; padding: 0 10px 0 12px;
-  border: 1px solid var(--accent); border-radius: 3px; background: rgba(127, 246, 255, 0.1); text-align: left; transition: background 0.15s;
-}
-#menu .map-trigger:hover { background: rgba(127, 246, 255, 0.18); }
-#menu .map-trigger[aria-expanded='true'] { background: rgba(127, 246, 255, 0.2); }
-#menu .map-trigger .sw { flex: none; width: 10px; height: 22px; border-radius: 2px; background: var(--swatch, var(--accent)); }
-#menu .map-trigger.any .sw { background: repeating-linear-gradient(180deg, #d9a75e 0 4px, #7fc56b 4px 8px, #8aa6c8 8px 12px, #ff5ad8 12px 16px, #cfe8f2 16px 22px); }
-#menu .map-trigger b { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 15px; letter-spacing: 0.08em; text-transform: uppercase; color: var(--accent); }
-#menu .map-trigger small { flex: none; margin-left: auto; color: #9be8b9; font-size: 11px; font-weight: 700; letter-spacing: 0.08em; white-space: nowrap; }
-#menu .map-trigger small:empty { display: none; }
 #menu .caret { flex: none; width: 16px; height: 16px; margin-left: auto; fill: none; stroke: var(--accent); stroke-width: 2.2; stroke-linecap: round; stroke-linejoin: round; transition: transform 0.15s; }
-#menu .map-trigger small + .caret { margin-left: 0; }
-#menu .map-trigger[aria-expanded='true'] .caret { transform: rotate(180deg); }
-/* Shortcuts that do not fit wrap onto a hidden second line, so a chip is shown whole or not at all. */
-#menu .quick-maps { display: flex; flex-wrap: wrap; align-items: center; gap: 7px 6px; height: 30px; min-width: 0; overflow: hidden; white-space: nowrap; }
-#menu .qmap {
-  position: relative; flex: none; display: inline-flex; align-items: baseline; gap: 5px; height: 30px; padding: 0 9px 0 13px;
-  border: 1px solid var(--line); border-radius: 3px; background: rgba(255, 255, 255, 0.03); font-size: 13px; font-weight: 700;
-  letter-spacing: 0.06em; text-transform: uppercase; align-items: center; transition: border-color 0.15s, background 0.15s;
-}
-#menu .qmap::before { content: ''; position: absolute; left: 4px; top: 7px; bottom: 7px; width: 3px; border-radius: 2px; background: var(--swatch, var(--muted)); }
-#menu .qmap small { color: #9be8b9; font-size: 11px; }
-#menu .qmap:hover { border-color: rgba(127, 246, 255, 0.5); background: rgba(127, 246, 255, 0.05); }
 /* The map row's note (why the map changed) takes the shortcuts' place for a few seconds. */
 #menu .notice { display: none; flex: 1; min-width: 0; margin: 0; color: var(--amber); font-size: 12px; font-weight: 600; letter-spacing: 0.04em; line-height: 1.25; }
 #menu.noticing .notice { display: block; }
-#menu.noticing .quick-maps { display: none; }
 
-/* ---- Tabs: Quick Play, Start a Server, Join a Server ---- */
-#menu .tabs { flex: none; display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 6px; container-type: inline-size; }
-#menu .tab {
-  display: flex; align-items: center; gap: 10px; min-width: 0; height: 54px; padding: 0 12px; text-align: left;
-  border: 1px solid var(--line); border-radius: 3px; background: rgba(6, 12, 16, 0.6); color: var(--ink);
-  transition: border-color 0.15s, background 0.15s, color 0.15s;
-}
-#menu .tab svg { flex: none; width: 20px; height: 20px; fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
-#menu .tab > span { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
-#menu .tab b { font-size: 13px; letter-spacing: 0.08em; text-transform: uppercase; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-#menu .tab small { color: var(--muted); font-size: 10px; font-weight: 600; letter-spacing: 0.1em; text-transform: uppercase; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-#menu .tab:hover { border-color: rgba(127, 246, 255, 0.5); background: rgba(127, 246, 255, 0.05); }
-#menu .tab[aria-selected='true'] { border-color: var(--accent); background: rgba(127, 246, 255, 0.12); color: var(--accent); box-shadow: inset 0 -2px 0 var(--accent); }
-#menu .tab[aria-selected='true'] small { color: rgba(127, 246, 255, 0.75); }
-@container (max-width: 560px) { #menu .tab svg { display: none; } }
 
-/* ---- The views ---- */
-#menu .view { display: flex; flex-direction: column; gap: 10px; min-height: 0; }
-#menu .view[hidden] { display: none; }
-#menu #view-join, #menu #view-quick { flex: 1 1 auto; }
-/* Quick play's list is as tall as its rooms (an empty one stays short), up to the space there is. */
-#menu #view-quick .browser, #menu #view-quick .browser-rows { flex: 0 1 auto; }
-#menu #view-start .deploy { margin-top: 6px; }
-#menu .deploy {
-  display: flex; align-items: center; justify-content: space-between; gap: 16px; width: 100%; min-height: 62px; padding: 0 22px;
-  border: 1px solid var(--accent); border-radius: 3px; color: #031014; background: var(--accent);
-  box-shadow: 0 0 30px rgba(127, 246, 255, 0.28); transition: filter 0.15s, box-shadow 0.15s;
-}
-#menu .deploy:hover:not(:disabled) { filter: brightness(1.08); box-shadow: 0 0 40px rgba(127, 246, 255, 0.42); }
-#menu .deploy:active:not(:disabled) { filter: brightness(0.96); }
-#menu .deploy:disabled { background: transparent; color: var(--muted); border-color: var(--line); box-shadow: none; cursor: not-allowed; }
-#menu .deploy-l { display: flex; align-items: center; gap: 12px; min-width: 0; font-size: 22px; font-weight: 700; letter-spacing: 0.2em; text-transform: uppercase; white-space: nowrap; }
-#menu .deploy-l svg { flex: none; width: 20px; height: 20px; fill: currentColor; }
-#menu .deploy-r { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 15px; font-weight: 700; letter-spacing: 0.1em; text-transform: uppercase; opacity: 0.78; }
 #menu .rooms-line { display: flex; align-items: center; gap: 8px; margin: 0; min-height: 18px; color: var(--muted); font-size: 13px; font-weight: 600; letter-spacing: 0.02em; line-height: 1.25; }
 #menu .rooms-line .line-text { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 #menu #start-line .line-text { white-space: normal; }
@@ -190,6 +195,7 @@
 #menu .conn.wait i { background: var(--amber); animation: lobby-pulse 1s ease-in-out infinite; }
 #menu .conn.off i { background: var(--crimson); }
 @keyframes lobby-pulse { 50% { opacity: 0.3; } }
+
 
 /* ---- Live rooms: fills the panel's spare height (at least three rows), scrolls beyond ---- */
 #menu .browser {
@@ -271,17 +277,7 @@
 #menu .code-row { flex: none; display: flex; align-items: center; gap: 12px; }
 #menu .code-row .code-box { flex: 0 1 240px; }
 
-/* ---- Offline: Solo vs bots, Practice ---- */
-/* 最新更新 (src/ui/news.ts): one line above the offline row. */
-#menu .news { flex: none; margin-top: auto; padding: 9px 12px 10px; border: 1px solid var(--line); border-left: 3px solid var(--accent); border-radius: 3px; background: rgba(6, 12, 16, 0.72); backdrop-filter: blur(4px); }
-#menu .news[hidden] { display: none; }
-#menu .news-head { display: flex; align-items: center; gap: 8px; font-size: 11px; font-weight: 700; letter-spacing: 0.18em; text-transform: uppercase; color: var(--muted); }
-#menu .news-head b { color: var(--accent); }
-#menu .news-new { padding: 0 6px; border-radius: 2px; background: var(--amber); color: #120c04; font-size: 10px; letter-spacing: 0.12em; line-height: 16px; }
-#menu .news-head time { margin-left: auto; font-variant-numeric: tabular-nums; letter-spacing: 0.08em; }
-#menu .news p { margin: 4px 0 0; font-size: 15px; font-weight: 600; line-height: 1.35; color: var(--ink); }
-#menu .news:not([hidden]) + .others { margin-top: 0; }
-#menu .others { flex: none; margin-top: auto; display: grid; grid-template-columns: auto 1fr 1fr; align-items: center; gap: 8px; }
+
 #menu .sub {
   min-width: 0; height: 40px; padding: 0 8px; border: 1px solid var(--line); border-radius: 3px; background: rgba(6, 12, 16, 0.6);
   font-size: 13px; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; color: var(--ink); white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
@@ -320,27 +316,7 @@
 /* The amber dot: still, after giving up (not the red of an error). */
 #menu .conn.down i { background: var(--amber); }
 /* A big button whose action waits for the server: outlined, so it reads as pending rather than ready. */
-#menu .deploy.queued { background: rgba(127, 246, 255, 0.12); color: var(--accent); box-shadow: none; }
 @media (prefers-reduced-motion: reduce) { #menu .conn.wait i { animation: none; } }
-
-/* ---- Stage: the map in view ---- */
-#menu .stage { grid-column: 2; grid-row: 2; position: relative; display: flex; flex-direction: column; justify-content: flex-end; padding: 0 36px 32px; min-width: 0; min-height: 0; pointer-events: none; }
-#menu .showcase { align-self: flex-end; max-width: 460px; text-align: right; text-shadow: 0 2px 18px rgba(0, 0, 0, 0.7); }
-#menu .showcase h2 { margin: 0; font-size: clamp(30px, 3 * var(--vw), 46px); line-height: 1; letter-spacing: 0.05em; text-transform: uppercase; }
-#menu .showcase .meta { margin-top: 10px; display: inline-block; padding: 3px 10px; font-size: 13px; font-weight: 700; letter-spacing: 0.12em; text-transform: uppercase; border: 1px solid var(--line); border-radius: 999px; background: rgba(4, 9, 12, 0.55); text-shadow: none; }
-
-/* ---- Footer links: the source on GitHub, the privacy page. Quiet, in the stage's bottom-left corner
-   (under the panel on narrow screens, where the stage is hidden). ---- */
-#menu .site-links {
-  position: absolute; left: calc(var(--panel-w) + 36px); bottom: 30px; z-index: 2;
-  display: flex; align-items: center; gap: 8px; font-size: 12px; font-weight: 700; letter-spacing: 0.14em; text-transform: uppercase;
-  color: var(--muted); text-shadow: 0 1px 8px rgba(0, 0, 0, 0.8);
-}
-#menu .site-links a { display: inline-flex; align-items: center; gap: 6px; padding: 4px 2px; color: inherit; text-decoration: none; transition: color 0.15s; }
-#menu .site-links a:hover { color: var(--accent); }
-#menu .site-links svg { width: 14px; height: 14px; fill: currentColor; }
-#menu .site-links .dot { opacity: 0.6; }
-:lang(zh-TW) #menu .site-links { letter-spacing: 0.08em; }
 
 /* ---- Popovers ---- */
 #menu .pop {
@@ -406,171 +382,131 @@
 #menu [data-theme='memorial'] { --swatch: #3a6ad0; }
 #menu [data-theme='sanchong'] { --swatch: #e8884a; }
 
-/* ---- Tighter screens ---- */
-@media (max-width: 1180px) {
-  #menu .callsign { width: 200px; }
+
+/* ---- The latest update (src/ui/news.ts): one quiet line, bottom-right ---- */
+#menu .news { grid-column: 2; grid-row: 3; justify-self: end; display: flex; align-items: baseline; gap: 14px; max-width: 640px; padding: 0 0 28px; text-shadow: 0 2px 12px rgba(0, 0, 0, 0.8); }
+#menu .news[hidden] { display: none; }
+#menu .news-head { flex: none; display: flex; align-items: center; gap: 8px; padding-right: 14px; border-right: 1px solid var(--line); font-size: 13px; font-weight: 700; letter-spacing: 0.12em; color: #7ff6ff; }
+#menu .news-head b { color: inherit; }
+#menu .news-new { padding: 0 6px; background: #ffd27a; color: #120c04; font-size: 10px; letter-spacing: 0.12em; line-height: 16px; text-shadow: none; }
+#menu .news-head time { display: none; }
+#menu .news p { margin: 0; min-width: 0; font-size: 14px; font-weight: 600; line-height: 1.35; color: var(--ink); }
+#menu:not([data-tab='quick']) .news { display: none; }
+
+/* ---- Footer links: quiet, bottom-left ---- */
+#menu .site-links {
+  grid-column: 1; grid-row: 3; align-self: end; display: flex; align-items: center; gap: 8px; padding: 0 0 28px;
+  font-size: 12px; font-weight: 700; letter-spacing: 0.12em; color: var(--muted); text-shadow: 0 1px 8px rgba(0, 0, 0, 0.8);
 }
+#menu .site-links a { display: inline-flex; align-items: center; gap: 6px; padding: 4px 2px; color: inherit; text-decoration: none; transition: color 0.15s; }
+#menu .site-links a:hover { color: var(--ink); }
+#menu .site-links svg { width: 14px; height: 14px; fill: currentColor; }
+#menu .site-links .dot { opacity: 0.6; }
+
+/* 開設房間's maps: one row of picture cards that scrolls sideways. */
+#menu #view-start .mapline { flex-direction: column; align-items: stretch; height: auto; gap: 6px; }
+#menu #view-start .map-grid { grid-template-columns: none; grid-auto-flow: column; grid-auto-columns: clamp(136px, 12 * var(--vw), 176px); overflow-x: auto; overflow-y: hidden; padding: 2px 2px 8px; }
+#menu .mcard { border-color: rgba(255, 255, 255, 0.12); background: rgba(255, 255, 255, 0.03); }
+#menu .mcard:hover:not(:disabled) { border-color: rgba(255, 255, 255, 0.45); background: rgba(255, 255, 255, 0.06); }
+#menu .mcard[aria-pressed='true'] { border-color: #fff; background: rgba(255, 255, 255, 0.1); box-shadow: inset 0 0 0 1px #fff; }
+#menu .mcard .thumb { border-bottom: 0; }
+
+/* The quick line's server chip and the popovers: plain, on the glass. */
+#menu .pop { border-color: rgba(255, 255, 255, 0.16); background: rgba(10, 12, 14, 0.94); }
+#menu .pop-head b { color: var(--ink); }
+#menu .go { color: #0a0b0c; background: #fff; border-color: #fff; box-shadow: none; }
+#menu .go:hover:not(:disabled) { filter: none; background: #e9ecee; box-shadow: none; }
+#menu .choice[aria-pressed='true'] { background: #fff; color: #0a0b0c; box-shadow: none; }
+#menu .choice[aria-pressed='true'] small, #menu .choice[aria-pressed='true'] .mtag { color: rgba(10, 11, 12, 0.6); }
+#menu .choice[aria-pressed='true'] .swat, #menu .choice[aria-pressed='true'] .militia { color: inherit; }
+#menu .choice:hover:not(:disabled):not([aria-pressed='true']) { background: rgba(255, 255, 255, 0.07); }
+
+/* ---- Shorter screens ---- */
 @media (max-height: 760px) and (min-width: 901px) {
-  #menu .top { padding-top: 12px; padding-bottom: 8px; }
-  #menu .panel { gap: 11px; }
-  #menu .deploy { min-height: 56px; }
+  #menu .top { padding-top: 14px; }
+  #menu .side { gap: 8px; }
+  #menu .way { min-height: 44px; }
+  #menu .deploy { min-height: 52px; }
 }
 
-/* ---- Narrow screens: one scrolling column ---- */
+/* ---- Narrow screens (upright phones, small windows): one scrolling column ---- */
 @media (max-width: 900px) {
-  #menu { display: block; overflow-y: auto; overflow-x: hidden; background: rgba(4, 9, 12, 0.9); }
-  #menu .top { flex-wrap: wrap; padding: 16px 16px 8px; gap: 12px; }
-  #menu .who { flex: 1 1 100%; flex-wrap: wrap; }
-  #menu .callsign { flex: 1 1 200px; width: auto; }
-  #menu .panel { padding: 8px 16px 24px; border-right: none; }
+  #menu { display: flex; flex-direction: column; overflow-y: auto; overflow-x: hidden; padding: 0 16px; background: rgba(5, 7, 9, 0.55); }
+  #menu .top { padding: 14px 0 6px; }
+  #menu .profile { max-width: 160px; }
+  #menu .side { flex: none; padding: 18px 0 10px; }
+  #menu .logo-name.cjk { font-size: clamp(44px, 13 * var(--vw), 72px); }
+  #menu .page { flex: none; padding: 0 0 12px; }
+  #menu .view { max-height: none; overflow: visible; padding: 18px 16px; }
   #menu .browser { flex: none; min-height: 0; }
   #menu .browser-rows { flex: none; min-height: 126px; max-height: calc(50 * var(--vh)); }
-  #menu .stage { display: none; }
-  #menu .site-links { position: static; justify-content: center; padding: 0 16px 24px; }
-  /* The install card sits over the bottom of the page: let the page scroll past it. */
+  #menu .news { justify-self: auto; padding: 8px 0 12px; }
+  #menu .site-links { justify-content: center; padding: 0 0 24px; }
   #menu:has(> .install-hint:not([hidden])) .site-links { padding-bottom: 220px; }
 }
 @media (max-width: 560px) {
-  #menu .brand { flex: 1; gap: 8px; }
-  #menu .brand-icon { width: 32px; height: 32px; border-radius: 6px; }
-  #menu .logo-name { font-size: clamp(18px, 5.6 * var(--vw), 28px); }
-  #menu .logo-sub { font-size: 9px; gap: 6px; letter-spacing: 0.12em; }
-  #menu .logo-alt.cjk { font-size: 11px; letter-spacing: 0.15em; }
-  #menu .top { position: relative; }
-  #menu .icons { position: absolute; top: 16px; right: 16px; margin: 0; }
-  #menu .who .segmented { flex: 1 1 100%; width: auto; }
+  #menu .icons { gap: 6px; }
+  #menu .icon-btn, #menu .profile { height: 40px; }
+  #menu .icon-btn { width: 40px; }
   #menu .filters { grid-template-columns: 1fr; gap: 6px; }
   #menu .frow > .label { margin-top: 4px; }
   #menu .mapline { height: auto; flex-wrap: wrap; }
-  #menu .map-trigger { flex: 1 1 100%; max-width: none; height: 44px; }
-  #menu .quick-maps { flex: 1 1 100%; }
-  #menu .notice { flex: 1 1 100%; }
-  #menu .deploy { flex-direction: column; align-items: flex-start; justify-content: center; gap: 2px; padding: 10px 18px; }
-  #menu .deploy-l { font-size: 20px; }
-  #menu .deploy-r { font-size: 13px; padding-left: 32px; max-width: 100%; }
   #menu .rooms-line { flex-wrap: wrap; }
   #menu .rooms-line .line-text { white-space: normal; flex: 1 1 0; }
   #menu .browser-head .server-chip .server-word { display: none; }
-  /* The totals and the server chip share a line only when they fit. */
   #menu .browser-head { flex-wrap: wrap; align-items: center; row-gap: 4px; }
-  #menu .tab { flex-direction: column; justify-content: center; gap: 0; height: 50px; padding: 4px; text-align: center; }
-  #menu .tab > span { align-items: center; }
-  #menu .tab b { white-space: normal; font-size: 12px; line-height: 1.15; }
-  #menu .tab small { display: none; }
   #menu .code-row { flex-wrap: wrap; gap: 6px; }
-  #menu .code-row .label { flex: 1 1 100%; }
-  #menu .code-row .code-box { flex: 1 1 100%; }
-  #menu .others { grid-template-columns: 1fr 1fr; }
-  #menu .others .label { grid-column: 1 / -1; }
+  #menu .code-row .label, #menu .code-row .code-box { flex: 1 1 100%; }
 }
 
-/* ---- Phones sideways (and other short screens): a compact two-column lobby ----
- * One slim bar on top (the name, callsign, team, Controls, Settings), a rail on the left that never
- * scrolls away (the three tabs, Solo and Practice, the footer links), and the open tab on the right
- * in a panel that scrolls by itself. The backdrop's map title is hidden, every control is a 44 px
- * target, and the notch and home indicator are kept clear. The panel's children join the menu's grid
- * (display: contents) so the rail and the view sit side by side without new markup.
+/* ---- Phones sideways (and other short screens): the menu on the left, the city (or the open page) on the right ----
+ * Home keeps the city clear beside a compact menu; a page takes the right side and scrolls by itself
+ * while the menu stays in reach. Every control is a 44 px target; the notch and home indicator are kept clear.
  */
 @media (orientation: landscape) and (max-height: 500px) {
   #menu {
-    --rail: clamp(200px, 27 * var(--vw), 250px); --gap: 12px;
-    display: grid; overflow: hidden; background: rgba(4, 9, 12, 0.9);
-    grid-template-columns: var(--rail) minmax(0, 1fr);
-    grid-template-rows: auto auto auto auto minmax(0, 1fr) auto;
-    column-gap: var(--gap);
-    padding: var(--safe-t) max(var(--gap), var(--safe-r)) 0 max(var(--gap), var(--safe-l));
+    --side: clamp(210px, 30 * var(--vw), 280px);
+    display: grid; overflow: hidden; column-gap: 14px; grid-template-rows: auto minmax(0, 1fr) auto;
+    padding: var(--safe-t) max(12px, var(--safe-r)) 0 max(14px, var(--safe-l));
   }
-  #menu .stage { display: none; }
-
-  /* Top bar: one line, 44 px tall. */
-  #menu .top { grid-column: 1 / -1; grid-row: 1; flex-wrap: nowrap; gap: var(--gap); padding: 8px 0 6px; }
-  #menu .brand { flex: 0 0 var(--rail); gap: 6px; }
-  #menu .brand-icon { width: 28px; height: 28px; border-radius: 5px; }
-  #menu .logo { gap: 0; }
-  #menu .logo-name, #menu .logo-name.cjk { font-size: 20px; }
-  #menu .logo-sub { display: none; }
-  #menu .who { flex: 1 1 auto; flex-wrap: nowrap; justify-content: flex-end; gap: 6px; }
-  #menu .callsign { flex: 1 1 auto; width: auto; max-width: 300px; height: 46px; }
-  #menu .who .segmented { flex: 0 0 156px; width: auto; height: 46px; }
-  #menu .icons { position: static; flex: none; margin: 0; gap: 6px; }
-  #menu .icon-btn { width: 46px; height: 46px; }
-
-  /* The rail and the view. */
-  #menu .panel { display: contents; }
-  #menu .tabs { grid-column: 1; grid-row: 2; grid-template-columns: 1fr; gap: 4px; }
-  #menu .tab { height: 46px; padding: 0 10px; gap: 8px; }
-  #menu .tab b { font-size: 13px; }
-  #menu .others { grid-column: 1; grid-row: 3; margin: 10px 0 0; grid-template-columns: 1fr 1fr; gap: 4px 6px; }
-  #menu .others .label { grid-column: 1 / -1; font-size: 10px; }
-  #menu .sub { height: 44px; padding: 0 4px; font-size: 12px; letter-spacing: 0.03em; }
-  #menu .unavailable { grid-column: 1; grid-row: 4; margin-top: 8px; font-size: 12px; }
-  /* The latest update sits under the open view (the rail has no room); a status line takes its place. */
-  #menu .news { grid-column: 2; grid-row: 6; display: flex; align-items: baseline; gap: 10px; margin: 0 4px max(8px, var(--safe-b)) 0; padding: 6px 10px; }
-  #menu .news[hidden], #menu:has(.status:not(:empty)) .news { display: none; }
-  #menu .news-head { flex: none; font-size: 10px; letter-spacing: 0.12em; }
-  #menu .news-head time { margin-left: 0; }
-  #menu .news p { margin: 0; font-size: 13px; line-height: 1.3; }
-  #menu .news:not([hidden]) + .others { margin-top: 10px; }
-  /* The unreachable card sits beside the tabs (the rail's tallest row, so the screen grows no taller) and
-     the open view starts under it. */
-  #menu .unreachable { grid-column: 2; grid-row: 2; align-self: start; margin: 0 4px 6px 0; gap: 4px; padding: 7px 12px; }
-  #menu .unreachable p { font-size: 13px; line-height: 1.3; }
-  #menu .unreachable-head { font-size: 12px; }
-  #menu .unreachable-retry { min-height: 40px; }
-  #menu:has(> .panel > .unreachable:not([hidden])) .view { grid-row: 3 / 6; }
-  #menu .status { grid-column: 2; grid-row: 6; margin: 0 0 8px; }
-  #menu .site-links {
-    position: static; grid-column: 1; grid-row: 5 / 7; align-self: end; justify-content: flex-start;
-    padding: 0 0 max(4px, var(--safe-b)); letter-spacing: 0.1em;
-  }
-  #menu .site-links a { min-height: 44px; padding: 0 6px; }
-  /* The narrow footer here has room for two links; the about page stays one tap away in the other layouts and in the sitemap. */
-  #menu .site-links #about-link, #menu .site-links #about-link + .dot { display: none; }
-  #menu .view {
-    grid-column: 2; grid-row: 2 / 6; min-height: 0; overflow-y: auto; overscroll-behavior: contain; gap: 8px;
-    padding: 0 4px max(12px, var(--safe-b)) 0;
-    scrollbar-width: thin; scrollbar-color: rgba(190, 236, 244, 0.2) transparent;
-  }
-  /* Room for the install strip under the last row (the rail is clear of it). */
-  #menu:has(> .install-hint:not([hidden])) .view { padding-bottom: 70px; }
-  #menu:has(> .install-hint:not([hidden])) .site-links { padding-bottom: max(4px, var(--safe-b)); }
-
-  /* Quick play. */
-  #menu .deploy { flex: none; min-height: 52px; padding: 0 16px; }
-  #menu .deploy-l { font-size: 18px; }
-  #menu .deploy-r { font-size: 13px; }
-
-  /* Start a server: the form scrolls, START stays in reach at the bottom. */
+  #menu .top { padding: 8px 0 2px; }
+  #menu .mark img { width: 32px; height: 32px; }
+  #menu .profile, #menu .icon-btn { height: 44px; }
+  #menu .icon-btn { width: 44px; }
+  #menu .side { justify-content: flex-start; gap: 0; padding: 0 0 max(6px, var(--safe-b)); overflow-y: auto; scrollbar-width: none; }
+  /* No room for the big title: the name sits in the top bar beside the mark, home or not. */
+  #menu .logo { display: none; }
+  #menu .mark .mark-name { display: block; font-family: 'Noto Sans TC', var(--font); font-size: 20px; font-weight: 900; letter-spacing: 0.08em; }
+  #menu .side { padding-top: 6px; }
+  #menu .deploy { min-height: 48px; padding: 0 16px 0 18px; }
+  #menu .deploy-l { font-size: 20px; }
+  #menu .deploy::after { font-size: 24px; }
+  #menu #quick-line { display: none; }
+  #menu .deploy { margin-bottom: 4px; }
+  #menu .way { min-height: 44px; }
+  #menu .way b { font-size: 17px; }
+  #menu .ig-goal { font-size: 12px; padding: 3px 8px 3px 28px; }
+  #menu .page { padding: 0 0 max(8px, var(--safe-b)); justify-content: flex-start; }
+  #menu .view { padding: 14px 16px; gap: 10px; }
+  #menu .page-head { font-size: 22px; margin: 0; }
+  #menu .news { grid-row: 3; padding: 0 0 max(8px, var(--safe-b)); }
+  #menu .news p { font-size: 12px; }
+  #menu .news-head { font-size: 11px; }
+  #menu .site-links { display: none; }
   #menu .filters { gap: 6px 10px; }
-  #menu .filters .segmented, #menu .join-filters .segmented { height: 46px; }
-  #menu .mapline { height: 46px; }
-  #menu .map-trigger { min-width: 0; max-width: 60%; }
-  #menu .quick-maps { height: 44px; align-items: center; }
-  #menu .qmap { height: 44px; }
-  #menu #view-start .deploy { position: sticky; bottom: 0; z-index: 1; margin-top: 2px; }
-
-  /* Join a server: both filters on one line, the rooms in the scrolling view, the code box under them. */
+  #menu .filters .segmented, #menu .join-filters .segmented { height: 44px; }
+  #menu .mapline { height: 44px; }
   #menu #view-join { container-type: inline-size; }
   #menu .join-filters { grid-template-columns: auto minmax(0, 1.1fr) auto minmax(0, 1fr); }
-  #menu .join-filters .label { font-size: 10px; letter-spacing: 0.14em; }
   #menu .browser { flex: none; min-height: 0; max-height: none; overflow: visible; }
-  #menu .browser-head { flex-wrap: wrap; align-items: center; row-gap: 4px; padding: 6px 10px; }
-  #menu .browser-head .server-chip .server-word { display: none; }
   #menu .browser-rows { flex: none; min-height: 0; max-height: none; overflow: visible; }
   #menu .room { height: 52px; padding-right: 6px; }
   #menu .room .join { height: 44px; }
-  #menu .browser .empty { min-height: 0; padding: 12px; gap: 6px; }
-  #menu .empty-go .sub { height: 44px; }
-  #menu .browser-foot { height: auto; min-height: 30px; }
-  #menu .browser-foot .link { min-height: 44px; }
-  #menu .code-row { flex-wrap: nowrap; gap: 10px; }
   #menu .code-row .code-box { flex: 1 1 220px; max-width: 280px; height: 46px; }
   #menu .code-go { min-width: 64px; }
-
-  /* Install hint: a one-line strip over the view's bottom-right, not a card over the lobby. */
   .install-hint {
     left: auto; right: max(12px, var(--safe-r)); bottom: max(6px, var(--safe-b)); transform: none;
-    width: min(560px, calc(100 * var(--vw) - var(--rail) - 36px - var(--safe-l) - var(--safe-r)));
+    width: min(560px, calc(100 * var(--vw) - var(--side) - 40px - var(--safe-l) - var(--safe-r)));
     grid-template-columns: minmax(0, 1fr) auto; gap: 0 8px; padding: 4px 4px 4px 12px;
   }
   .install-hint .mark, .install-hint b, .install-hint:not(.tip-only) p.tip { display: none; }
@@ -579,9 +515,6 @@
     display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden;
   }
   .install-hint .acts { grid-column: 2; grid-row: 1; }
-}
-/* Narrow rails: the room rows drop the mode's name for its tag and keep the ping as a small badge. */
-@media (orientation: landscape) and (max-height: 500px) {
   @container (max-width: 720px) { #menu .join-filters .jname { display: none; } }
   @container (max-width: 560px) {
     #menu .room { grid-template-columns: minmax(0, 1fr) 30px 40px 40px 50px 64px; gap: 6px; padding-left: 12px; }
@@ -592,9 +525,10 @@
 
 /* ---------- The lobby's one-question dialog (src/ui/ask.ts): the first callsign, a private room's code ---------- */
 .ask-dialog { position: fixed; inset: 0; z-index: 12; display: grid; place-items: center; padding: 12px; background: rgba(3, 7, 10, 0.6); backdrop-filter: blur(3px); }
+.ask-dialog { --accent: #ffffff; --line: rgba(255, 255, 255, 0.14); }
 .ask-dialog .panel {
   width: min(420px, 100%); display: flex; flex-direction: column; gap: 12px; padding: 18px 20px 20px;
-  background: linear-gradient(180deg, rgba(14, 26, 33, 0.97), rgba(7, 13, 18, 0.97)); border: 1px solid rgba(127, 246, 255, 0.55); color: var(--ink);
+  background: rgba(10, 12, 14, 0.95); border: 1px solid rgba(255, 255, 255, 0.16); color: var(--ink);
 }
 .ask-dialog header { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
 .ask-dialog h2 { margin: 0; font-size: 20px; letter-spacing: 0.2em; text-transform: uppercase; color: var(--accent); }
@@ -608,7 +542,7 @@
 .ask-dialog input:focus { border-color: var(--accent); }
 .ask-dialog .err { margin: -4px 0 0; font-size: 12px; color: #ffb35c; }
 .ask-dialog .err[hidden] { display: none; }
-.ask-dialog .go { height: 48px; font: inherit; font-size: 16px; font-weight: 700; letter-spacing: 0.3em; text-transform: uppercase; color: #031013; background: var(--accent); border: 0; cursor: pointer; }
+.ask-dialog .go { height: 48px; font: inherit; font-size: 16px; font-weight: 700; letter-spacing: 0.3em; text-transform: uppercase; color: #0a0b0c; background: var(--accent); border: 0; cursor: pointer; }
 /* Phones sideways: the keyboard takes most of the height, so keep the dialog compact and near the top. */
 :where(.view-low) .ask-dialog { place-items: start center; padding-top: max(8px, var(--safe-t)); }
 :where(.view-low) .ask-dialog .panel { gap: 8px; padding: 10px 14px 12px; }
@@ -630,25 +564,3 @@
 .gfx-lost p { margin: 0; }
 .gfx-lost button { flex: none; height: 38px; padding: 0 14px; font: inherit; font-weight: 700; color: #031013; background: var(--accent); border: 0; cursor: pointer; }
 
-/* ---------- 邀請朋友 under Quick Play (main.ts renderInvite) ---------- */
-#menu .invite-go {
-  display: grid; grid-template-columns: auto minmax(0, 1fr) auto; align-items: center; gap: 14px; width: 100%; min-height: 64px; margin-top: 10px; padding: 8px 16px;
-  font: inherit; color: #fff; text-align: left; cursor: pointer; touch-action: manipulation;
-  background: linear-gradient(90deg, rgba(255, 85, 68, 0.24), rgba(255, 85, 68, 0.06)); border: 2px solid var(--crimson);
-}
-#menu .invite-go[hidden] { display: none; }
-#menu .invite-go:hover:not(:disabled) { background: linear-gradient(90deg, rgba(255, 85, 68, 0.36), rgba(255, 85, 68, 0.1)); }
-#menu .invite-go:disabled { opacity: 0.55; cursor: not-allowed; }
-#menu .invite-go .ig-icon { width: 30px; height: 30px; background: center / contain no-repeat url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23ff8a7d' stroke-width='2' stroke-linecap='round'%3E%3Ccircle cx='9' cy='8' r='3.4'/%3E%3Cpath d='M2.5 20c.6-3.6 3.2-5.6 6.5-5.6s5.9 2 6.5 5.6'/%3E%3Cpath d='M16 4.8a3.3 3.3 0 0 1 0 6.4M18.2 14.6c1.8.7 2.9 2.4 3.3 5.4'/%3E%3C/svg%3E"); }
-#menu .invite-go .ig-t { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
-#menu .invite-go b { font-size: 21px; font-weight: 800; letter-spacing: 0.12em; }
-#menu .invite-go small { overflow: hidden; font-size: 13px; font-weight: 600; letter-spacing: 0.02em; color: #ffd0ca; white-space: nowrap; text-overflow: ellipsis; }
-#menu .invite-go .ig-goal {
-  padding: 4px 9px 4px 30px; font-size: 13px; font-weight: 800; letter-spacing: 0.04em; color: #ffd9a8; white-space: nowrap;
-  border: 1px dashed rgba(255, 180, 90, 0.6); background: rgba(255, 180, 90, 0.08) 7px center / 20px 12px no-repeat url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='8 2 32 16'%3E%3Cpath d='M10 10c0-4.5 3-6.5 8-6.5h11c5.5 0 9.5 2.6 9.5 6.5s-4 6.5-9.5 6.5H18c-5 0-8-2-8-6.5z' fill='%23ffe7a3' stroke='%23a8740f' stroke-width='1.6'/%3E%3Cpath d='M26 3.6c1.6 2 1.6 10.8 0 12.8M30.5 3.8c1.6 2 1.6 10.4 0 12.4' stroke='%23e8b42a' stroke-width='3.2' fill='none' stroke-linecap='round'/%3E%3C/svg%3E");
-}
-#menu .invite-go .ig-goal.done { color: var(--cash); border-style: solid; border-color: rgba(156, 240, 138, 0.5); }
-:where(.view-short) #menu .invite-go { min-height: 46px; margin-top: 6px; padding: 4px 12px; gap: 10px; }
-:where(.view-short) #menu .invite-go b { font-size: 17px; }
-:where(.view-short) #menu .invite-go small { display: none; }
-:where(.view-short) #menu .invite-go .ig-icon { width: 24px; height: 24px; }

@@ -45,3 +45,47 @@
 :where(.view-short) .skins .knife-pick small, :where(.view-short) .skins .row-note { display: none; }
 :where(.view-short) .skins .mark { height: 22px; }
 :where(.view-short) .skins .done { min-height: 44px; padding: 0; }
+
+/* ---- 外觀 as a showcase: full screen over the dimmed city, the choices a plain list on the left, the two
+   soldiers large on the right (the preview canvas is transparent). ---- */
+.lb-settings.lobby.skins-dialog { place-items: stretch; background: rgba(5, 7, 9, 0.35); }
+.lb-settings.lobby.skins-dialog .panel {
+  width: 100%; height: 100%; max-height: none; display: flex; flex-direction: column; border: 0;
+  background: linear-gradient(90deg, rgba(5, 7, 9, 0.9) 0, rgba(5, 7, 9, 0.7) clamp(340px, 34vw, 480px), rgba(5, 7, 9, 0) 78%);
+}
+.lb-settings.lobby.skins-dialog header { flex: none; padding: 22px clamp(24px, 3.4vw, 56px) 0; background: none; border: 0; }
+.lb-settings.lobby.skins-dialog h2 { font-family: 'Noto Sans TC', var(--font); font-size: clamp(28px, 2.4vw, 40px); font-weight: 900; letter-spacing: 0.06em; color: #fff; text-transform: none; }
+.skins-dialog .skins { flex: 1 1 auto; min-height: 0; grid-template-columns: clamp(300px, 30vw, 420px) minmax(0, 1fr); }
+.skins-dialog .skins .stage { order: 2; min-height: 0; border: 0; }
+.skins-dialog .skins .picks { order: 1; gap: 8px; padding: 18px 0 28px clamp(24px, 3.4vw, 56px); overflow-y: auto; text-transform: none; }
+.skins-dialog .skins h3 { margin: 10px 0 2px; font-size: 13px; letter-spacing: 0.2em; color: var(--muted); }
+.skins-dialog .skins .knives { grid-template-columns: 1fr; gap: 2px; }
+.skins-dialog .skins .knife-pick {
+  display: grid; grid-template-columns: 54px minmax(0, 1fr); grid-template-rows: auto auto; align-items: center; column-gap: 14px; row-gap: 0;
+  padding: 8px 10px 8px 12px; border: 0; border-left: 3px solid transparent; background: none; text-align: left;
+}
+.skins-dialog .skins .knife-pick .mark { grid-row: 1 / 3; width: 50px; height: 28px; }
+.skins-dialog .skins .knife-pick b { font-size: 19px; letter-spacing: 0.08em; color: rgba(255, 255, 255, 0.8); }
+.skins-dialog .skins .knife-pick small { text-align: left; font-size: 12px; }
+.skins-dialog .skins .knife-pick:hover { background: rgba(255, 255, 255, 0.05); }
+.skins-dialog .skins .knife-pick.on { border-left-color: #fff; background: rgba(255, 255, 255, 0.08); }
+.skins-dialog .skins .knife-pick.on b { color: #fff; }
+.skins-dialog .skins .knife-pick[data-knife='gold'].on { border-left-color: #ffc85a; background: rgba(255, 196, 90, 0.1); }
+.skins-dialog .skins .knife-pick.locked::after { top: 50%; right: 12px; transform: translateY(-50%); }
+.skins-dialog .skins .gold-lock { border-style: solid; border-color: rgba(255, 196, 90, 0.35); background: rgba(255, 196, 90, 0.06); }
+.skins-dialog .skins .gold-lock button { color: #0a0b0c; background: #fff; }
+.skins-dialog .skins .looks { grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 4px; border: 0; }
+.skins-dialog .skins .looks button { border: 1px solid var(--line); }
+.skins-dialog .skins .done { align-self: flex-start; min-width: 180px; margin-top: auto; padding: 12px 28px; }
+/* Upright phones: the soldiers above the list. */
+:where(.view-narrow) .skins-dialog .skins { grid-template-columns: 1fr; grid-template-rows: minmax(220px, 40vh) auto; }
+:where(.view-narrow) .skins-dialog .skins .stage { order: 0; }
+:where(.view-narrow) .skins-dialog .skins .picks { order: 1; padding: 10px 16px 20px; }
+:where(.view-narrow) .lb-settings.lobby.skins-dialog .panel { height: 100%; max-height: none; background: rgba(5, 7, 9, 0.82); }
+:where(.view-short) .lb-settings.lobby.skins-dialog .panel { height: 100%; }
+:where(.view-short) .lb-settings.lobby.skins-dialog header { padding: 8px 16px 0; }
+:where(.view-short) .lb-settings.lobby.skins-dialog h2 { font-size: 22px; padding-bottom: 4px; }
+:where(.view-short) .skins-dialog .skins { grid-template-columns: clamp(240px, 38vw, 340px) minmax(0, 1fr); }
+:where(.view-short) .skins-dialog .skins .picks { padding: 6px 0 10px 16px; gap: 4px; }
+:where(.view-short) .skins-dialog .skins .knife-pick { padding: 4px 8px; min-height: 44px; }
+:where(.view-short) .skins-dialog .skins .knife-pick b { font-size: 16px; }

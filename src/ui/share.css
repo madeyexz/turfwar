@@ -111,3 +111,26 @@
 :where(.view-short) .invite-panel .ip-apps button { min-height: 40px; font-size: 14px; }
 :where(.view-short) .invite-panel .ip-apps .line { min-height: 44px; font-size: 16px; }
 :where(.view-short) .invite-panel .ip-play { min-height: 42px; font-size: 16px; }
+
+/* ---- In the lobby's look (menu.css): white on dark glass, no neon ---- */
+.share-panel { --accent: #ffffff; --line: rgba(255, 255, 255, 0.14); background: rgba(5, 7, 9, 0.55); backdrop-filter: blur(12px); -webkit-backdrop-filter: blur(12px); }
+.share-panel .sp-box { background: rgba(10, 12, 14, 0.94); border-color: rgba(255, 255, 255, 0.14); box-shadow: 0 24px 60px rgba(0, 0, 0, 0.5); }
+.share-panel header b { color: #fff; letter-spacing: 0.12em; }
+.share-panel .sp-acts .sp-go { color: #0a0b0c; }
+.share-panel .sp-acts .sp-duel { color: #fff; background: rgba(255, 255, 255, 0.04); border-color: var(--line); }
+/* The invite dialog: the room's code large and centred, the people and the ways to send it under it. */
+.invite-panel header { position: relative; flex-direction: column; align-items: center; gap: 2px; padding: 4px 0 12px; border-bottom: 1px solid var(--line); }
+.invite-panel header b { font-size: 13px; letter-spacing: 0.24em; color: var(--muted); }
+.invite-panel .ip-code { font-size: clamp(40px, 5vw, 64px); line-height: 1.05; letter-spacing: 0.32em; padding-left: 0.32em; }
+.invite-panel .ip-where { flex: none; font-size: 15px; }
+.invite-panel header .sp-close { position: absolute; top: 0; right: 0; }
+.invite-panel .ip-row.me { border-color: rgba(255, 255, 255, 0.5); }
+.invite-panel .ip-row em { padding: 1px 6px; border: 1px solid var(--line); color: var(--muted); }
+.invite-panel .ip-apps .threads { background: rgba(255, 255, 255, 0.04); border-color: var(--line); }
+.invite-panel .ip-play { color: #0a0b0c; background: #fff; }
+.invite-panel .ip-play::after { content: ' ›'; }
+:where(.view-short) .invite-panel header { flex-direction: row; justify-content: center; gap: 14px; padding: 0 44px 6px; }
+:where(.view-short) .invite-panel .ip-code { font-size: 30px; }
+.challenge-banner { background: rgba(10, 12, 14, 0.95); border: 1px solid rgba(255, 255, 255, 0.18); box-shadow: 0 16px 50px rgba(0, 0, 0, 0.5); }
+.challenge-banner .go { color: #0a0b0c; background: #fff; }
+.challenge-banner .later { border-color: rgba(255, 255, 255, 0.14); }
