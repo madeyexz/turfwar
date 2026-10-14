@@ -242,6 +242,17 @@ export const HIGH_EXPLOSIVE = { price: 1500, damage: 45, radius: -6 };
 export const SMOKE = { price: 300, max: 1, fuse: 1.6, duration: 15, radius: 4.5, height: 1.6 };
 
 /**
+ * 燃燒彈 molotov (not in BeGone; added 2026-10-14, after Counter-Strike's): $400, one carried, thrown
+ * like the M67. The bottle bounces off walls and breaks on the first floor it lands on, spilling fire
+ * over up to `radius` m of that floor (walls stop it, it does not pour over ledges) for `duration` s.
+ * Whoever stands in it, enemies and the thrower but not teammates, burns for `dps` health a second (taken
+ * every `pulse` s) while their feet are within `height` m of the flames. Still in the air after `fuse` s,
+ * it breaks there and fizzles. Smoke puts fire out: a bottle breaking in a cloud fizzles, a smoke
+ * popped by a fire smothers it, and a smoke grenade landing in the flames pops there at once.
+ */
+export const MOLOTOV = { price: 400, max: 1, fuse: 2.5, duration: 7, radius: 3, dps: 32, pulse: 0.25, height: 1.2 };
+
+/**
  * 珍奶 (bubble tea; our own item, not BeGone's): bought like the M18, one carried. Drinking it takes
  * `drinkTime` (the client sips, then asks; no shooting meanwhile) and restores `heal` health up to the maximum.
  */

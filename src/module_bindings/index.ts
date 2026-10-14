@@ -53,6 +53,7 @@ import JoinReducer from "./join_reducer";
 import JoinPublicReducer from "./join_public_reducer";
 import JoinRoomReducer from "./join_room_reducer";
 import LeaveReducer from "./leave_reducer";
+import MolotovReducer from "./molotov_reducer";
 import NetStatsReducer from "./net_stats_reducer";
 import PerfStatsReducer from "./perf_stats_reducer";
 import QuickAnyReducer from "./quick_any_reducer";
@@ -438,6 +439,7 @@ const reducersSchema = __reducers(
   __reducerSchema("join_public", JoinPublicReducer),
   __reducerSchema("join_room", JoinRoomReducer),
   __reducerSchema("leave", LeaveReducer),
+  __reducerSchema("molotov", MolotovReducer),
   __reducerSchema("net_stats", NetStatsReducer),
   __reducerSchema("perf_stats", PerfStatsReducer),
   __reducerSchema("quick_any", QuickAnyReducer),
