@@ -59,12 +59,12 @@ export class SkinPanel {
     });
     onSkinChange(() => { this.refresh(); this.swing(); });
     onLang(() => { this.build(); this.refresh(); });
-    this.scene.background = new THREE.Color(0x0b151b);
+    // No backdrop of its own: the dimmed city shows through (skins.css).
     this.scene.add(new THREE.HemisphereLight(0xcfe8ff, 0x3a3226, 1.4));
     const sun = new THREE.DirectionalLight(0xfff1dc, 2.2);
     sun.position.set(2, 4, 3);
     this.scene.add(sun);
-    const floor = new THREE.Mesh(new THREE.CircleGeometry(1.6, 48), new THREE.MeshStandardMaterial({ color: 0x1b2a31, roughness: 0.9 }));
+    const floor = new THREE.Mesh(new THREE.CircleGeometry(1.6, 48), new THREE.MeshStandardMaterial({ color: 0x1b2026, roughness: 0.9, transparent: true, opacity: 0.55 }));
     floor.rotation.x = -Math.PI / 2;
     this.scene.add(floor);
     this.camera.position.set(0, 1.2, 4.8);
@@ -99,7 +99,7 @@ export class SkinPanel {
   private attach() {
     if (this.renderer) return;
     const canvas = this.root.querySelector<HTMLCanvasElement>('canvas')!;
-    this.renderer = new THREE.WebGLRenderer({ canvas, antialias: true });
+    this.renderer = new THREE.WebGLRenderer({ canvas, antialias: true, alpha: true });
     this.renderer.toneMapping = THREE.ACESFilmicToneMapping;
     this.renderer.outputColorSpace = THREE.SRGBColorSpace;
     this.scene.environment = new THREE.PMREMGenerator(this.renderer).fromScene(new RoomEnvironment(), 0.04).texture;
