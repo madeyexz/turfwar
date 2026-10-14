@@ -1,8 +1,8 @@
 /**
  * Link previews for the links players send (LINE, Threads, Messenger, Discord…): what a 發起單挑 link
  * (`/c?ch=…&map=…&beat=…`) or an invite link (`/r/<code>`) says about itself, read the way the game
- * reads it (src/game/challenge.ts; kept separate so the middleware stays small), and the little page
- * a link-preview crawler is served (`middleware.ts`) with its picture (`api/og.ts`). Everything here
+ * reads it (src/game/challenge.ts; kept separate so the preview function stays small), and the little page
+ * a link-preview crawler is served (`api/preview.ts`) with its picture (`api/og.ts`). Everything here
  * comes from the URL, so it is cleaned and escaped.
  */
 

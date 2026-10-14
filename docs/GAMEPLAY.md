@@ -348,8 +348,8 @@ arrived through their share code (`player_source.ref_by`) and how many of them e
 unlock it. The count arrives with an online match and is kept in the browser for Solo.
 
 **Link previews.** A chat app's link-preview crawler (LINE, Threads and the other Meta apps, Discord, X, Telegram,
-Slack, iMessage…) asking for a `/c` or `/r/…` link gets a small page from `middleware.ts` (Vercel Routing
-Middleware, those two paths only) whose Open Graph tags read 「<name> 向你發起單挑！」 with the map and kills, or
+Slack, iMessage…) asking for a `/c` or `/r/…` link gets a small page from `api/preview.ts` (vercel.json rewrites
+those two paths there only for known preview-crawler user agents) whose Open Graph tags read 「<name> 向你發起單挑！」 with the map and kills, or
 「朋友邀你一起打《角頭械鬥》」 with the room code, and a 1200×630 picture drawn by `api/og.ts` (@vercel/og) over the
 map's art. People get the game as usual.
 

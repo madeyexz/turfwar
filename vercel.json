@@ -4,6 +4,8 @@
   "buildCommand": "bun run build",
   "outputDirectory": "dist",
   "rewrites": [
+    { "source": "/c", "has": [{ "type": "header", "key": "user-agent", "value": ".*(facebookexternalhit|Facebot|line-poker|Linespider|Twitterbot|Slackbot|Discordbot|TelegramBot|WhatsApp/|LinkedInBot|SkypeUriPreview|Embedly|Pinterestbot|redditbot|Applebot|Googlebot|bingbot|kakaotalk-scrap|Iframely|vkShare|Mastodon|Bluesky).*" }], "destination": "/api/preview" },
+    { "source": "/r/:code([A-Za-z]{4})", "has": [{ "type": "header", "key": "user-agent", "value": ".*(facebookexternalhit|Facebot|line-poker|Linespider|Twitterbot|Slackbot|Discordbot|TelegramBot|WhatsApp/|LinkedInBot|SkypeUriPreview|Embedly|Pinterestbot|redditbot|Applebot|Googlebot|bingbot|kakaotalk-scrap|Iframely|vkShare|Mastodon|Bluesky).*" }], "destination": "/api/preview?room=:code" },
     { "source": "/admin", "destination": "/admin/index.html" },
     { "source": "/privacy", "destination": "/privacy/index.html" },
     { "source": "/about", "destination": "/about/index.html" },
@@ -18,7 +20,8 @@
     { "source": "/r/:code([A-Za-z]{4})", "destination": "/index.html" }
   ],
   "functions": {
-    "api/og.ts": { "includeFiles": "api/_og/**", "maxDuration": 15 }
+    "api/og.ts": { "includeFiles": "api/_og/**", "maxDuration": 15 },
+    "api/preview.ts": { "maxDuration": 5 }
   },
   "headers": [
     { "source": "/(.*)", "headers": [

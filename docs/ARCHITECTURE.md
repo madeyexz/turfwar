@@ -183,7 +183,7 @@ shared/        Pure TypeScript shared by browser, tests and the SpacetimeDB modu
   match/         State, rounds and bomb, combat validation, economy, bots, navigation, packed frame
 src/           Browser client: lobby, game loop, prediction, rendering, view model, soldiers, HUD, store, audio, net
 spacetimedb/   SpacetimeDB module (tables, scheduled tick, validated reducers)
-api/ middleware.ts  Link previews for shared /c and /r/<code> links (Vercel: crawler page, og.ts picture; _og/ assets)
+api/           Link previews for shared /c and /r/<code> links (Vercel: preview.ts crawler page, og.ts picture; _og/ assets)
 scripts/       Local load test and simulation benchmark
 tools/         Reproducible CC0 asset import, sound and texture fetch scripts, and the Chinese font subset
 dev/           Development preview pages
