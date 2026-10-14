@@ -119,6 +119,7 @@ queries are the cheap win. Check the real ones in Search Console's Performance r
 - Category: 網頁射擊遊戲, 網頁 FPS, 免下載 FPS, 免下載射擊遊戲, 瀏覽器射擊遊戲, 免費線上射擊遊戲, 線上 FPS 免費, 手機網頁射擊遊戲, 台灣自製 FPS, 台灣開發 射擊遊戲
 - Play with friends: 單挑 遊戲, 線上單挑, 6v6 射擊遊戲, 多人射擊遊戲 網頁, 跟朋友玩 射擊遊戲 免註冊
 - BeGone fans: BeGone 類似遊戲, BeGone 替代, BeGone 繁體中文, BeGone 網頁遊戲, 類似 BeGone 的 FPS, nPlay BeGone, 爆破 殲滅 FPS
+- Classmates and class time (the owner's list, 2026-10-14; weekday 08–16 Taipei brings more visitors than evenings, 79% on phones): 上課玩的小遊戲, 電腦課玩的小遊戲, 電腦課玩的多人小遊戲, 電腦課 同學 遊戲, 多人小遊戲, 網頁遊戲. Answered by the "電腦課、上課跟同學一起玩" section and FAQ on `/about`, and the descriptions of `/` and `/about`; written once each in sentences, never as a list of permutations.
 - Place and culture hooks: 西門町 遊戲, 台北 FPS, 台北101 遊戲 地圖, 中正紀念堂 遊戲, 三重 遊戲, 藍白拖 遊戲, 珍奶 遊戲
 
 **English**
@@ -126,6 +127,7 @@ queries are the cheap win. Check the real ones in Search Console's Performance r
 - Brand: Turf War Taipei, Turf War: Taipei, 角頭械鬥 game, Turf War Taipei browser game
 - Category: browser FPS, browser FPS Taiwan, free browser shooter no download, play FPS in browser, free online multiplayer FPS no install, team shooter in browser, round-based FPS browser, Taipei shooter game, Taiwan browser game
 - BeGone fans: BeGone alternative, games like BeGone, BeGone 2026, BeGone-style browser FPS, Counter-Strike style browser game
+- Classmates and generic (the owner's list): browser based games, .io games, shooter games browser (the "Play with classmates" section and FAQ on `/en/about`, the titles and descriptions).
 - Modes: Elimination Sabotage browser game, 1v1 browser FPS, 6v6 browser shooter, 24v24 browser shooter
 
 The page that should answer each: brand and "what is" → `/` and `/about` / `/en/about`; weapons, cash, 攻略 and
