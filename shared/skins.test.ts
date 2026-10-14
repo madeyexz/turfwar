@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { botSkin, cleanSkin, DEFAULT_SKIN, KNIFE_SKINS, skinOf } from './skins';
+import { botSkin, cleanSkin, DEFAULT_SKIN, GOLD_INVITES, KNIFE_SKINS, skinOf, wearable } from './skins';
 import { addSoldier, createContext, createMatch, setSkin } from './match/sim';
 import { ELIMINATION } from './match/state';
 import { rng } from './math';
@@ -13,13 +13,22 @@ describe('skins', () => {
     expect(cleanSkin({ knife: 'knife', extra: 'x'.repeat(10000) })).toEqual({ knife: 'knife', look: 'auto' });
   });
 
-  it('give bots a fixed mix of knife skins', () => {
+  it('give bots a fixed mix of knife skins, never the earned 金拖', () => {
     expect(botSkin(7)).toEqual(botSkin(7));
     const seen = new Set(Array.from({ length: 60 }, (_, i) => botSkin(i + 1).knife));
-    expect([...seen].sort()).toEqual([...KNIFE_SKINS].sort());
+    expect([...seen].sort()).toEqual(KNIFE_SKINS.filter(k => k !== 'gold').sort());
     expect(skinOf({ id: 3, bot: false })).toEqual(DEFAULT_SKIN);
     expect(skinOf({ id: 3, bot: true })).toEqual(botSkin(3));
     expect(skinOf({ id: 3, bot: true, skin: { knife: 'knife', look: 'punk' } })).toEqual({ knife: 'knife', look: 'punk' });
+  });
+
+  it('keep the 金拖 for players who brought GOLD_INVITES friends', () => {
+    const gold = { knife: 'gold', look: 'punk' } as const;
+    expect(GOLD_INVITES).toBe(3);
+    expect(wearable(gold, 0)).toEqual({ knife: 'slipper', look: 'punk' });
+    expect(wearable(gold, 2)).toEqual({ knife: 'slipper', look: 'punk' });
+    expect(wearable(gold, 3)).toEqual(gold);
+    expect(wearable({ knife: 'broom', look: 'auto' }, 0)).toEqual({ knife: 'broom', look: 'auto' });
   });
 
   it('are worn through the shared rules: cleaned, cosmetic only, defaults stored as nothing', () => {

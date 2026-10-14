@@ -83,15 +83,23 @@ export interface Events {
   callsign_asked: Record<string, never>;
   /** The share card (src/ui/sharepanel.ts). `ref`: this browser's random share code (src/game/challenge.ts); `room`: the link names a live 1v1 room. */
   share_card_opened: { ref: string; solo: boolean; result: 'win' | 'loss' | 'draw'; room: boolean };
-  /** `method`: `native` = the card with its link through the share sheet, `link` = only the text and link through it, `copy` = the clipboard (also the fallback of the other two), `download` = the picture saved. */
-  share_card_shared: { ref: string; method: 'native' | 'link' | 'download' | 'copy'; room: boolean };
+  /** `method`: `native` = the card with its link through the share sheet, `link` = only the text and link through it, `copy` = the clipboard (also the fallback of the other two), `download` = the picture saved, `line` / `threads` = the message and link through that app's share page (src/ui/sendto.ts). */
+  share_card_shared: { ref: string; method: 'native' | 'link' | 'download' | 'copy' | 'line' | 'threads'; room: boolean };
   /** 約朋友單挑 pressed on the end screen (`ref`: this browser's share code; `solo`/`result`: the match it was pressed after; `via`: it opened a private 1v1 `room`, or, with no online play available, shared a `link` the challenger's bot double answers). */
   duel_clicked: { ref: string; solo: boolean; result: 'win' | 'loss' | 'draw'; via: 'room' | 'link' };
-  /** A 單挑我 link opened (`ref`: the sharer's code, `has_room`: it names their room). */
+  /** A 發起單挑 link opened (`ref`: the sharer's code, `has_room`: it names their room). */
   challenge_link_opened: { ref: string; has_room: boolean };
   /** The challenge began: in the sharer's room, or against their bot double (`fallback`) and why. */
   challenge_started: { ref: string; via: 'room' | 'fallback'; reason?: 'no_room' | 'gone' | 'offline' };
   challenge_completed: { ref: string; via: 'room' | 'fallback'; won: boolean };
+  /** 邀請朋友 in the lobby opened a private room; the invite dialog showed (src/ui/invitepanel.ts). `ref`: this browser's share code. */
+  invite_opened: { ref: string };
+  /** The invite link went out: `line` / `threads` (their share pages), `copy`, or `native` (the phone's share sheet). */
+  invite_sent: { ref: string; method: 'line' | 'threads' | 'copy' | 'native' };
+  /** An invite link (`/r/<code>`) opened (`ref`: the inviter's share code). */
+  invite_link_opened: { ref: string };
+  /** Join pressed on an invite link's banner; `joined`: the room was still there. */
+  invite_joined: { ref: string; joined: boolean };
 }
 type EventName = keyof Events;
 type Props = Record<string, string | number | boolean>;

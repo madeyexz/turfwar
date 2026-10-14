@@ -445,6 +445,15 @@ export const MatchEvent = __t.object("MatchEvent", {
 });
 export type MatchEvent = __Infer<typeof MatchEvent>;
 
+export const MyInvites = __t.object("MyInvites", {});
+export type MyInvites = __Infer<typeof MyInvites>;
+
+export const MyInvitesRow = __t.object("MyInvitesRow", {
+  invited: __t.u32(),
+  played: __t.u32(),
+});
+export type MyInvitesRow = __Infer<typeof MyInvitesRow>;
+
 export const MyRoomCode = __t.object("MyRoomCode", {});
 export type MyRoomCode = __Infer<typeof MyRoomCode>;
 

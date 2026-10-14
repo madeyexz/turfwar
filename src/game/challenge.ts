@@ -1,5 +1,5 @@
 /**
- * 單挑我: the challenge link a share card carries. It names the challenger, the map, the kills to
+ * 發起單挑: the challenge link a share card carries. It names the challenger, the map, the kills to
  * brag about and a random share code (`ref`, for counting players a share brings), and the code of
  * the private 1v1 room the challenger waits in, when there is one. Everything in it is user text from
  * a URL, so every field is checked here and anything doubtful is dropped.
@@ -25,10 +25,14 @@ export const cleanName = (s: string) => s.replace(/[^\p{L}\p{N} _\-.]/gu, '').re
 const REF = /^[a-z0-9]{6,12}$/;
 const MAP = /^[a-z0-9]{2,20}$/;
 
-/** The challenge in a page's query string, or undefined when it has none (or no usable challenger). */
-export function parseChallenge(search: string): Challenge | undefined {
+/**
+ * The challenge in a page's address, or undefined when it has none (or no usable challenger): links made
+ * now open `/c?…` (a path of its own, so the link-preview middleware never touches the home page), older
+ * ones `/?c=1&…`.
+ */
+export function parseChallenge(search: string, pathname = '/'): Challenge | undefined {
   const p = new URLSearchParams(search);
-  if (!p.has('c')) return undefined;
+  if (!p.has('c') && !/^\/c\/?$/.test(pathname)) return undefined;
   const name = cleanName(p.get('ch') ?? '');
   if (!name) return undefined;
   const c: Challenge = { name };
@@ -46,7 +50,7 @@ export function parseChallenge(search: string): Challenge | undefined {
 /**
  * Where a link we hand out came from, as UTM parameters (so a visit it brings is attributed):
  * `source` is the kind of link, `medium` the screen it came from. `share`: the brag card, no room;
- * `challenge`: a 單挑我 link with no room (the bot double answers); `duel`: a link to the private
+ * `challenge`: a 發起單挑 link with no room (the bot double answers); `duel`: a link to the private
  * 1v1 room we opened (約朋友單挑). `end_screen`: the end-of-match buttons; `share_card`: the share
  * dialog (its link, copy, QR and share sheet); `lobby`: the lobby.
  */
@@ -58,13 +62,13 @@ export interface LinkOrigin {
 
 /** The link for a challenge, on `origin` (this site's, so a preview shares preview links); `origin` tags it with where it was handed out. */
 export function challengeUrl(origin: string, c: Challenge, from?: LinkOrigin) {
-  const p = new URLSearchParams({ c: '1' });
+  const p = new URLSearchParams();
   if (c.room) p.set('room', c.room);
   p.set('ch', cleanName(c.name) || 'Operator');
   if (c.map && MAP.test(c.map)) p.set('map', c.map);
   if (c.beat !== undefined) p.set('beat', String(Math.max(0, Math.min(999, Math.round(c.beat)))));
   if (c.ref && REF.test(c.ref)) p.set('ref', c.ref);
-  const url = `${origin}/?${p}`;
+  const url = `${origin}/c?${p}`;
   return from ? withUtm(url, from) : url;
 }
 
@@ -81,4 +85,24 @@ export function shareRef(storage: Pick<Storage, 'getItem' | 'setItem'> | undefin
   while (ref.length < 8) ref += Math.floor(random() * 36).toString(36);
   try { storage?.setItem('turfwar.ref', ref); } catch { /* a fresh code next time */ }
   return ref;
+}
+
+/**
+ * 邀請朋友: the link to a private room, `/r/<code>?ref=<share code>`. Whoever opens it is asked to join
+ * that room (the lobby's invite banner); the share code counts them toward the 金拖 (shared/skins.ts).
+ * Short on purpose: it is pasted into chats as text. `vercel.json` sends `/r/…` to the link-preview page.
+ */
+export function inviteUrl(origin: string, room: string, ref: string) {
+  const code = cleanCode(room);
+  return `${origin}/r/${code}${REF.test(ref) ? `?ref=${ref}` : ''}`;
+}
+
+/** The private room an invite link names (`/r/<code>`, with the sharer's `ref`), or undefined. */
+export function parseInvite(pathname: string, search: string): { room: string; ref?: string } | undefined {
+  const m = /^\/r\/([A-Za-z]{4})\/?$/.exec(pathname);
+  if (!m) return undefined;
+  const room = cleanCode(m[1]);
+  if (room.length !== 4) return undefined;
+  const ref = (new URLSearchParams(search).get('ref') ?? '').toLowerCase();
+  return REF.test(ref) ? { room, ref } : { room };
 }

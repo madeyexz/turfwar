@@ -12,5 +12,5 @@
     "noEmit": true,
     "types": ["vite/client", "node"]
   },
-  "include": ["src", "shared", "api", "vite.config.ts"]
+  "include": ["src", "shared", "api", "middleware.ts", "vite.config.ts"]
 }

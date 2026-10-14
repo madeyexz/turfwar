@@ -62,7 +62,8 @@ Back to the [README](../README.md) · [Architecture](ARCHITECTURE.md) · [Develo
 
 **Skins (外觀; cosmetic only, `shared/skins.ts`)**: the lobby's 外觀 button (the T-shirt) picks how the
 knife looks and which street character a Militia soldier is. Knife skins: **藍白拖 / Slipper** (the default:
-the blue-and-white rubber slipper, swung as a flat slap with a cartoon slap sound), **掃把 / Broom** (the
+the blue-and-white rubber slipper, swung as a flat slap with a cartoon slap sound), **金拖 / Gold slipper** (the
+same slipper in polished gold, swung and heard the same; earned by inviting friends, see Inviting friends), **掃把 / Broom** (the
 red-handled plastic broom with a neon-green head and splayed pink-and-green bristles, held two-handed and
 brought down flat in an overhead swat, with a straw whoosh and THWUMP) and the classic **knife**. The knife
 slot is called by your skin wherever it is named for you, and the kill feed names and marks the killer's.
@@ -71,7 +72,10 @@ keep their one operator so the sides stay easy to tell apart. Looks, names and s
 stats, strike, throw and pick-up are the knife's whatever the skin. The choice is saved per browser
 (`src/game/skins.ts`; `?classic=1` shows the knife for one visit). Online the client sends it with the
 `set_skin` reducer; the tick cleans it (`setSkin`) and keeps it in the soldier's gear JSON, and every client
-draws it from the roster. Bots wear a skin picked from their id (`botSkin`).
+draws it from the roster. Bots wear a skin picked from their id (`botSkin`), never the 金拖. The 金拖 is
+locked until `GOLD_INVITES` (3) players have arrived through your links and entered a room: before that the 外觀
+panel lets you try it on in the preview and offers 邀請朋友, the client wears the 藍白拖 (`wearable`), and the
+`set_skin` reducer turns a locked 金拖 back into the 藍白拖 itself (it counts from `player_source`, see Inviting friends).
 
 **飛拖 (thrown slipper; not in BeGone)**: with the knife (藍白拖, or whatever its skin) in hand, hold aim (right mouse; the aim
 button on phones) to wind it up for up to 0.8 s, and let go to throw it (`SLIPPER` in `shared/weapons.ts`:
@@ -308,11 +312,11 @@ weapon round. Models are built procedurally (`src/render/vehicles.ts`); engines,
 the rotor chop are synthesized.
 
 
-### Sharing a match and 單挑我
+### Sharing a match and 發起單挑
 
 The end screen has **分享戰績 / Share**: a 1080×1920 card (`src/ui/sharecard.ts`) over a frame of the match with
 the result, one brag line picked from the match (`src/game/matchstats.ts`: beating a challenger, slipper kills, a
-multi-kill round, kills on the map, headshots…), the numbers, the callsign and **單挑我 →** with a QR code and link.
+multi-kill round, kills on the map, headshots…), the numbers, the callsign and **發起單挑 →** with a QR code and link.
 Phones share the picture and link through the share sheet (IG Stories, LINE, Threads); a browser with Web Share
 but no file sharing sends just the text and link; elsewhere the link is copied and the picture can be saved
 (`src/ui/sharechoice.ts` picks the buttons and the fallbacks). Solo cards say "vs bots". **約朋友單挑 / Challenge a
@@ -323,6 +327,31 @@ room starts the next match by itself). Every link we hand out carries `utm_sourc
 link without a room, `duel`: a link to our room) and `utm_medium` (`share_card`). A friend who opens a challenge link sees 「<name> 向你下戰帖！」 in the lobby and
 is one tap from the room; if it is gone, full or empty they play a Solo 1v1 against a bot carrying the challenger's
 name, and either way the end screen says who won and offers their own card.
+
+The share dialog (`src/ui/sharepanel.ts`) prefills the message (the brag line, the map and the kills; editable) and
+sends it with the link through **LINE** and **Threads** (their own share pages, `src/ui/sendto.ts`, which work in
+desktop and in-app browsers too), the phone's share sheet with the picture (IG Stories), Save image or Copy link; a
+card without a room also offers **改開 1v1 房間發起單挑** (the 約朋友單挑 flow). Challenge links are `/c?ch=…&map=…&beat=…`
+(older `/?c=1&…` links still open).
+
+### Inviting friends (邀請朋友) and link previews
+
+**邀請朋友 / Invite friends** sits under Quick Play (online only): one tap opens a private 6v6 with bots on the
+form's map (the first 6v6 map if it doesn't fit) and shows the invite dialog over it (`src/ui/invitepanel.ts`): the
+room's code, who is in the room (live), LINE, Threads, Copy link, the share sheet where there is one, and a QR code
+for a friend sitting next to you. 開始對戰 closes it and plays on; bots hold the seats and a friend who joins takes
+one. The link is `/r/<code>?ref=<share code>`: whoever opens it sees 「朋友邀你一起打！」 in the lobby and joins the
+room in one tap (a closed room says so). Arrivals through `/r/…` count as `utm_source=invite`, `utm_medium=link`.
+
+The button's corner counts toward the **金拖**: the server's `my_invites` view gives each player how many players
+arrived through their share code (`player_source.ref_by`) and how many of them entered a room; three who played
+unlock it. The count arrives with an online match and is kept in the browser for Solo.
+
+**Link previews.** A chat app's link-preview crawler (LINE, Threads and the other Meta apps, Discord, X, Telegram,
+Slack, iMessage…) asking for a `/c` or `/r/…` link gets a small page from `middleware.ts` (Vercel Routing
+Middleware, those two paths only) whose Open Graph tags read 「<name> 向你發起單挑！」 with the map and kills, or
+「朋友邀你一起打《角頭械鬥》」 with the room code, and a 1200×630 picture drawn by `api/og.ts` (@vercel/og) over the
+map's art. People get the game as usual.
 
 ### New players, progress and staying in the match
 

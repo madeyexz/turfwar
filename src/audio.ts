@@ -1,6 +1,6 @@
 import type { WeaponId } from '../shared/weapons';
 import { Voice, VoicePool, unit } from './voices';
-import type { KnifeSkin } from '../shared/skins';
+import { isSlipper, type KnifeSkin } from '../shared/skins';
 import { assetUrl } from './assetUrl';
 
 type V3 = { x: number; y: number; z: number };
@@ -630,7 +630,7 @@ export class Audio {
     if (skin === 'broom') { this.broomSwish(t, listener, at); if (hit) this.broomHit(t + 0.1, listener, at); return; }
     this.swish(t, listener, at);
     if (!hit) return;
-    if (skin === 'slipper') return this.slap(t + 0.05, listener, at);
+    if (isSlipper(skin)) return this.slap(t + 0.05, listener, at);
     const out = this.out(listener ? 0.55 : 0.45, listener, at, 0.06);
     this.tone(out, t + 0.06, 'sine', 140, 55, 0.12, 0.8);
     this.noiseBurst(out, t + 0.06, 0.07, 'lowpass', 900, 1, 0.7);

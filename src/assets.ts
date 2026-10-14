@@ -94,6 +94,7 @@ export async function loadAssets(onProgress: (fraction: number) => void, gpu?: {
   applyOptics(guns);
   // The knife skins (shared/skins.ts): each view picks its soldier's (knifeModel).
   guns.set(KNIFE_MODELS.slipper, slipperModel());
+  guns.set(KNIFE_MODELS.gold, slipperModel(true));
   guns.set(KNIFE_MODELS.broom, broomModel());
   return {
     weapons: guns, props: named(props), soldier, crew: crew?.scene,
@@ -103,7 +104,7 @@ export async function loadAssets(onProgress: (fraction: number) => void, gpu?: {
 }
 
 /** The weapons-map model of each knife skin ('Gun_Knife' is the pack's own knife). */
-export const KNIFE_MODELS: Record<KnifeSkin, string> = { knife: 'Gun_Knife', slipper: 'Knife_Slipper', broom: 'Knife_Broom' };
+export const KNIFE_MODELS: Record<KnifeSkin, string> = { knife: 'Gun_Knife', slipper: 'Knife_Slipper', gold: 'Knife_GoldSlipper', broom: 'Knife_Broom' };
 /** The model a weapon is drawn with: the knife's follows the skin. */
 export const weaponModel = (model: string, knife: KnifeSkin) => (model === 'Gun_Knife' ? KNIFE_MODELS[knife] : model);
 

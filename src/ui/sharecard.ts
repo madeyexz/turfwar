@@ -1,7 +1,7 @@
 /**
  * 戰績分享卡: a 1080×1920 (9:16, story-sized) picture of a match, drawn on a canvas in the browser:
  * a frame of the match behind, the result, one brag line, the numbers, the callsign, and a QR code
- * and link under 「單挑我 →」. Shared with the Web Share API where the browser can share files
+ * and link under 「發起單挑 →」. Shared with the Web Share API where the browser can share files
  * (phones: IG Stories, LINE, Threads), else saved and the link copied.
  */
 import qrcode from 'qrcode-generator';
@@ -25,7 +25,8 @@ export function bragText(s: MatchSummary, knife: KnifeSkin, at = new Date()) {
   return t(key as Key, { n: b.n ?? 0, name: b.name ?? '', map });
 }
 
-const mapLabel = (id: string) => {
+/** A map's name in the current language. */
+export const mapLabel = (id: string) => {
   let english = id;
   try { english = loadMap(id).def.name; } catch { /* an unknown id stays as it is */ }
   return mapName(id, english);
@@ -88,7 +89,7 @@ function drawQr(ctx: CanvasRenderingContext2D, url: string, x: number, y: number
 
 export interface CardInput {
   summary: MatchSummary;
-  /** The 單挑我 link the QR code and the text carry. */
+  /** The 發起單挑 link the QR code and the text carry. */
   url: string;
   /** A frame of the match (any size; cropped to fill). */
   backdrop?: CanvasImageSource & { width: number; height: number };
@@ -189,7 +190,7 @@ export async function drawShareCard(input: CardInput): Promise<HTMLCanvasElement
     ctx.fillStyle = MUTED; fit(ctx, label, 700, 34, tw - 60); ctx.fillText(label, x + 32, y + 152);
   });
 
-  // ---- 單挑我 → with the QR code and the link.
+  // ---- 發起單挑 → with the QR code and the link.
   const qrSize = 290, qy = CARD_H - 80 - qrSize;
   drawQr(ctx, url, R - qrSize, qy, qrSize);
   ctx.fillStyle = ACCENT; fit(ctx, t('card.challenge'), 900, 112, W - qrSize - 40); ctx.fillText(t('card.challenge'), L, qy + 120);

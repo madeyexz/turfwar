@@ -16,7 +16,7 @@ import { ATTACHMENTS, DEFAULT_WEAPONS, STAMINA, WEAPONS, normalizeAttachments, t
 import { newRoundStats, type BuyItem } from '../../shared/match/economy';
 import { BODY_RADIUS, type Body } from '../../shared/world';
 import { VEHICLE_KINDS, type Vehicle, type VehicleKind } from '../../shared/vehicles';
-import { cleanSkin, type Skin } from '../../shared/skins';
+import { cleanSkin, wearable, type Skin } from '../../shared/skins';
 import { cleanHello } from '../../shared/hello';
 import { beginPlay, endPlay, flushDue, flushPlay, type PlayStore } from '../../shared/playtime';
 import { acceptNetReport, foldNetDay } from '../../shared/netstats';
@@ -269,7 +269,7 @@ const perfTable = table({ name: 'player_perf' }, {
  */
 const sourceTable = table({ name: 'player_source' }, {
   identity: t.identity().primaryKey(), source: t.string(), medium: t.string(), campaign: t.string(), inApp: t.string(),
-  refBy: t.string(), ref: t.string().index('btree'), shares: t.u32(), duels: t.u32(), firstAt: t.timestamp(), lastAt: t.timestamp(),
+  refBy: t.string().index('btree'), ref: t.string().index('btree'), shares: t.u32(), duels: t.u32(), firstAt: t.timestamp(), lastAt: t.timestamp(),
 });
 
 /**
@@ -1236,8 +1236,21 @@ export const changeTeam = spacetimedb.reducer({}, ctx => { queue(ctx, { kind: 't
 
 /** Wear a cosmetic skin (shared/skins.ts): the tick cleans and applies it; every client draws it from the roster. */
 export const setSkin = spacetimedb.reducer({ knife: t.string(), look: t.string() }, (ctx, { knife, look }) => {
-  queue(ctx, { kind: 'skin', skin: cleanSkin({ knife, look }) });
+  // The 金拖 is earned (shared/skins.ts GOLD_INVITES): before that it is worn as the 藍白拖.
+  queue(ctx, { kind: 'skin', skin: wearable(cleanSkin({ knife, look }), invitesOf(ctx.db, ctx.sender).played) });
 });
+
+type InviteDb = {
+  playerSource: { identity: { find(i: Identity): { ref: string } | null | undefined }; refBy: { filter(ref: string): Iterable<{ identity: Identity }> } };
+  playerMilestone: { identity: { find(i: Identity): { room: bigint } | null | undefined } };
+};
+/** Players who arrived through `identity`'s share code (`invited`), and how many of them entered a room (`played`: what the 金拖 counts). */
+function invitesOf(db: InviteDb, identity: Identity) {
+  const ref = db.playerSource.identity.find(identity)?.ref;
+  let invited = 0, played = 0;
+  if (ref) for (const r of db.playerSource.refBy.filter(ref)) { invited++; if ((db.playerMilestone.identity.find(r.identity)?.room ?? 0n) > 0n) played++; }
+  return { invited, played };
+}
 
 export const switchSlot = spacetimedb.reducer({ slot: t.u8() }, (ctx, { slot }) => { queue(ctx, { kind: 'switch', slot: slotOf(slot) }); });
 
@@ -1444,6 +1457,11 @@ export const myRoomCode = spacetimedb.view({ name: 'my_room_code', public: true 
     const code = me ? ctx.db.roomCode.room.find(me.room) : undefined;
     return me && code ? [{ room: me.room, code: code.code }] : [];
   });
+
+/** How many friends the caller's share code brought, and how many of them entered a room (the lobby's 金拖 progress). */
+export const myInvites = spacetimedb.view({ name: 'my_invites', public: true },
+  t.array(t.row('MyInvitesRow', { invited: t.u32(), played: t.u32() })),
+  ctx => [invitesOf(ctx.db, ctx.sender)]);
 
 /** Every player seen, by an anonymous short id (never the identity), with career numbers; newest activity first. */
 export const adminPlayers = spacetimedb.view({ name: 'admin_players', public: true },

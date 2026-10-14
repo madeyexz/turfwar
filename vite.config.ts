@@ -28,7 +28,10 @@ function releases(): Release[] {
   return mergeReleases(snapshot, fromGit, building);
 }
 
-/** /admin, /privacy, /about and /en/about without the trailing slash serve their pages in the dev server too (Vercel rewrites them). */
+/**
+ * /admin, /privacy, /about and /en/about without the trailing slash serve their pages in the dev server too
+ * (Vercel rewrites them), and so do an invite link's /r/<code> and a challenge link's /c (src/game/challenge.ts).
+ */
 const pageRoutes: Plugin = {
   name: 'page-routes',
   configureServer(server) {
@@ -36,6 +39,8 @@ const pageRoutes: Plugin = {
       for (const page of ['/admin', '/privacy', '/about', '/en/about']) {
         if (req.url === page || req.url?.startsWith(`${page}?`)) req.url = `${page}/${req.url.slice(page.length)}`;
       }
+      const invite = /^(?:\/r\/[A-Za-z]{4}|\/c)\/?(\?.*)?$/.exec(req.url ?? '');
+      if (invite) req.url = `/index.html${invite[1] ?? ''}`;
       next();
     });
   },

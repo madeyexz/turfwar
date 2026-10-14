@@ -61,6 +61,7 @@ const SWAT: Key[] = [
 const KNIFE_MOTION: Record<KnifeSkin, { guard?: [number[], number[]]; swing?: Key[]; time: number }> = {
   knife: { time: 0.34 },
   slipper: { guard: SLIPPER_GUARD, swing: SLAP, time: 0.28 },
+  gold: { guard: SLIPPER_GUARD, swing: SLAP, time: 0.28 },
   broom: { guard: BROOM_GUARD, swing: SWAT, time: 0.36 },
 };
 

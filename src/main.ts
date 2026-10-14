@@ -6,7 +6,9 @@ import { cleanCode, hasSites, listOrder, mapsFor, pickAnyRoom, ROOM_SIZES, roomF
 import { ELIMINATION, SABOTAGE, type Mode, type Team } from '../shared/match/state';
 import { assetUrl } from './assetUrl';
 import { groundSets, loadAssets, type Assets } from './assets';
-import { challengeMap, parseChallenge, type Challenge } from './game/challenge';
+import { challengeMap, parseChallenge, parseInvite, type Challenge } from './game/challenge';
+import { invitedFriends, onSkinChange } from './game/skins';
+import { GOLD_INVITES } from '../shared/skins';
 import type { MatchSummary } from './game/matchstats';
 import './ui/share.css';
 import { Audio } from './audio';
@@ -164,6 +166,7 @@ menu.innerHTML = `
 
     <div class="view" id="view-quick" role="tabpanel" aria-labelledby="tab-quick">
       ${deploy('quick-go', 'tab.quick', L('quick.tag'), 'quick.about')}
+      <button type="button" class="invite-go" id="invite-go" disabled><span class="ig-icon" aria-hidden="true"></span><span class="ig-t"><b>${t('lobby.invite')}</b><small>${t('invite.sub')}</small></span><span class="ig-goal" id="invite-goal"></span></button>
       ${line('quick', serverChip('quick-server'))}
       <section class="browser" aria-labelledby="quick-rooms-title">
         <div class="browser-head"><b id="quick-rooms-title" data-i18n="lobby.liveRooms">${t('lobby.liveRooms')}</b><span class="count" id="quick-rooms-count"></span></div>
@@ -510,6 +513,8 @@ function renderBrand() {
 // ---- Rendering: everything on screen follows the tab, the form, the rooms and the language. ----
 let ready = false;
 let starting: Action | undefined;
+/** The start under way is 邀請朋友's private room (its button says so). */
+let inviteStarting = false;
 let loadFraction = -1;
 let joiningRoom = -1;
 const loadingText = () => loadFraction < 0 ? t('lobby.loading') : t('lobby.loadingPct', { n: (loadFraction * 100).toFixed(0) });
@@ -563,9 +568,23 @@ function renderUnreachable() {
   setText($('#unreachable-retry'), t('connect.retry'));
 }
 
+/** 邀請朋友 under Quick Play: opens a private room to send; its corner counts friends toward the 金拖. */
+function renderInvite() {
+  const btn = $<HTMLButtonElement>('#invite-go');
+  btn.hidden = !online.ok;
+  btn.disabled = !ready || !!starting;
+  btn.querySelector('b')!.textContent = inviteStarting && starting ? t('invite.opening') : t('lobby.invite');
+  btn.querySelector('small')!.textContent = t('invite.sub');
+  const have = invitedFriends();
+  const goal = $('#invite-goal');
+  goal.textContent = have >= GOLD_INVITES ? t('invite.goalDone') : t('invite.goal', { have, n: GOLD_INVITES });
+  goal.classList.toggle('done', have >= GOLD_INVITES);
+}
+
 /** QUICK PLAY: where it would put you (or that it opens a 6v6 with bots) beside the server chip, and every live room to pick from. */
 function renderQuick() {
   renderDeploy($<HTMLButtonElement>('#quick-go'), 'quick', t('lobby.joining'), online.ok);
+  renderInvite();
   const target = quickTarget();
   renderLine('quick', 'quick', target ? t('quick.joins', { map: mapName(target.mapId), size: sizeLabel(target.size), n: target.humans, max: target.size * 2 }) : t('quick.opens'));
   $('#quick-rooms-count').innerHTML = roomTotals();
@@ -776,6 +795,7 @@ onClick('unreachable-retry', () => lobbyConn.retry());
 $('#unreachable-retry').addEventListener('click', () => { audio.ui(); lobbyConn.retry(); });
 roomCode.addEventListener('input', () => { roomCode.value = cleanCode(roomCode.value); renderJoin(); });
 $('#quick-go').addEventListener('click', () => { audio.ui(); run('quick'); });
+$('#invite-go').addEventListener('click', () => { audio.ui(); openInviteRoom(); });
 $('#start-go').addEventListener('click', () => { audio.ui(); run('start'); });
 $('#go-range').addEventListener('click', () => { audio.ui(); run('range'); });
 $('#join-go').addEventListener('click', () => { audio.ui(); run('code'); });
@@ -977,6 +997,9 @@ $('#open-settings').addEventListener('click', () => openOptions('options'));
 // 外觀: the knife skin and Militia character (src/ui/skinpanel.ts), previewed on the lobby's loaded models.
 const skinPanel = new SkinPanel(document.body, () => assets);
 $('#open-skins').addEventListener('click', () => { if (assets) skinPanel.show(); });
+skinPanel.onInvite = openInviteRoom;
+// A friend arriving moves the 金拖 count on the invite button.
+onSkinChange(() => { if (ready) renderInvite(); });
 $('#discord-top').addEventListener('click', () => track('discord_clicked', { where: 'lobby' }));
 $('#open-controls').addEventListener('click', () => openOptions('controls'));
 
@@ -1034,7 +1057,7 @@ function showBackdrop() {
 /** A player still on the made-up callsign is asked for one before playing (automation and `?name=` skip it). */
 const needsCallsign = () => !benchMode && !params.get('autostart') && !params.has('name') && madeUpCallsign(callsign.value);
 
-// ---- 單挑我 (src/game/challenge.ts) ----------------------------------------------------------------
+// ---- 發起單挑 (src/game/challenge.ts) ----------------------------------------------------------------
 
 /**
  * A start that answers a challenge or opens one: `join` the challenger's room; `fallback` a Solo
@@ -1043,16 +1066,23 @@ const needsCallsign = () => !benchMode && !params.get('autostart') && !params.ha
  */
 type Duel = { kind: 'join'; c: Challenge; mapId: string }
   | { kind: 'fallback'; c: Challenge; mapId: string; reason: 'no_room' | 'gone' | 'offline' }
-  | { kind: 'host'; summary: MatchSummary; mapId: string };
+  | { kind: 'host'; summary: MatchSummary; mapId: string }
+  | { kind: 'invite'; mapId: string; mode: Mode }
+  | { kind: 'joinInvite'; ref: string };
 let special: Duel | undefined;
 /** The challenge this page was opened with. */
-const challenge = parseChallenge(location.search);
+const challenge = parseChallenge(location.search, location.pathname);
 if (challenge) noteArrival(challenge.ref);
 if (challenge) track('challenge_link_opened', { ref: challenge.ref ?? '', has_room: !!challenge.room }, { setOnce: { ref_by: challenge.ref ?? '' } });
+/** The private room an invite link (`/r/<code>`) asks this page to join; a challenge link wins if both. */
+const invite = challenge ? undefined : parseInvite(location.pathname, location.search);
+if (invite) noteArrival(invite.ref);
+if (invite) track('invite_link_opened', { ref: invite.ref ?? '' }, { setOnce: { ref_by: invite.ref ?? '' } });
 
 /** 「<name> 向你下戰帖！」 over the lobby: one tap (with the callsign asked for if needed) and you're in. */
 let challengeBanner: HTMLElement | undefined;
 function showChallenge() {
+  if (invite && !challenge && !challengeBanner) return showInvite();
   if (!challenge || challengeBanner) return;
   const c = challenge;
   const el = document.createElement('div');
@@ -1073,7 +1103,40 @@ function renderChallenge() {
   const go = challengeBanner?.querySelector<HTMLButtonElement>('.go');
   if (!go) return;
   go.disabled = !ready;
-  go.textContent = ready ? t('chal.accept') : loadingText();
+  go.textContent = ready ? t(challenge ? 'chal.accept' : 'invite.join') : loadingText();
+}
+
+/** 「朋友邀你一起打！」 over the lobby for an invite link: one tap joins the friend's private room. */
+function showInvite() {
+  if (!invite) return;
+  const el = document.createElement('div');
+  el.className = 'challenge-banner invite-banner';
+  el.innerHTML = '<b></b><p></p><div class="acts"><button type="button" class="go"></button><button type="button" class="later"></button></div>';
+  el.querySelector('b')!.textContent = t('invite.banner');
+  el.querySelector('p')!.textContent = t('invite.bannerBody', { code: invite.room });
+  el.querySelector<HTMLButtonElement>('.go')!.onclick = acceptInvite;
+  el.querySelector<HTMLButtonElement>('.later')!.textContent = t('chal.later');
+  el.querySelector<HTMLButtonElement>('.later')!.onclick = () => { el.remove(); };
+  challengeBanner = el;
+  menu.appendChild(el);
+  renderChallenge();
+}
+
+function acceptInvite() {
+  if (!invite || !ready || starting) return;
+  challengeBanner?.remove();
+  roomCode.value = invite.room;
+  if (!online.ok) { status.textContent = t('invite.gone'); return; }
+  special = { kind: 'joinInvite', ref: invite.ref ?? '' };
+  run('code');
+}
+
+/** 邀請朋友: open a private 6v6 (the form's map and mode where they fit) and show the invite dialog in it. */
+function openInviteRoom() {
+  if (!online.ok || !ready || starting) return;
+  const fits = mapsFor(6), mapId = fits.includes(map) ? map : fits[0];
+  special = { kind: 'invite', mapId, mode: mode === 'sabotage' && !hasSites(mapId) ? 'elimination' : mode };
+  run('start');
 }
 
 function acceptChallenge() {
@@ -1087,6 +1150,20 @@ function acceptChallenge() {
 
 /** In a challenge's match: the end screen names the challenger; a room nobody else is in falls back to the bot double. */
 function startedDuel(duel: Duel, link: GameLink) {
+  if (duel.kind === 'joinInvite') { track('invite_joined', { ref: duel.ref, joined: true }); return; }
+  if (duel.kind === 'invite') {
+    // As for the 1v1 room: the code arrives a moment after the join.
+    const hosting = game;
+    let tries = 0;
+    const open = () => {
+      if (game !== hosting) return;
+      const code = link.roomInfo?.()?.code;
+      if (code) game?.invite(code, t('invite.where', { map: mapName(duel.mapId), size: sizeLabel(6), mode: modeName(duel.mode) }));
+      else if (++tries < 40) setTimeout(open, 250);
+    };
+    open();
+    return;
+  }
   if (duel.kind === 'host') {
     // The room's code arrives a moment after the join (its own subscription): wait for it, so the dialog always opens.
     const hosting = game;
@@ -1115,7 +1192,7 @@ function startedDuel(duel: Duel, link: GameLink) {
   }, 6000);
 }
 
-/** 單挑我 from an end screen: leave the match, open a private 1v1 room on its map and share its link. */
+/** 發起單挑 from an end screen: leave the match, open a private 1v1 room on its map and share its link. */
 function openDuelRoom(summary: MatchSummary) {
   backToLobby('menu', t('chal.opening'), 'end_screen');
   special = { kind: 'host', summary, mapId: challengeMap(summary.mapId, mapsFor(1)) };
@@ -1176,9 +1253,10 @@ async function start(action: Action, retried = false) {
   if (!benchMode) fullscreenForTouch();
   const name = callsign.value.trim().slice(0, 16) || t('lobby.fallbackName');
   const via = modeOf(action);
-  // A 單挑我 start (the challenger's room, their bot double, or our own 1v1 room) leaves the form as it was.
+  // A 發起單挑 start (the challenger's room, their bot double, or our own 1v1 room) leaves the form as it was.
   const duel = special;
   special = undefined;
+  inviteStarting = duel?.kind === 'invite';
   if (!benchMode) {
     store.set('name', name);
     if (!duel) { store.set('mode', via); store.set('team', team); store.set('skill', skill); saveForm(); }
@@ -1202,6 +1280,7 @@ async function start(action: Action, retried = false) {
   const botSkill = Math.max(0.1, Math.min(0.95, Number(skill) || 0.45));
   const rules = offlineRules();
   const how: OnlineEntry = duel?.kind === 'host' ? { kind: 'start', size: 1, mode: 'elimination', mapId: duel.mapId, bots: false, isPublic: false }
+    : duel?.kind === 'invite' ? { kind: 'start', size: 6, mode: duel.mode, mapId: duel.mapId, bots: true, isPublic: false }
     : duel?.kind === 'join' ? { kind: 'code', code: duel.c.room! }
     : action === 'code' ? { kind: 'code', code: cleanCode(roomCode.value) }
     : action === 'room' ? { kind: 'room', room: joiningRoom }
@@ -1224,6 +1303,7 @@ async function start(action: Action, retried = false) {
       void start('solo');
       return;
     }
+    if (duel?.kind === 'joinInvite') track('invite_joined', { ref: duel.ref, joined: false });
     const room = joiningRoom;
     starting = undefined; joiningRoom = -1;
     inMenu = !benchMode; menuMusic();
@@ -1248,15 +1328,15 @@ async function start(action: Action, retried = false) {
   status.textContent = '';
   if (backdrop) { renderer.scene.remove(backdrop.group); backdrop = undefined; backdropMap = undefined; }
   launch(link, linkMap);
-  joined(link, linkMap, playServer, false, duel?.kind === 'host');
+  joined(link, linkMap, playServer, false, duel?.kind === 'host' || duel?.kind === 'invite');
   matchServer = playServer;
   if (duel) startedDuel(duel, link);
   // The map's own files have loaded by now: cache them too on a first visit.
   setTimeout(warmServiceWorker, 15000);
   menu.hidden = true;
   document.body.classList.remove('menu-open');
-  // Our own 1v1 room opens with the share dialog (the pointer stays free for it).
-  if (duel?.kind === 'host') return;
+  // Our own 1v1 room opens with the share dialog, our invite room with the invite dialog (the pointer stays free for them).
+  if (duel?.kind === 'host' || duel?.kind === 'invite') return;
   await game?.input.lock()?.catch?.(() => undefined);
 }
 

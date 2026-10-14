@@ -131,8 +131,16 @@ export function visitProps({ local, session, landing, prior, inApp, now = new Da
 
 const store = (kind: 'localStorage' | 'sessionStorage'): Store | undefined => { try { return typeof window === 'undefined' ? undefined : window[kind]; } catch { return undefined; } };
 
+/** An invite link (`/r/<code>`, src/game/challenge.ts) carries no tags to stay short: it counts as `invite` / `link` unless it has its own. */
+export function landingSearch(pathname: string, search: string) {
+  if (!/^\/r\/[A-Za-z]{4}\/?$/.test(pathname) || new URLSearchParams(search).has('utm_source')) return search;
+  const p = new URLSearchParams(search);
+  p.set('utm_source', 'invite'); p.set('utm_medium', 'link');
+  return `?${p}`;
+}
+
 // Snapshot at first import (see the file comment).
-const landing: Landing = typeof location === 'undefined' ? { search: '', referrer: '', host: '' } : { search: location.search, referrer: typeof document === 'undefined' ? '' : document.referrer, host: location.hostname };
+const landing: Landing = typeof location === 'undefined' ? { search: '', referrer: '', host: '' } : { search: landingSearch(location.pathname, location.search), referrer: typeof document === 'undefined' ? '' : document.referrer, host: location.hostname };
 const prior = hadStorage(store('localStorage'));
 
 /** This browser's visit properties (counts the visit, so call it once per page, when analytics starts). */
