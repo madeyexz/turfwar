@@ -31,7 +31,10 @@ function releases(): Release[] {
 /** The static pages for search and answer engines (docs/SEO.md): each at /<page> (繁體中文) and /en/<page> (English). */
 const INFO_PAGES = ['about', 'guide', 'maps', 'begone'];
 
-/** /admin, /privacy and the info pages (/about, /en/about, …) without the trailing slash serve their pages in the dev server too (Vercel rewrites them). */
+/**
+ * /admin, /privacy and the info pages (/about, /en/about, …) without the trailing slash serve their pages in the dev server too
+ * (Vercel rewrites them), and so do an invite link's /r/<code> and a challenge link's /c (src/game/challenge.ts).
+ */
 const pageRoutes: Plugin = {
   name: 'page-routes',
   configureServer(server) {
@@ -39,6 +42,8 @@ const pageRoutes: Plugin = {
       for (const page of ['/admin', '/privacy', ...INFO_PAGES.flatMap(p => [`/${p}`, `/en/${p}`])]) {
         if (req.url === page || req.url?.startsWith(`${page}?`)) req.url = `${page}/${req.url.slice(page.length)}`;
       }
+      const invite = /^(?:\/r\/[A-Za-z]{4}|\/c)\/?(\?.*)?$/.exec(req.url ?? '');
+      if (invite) req.url = `/index.html${invite[1] ?? ''}`;
       next();
     });
   },

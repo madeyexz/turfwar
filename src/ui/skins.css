@@ -6,7 +6,7 @@
 .skins .stage canvas { position: absolute; inset: 0; width: 100%; height: 100%; display: block; }
 .skins .picks { display: flex; flex-direction: column; gap: 10px; padding: 18px 22px 20px; }
 .skins h3 { margin: 4px 0 0; font-size: 13px; letter-spacing: 0.16em; color: var(--muted); }
-.skins .knives { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; }
+.skins .knives { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 8px; }
 .skins .knife-pick { display: flex; flex-direction: column; align-items: center; gap: 4px; padding: 10px 6px 9px; background: rgba(255, 255, 255, 0.04); border: 1px solid var(--line); color: var(--muted); text-transform: none; }
 .skins .knife-pick b { font-size: 16px; letter-spacing: 0.08em; color: var(--ink); }
 .skins .knife-pick small { font-size: 11px; font-weight: 600; letter-spacing: 0.02em; text-align: center; line-height: 1.25; }
@@ -15,8 +15,18 @@
 .skins .knife-pick.on b { color: var(--accent); }
 .skins .mark { width: 54px; height: 30px; background: center / contain no-repeat; }
 .skins .mark.slipper { background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='8 2 32 16'%3E%3Cpath d='M10 10c0-4.5 3-6.5 8-6.5h11c5.5 0 9.5 2.6 9.5 6.5s-4 6.5-9.5 6.5H18c-5 0-8-2-8-6.5z' fill='%23f4f6f4' stroke='%231f5bd1' stroke-width='1.6'/%3E%3Cpath d='M26 3.6c1.6 2 1.6 10.8 0 12.8M30.5 3.8c1.6 2 1.6 10.4 0 12.4' stroke='%232f6fe0' stroke-width='3.2' fill='none' stroke-linecap='round'/%3E%3C/svg%3E"); }
+.skins .mark.gold { background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='8 2 32 16'%3E%3Cpath d='M10 10c0-4.5 3-6.5 8-6.5h11c5.5 0 9.5 2.6 9.5 6.5s-4 6.5-9.5 6.5H18c-5 0-8-2-8-6.5z' fill='%23ffe7a3' stroke='%23a8740f' stroke-width='1.6'/%3E%3Cpath d='M26 3.6c1.6 2 1.6 10.8 0 12.8M30.5 3.8c1.6 2 1.6 10.4 0 12.4' stroke='%23e8b42a' stroke-width='3.2' fill='none' stroke-linecap='round'/%3E%3C/svg%3E"); }
 .skins .mark.broom { background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='6 0 34 20'%3E%3Cpath d='M7 10h17' stroke='%23d23a3c' stroke-width='2.6' stroke-linecap='round'/%3E%3Cpath d='M23 7.5h3v5h-3z' fill='%233df03a'/%3E%3Cpath d='M26 3h3v14h-3z' fill='%2346f53f'/%3E%3Cpath d='M29 4l9-3M29 6.5l10-1.5M29 9l10 0M29 11.5l10 1.5M29 14l9 3M29 16l7 4' stroke='%23d8306f' stroke-width='1.1'/%3E%3Cpath d='M29 8l9-.5M29 10.5l9 1' stroke='%234fb83a' stroke-width='1.1'/%3E%3C/svg%3E"); }
 .skins .mark.knife { background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 40 20'%3E%3Cpath d='M4 11h11v-2.4H4z' fill='%233a3d33'/%3E%3Cpath d='M15 8.2h3v4h-3z' fill='%23222'/%3E%3Cpath d='M18 8.6h14l5 1.6-5 1.8H18z' fill='%23c9ced3'/%3E%3C/svg%3E"); }
+.skins .knife-pick { position: relative; }
+.skins .knife-pick.locked::after { content: ''; position: absolute; top: 6px; right: 6px; width: 14px; height: 14px; background: center / contain no-repeat url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'%3E%3Crect x='5' y='10' width='14' height='11' rx='2' fill='%23ffb45a'/%3E%3Cpath d='M8 10V7a4 4 0 0 1 8 0v3' stroke='%23ffb45a' stroke-width='2.4' fill='none'/%3E%3C/svg%3E"); }
+.skins .knife-pick[data-knife='gold'].on { border-color: #ffb45a; background: rgba(255, 180, 90, 0.12); }
+.skins .knife-pick[data-knife='gold'].on b { color: #ffd27a; }
+.skins .gold-lock { display: flex; align-items: center; gap: 10px; padding: 8px 10px; border: 1px dashed rgba(255, 180, 90, 0.55); background: rgba(255, 180, 90, 0.08); }
+.skins .gold-lock[hidden] { display: none; }
+.skins .gold-lock span { flex: 1; font-size: 13px; font-weight: 700; line-height: 1.35; color: #ffd9a8; }
+.skins .gold-lock button { flex: none; min-height: 36px; padding: 0 14px; font: inherit; font-weight: 800; letter-spacing: 0.1em; color: #fff; background: var(--crimson); border: 0; cursor: pointer; }
+.skins .gold-lock.open button { display: none; }
 .skins .done { margin-top: auto; padding: 11px; font-size: 16px; font-weight: 700; letter-spacing: 0.3em; color: #031013; background: var(--accent); border: 0; }
 .skins .looks { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); }
 .skins .looks button { justify-content: center; min-height: 36px; }
@@ -35,3 +45,47 @@
 :where(.view-short) .skins .knife-pick small, :where(.view-short) .skins .row-note { display: none; }
 :where(.view-short) .skins .mark { height: 22px; }
 :where(.view-short) .skins .done { min-height: 44px; padding: 0; }
+
+/* ---- 外觀 as a showcase: full screen over the dimmed city, the choices a plain list on the left, the two
+   soldiers large on the right (the preview canvas is transparent). ---- */
+.lb-settings.lobby.skins-dialog { place-items: stretch; background: rgba(5, 7, 9, 0.35); }
+.lb-settings.lobby.skins-dialog .panel {
+  width: 100%; height: 100%; max-height: none; display: flex; flex-direction: column; border: 0;
+  background: linear-gradient(90deg, rgba(5, 7, 9, 0.9) 0, rgba(5, 7, 9, 0.7) clamp(340px, 34vw, 480px), rgba(5, 7, 9, 0) 78%);
+}
+.lb-settings.lobby.skins-dialog header { flex: none; padding: 22px clamp(24px, 3.4vw, 56px) 0; background: none; border: 0; }
+.lb-settings.lobby.skins-dialog h2 { font-family: 'Noto Sans TC', var(--font); font-size: clamp(28px, 2.4vw, 40px); font-weight: 900; letter-spacing: 0.06em; color: #fff; text-transform: none; }
+.skins-dialog .skins { flex: 1 1 auto; min-height: 0; grid-template-columns: clamp(300px, 30vw, 420px) minmax(0, 1fr); }
+.skins-dialog .skins .stage { order: 2; min-height: 0; border: 0; }
+.skins-dialog .skins .picks { order: 1; gap: 8px; padding: 18px 0 28px clamp(24px, 3.4vw, 56px); overflow-y: auto; text-transform: none; }
+.skins-dialog .skins h3 { margin: 10px 0 2px; font-size: 13px; letter-spacing: 0.2em; color: var(--muted); }
+.skins-dialog .skins .knives { grid-template-columns: 1fr; gap: 2px; }
+.skins-dialog .skins .knife-pick {
+  display: grid; grid-template-columns: 54px minmax(0, 1fr); grid-template-rows: auto auto; align-items: center; column-gap: 14px; row-gap: 0;
+  padding: 8px 10px 8px 12px; border: 0; border-left: 3px solid transparent; background: none; text-align: left;
+}
+.skins-dialog .skins .knife-pick .mark { grid-row: 1 / 3; width: 50px; height: 28px; }
+.skins-dialog .skins .knife-pick b { font-size: 19px; letter-spacing: 0.08em; color: rgba(255, 255, 255, 0.8); }
+.skins-dialog .skins .knife-pick small { text-align: left; font-size: 12px; }
+.skins-dialog .skins .knife-pick:hover { background: rgba(255, 255, 255, 0.05); }
+.skins-dialog .skins .knife-pick.on { border-left-color: #fff; background: rgba(255, 255, 255, 0.08); }
+.skins-dialog .skins .knife-pick.on b { color: #fff; }
+.skins-dialog .skins .knife-pick[data-knife='gold'].on { border-left-color: #ffc85a; background: rgba(255, 196, 90, 0.1); }
+.skins-dialog .skins .knife-pick.locked::after { top: 50%; right: 12px; transform: translateY(-50%); }
+.skins-dialog .skins .gold-lock { border-style: solid; border-color: rgba(255, 196, 90, 0.35); background: rgba(255, 196, 90, 0.06); }
+.skins-dialog .skins .gold-lock button { color: #0a0b0c; background: #fff; }
+.skins-dialog .skins .looks { grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 4px; border: 0; }
+.skins-dialog .skins .looks button { border: 1px solid var(--line); }
+.skins-dialog .skins .done { align-self: flex-start; min-width: 180px; margin-top: auto; padding: 12px 28px; }
+/* Upright phones: the soldiers above the list. */
+:where(.view-narrow) .skins-dialog .skins { grid-template-columns: 1fr; grid-template-rows: minmax(220px, 40vh) auto; }
+:where(.view-narrow) .skins-dialog .skins .stage { order: 0; }
+:where(.view-narrow) .skins-dialog .skins .picks { order: 1; padding: 10px 16px 20px; }
+:where(.view-narrow) .lb-settings.lobby.skins-dialog .panel { height: 100%; max-height: none; background: rgba(5, 7, 9, 0.82); }
+:where(.view-short) .lb-settings.lobby.skins-dialog .panel { height: 100%; }
+:where(.view-short) .lb-settings.lobby.skins-dialog header { padding: 8px 16px 0; }
+:where(.view-short) .lb-settings.lobby.skins-dialog h2 { font-size: 22px; padding-bottom: 4px; }
+:where(.view-short) .skins-dialog .skins { grid-template-columns: clamp(240px, 38vw, 340px) minmax(0, 1fr); }
+:where(.view-short) .skins-dialog .skins .picks { padding: 6px 0 10px 16px; gap: 4px; }
+:where(.view-short) .skins-dialog .skins .knife-pick { padding: 4px 8px; min-height: 44px; }
+:where(.view-short) .skins-dialog .skins .knife-pick b { font-size: 16px; }

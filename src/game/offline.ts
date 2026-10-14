@@ -27,7 +27,7 @@ export class OfflineLink implements GameLink {
   private practice: boolean;
 
   /**
-   * `rival`: a 單挑我 link with no room to join (src/game/challenge.ts): the other side's bot plays
+   * `rival`: a 發起單挑 link with no room to join (src/game/challenge.ts): the other side's bot plays
    * under the challenger's name.
    */
   constructor(mapId: string, name: string, team: Team | undefined, config: Partial<MatchConfig> = {}, practice = false, private rival?: string) {

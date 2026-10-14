@@ -8,6 +8,7 @@ import { lang, onLang, t, type Lang } from './i18n';
 export interface NewsItem { id: string; date: string; text: Record<Lang, string> }
 
 export const NEWS: readonly NewsItem[] = [
+  { id: 'invite-gold', date: '2026-10-14', text: { 'zh-TW': '新增「邀請朋友」：開私人房一鍵傳 LINE，揪 3 位朋友來玩解鎖金拖', en: 'Invite friends: a private room sent on LINE in one tap. 3 friends unlock the gold slipper' } },
   { id: 'skins-broom', date: '2026-10-13', text: { 'zh-TW': '新增外觀：刀可以換成掃把，民兵也能挑角色（大廳右上的衣服）', en: 'Skins: swap the knife for a broom and pick your Militia character (the T-shirt, top right)' } },
   { id: 'discord-community', date: '2026-10-11', text: { 'zh-TW': '新增 discord 社群，歡迎加入！', en: 'Our Discord community is now open. Come join us!' } },
   { id: 'challenge-friend', date: '2026-10-11', text: { 'zh-TW': '結算畫面的「約朋友單挑」，一鍵把連結傳給朋友', en: '"Challenge a friend" on the end screen sends a 1v1 link in one tap' } },

@@ -13,14 +13,20 @@
     { "source": "/maps", "destination": "/maps/index.html" },
     { "source": "/en/maps", "destination": "/en/maps/index.html" },
     { "source": "/begone", "destination": "/begone/index.html" },
-    { "source": "/en/begone", "destination": "/en/begone/index.html" }
+    { "source": "/en/begone", "destination": "/en/begone/index.html" },
+    { "source": "/c", "destination": "/index.html" },
+    { "source": "/r/:code([A-Za-z]{4})", "destination": "/index.html" }
   ],
+  "functions": {
+    "api/og.ts": { "includeFiles": "api/_og/**", "maxDuration": 15 }
+  },
   "headers": [
     { "source": "/(.*)", "headers": [
       { "key": "X-Content-Type-Options", "value": "nosniff" },
       { "key": "Referrer-Policy", "value": "strict-origin-when-cross-origin" }
     ] },
     { "source": "/admin(.*)", "headers": [{ "key": "X-Robots-Tag", "value": "noindex, nofollow" }] },
+    { "source": "/(c|r/.*)", "headers": [{ "key": "X-Robots-Tag", "value": "noindex" }] },
     { "source": "/sw.js", "headers": [{ "key": "Cache-Control", "value": "no-cache" }] },
     { "source": "/robots.txt", "headers": [{ "key": "Content-Type", "value": "text/plain; charset=utf-8" }, { "key": "Cache-Control", "value": "public, max-age=3600" }] },
     { "source": "/sitemap.xml", "headers": [{ "key": "Content-Type", "value": "application/xml; charset=utf-8" }, { "key": "Cache-Control", "value": "public, max-age=3600" }] },

@@ -43,7 +43,7 @@ export interface MatchSummary {
   headshots: number;
   knifeKills: number;
   bestRound: number;
-  /** A 單挑我 match: the challenger, and whether the player won it. */
+  /** A 發起單挑 match: the challenger, and whether the player won it. */
   rival?: { name: string; beaten: boolean };
 }
 

@@ -13,6 +13,7 @@ import { decodeFrame, type DecodedFrame, type FramePose } from '../../shared/mat
 import { DEFAULT_WEAPONS, STAMINA, WEAPONS, normalizeAttachments, weaponStats, type AttachmentId, type Attachments, type Slot, type WeaponId } from '../../shared/weapons';
 import { newRoundStats, type BuyItem } from '../../shared/match/economy';
 import { cleanSkin, type Skin } from '../../shared/skins';
+import { setInvitedFriends } from '../game/skins';
 import { plural, t } from '../ui/i18n';
 import { setPerson, track } from '../analytics';
 import { NetReporter, SAMPLE_EVERY_MS, type NetFields, type NetReport } from '../../shared/netstats';
@@ -561,6 +562,10 @@ export async function connectOnline(name: string, team: Team | undefined, how: O
           .subscribe(['SELECT * FROM match', 'SELECT * FROM player', 'SELECT * FROM profile']);
         // Our own private room's code (the server keeps codes off the public room rows); none from an older server.
         connection.subscriptionBuilder().onError(() => undefined).subscribe(['SELECT * FROM my_room_code']);
+        // How many friends our share code brought (the 金拖 unlock, src/game/skins.ts); none from an older server.
+        const invites = () => { for (const r of connection.db.myInvites.iter()) setInvitedFriends(r.played); };
+        connection.db.myInvites.onInsert(invites);
+        connection.subscriptionBuilder().onApplied(invites).onError(() => undefined).subscribe(['SELECT * FROM my_invites']);
       })
       .onConnectError((_ctx, error) => fail(new ConnectError(t('net.unreachable', { error: error?.message ?? t('net.refused') }))))
       .onDisconnect(() => {

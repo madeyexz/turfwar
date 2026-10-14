@@ -103,6 +103,7 @@ import BodyRow from "./body_table";
 import FrameRow from "./frame_table";
 import MatchRow from "./match_table";
 import MatchEventRow from "./match_event_table";
+import MyInvitesRow from "./my_invites_table";
 import MyRoomCodeRow from "./my_room_code_table";
 import PlayerRow from "./player_table";
 import PointRow from "./point_table";
@@ -400,6 +401,13 @@ const tablesSchema = __schema({
     constraints: [
     ],
   }, AdminTaipeiRebuildRow),
+  myInvites: __table({
+    name: 'my_invites',
+    indexes: [
+    ],
+    constraints: [
+    ],
+  }, MyInvitesRow),
   myRoomCode: __table({
     name: 'my_room_code',
     indexes: [

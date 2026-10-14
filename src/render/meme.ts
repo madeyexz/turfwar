@@ -11,6 +11,18 @@ import { mergeGeometries } from 'three/examples/jsm/utils/BufferGeometryUtils.js
 const BLUE = 0x2f6fe0, WHITE = 0xe4e8e4;
 const mat = (color: number, roughness = 0.8, metalness = 0) => new THREE.MeshStandardMaterial({ color, roughness, metalness });
 
+/** A slipper's paint: [colour, roughness, metalness] for each part. */
+interface SlipperPaint { footbed: [number, number, number]; sole: [number, number, number]; tread: [number, number, number]; strap: [number, number, number]; ridge: [number, number, number] }
+const BLUE_WHITE: SlipperPaint = { footbed: [WHITE, 0.7, 0], sole: [BLUE, 0.85, 0], tread: [0x2458c0, 0.9, 0], strap: [BLUE, 0.6, 0], ridge: [0x4a86f0, 0.5, 0] };
+/** 金拖 (the invite reward): the same slipper in polished gold on a satin-gold footbed. */
+const GOLD: SlipperPaint = { footbed: [0xffe39a, 0.35, 0.35], sole: [0xf0b020, 0.28, 0.8], tread: [0xb07a12, 0.45, 0.7], strap: [0xffc21f, 0.18, 0.85], ridge: [0xfff3c0, 0.12, 0.9] };
+/** Metal parts glow a little of their own colour, so the gold still reads as gold in a dark alley. */
+const paint = ([color, roughness, metalness]: [number, number, number]) => {
+  const m = mat(color, roughness, metalness);
+  if (metalness > 0) m.emissive.setHex(color).multiplyScalar(0.18);
+  return m;
+};
+
 /** The slipper's outline (x along its length, toe at -X; y across it). */
 function footprint() {
   const s = new THREE.Shape();
@@ -27,9 +39,8 @@ function footprint() {
 const slab = (depth: number, z: number) => new THREE.ExtrudeGeometry(footprint(), { depth, bevelEnabled: true, bevelThickness: 0.002, bevelSize: 0.003, bevelSegments: 2, curveSegments: 10 }).translate(0, 0, z);
 
 /** Rows of grip grooves across the outsole. */
-function treads(group: THREE.Group) {
+function treads(group: THREE.Group, m: THREE.Material) {
   const groove = new THREE.BoxGeometry(0.006, 0.07, 0.003);
-  const m = mat(0x2458c0, 0.9);
   for (let x = 0.03; x > -0.22; x -= 0.03) {
     const bar = new THREE.Mesh(groove, m);
     bar.position.set(x, 0, -0.0105);
@@ -38,13 +49,14 @@ function treads(group: THREE.Group) {
   }
 }
 
-/** The 藍白拖: a white footbed on a blue outsole, one wide blue strap over the forefoot. */
-export function slipperModel() {
+/** The 藍白拖: a white footbed on a blue outsole, one wide blue strap over the forefoot. `gold`: the 金拖. */
+export function slipperModel(gold = false) {
+  const c = gold ? GOLD : BLUE_WHITE;
   const group = new THREE.Group();
-  group.name = 'Knife_Slipper';
-  group.add(new THREE.Mesh(slab(0.014, 0), mat(WHITE, 0.7)));
-  group.add(new THREE.Mesh(slab(0.006, -0.008), mat(BLUE, 0.85)));
-  treads(group);
+  group.name = gold ? 'Knife_GoldSlipper' : 'Knife_Slipper';
+  group.add(new THREE.Mesh(slab(0.014, 0), paint(c.footbed)));
+  group.add(new THREE.Mesh(slab(0.006, -0.008), paint(c.sole)));
+  treads(group, paint(c.tread));
   // The strap: an arch across the sole (in y–z), extruded along the slipper's length.
   const arch = new THREE.Shape();
   arch.absellipse(0, 0, 0.056, 0.034, 0, Math.PI, false);
@@ -54,12 +66,12 @@ export function slipperModel() {
   const strap = new THREE.ExtrudeGeometry(arch, { depth: 0.07, bevelEnabled: true, bevelThickness: 0.003, bevelSize: 0.002, bevelSegments: 2, curveSegments: 16 });
   // Shape (x, y, extrusion) → slipper (y across, z up from the footbed, x along the length).
   strap.applyMatrix4(new THREE.Matrix4().set(0, 0, 1, 0, 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 1));
-  const band = new THREE.Mesh(strap, mat(BLUE, 0.6));
+  const band = new THREE.Mesh(strap, paint(c.strap));
   band.position.set(-0.19, 0, 0.015);
   group.add(band);
   // The strap's moulded ridges catch the light like the real thing.
   for (const x of [-0.17, -0.15, -0.13]) {
-    const ridge = new THREE.Mesh(new THREE.TorusGeometry(0.052, 0.0028, 6, 20, Math.PI), mat(0x4a86f0, 0.5));
+    const ridge = new THREE.Mesh(new THREE.TorusGeometry(0.052, 0.0028, 6, 20, Math.PI), paint(c.ridge));
     ridge.rotation.y = Math.PI / 2;
     ridge.scale.set(0.66, 1.02, 1);
     ridge.position.set(x, 0, 0.016);

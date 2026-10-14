@@ -40,7 +40,8 @@ import { isMagnified, settings } from './settings';
 import { ownedOf, purchaseOf, type BuyRequest, type Owned } from './purchases';
 import { matchNote, roundEnded, track } from '../analytics';
 import { noteDuel, noteKill, noteShare } from '../growth';
-import { challengeUrl, shareRef } from './challenge';
+import { openInvitePanel } from '../ui/invitepanel';
+import { challengeUrl, inviteUrl, shareRef } from './challenge';
 import { MatchTally, type MatchSummary } from './matchstats';
 import { openSharePanel } from '../ui/sharepanel';
 import { mySkin } from './skins';
@@ -206,7 +207,7 @@ export class Game {
   /** The player's own tally this match, and the finished match's summary (the share card's numbers). */
   private tally = new MatchTally();
   private summary?: MatchSummary;
-  /** A 單挑我 match (main.ts): the challenger, the sharer's code and how it is played. */
+  /** A 發起單挑 match (main.ts): the challenger, the sharer's code and how it is played. */
   private challenge?: { name: string; ref: string; via: 'room' | 'fallback' };
   readonly mapId: string;
 
@@ -729,7 +730,7 @@ export class Game {
   }
 
   /**
-   * 分享戰績: the card over a frame of this view, carrying the 單挑我 link. `summary`: an earlier
+   * 分享戰績: the card over a frame of this view, carrying the 發起單挑 link. `summary`: an earlier
    * match's (the 1v1 room opened from its end screen); `room`: the code of the room we wait in;
    * `source`: which kind of link it is for the UTM tags (a room's is always `duel`).
    */
@@ -745,6 +746,7 @@ export class Game {
       summary, url, backdrop: this.renderer.snapshot(), knife: mySkin().knife, room: !!o.room,
       note: o.room ? t('chal.room', { code: o.room }) : undefined,
       onShared: method => { noteShare(); track('share_card_shared', { ref, method, room: !!o.room }); },
+      ...(!o.room && this.hud.onDuel ? { onDuel: this.hud.onDuel } : {}),
       // Closed mid-match (the 1v1 room): back to play, the close tap capturing the mouse again.
       onClose: () => { if (this.running && this.link.state()?.phase !== 'ended') { this.menu.hide(); this.resume(); } },
     });
@@ -771,10 +773,27 @@ export class Game {
     };
   }
 
+  /**
+   * 邀請朋友: the dialog over the private room we opened from the lobby, with its `code` and link (to
+   * `/r/<code>`, carrying our share code). Closing it plays on.
+   */
+  invite(code: string, where: string) {
+    const ref = this.shareCode();
+    this.input.release();
+    track('invite_opened', { ref });
+    openInvitePanel({
+      code, where, url: inviteUrl(location.origin, code, ref), seats: this.link.state()?.config.teamSize ?? 6,
+      people: () => (this.link.state()?.soldiers ?? []).filter(s => !s.bot)
+        .map(s => ({ name: s.name, me: s.id === this.link.myId() })).sort((a, b) => Number(b.me) - Number(a.me)),
+      onSent: method => { noteShare(); track('invite_sent', { ref, method }); },
+      onClose: () => { if (this.running && this.link.state()?.phase !== 'ended') { this.menu.hide(); this.resume(); } },
+    });
+  }
+
   /** A short line over the match (main.ts: the challenge's notes). */
   notice(text: string, ms = 6000) { this.hud.toast(text, ms); }
 
-  /** This match answers a 單挑我 link: the end screen and the card name the challenger. */
+  /** This match answers a 發起單挑 link: the end screen and the card name the challenger. */
   setChallenge(c: { name: string; ref: string; via: 'room' | 'fallback' }) {
     this.challenge = c;
     this.hud.rival = c.name;

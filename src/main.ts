@@ -6,7 +6,9 @@ import { cleanCode, hasSites, listOrder, mapsFor, pickAnyRoom, ROOM_SIZES, roomF
 import { ELIMINATION, SABOTAGE, type Mode, type Team } from '../shared/match/state';
 import { assetUrl } from './assetUrl';
 import { groundSets, loadAssets, type Assets } from './assets';
-import { challengeMap, parseChallenge, type Challenge } from './game/challenge';
+import { challengeMap, parseChallenge, parseInvite, type Challenge } from './game/challenge';
+import { invitedFriends, onSkinChange } from './game/skins';
+import { GOLD_INVITES } from '../shared/skins';
 import type { MatchSummary } from './game/matchstats';
 import './ui/share.css';
 import { Audio } from './audio';
@@ -39,6 +41,7 @@ import { onTouchLayout, touchActive, touchAimAssist } from './game/touchlayout';
 import { InstallBanner } from './ui/installhint';
 import { isSideways, onSideways, watchSideways } from './ui/viewport';
 import { mountProgressBadge } from './ui/progressbadge';
+import { levelOf, loadProgress, onProgress } from './game/progress';
 import { mountNews } from './ui/news';
 import { askCallsign, madeUpCallsign } from './ui/callsign';
 import { ask, confirmDialog } from './ui/ask';
@@ -137,10 +140,9 @@ const deploy = (id: string, label: Key, right = '', title?: Key) =>
  */
 menu.innerHTML = `
   <header class="top">
-    <div class="brand"><img class="brand-icon" src="/icons/icon-192.png" width="56" height="56" alt=""><div class="brand-text"><h1 class="logo" id="logo"></h1><div class="prog" id="prog"></div></div></div>
+    <button type="button" class="mark" id="tab-quick" data-tab="quick" aria-label="${t('lobby.home')}" data-i18n-aria-label="lobby.home"><img src="/icons/icon-192.png" width="40" height="40" alt=""><span class="mark-back" aria-hidden="true">‹</span><span class="mark-name">${L('brand.short')}</span></button>
     <div class="who">
-      <label class="callsign">${L('lobby.callsign', 'span', 'class="label"')}<input type="text" id="callsign" maxlength="16" autocomplete="off" spellcheck="false"></label>
-      ${choice('teams', 'team', [['auto', L('lobby.auto')], ['0', L('team.0', 'span', 'class="swat"')], ['1', L('team.1', 'span', 'class="militia"')]], 'lobby.team')}
+      <button type="button" class="profile" id="open-profile" aria-haspopup="dialog" aria-expanded="false" aria-controls="profile-pop"><b id="profile-name"></b><span class="dot" aria-hidden="true">·</span><span id="profile-lv"></span>${CARET}</button>
       <div class="icons">
         <a class="icon-btn discord" id="discord-top" href="${DISCORD_URL}" target="_blank" rel="noopener" data-tip="${t('lobby.discord')}" data-i18n-tip="lobby.discord" aria-label="${t('lobby.discordTitle')}" data-i18n-aria-label="lobby.discordTitle">${DISCORD}</a>
         <button type="button" class="icon-btn" id="open-skins" data-tip="${t('skin.open')}" data-i18n-tip="skin.open" aria-label="${t('skin.title')}" data-i18n-aria-label="skin.title" aria-haspopup="dialog">${SHIRT}</button>
@@ -149,11 +151,17 @@ menu.innerHTML = `
       </div>
     </div>
   </header>
-  <section class="panel">
-    <div class="tabs" id="tabs" role="tablist" aria-label="${t('lobby.ways')}" data-i18n-aria-label="lobby.ways">${TABS.map(id => `
-      <button type="button" class="tab" role="tab" id="tab-${id}" data-tab="${id}" aria-controls="view-${id}">${TAB_ICONS[id]}<span>${L(`tab.${id}`, 'b')}${L(`tab.${id}Sub`, 'small')}</span></button>`).join('')}
-    </div>
-
+  <section class="side">
+    <h1 class="logo" id="logo"></h1>
+    <nav class="ways" id="tabs" aria-label="${t('lobby.ways')}" data-i18n-aria-label="lobby.ways">
+      ${deploy('quick-go', 'tab.quick', L('quick.tag'), 'quick.about')}
+      ${line('quick', serverChip('quick-server'))}
+      <button type="button" class="way" id="invite-go" disabled><b>${t('lobby.invite')}</b><span class="ig-goal" id="invite-goal"></span></button>
+      <button type="button" class="way" id="tab-start" data-tab="start" aria-controls="view-start">${L('tab.start', 'b')}</button>
+      <button type="button" class="way" id="tab-join" data-tab="join" aria-controls="view-join">${L('tab.join', 'b')}</button>
+      <button type="button" class="way" id="open-solo" aria-haspopup="dialog" aria-expanded="false" aria-controls="solo-pop">${L('lobby.solo', 'b')}</button>
+      <button type="button" class="way" id="go-range" title="${t('lobby.rangeHint')}" data-i18n-title="lobby.rangeHint">${L('lobby.sub.range', 'b')}</button>
+    </nav>
     <div class="unreachable" id="unreachable" hidden>
       <div class="unreachable-say" role="status" aria-live="polite">
         <b class="unreachable-head"><span class="conn down"><i></i></span><span id="unreachable-title"></span></b>
@@ -161,23 +169,17 @@ menu.innerHTML = `
       </div>
       <button type="button" class="sub unreachable-retry" id="unreachable-retry"></button>
     </div>
-
-    <div class="view" id="view-quick" role="tabpanel" aria-labelledby="tab-quick">
-      ${deploy('quick-go', 'tab.quick', L('quick.tag'), 'quick.about')}
-      ${line('quick', serverChip('quick-server'))}
-      <section class="browser" aria-labelledby="quick-rooms-title">
-        <div class="browser-head"><b id="quick-rooms-title" data-i18n="lobby.liveRooms">${t('lobby.liveRooms')}</b><span class="count" id="quick-rooms-count"></span></div>
-        <div class="browser-rows" id="quick-rooms" role="list"></div>
-      </section>
-    </div>
-
-    <div class="view" id="view-start" role="tabpanel" aria-labelledby="tab-start" hidden>
+    <p class="unavailable" id="online-off"></p>
+    <div class="status" id="status" role="status"></div>
+  </section>
+  <section class="page">
+    <div class="view" id="view-start" aria-labelledby="start-title" hidden>
+      <h2 class="page-head" id="start-title">${L('tab.start')}</h2>
       <div class="filters" role="group" aria-label="${t('tab.start')}" data-i18n-aria-label="tab.start">
         ${field('start.field.mode', choice('smodes', 'smode', [['elimination', modeTag('elimination')], ['sabotage', modeTag('sabotage')]], 'start.field.mode'))}
         ${field('lobby.field.size', choice2('ssizes', 'ssize', sizeItems(), 'lobby.roomSize', 'sizes'))}
         ${field('lobby.field.map', `<div class="mapline">
-          <button type="button" class="map-trigger" id="map-trigger" aria-haspopup="dialog" aria-expanded="false" aria-controls="map-pop"><i class="sw"></i><b></b><small></small>${CARET}</button>
-          <div class="quick-maps" id="quick-maps" role="group" aria-label="${t('lobby.field.map')}" data-i18n-aria-label="lobby.field.map"></div>
+          <div class="map-grid" id="map-grid" role="group" aria-label="${t('lobby.field.map')}" data-i18n-aria-label="lobby.field.map"></div>
           <p class="notice" id="map-notice" role="status"></p>
         </div>`)}
         ${field('start.field.visibility', choice2('svis', 'svis', [['public', L('start.public'), L('start.publicSub')], ['private', L('start.private'), L('start.privateSub')]], 'start.field.visibility'))}
@@ -187,13 +189,14 @@ menu.innerHTML = `
       ${line('start')}
     </div>
 
-    <div class="view" id="view-join" role="tabpanel" aria-labelledby="tab-join" hidden>
+    <div class="view" id="view-join" aria-labelledby="join-title" hidden>
+      <h2 class="page-head" id="join-title">${L('tab.join')}<span class="count" id="rooms-count"></span></h2>
       <div class="filters join-filters">
         ${field('lobby.field.size', choice('jsizes', 'jsize', [['', L('join.all')], ...SIZES.map(s => [s.id, s.label] as [string, string])], 'lobby.roomSize'))}
         ${field('lobby.field.mode', choice('jmodes', 'jmode', [['', L('join.all')], ['elimination', `<span class="mtag">[E]</span><span class="jname"> ${L('mode.elimination')}</span>`], ['sabotage', `<span class="mtag">[S]</span><span class="jname"> ${L('mode.sabotage')}</span>`]], 'lobby.field.mode'))}
       </div>
-      <section class="browser" id="browser" aria-labelledby="rooms-title">
-        <div class="browser-head"><b id="rooms-title" data-i18n="lobby.liveRooms">${t('lobby.liveRooms')}</b><span class="count" id="rooms-count"></span>${serverChip('rooms-server')}</div>
+      <section class="browser" id="browser" aria-labelledby="join-title">
+        <div class="browser-head"><b id="rooms-title" data-i18n="lobby.liveRooms">${t('lobby.liveRooms')}</b>${serverChip('rooms-server')}</div>
         <div class="browser-rows" id="rooms" role="list"></div>
         <div class="browser-foot" id="rooms-foot"></div>
       </section>
@@ -206,19 +209,8 @@ menu.innerHTML = `
         </div>
       </div>
     </div>
-
-    <section class="news" id="news" hidden></section>
-    <nav class="others" aria-label="${t('lobby.more')}" data-i18n-aria-label="lobby.more">
-      ${L('lobby.offline', 'span', 'class="label"')}
-      <button type="button" class="sub" id="open-solo" aria-haspopup="dialog" aria-expanded="false" aria-controls="solo-pop">${L('lobby.solo')}</button>
-      <button type="button" class="sub" id="go-range" title="${t('lobby.rangeHint')}" data-i18n-title="lobby.rangeHint">${L('lobby.sub.range')}</button>
-    </nav>
-    <p class="unavailable" id="online-off"></p>
-    <div class="status" id="status" role="status"></div>
   </section>
-  <section class="stage">
-    <div class="showcase" id="showcase"><h2></h2><div class="meta"></div></div>
-  </section>
+  <section class="news" id="news" hidden></section>
   <footer class="site-links" aria-label="${t('lobby.siteLinks')}" data-i18n-aria-label="lobby.siteLinks">
     <a href="${REPO_URL}" target="_blank" rel="noopener" title="${t('lobby.openSourceTitle')}" data-i18n-title="lobby.openSourceTitle">${GITHUB}${L('lobby.openSource')}</a>
     <span class="dot" aria-hidden="true">·</span>
@@ -226,8 +218,14 @@ menu.innerHTML = `
     <span class="dot" aria-hidden="true">·</span>
     <a href="${privacyHref()}" id="privacy-link">${L('lobby.privacy')}</a>
   </footer>
-  ${pop('map-pop', 'lobby.chooseMap', `<div class="pop-head"><b>${L('lobby.chooseMap')}</b><small id="map-pop-sub"></small></div><div class="map-grid" id="map-grid"></div>`)}
+  ${pop('profile-pop', 'lobby.profile', `<label class="callsign">${L('lobby.callsign', 'span', 'class="label"')}<input type="text" id="callsign" maxlength="16" autocomplete="off" spellcheck="false"></label>
+    <div class="prog" id="prog"></div>
+    <div class="field">${L('lobby.team', 'span', 'class="label"')}${choice('teams', 'team', [['auto', L('lobby.auto')], ['0', L('team.0', 'span', 'class="swat"')], ['1', L('team.1', 'span', 'class="militia"')]], 'lobby.team')}</div>
+    <div class="field">${L('set.server', 'span', 'class="label"')}${serverChip('profile-server')}</div>`)}
   ${pop('solo-pop', 'lobby.solo', `<div class="pop-head"><b>${L('lobby.solo')}</b><small class="rules" id="solo-rules"></small></div>
+    <div class="field">${L('start.field.mode', 'span', 'class="label"')}${choice('solo-modes', 'smode', [['elimination', modeTag('elimination')], ['sabotage', modeTag('sabotage')]], 'start.field.mode')}</div>
+    <div class="field">${L('lobby.field.size', 'span', 'class="label"')}${choice('solo-sizes', 'ssize', SIZES.map(s => [s.id, s.label] as [string, string]), 'lobby.roomSize')}</div>
+    <div class="field">${L('lobby.field.map', 'span', 'class="label"')}<div class="map-grid" id="solo-maps" role="group" aria-label="${t('lobby.field.map')}" data-i18n-aria-label="lobby.field.map"></div></div>
     <div class="field">${L('lobby.field.skill', 'span', 'class="label"')}${choice('skills', 'skill', [['0.25', L('lobby.skill.recruit')], ['0.45', L('lobby.skill.veteran')], ['0.75', L('lobby.skill.elite')]], 'lobby.field.skill')}</div>
     <button type="button" class="go" id="solo-go">${t('lobby.startMatch')}</button>${L('lobby.botsHint', 'p', 'class="hint"')}`)}`;
 app.appendChild(menu);
@@ -260,8 +258,9 @@ onSideways(on => {
 watchSideways();
 // Inside the lobby, so it goes away with it during a match.
 if (!params.has('bench')) new InstallBanner(menu);
-// Level and the day's goal under the title (game/progress.ts).
+// Level and the day's goal in the profile popover (game/progress.ts); the chip shows the level.
 mountProgressBadge(menu.querySelector<HTMLElement>('#prog')!);
+onProgress(() => renderProfile());
 // 最新更新: the newest entry of src/ui/news.ts.
 mountNews(menu.querySelector<HTMLElement>('#news')!);
 
@@ -450,7 +449,7 @@ function renderPings() {
   // The chips show from the first connection attempt (so the server can be changed meanwhile) and
   // say when the server could not be reached, never an error.
   const chips = pingOn && !!server && phase() !== 'idle';
-  for (const chip of [$('#rooms-server'), $('#quick-server')]) {
+  for (const chip of [$('#rooms-server'), $('#quick-server'), $('#profile-server')]) {
     chip.hidden = !chips;
     if (!chips || !server) continue;
     const change = choosable ? t('server.change') : '';
@@ -510,19 +509,27 @@ function renderBrand() {
 // ---- Rendering: everything on screen follows the tab, the form, the rooms and the language. ----
 let ready = false;
 let starting: Action | undefined;
+/** The start under way is 邀請朋友's private room (its button says so). */
+let inviteStarting = false;
 let loadFraction = -1;
 let joiningRoom = -1;
 const loadingText = () => loadFraction < 0 ? t('lobby.loading') : t('lobby.loadingPct', { n: (loadFraction * 100).toFixed(0) });
 
+/** The home screen (`quick`) or a page over the blurred city (Create room, Join room); the menu marks the open page. */
 function renderTabs() {
   for (const id of TABS) {
     const on = id === tab;
-    const b = $(`#tab-${id}`);
-    b.setAttribute('aria-selected', String(on));
-    b.tabIndex = on ? 0 : -1;
+    if (id === 'quick') continue;
+    $(`#tab-${id}`).setAttribute('aria-current', on ? 'page' : 'false');
     $(`#view-${id}`).hidden = !on;
   }
   menu.dataset.tab = tab;
+}
+
+/** The profile chip: the callsign and level (the popover holds the callsign field, progress, team and server). */
+function renderProfile() {
+  $('#profile-name').textContent = callsign.value.trim() || t('lobby.fallbackName');
+  $('#profile-lv').textContent = t('prog.level', { n: levelOf(loadProgress().xp).level });
 }
 
 /** The queued action (pressed before the server answered), if any. */
@@ -563,14 +570,25 @@ function renderUnreachable() {
   setText($('#unreachable-retry'), t('connect.retry'));
 }
 
+/** 邀請朋友 under Quick Play: opens a private room to send; its corner counts friends toward the 金拖. */
+function renderInvite() {
+  const btn = $<HTMLButtonElement>('#invite-go');
+  btn.hidden = !online.ok;
+  btn.disabled = !ready || !!starting;
+  btn.querySelector('b')!.textContent = inviteStarting && starting ? t('invite.opening') : t('lobby.invite');
+  btn.title = t('invite.sub');
+  const have = invitedFriends();
+  const goal = $('#invite-goal');
+  goal.textContent = have >= GOLD_INVITES ? t('invite.goalDone') : t('invite.goal', { have, n: GOLD_INVITES });
+  goal.classList.toggle('done', have >= GOLD_INVITES);
+}
+
 /** QUICK PLAY: where it would put you (or that it opens a 6v6 with bots) beside the server chip, and every live room to pick from. */
 function renderQuick() {
   renderDeploy($<HTMLButtonElement>('#quick-go'), 'quick', t('lobby.joining'), online.ok);
+  renderInvite();
   const target = quickTarget();
   renderLine('quick', 'quick', target ? t('quick.joins', { map: mapName(target.mapId), size: sizeLabel(target.size), n: target.humans, max: target.size * 2 }) : t('quick.opens'));
-  $('#quick-rooms-count').innerHTML = roomTotals();
-  // Every room, unfiltered, in Join a Server's order (private ones last); the one Quick Play would join is marked.
-  renderRoomRows($('#quick-rooms'), listed(rooms), `<div class="empty"><p>${esc(t('quick.noRooms'))}</p></div>`, target);
 }
 
 /** START A SERVER: the form, the button and what the room will be. */
@@ -579,24 +597,7 @@ function renderStart() {
   select('ssizes', 'ssize', size);
   select('svis', 'svis', isPublic ? 'public' : 'private');
   select('sbots', 'sbots', bots ? 'on' : 'off');
-  const trigger = $('#map-trigger');
-  const m = maps.find(x => x.id === map);
-  trigger.dataset.theme = m?.theme ?? '';
-  trigger.querySelector('b')!.textContent = mapName(map);
-  const live = liveByMap();
-  const n = live.get(map) ?? 0;
-  trigger.querySelector('small')!.textContent = n ? t('lobby.playing', { n }) : '';
-  // Shortcuts: up to three featured maps the form can play (not the one chosen); the picker has them all.
-  const quick = FEATURED.filter(id => id !== map && mapOk(id)).slice(0, 3);
-  const box = $('#quick-maps');
-  const key = `${quick.join()}|${[...live].join()}|${isZh()}`;
-  if (box.dataset.key !== key) {
-    box.dataset.key = key;
-    box.innerHTML = quick.map(id => {
-      const c = live.get(id) ?? 0;
-      return `<button type="button" class="qmap" data-pick="${id}" data-theme="${maps.find(x => x.id === id)?.theme ?? ''}">${esc(mapName(id))}${c ? `<small>${c}</small>` : ''}</button>`;
-    }).join('');
-  }
+  renderMapGrid();
   renderDeploy($<HTMLButtonElement>('#start-go'), 'start', t('lobby.starting'), online.ok);
   $('#start-summary').textContent = ready ? `${sizeOf(size).label} · ${t(isPublic ? 'start.public' : 'start.private')}` : '';
   renderLine('start', 'start', t(isPublic ? 'start.hintPublic' : 'start.hintPrivate'));
@@ -677,22 +678,6 @@ function renderJoin() {
 /** The backdrop's map: Quick Play's target, the form's map, or the first listed room. */
 const shownMap = () => tab === 'start' ? map : tab === 'join' ? shownRooms()[0]?.mapId ?? map : quickTarget()?.mapId ?? map;
 
-function renderShowcase() {
-  const box = $('#showcase');
-  const target = tab === 'quick' ? quickTarget() : tab === 'join' ? shownRooms()[0] : undefined;
-  const h2 = box.querySelector('h2')!, meta = box.querySelector('.meta')!;
-  if (target) {
-    h2.textContent = mapName(target.mapId);
-    meta.textContent = `${t(tab === 'quick' ? 'tab.quick' : 'lobby.liveRooms')} · ${modeLabel(target.mode)} · ${sizeLabel(target.size)} · ${players(target.humans, target.size * 2)}`;
-  } else if (tab === 'quick') {
-    h2.textContent = `${sizeName('squad')} 6v6`;
-    meta.textContent = `${t('lobby.newRoom')} · [E] ⇄ [S] · ${t('lobby.mapRotation')}`;
-  } else {
-    h2.textContent = mapName(map);
-    const sites = mode === 'sabotage' ? ` · ${plural('lobby.bombSites', loadMap(map).def.sabotage?.sites.length ?? 0)}` : '';
-    meta.textContent = `${t(isPublic ? 'start.public' : 'start.private')} · ${modeLabel(mode)} · ${sizeOf(size).label}${sites}`;
-  }
-}
 
 function renderOthers() {
   select('teams', 'team', team);
@@ -703,20 +688,23 @@ function renderOthers() {
   solo.textContent = !ready ? loadingText() : starting === 'solo' ? t('lobby.starting') : t('lobby.startMatch');
   range.disabled = offlineBusy;
   $('#solo-rules').textContent = rulesText();
+  // Solo's own mode, size and map: the same choices as 開設房間 (one form, remembered for both).
+  select('solo-modes', 'smode', mode);
+  select('solo-sizes', 'ssize', size);
+  if (openPop?.id === 'solo-pop') renderMapGrid($('#solo-maps'));
 }
 
 /** Everything on screen follows the current choices. */
 function refresh() {
   renderBrand();
+  renderProfile();
   renderTabs();
   renderUnreachable();
   renderQuick();
   renderStart();
   renderJoin();
   renderPings();
-  renderShowcase();
   renderOthers();
-  if (openPop?.id === 'map-pop') renderMapGrid();
   showBackdrop();
 }
 
@@ -764,7 +752,7 @@ onClick('smode', v => { mode = v === 'sabotage' ? 'sabotage' : 'elimination'; ch
 onClick('ssize', v => { size = sizeOf(v).id; checkMap('size'); changed(); });
 onClick('svis', v => { isPublic = v !== 'private'; changed(); });
 onClick('sbots', v => { bots = v !== 'off'; changed(); });
-onClick('pick', v => { if (mapOk(v)) map = v; notice(''); changed(); closePop(); });
+onClick('pick', v => { if (mapOk(v)) map = v; notice(''); changed(); });
 onClick('jsize', v => { joinSize = SIZES.some(s => s.id === v) ? v as SizeId : ''; changed(); });
 onClick('jmode', v => { joinMode = v === 'elimination' || v === 'sabotage' ? v : ''; changed(); });
 onClick('clear', () => { joinSize = ''; joinMode = ''; changed(); });
@@ -775,12 +763,14 @@ onClick('coderoom', v => askRoomCode(Number(v)));
 onClick('unreachable-retry', () => lobbyConn.retry());
 $('#unreachable-retry').addEventListener('click', () => { audio.ui(); lobbyConn.retry(); });
 roomCode.addEventListener('input', () => { roomCode.value = cleanCode(roomCode.value); renderJoin(); });
+callsign.addEventListener('input', renderProfile);
 $('#quick-go').addEventListener('click', () => { audio.ui(); run('quick'); });
+$('#invite-go').addEventListener('click', () => { audio.ui(); openInviteRoom(); });
 $('#start-go').addEventListener('click', () => { audio.ui(); run('start'); });
 $('#go-range').addEventListener('click', () => { audio.ui(); run('range'); });
 $('#join-go').addEventListener('click', () => { audio.ui(); run('code'); });
 $('#solo-go').addEventListener('click', () => { audio.ui(); run('solo'); });
-for (const id of ['#rooms', '#quick-rooms']) $(id).addEventListener('dblclick', e => {
+for (const id of ['#rooms']) $(id).addEventListener('dblclick', e => {
   const row = (e.target as HTMLElement).closest<HTMLElement>('.room');
   if (row) { if (row.dataset.private) askRoomCode(Number(row.dataset.room)); else run('room', Number(row.dataset.room)); }
 });
@@ -797,13 +787,15 @@ function askRoomCode(room: number) {
     done: code => { roomCode.value = code; run('code', room); },
   });
 }
-// Tabs: arrow keys move between them (and select), as a tab list does.
+// The menu: up and down arrows move between its items.
 $('#tabs').addEventListener('keydown', e => {
-  const step = e.key === 'ArrowRight' ? 1 : e.key === 'ArrowLeft' ? -1 : 0;
-  if (!step && e.key !== 'Home' && e.key !== 'End') return;
+  const step = e.key === 'ArrowDown' ? 1 : e.key === 'ArrowUp' ? -1 : 0;
+  if (!step) return;
+  const items = Array.from($('#tabs').querySelectorAll<HTMLButtonElement>('button:not(:disabled):not(.server-chip)'));
+  const i = items.indexOf(document.activeElement as HTMLButtonElement);
+  if (i < 0) return;
   e.preventDefault();
-  const i = TABS.indexOf(tab);
-  setTab(e.key === 'Home' ? TABS[0] : e.key === 'End' ? TABS[TABS.length - 1] : TABS[(i + step + TABS.length) % TABS.length], true);
+  items[(i + step + items.length) % items.length].focus();
 });
 
 // ---- Popovers: the map picker and Solo. One open at a time; Esc or a click outside closes. ----
@@ -820,10 +812,11 @@ function placePop() {
   // Below the anchor if it fits, else above; failing both, beside the panel (over the backdrop), else as low as fits.
   const below = a.bottom + 6, above = a.top - 6 - h;
   // (A sideways phone's compact lobby lays the panel's children out without the panel's own box.)
-  const panel = $('.panel').getBoundingClientRect();
-  const side = (panel.width ? panel.right : $('#tabs').getBoundingClientRect().right) + margin;
+  const side = $('#tabs').getBoundingClientRect().right + margin;
   const clampTop = (y: number) => Math.max(margin, Math.min(y, vh - h - margin));
-  const [x, y] = below + h <= vh - margin ? [left, below] : above >= margin ? [left, above]
+  // The menu's popovers (Solo) open beside the menu, over the city, so the menu stays in view.
+  const [x, y] = popAnchor.closest('.ways') && side + w <= vw - margin ? [side, clampTop(a.top - 40)]
+    : below + h <= vh - margin ? [left, below] : above >= margin ? [left, above]
     : side + w <= vw - margin ? [side, clampTop(a.top - 60)] : [left, clampTop(vh)];
   p.style.left = `${x}px`; p.style.top = `${y}px`;
 }
@@ -831,7 +824,6 @@ function showPop(id: string, anchor: HTMLElement) {
   if (openPop?.id === id) { closePop(); return; }
   closePop(false);
   openPop = $(`#${id}`); popAnchor = anchor;
-  if (id === 'map-pop') renderMapGrid();
   openPop.hidden = false;
   anchor.setAttribute('aria-expanded', 'true');
   placePop();
@@ -845,8 +837,8 @@ function closePop(restore = true) {
   if (restore && popAnchor && openPop.contains(document.activeElement)) popAnchor.focus({ preventScroll: true });
   openPop = undefined; popAnchor = undefined;
 }
-$('#map-trigger').addEventListener('click', e => { audio.ui(); showPop('map-pop', e.currentTarget as HTMLElement); });
-$('#open-solo').addEventListener('click', e => { audio.ui(); showPop('solo-pop', e.currentTarget as HTMLElement); });
+$('#open-solo').addEventListener('click', e => { audio.ui(); showPop('solo-pop', e.currentTarget as HTMLElement); renderMapGrid($('#solo-maps')); placePop(); });
+$('#open-profile').addEventListener('click', e => { audio.ui(); showPop('profile-pop', e.currentTarget as HTMLElement); });
 document.addEventListener('pointerdown', e => {
   if (!openPop) return;
   const target = e.target as Node;
@@ -863,8 +855,9 @@ menu.addEventListener('focusout', e => {
 
 /**
  * A map card's picture: the map's screenshot (public/media/maps/<id>.webp, shot by scripts/mapshots.ts),
- * or its top-down plan when there is none or it fails to load. Kept per map, so redraws (live
- * counts arrive often) move the same loaded element instead of loading it again.
+ * or its top-down plan when there is none or it fails to load. Kept per map and per row (開設房間's
+ * and Solo's each hold their own), so redraws (live counts arrive often) move the same loaded element
+ * instead of loading it again.
  */
 const thumbs = new Map<string, HTMLElement>();
 function plan(id: string) {
@@ -873,27 +866,33 @@ function plan(id: string) {
   drawMapThumb(c, id);
   return c;
 }
-function thumb(id: string) {
-  let el = thumbs.get(id);
+function thumb(id: string, row: string) {
+  const key = `${row}:${id}`;
+  let el = thumbs.get(key);
   if (!el) {
     const img = document.createElement('img');
     img.loading = 'lazy'; img.decoding = 'async'; img.width = 480; img.height = 270;
-    img.addEventListener('error', () => { const c = plan(id); thumbs.set(id, c); img.replaceWith(c); }, { once: true });
+    img.addEventListener('error', () => { const c = plan(id); thumbs.set(key, c); img.replaceWith(c); }, { once: true });
     img.src = assetUrl(`media/maps/${id}.webp`);
-    thumbs.set(id, el = img);
+    thumbs.set(key, el = img);
   }
   if (el instanceof HTMLImageElement) el.alt = mapName(id);
   return el;
 }
-/** The map picker: every map the form's size plays, with its picture, its bomb sites in Sabotage and who is playing; maps the mode cannot host are disabled. */
-function renderMapGrid() {
-  const grid = $('#map-grid');
+/**
+ * A row of map picture cards (開設房間's and Solo's): every map the form's size plays, with its picture, its
+ * bomb sites in Sabotage and who is playing; maps the mode cannot host are disabled. Rebuilt only when what it shows changes.
+ */
+function renderMapGrid(grid = $('#map-grid')) {
   const live = liveByMap();
-  $('#map-pop-sub').textContent = `${t('lobby.mapsFor', { size: sizeOf(size).label })} · ${modeName(mode)}`;
   // Under the name: the bomb sites in Sabotage, nothing in Elimination (the line keeps its height either way).
   const sites = (m: (typeof maps)[number]) => mode === 'sabotage' ? t(m.sites > 1 ? 'lobby.sitesAB' : m.sites ? 'lobby.siteA' : 'lobby.noSites') : '';
   const fits = mapsFor(perTeam());
-  grid.innerHTML = maps.filter(m => fits.includes(m.id)).map(m => {
+  const key = `${fits.join()}|${map}|${mode}|${[...live].join()}|${isZh()}`;
+  if (grid.dataset.key === key) return;
+  grid.dataset.key = key;
+  // The featured maps first (Ximending, Xinyi), as Quick Play rotates them.
+  grid.innerHTML = maps.filter(m => fits.includes(m.id)).sort((a, b) => FEATURED.indexOf(a.id) - FEATURED.indexOf(b.id)).map(m => {
     const ok = mapOk(m.id), n = live.get(m.id) ?? 0, note = ok ? sites(m) : t('lobby.noSites');
     return `<button type="button" class="mcard" data-pick="${m.id}" data-theme="${m.theme}" aria-pressed="${m.id === map}"${ok ? '' : ` disabled title="${esc(t('lobby.noSites'))}"`}>
       <span class="thumb" data-thumb="${m.id}"></span>
@@ -902,14 +901,14 @@ function renderMapGrid() {
       <span class="live${n ? ' on' : ''}">${n ? `<i></i>${esc(t('lobby.playing', { n }))}` : '&nbsp;'}</span>
     </button>`;
   }).join('');
-  grid.querySelectorAll<HTMLElement>('[data-thumb]').forEach(el => el.appendChild(thumb(el.dataset.thumb!)));
-  placePop();
+  grid.querySelectorAll<HTMLElement>('[data-thumb]').forEach(el => el.appendChild(thumb(el.dataset.thumb!, grid.id)));
+  grid.querySelector('[aria-pressed="true"]')?.scrollIntoView({ block: 'nearest', inline: 'nearest' });
 }
 // Arrow keys move through the map cards (by rows and columns as laid out).
-$('#map-grid').addEventListener('keydown', e => {
+for (const id of ['#map-grid', '#solo-maps']) $(id).addEventListener('keydown', e => {
   const keys = ['ArrowLeft', 'ArrowRight', 'ArrowUp', 'ArrowDown', 'Home', 'End'];
   if (!keys.includes(e.key)) return;
-  const cards = Array.from($('#map-grid').querySelectorAll<HTMLButtonElement>('.mcard:not(:disabled)'));
+  const cards = Array.from((e.currentTarget as HTMLElement).querySelectorAll<HTMLButtonElement>('.mcard:not(:disabled)'));
   const i = cards.indexOf(document.activeElement as HTMLButtonElement);
   if (i < 0) return;
   e.preventDefault();
@@ -963,7 +962,7 @@ onLang(next => {
   applyI18n(menu);
   $<HTMLAnchorElement>('#privacy-link').href = privacyHref();
   $<HTMLAnchorElement>('#about-link').href = aboutHref();
-  $('#quick-maps').dataset.key = '';
+  $('#map-grid').dataset.key = '';
   if (benchPanel) { benchPanel.remove(); if (benchResult) showBenchResult(benchResult); }
   refresh();
 });
@@ -972,11 +971,14 @@ const openOptions = (tab: SettingsTab, focus?: SettingsFocus) => {
   choicePings.setActive(pingOn && choosable);
   options.show(false, tab, focus);
 };
-for (const id of ['#quick-server', '#rooms-server']) $(id).addEventListener('click', () => openOptions('options', 'server'));
+for (const id of ['#quick-server', '#rooms-server', '#profile-server']) $(id).addEventListener('click', () => openOptions('options', 'server'));
 $('#open-settings').addEventListener('click', () => openOptions('options'));
 // 外觀: the knife skin and Militia character (src/ui/skinpanel.ts), previewed on the lobby's loaded models.
 const skinPanel = new SkinPanel(document.body, () => assets);
 $('#open-skins').addEventListener('click', () => { if (assets) skinPanel.show(); });
+skinPanel.onInvite = openInviteRoom;
+// A friend arriving moves the 金拖 count on the invite button.
+onSkinChange(() => { if (ready) renderInvite(); });
 $('#discord-top').addEventListener('click', () => track('discord_clicked', { where: 'lobby' }));
 $('#open-controls').addEventListener('click', () => openOptions('controls'));
 
@@ -1034,7 +1036,7 @@ function showBackdrop() {
 /** A player still on the made-up callsign is asked for one before playing (automation and `?name=` skip it). */
 const needsCallsign = () => !benchMode && !params.get('autostart') && !params.has('name') && madeUpCallsign(callsign.value);
 
-// ---- 單挑我 (src/game/challenge.ts) ----------------------------------------------------------------
+// ---- 發起單挑 (src/game/challenge.ts) ----------------------------------------------------------------
 
 /**
  * A start that answers a challenge or opens one: `join` the challenger's room; `fallback` a Solo
@@ -1043,16 +1045,23 @@ const needsCallsign = () => !benchMode && !params.get('autostart') && !params.ha
  */
 type Duel = { kind: 'join'; c: Challenge; mapId: string }
   | { kind: 'fallback'; c: Challenge; mapId: string; reason: 'no_room' | 'gone' | 'offline' }
-  | { kind: 'host'; summary: MatchSummary; mapId: string };
+  | { kind: 'host'; summary: MatchSummary; mapId: string }
+  | { kind: 'invite'; mapId: string; mode: Mode }
+  | { kind: 'joinInvite'; ref: string };
 let special: Duel | undefined;
 /** The challenge this page was opened with. */
-const challenge = parseChallenge(location.search);
+const challenge = parseChallenge(location.search, location.pathname);
 if (challenge) noteArrival(challenge.ref);
 if (challenge) track('challenge_link_opened', { ref: challenge.ref ?? '', has_room: !!challenge.room }, { setOnce: { ref_by: challenge.ref ?? '' } });
+/** The private room an invite link (`/r/<code>`) asks this page to join; a challenge link wins if both. */
+const invite = challenge ? undefined : parseInvite(location.pathname, location.search);
+if (invite) noteArrival(invite.ref);
+if (invite) track('invite_link_opened', { ref: invite.ref ?? '' }, { setOnce: { ref_by: invite.ref ?? '' } });
 
 /** 「<name> 向你下戰帖！」 over the lobby: one tap (with the callsign asked for if needed) and you're in. */
 let challengeBanner: HTMLElement | undefined;
 function showChallenge() {
+  if (invite && !challenge && !challengeBanner) return showInvite();
   if (!challenge || challengeBanner) return;
   const c = challenge;
   const el = document.createElement('div');
@@ -1073,7 +1082,40 @@ function renderChallenge() {
   const go = challengeBanner?.querySelector<HTMLButtonElement>('.go');
   if (!go) return;
   go.disabled = !ready;
-  go.textContent = ready ? t('chal.accept') : loadingText();
+  go.textContent = ready ? t(challenge ? 'chal.accept' : 'invite.join') : loadingText();
+}
+
+/** 「朋友邀你一起打！」 over the lobby for an invite link: one tap joins the friend's private room. */
+function showInvite() {
+  if (!invite) return;
+  const el = document.createElement('div');
+  el.className = 'challenge-banner invite-banner';
+  el.innerHTML = '<b></b><p></p><div class="acts"><button type="button" class="go"></button><button type="button" class="later"></button></div>';
+  el.querySelector('b')!.textContent = t('invite.banner');
+  el.querySelector('p')!.textContent = t('invite.bannerBody', { code: invite.room });
+  el.querySelector<HTMLButtonElement>('.go')!.onclick = acceptInvite;
+  el.querySelector<HTMLButtonElement>('.later')!.textContent = t('chal.later');
+  el.querySelector<HTMLButtonElement>('.later')!.onclick = () => { el.remove(); };
+  challengeBanner = el;
+  menu.appendChild(el);
+  renderChallenge();
+}
+
+function acceptInvite() {
+  if (!invite || !ready || starting) return;
+  challengeBanner?.remove();
+  roomCode.value = invite.room;
+  if (!online.ok) { status.textContent = t('invite.gone'); return; }
+  special = { kind: 'joinInvite', ref: invite.ref ?? '' };
+  run('code');
+}
+
+/** 邀請朋友: open a private 6v6 (the form's map and mode where they fit) and show the invite dialog in it. */
+function openInviteRoom() {
+  if (!online.ok || !ready || starting) return;
+  const fits = mapsFor(6), mapId = fits.includes(map) ? map : fits[0];
+  special = { kind: 'invite', mapId, mode: mode === 'sabotage' && !hasSites(mapId) ? 'elimination' : mode };
+  run('start');
 }
 
 function acceptChallenge() {
@@ -1087,6 +1129,20 @@ function acceptChallenge() {
 
 /** In a challenge's match: the end screen names the challenger; a room nobody else is in falls back to the bot double. */
 function startedDuel(duel: Duel, link: GameLink) {
+  if (duel.kind === 'joinInvite') { track('invite_joined', { ref: duel.ref, joined: true }); return; }
+  if (duel.kind === 'invite') {
+    // As for the 1v1 room: the code arrives a moment after the join.
+    const hosting = game;
+    let tries = 0;
+    const open = () => {
+      if (game !== hosting) return;
+      const code = link.roomInfo?.()?.code;
+      if (code) game?.invite(code, t('invite.where', { map: mapName(duel.mapId), size: sizeLabel(6), mode: modeName(duel.mode) }));
+      else if (++tries < 40) setTimeout(open, 250);
+    };
+    open();
+    return;
+  }
   if (duel.kind === 'host') {
     // The room's code arrives a moment after the join (its own subscription): wait for it, so the dialog always opens.
     const hosting = game;
@@ -1115,7 +1171,7 @@ function startedDuel(duel: Duel, link: GameLink) {
   }, 6000);
 }
 
-/** 單挑我 from an end screen: leave the match, open a private 1v1 room on its map and share its link. */
+/** 發起單挑 from an end screen: leave the match, open a private 1v1 room on its map and share its link. */
 function openDuelRoom(summary: MatchSummary) {
   backToLobby('menu', t('chal.opening'), 'end_screen');
   special = { kind: 'host', summary, mapId: challengeMap(summary.mapId, mapsFor(1)) };
@@ -1176,9 +1232,10 @@ async function start(action: Action, retried = false) {
   if (!benchMode) fullscreenForTouch();
   const name = callsign.value.trim().slice(0, 16) || t('lobby.fallbackName');
   const via = modeOf(action);
-  // A 單挑我 start (the challenger's room, their bot double, or our own 1v1 room) leaves the form as it was.
+  // A 發起單挑 start (the challenger's room, their bot double, or our own 1v1 room) leaves the form as it was.
   const duel = special;
   special = undefined;
+  inviteStarting = duel?.kind === 'invite';
   if (!benchMode) {
     store.set('name', name);
     if (!duel) { store.set('mode', via); store.set('team', team); store.set('skill', skill); saveForm(); }
@@ -1202,6 +1259,7 @@ async function start(action: Action, retried = false) {
   const botSkill = Math.max(0.1, Math.min(0.95, Number(skill) || 0.45));
   const rules = offlineRules();
   const how: OnlineEntry = duel?.kind === 'host' ? { kind: 'start', size: 1, mode: 'elimination', mapId: duel.mapId, bots: false, isPublic: false }
+    : duel?.kind === 'invite' ? { kind: 'start', size: 6, mode: duel.mode, mapId: duel.mapId, bots: true, isPublic: false }
     : duel?.kind === 'join' ? { kind: 'code', code: duel.c.room! }
     : action === 'code' ? { kind: 'code', code: cleanCode(roomCode.value) }
     : action === 'room' ? { kind: 'room', room: joiningRoom }
@@ -1224,6 +1282,7 @@ async function start(action: Action, retried = false) {
       void start('solo');
       return;
     }
+    if (duel?.kind === 'joinInvite') track('invite_joined', { ref: duel.ref, joined: false });
     const room = joiningRoom;
     starting = undefined; joiningRoom = -1;
     inMenu = !benchMode; menuMusic();
@@ -1248,15 +1307,15 @@ async function start(action: Action, retried = false) {
   status.textContent = '';
   if (backdrop) { renderer.scene.remove(backdrop.group); backdrop = undefined; backdropMap = undefined; }
   launch(link, linkMap);
-  joined(link, linkMap, playServer, false, duel?.kind === 'host');
+  joined(link, linkMap, playServer, false, duel?.kind === 'host' || duel?.kind === 'invite');
   matchServer = playServer;
   if (duel) startedDuel(duel, link);
   // The map's own files have loaded by now: cache them too on a first visit.
   setTimeout(warmServiceWorker, 15000);
   menu.hidden = true;
   document.body.classList.remove('menu-open');
-  // Our own 1v1 room opens with the share dialog (the pointer stays free for it).
-  if (duel?.kind === 'host') return;
+  // Our own 1v1 room opens with the share dialog, our invite room with the invite dialog (the pointer stays free for them).
+  if (duel?.kind === 'host' || duel?.kind === 'invite') return;
   await game?.input.lock()?.catch?.(() => undefined);
 }
 

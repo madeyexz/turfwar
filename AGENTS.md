@@ -21,7 +21,7 @@ requests.
   in the rebuild; do not assume the original prototype's physics engine remains.
 - **SpacetimeDB 2.10.2** TypeScript module and client SDK for Online matches.
 - **Vitest** for tests.
-- **Vercel** serves the built frontend (static; there are no serverless routes).
+- **Vercel** serves the built frontend (static), plus link previews for shared links only: `middleware.ts` (crawlers on `/c` and `/r/<code>`) and `api/og.ts` (the preview picture).
 - GLB characters/weapons and animations from CC0 Quaternius packs (store guns from the
   CC0 Ultimate Gun Pack via `tools/import-guns.ts`); CC0 Poly Haven
   textures; Rajdhani font under OFL. Keep license files and attribution intact.

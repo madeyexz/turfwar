@@ -1,13 +1,15 @@
 import { describe, expect, it } from 'vitest';
-import { challengeMap, challengeUrl, cleanName, parseChallenge, shareRef } from './challenge';
+import { challengeMap, challengeUrl, cleanName, inviteUrl, parseChallenge, parseInvite, shareRef } from './challenge';
 import { withUtm } from '../utm';
 import { bragLine, MatchTally, nationalDay, type MatchSummary } from './matchstats';
 
-describe('單挑我 links', () => {
+describe('發起單挑 links', () => {
   it('round-trips a challenge with a room', () => {
     const url = challengeUrl('https://turfwar.ianhsiao.me', { name: 'Raven', room: 'ABCD', map: 'taipei', beat: 23, ref: 'k3x9q2ab' });
-    expect(url).toBe('https://turfwar.ianhsiao.me/?c=1&room=ABCD&ch=Raven&map=taipei&beat=23&ref=k3x9q2ab');
-    expect(parseChallenge(new URL(url).search)).toEqual({ name: 'Raven', room: 'ABCD', map: 'taipei', beat: 23, ref: 'k3x9q2ab' });
+    expect(url).toBe('https://turfwar.ianhsiao.me/c?room=ABCD&ch=Raven&map=taipei&beat=23&ref=k3x9q2ab');
+    expect(parseChallenge(new URL(url).search, new URL(url).pathname)).toEqual({ name: 'Raven', room: 'ABCD', map: 'taipei', beat: 23, ref: 'k3x9q2ab' });
+    // Links shared before /c still open.
+    expect(parseChallenge('?c=1&room=ABCD&ch=Raven&map=taipei&beat=23&ref=k3x9q2ab')).toEqual({ name: 'Raven', room: 'ABCD', map: 'taipei', beat: 23, ref: 'k3x9q2ab' });
   });
 
   it('tags a link with where it came from and still opens the same room', () => {
@@ -15,8 +17,8 @@ describe('單挑我 links', () => {
     const plain = challengeUrl('https://turfwar.ianhsiao.me', c);
     const tagged = challengeUrl('https://turfwar.ianhsiao.me', c, { source: 'duel', medium: 'share_card', campaign: 'room' });
     expect(tagged).toBe(`${plain}&utm_source=duel&utm_medium=share_card&utm_campaign=room`);
-    expect(parseChallenge(new URL(tagged).search)).toEqual(parseChallenge(new URL(plain).search));
-    expect(parseChallenge(new URL(tagged).search)?.room).toBe('ABCD');
+    expect(parseChallenge(new URL(tagged).search, '/c')).toEqual(parseChallenge(new URL(plain).search, '/c'));
+    expect(parseChallenge(new URL(tagged).search, '/c')?.room).toBe('ABCD');
   });
 
   it('tags without clobbering what the link already carries', () => {
@@ -31,7 +33,7 @@ describe('單挑我 links', () => {
 
   it('keeps Chinese callsigns and encodes them', () => {
     const url = challengeUrl('https://x.test', { name: '阿明 小隊' });
-    expect(parseChallenge(new URL(url).search)).toEqual({ name: '阿明 小隊' });
+    expect(parseChallenge(new URL(url).search, new URL(url).pathname)).toEqual({ name: '阿明 小隊' });
   });
 
   it('is not a challenge without ?c or without a usable name', () => {
@@ -47,6 +49,17 @@ describe('單挑我 links', () => {
     expect(parseChallenge('?c=1&ch=Ace&beat=5000')?.beat).toBeUndefined();
     expect(cleanName('  a   b  ')).toBe('a b');
     expect(cleanName('x'.repeat(40))).toHaveLength(16);
+  });
+
+  it('round-trips an invite link to a private room, and reads nothing else as one', () => {
+    const url = new URL(inviteUrl('https://turfwar.ianhsiao.me', 'kxpb', 'k3x9q2ab'));
+    expect(url.href).toBe('https://turfwar.ianhsiao.me/r/KXPB?ref=k3x9q2ab');
+    expect(parseInvite(url.pathname, url.search)).toEqual({ room: 'KXPB', ref: 'k3x9q2ab' });
+    expect(inviteUrl('https://x.test', 'KXPB', 'NOPE!')).toBe('https://x.test/r/KXPB');
+    expect(parseInvite('/r/KXPB/', '?ref=../x')).toEqual({ room: 'KXPB' });
+    expect(parseInvite('/r/KXP', '')).toBeUndefined();
+    expect(parseInvite('/r/KXPBX', '')).toBeUndefined();
+    expect(parseInvite('/', '?room=KXPB')).toBeUndefined();
   });
 
   it('plays on the challenge map only where a 1v1 fits', () => {

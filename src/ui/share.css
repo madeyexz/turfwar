@@ -58,3 +58,79 @@
 .challenge-banner button { min-height: 44px; padding: 0 16px; font: inherit; font-weight: 800; letter-spacing: 0.14em; text-transform: uppercase; cursor: pointer; }
 .challenge-banner .go { color: #fff; background: var(--crimson); border: 0; font-size: 17px; }
 .challenge-banner .later { min-height: 32px; color: var(--muted); background: none; border: 1px solid var(--line); font-size: 12px; }
+
+/* ---------- The share dialog's message and app buttons (sharepanel.ts) ---------- */
+.share-panel .sp-say { display: flex; flex-direction: column; gap: 6px; font-size: 12px; font-weight: 700; letter-spacing: 0.16em; color: var(--muted); }
+.share-panel .sp-say textarea {
+  min-height: 74px; padding: 9px 10px; resize: vertical; font: inherit; font-size: 15px; font-weight: 600; letter-spacing: 0.02em; line-height: 1.5;
+  color: var(--ink); background: rgba(0, 0, 0, 0.3); border: 1px solid var(--line); user-select: text; -webkit-user-select: text;
+}
+.share-panel .sp-apps { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+.share-panel .sp-apps button { min-height: 46px; padding: 0 8px; font-size: 14px; letter-spacing: 0.08em; text-transform: none; }
+.share-panel .sp-apps .sp-line { grid-column: 1 / -1; min-height: 54px; font-size: 18px; color: #fff; background: #06c755; border-color: #06c755; }
+.share-panel .sp-apps .sp-threads { color: #fff; background: #101010; border-color: #444; }
+.share-panel .sp-acts .sp-duel { min-height: 42px; font-size: 14px; letter-spacing: 0.08em; text-transform: none; color: #ffd0ca; background: rgba(255, 85, 68, 0.1); border-color: var(--crimson); }
+:where(.view-short) .share-panel .sp-say textarea { height: 48px; min-height: 0; resize: none; font-size: 13px; line-height: 1.35; }
+:where(.view-short) .share-panel .sp-acts .sp-duel { min-height: 34px; font-size: 13px; }
+:where(.view-short) .share-panel .sp-acts .sp-url { height: 30px; }
+:where(.view-short) .share-panel .sp-acts .sp-hold { display: none; }
+:where(.view-short) .share-panel .sp-apps button { min-height: 38px; }
+:where(.view-short) .share-panel .sp-apps .sp-line { min-height: 42px; font-size: 15px; }
+
+/* ---------- 邀請朋友: the invite dialog over our private room (invitepanel.ts) ---------- */
+.invite-panel .sp-box { width: min(900px, calc(100 * var(--vw) - 24px)); overflow: auto; }
+.invite-panel header { align-items: baseline; flex-wrap: wrap; }
+.invite-panel header b { flex: none; }
+.invite-panel .ip-code { font-size: 32px; font-weight: 800; letter-spacing: 0.3em; color: #fff; }
+.invite-panel .ip-where { flex: 1; min-width: 0; font-size: 14px; font-weight: 600; color: var(--muted); }
+.invite-panel .ip-cols { display: grid; grid-template-columns: 1fr 1.25fr; gap: 18px; }
+.invite-panel h4 { margin: 0 0 8px; font-size: 12px; letter-spacing: 0.2em; color: var(--muted); }
+.invite-panel .ip-row { display: flex; align-items: center; gap: 10px; height: 40px; margin-bottom: 6px; padding: 0 12px; font-weight: 700; border: 1px solid var(--line); background: rgba(255, 255, 255, 0.04); }
+.invite-panel .ip-row i { flex: none; width: 8px; height: 8px; border-radius: 50%; background: var(--cash); }
+.invite-panel .ip-row.me { border-color: var(--accent); }
+.invite-panel .ip-row em { margin-left: auto; font-size: 12px; font-style: normal; letter-spacing: 0.14em; color: var(--accent); }
+.invite-panel .ip-row.wait { font-weight: 600; color: var(--muted); border-style: dashed; }
+.invite-panel .ip-row.wait i { background: none; border: 1px solid var(--muted); }
+.invite-panel .ip-hint { margin: 8px 0 0; font-size: 13px; line-height: 1.5; color: var(--muted); }
+.invite-panel .ip-apps { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+.invite-panel .ip-apps button { min-height: 52px; font: inherit; font-size: 16px; font-weight: 800; letter-spacing: 0.08em; color: var(--ink); background: rgba(255, 255, 255, 0.06); border: 1px solid var(--line); cursor: pointer; }
+.invite-panel .ip-apps .line { grid-column: 1 / -1; min-height: 60px; font-size: 20px; color: #fff; background: #06c755; border-color: #06c755; }
+.invite-panel .ip-apps .threads { color: #fff; background: #101010; border-color: #444; }
+.invite-panel .ip-link { display: flex; align-items: center; gap: 12px; margin-top: 12px; }
+.invite-panel .ip-link svg { flex: none; width: 96px; height: 96px; }
+.invite-panel .ip-link div { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 6px; font-size: 13px; color: var(--muted); }
+.invite-panel .ip-link input { height: 36px; padding: 0 10px; font: inherit; font-size: 14px; color: var(--ink); background: rgba(0, 0, 0, 0.3); border: 1px solid var(--line); user-select: text; -webkit-user-select: text; }
+.invite-panel .ip-play { min-height: 54px; font: inherit; font-size: 19px; font-weight: 800; letter-spacing: 0.2em; color: #031013; background: var(--accent); border: 0; cursor: pointer; }
+/* Phones: the send buttons first, under the thumb; the people list after. */
+:where(.view-narrow) .invite-panel .ip-cols { grid-template-columns: 1fr; }
+:where(.view-narrow) .invite-panel .ip-send { order: -1; }
+:where(.view-short) .invite-panel .sp-box { padding: 8px 12px 10px; gap: 6px; }
+:where(.view-short) .invite-panel .ip-code { font-size: 24px; }
+:where(.view-short) .invite-panel .ip-row { height: 30px; margin-bottom: 4px; }
+:where(.view-short) .invite-panel .ip-hint, :where(.view-short) .invite-panel .ip-link svg { display: none; }
+:where(.view-short) .invite-panel .ip-apps button { min-height: 40px; font-size: 14px; }
+:where(.view-short) .invite-panel .ip-apps .line { min-height: 44px; font-size: 16px; }
+:where(.view-short) .invite-panel .ip-play { min-height: 42px; font-size: 16px; }
+
+/* ---- In the lobby's look (menu.css): white on dark glass, no neon ---- */
+.share-panel { --accent: #ffffff; --line: rgba(255, 255, 255, 0.14); background: rgba(5, 7, 9, 0.55); backdrop-filter: blur(12px); -webkit-backdrop-filter: blur(12px); }
+.share-panel .sp-box { background: rgba(10, 12, 14, 0.94); border-color: rgba(255, 255, 255, 0.14); box-shadow: 0 24px 60px rgba(0, 0, 0, 0.5); }
+.share-panel header b { color: #fff; letter-spacing: 0.12em; }
+.share-panel .sp-acts .sp-go { color: #0a0b0c; }
+.share-panel .sp-acts .sp-duel { color: #fff; background: rgba(255, 255, 255, 0.04); border-color: var(--line); }
+/* The invite dialog: the room's code large and centred, the people and the ways to send it under it. */
+.invite-panel header { position: relative; flex-direction: column; align-items: center; gap: 2px; padding: 4px 0 12px; border-bottom: 1px solid var(--line); }
+.invite-panel header b { font-size: 13px; letter-spacing: 0.24em; color: var(--muted); }
+.invite-panel .ip-code { font-size: clamp(40px, 5vw, 64px); line-height: 1.05; letter-spacing: 0.32em; padding-left: 0.32em; }
+.invite-panel .ip-where { flex: none; font-size: 15px; }
+.invite-panel header .sp-close { position: absolute; top: 0; right: 0; }
+.invite-panel .ip-row.me { border-color: rgba(255, 255, 255, 0.5); }
+.invite-panel .ip-row em { padding: 1px 6px; border: 1px solid var(--line); color: var(--muted); }
+.invite-panel .ip-apps .threads { background: rgba(255, 255, 255, 0.04); border-color: var(--line); }
+.invite-panel .ip-play { color: #0a0b0c; background: #fff; }
+.invite-panel .ip-play::after { content: ' ›'; }
+:where(.view-short) .invite-panel header { flex-direction: row; justify-content: center; gap: 14px; padding: 0 44px 6px; }
+:where(.view-short) .invite-panel .ip-code { font-size: 30px; }
+.challenge-banner { background: rgba(10, 12, 14, 0.95); border: 1px solid rgba(255, 255, 255, 0.18); box-shadow: 0 16px 50px rgba(0, 0, 0, 0.5); }
+.challenge-banner .go { color: #0a0b0c; background: #fff; }
+.challenge-banner .later { border-color: rgba(255, 255, 255, 0.14); }

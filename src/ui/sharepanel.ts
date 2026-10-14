@@ -1,15 +1,20 @@
 /**
- * The share dialog: the card (sharecard.ts) as a preview, Share (the phone's share sheet, with the
- * picture), Save image and Copy link. It sits over the match or the end screen and keeps keys and
+ * The share dialog: the card (sharecard.ts) as a preview; the message to send (prefilled with the
+ * match's brag line, editable); LINE and Threads (their share pages, sendto.ts), the phone's share
+ * sheet with the picture (IG Stories), Save image and Copy link; and, for a card without a room,
+ * 改開 1v1 房間 (the end screen's 約朋友單挑). It sits over the match or the end screen and keeps keys and
  * clicks away from the game while open.
  */
 import type { MatchSummary } from '../game/matchstats';
-import { bragText, cardBlob, copyText, download, drawShareCard, shareLink, shareNative } from './sharecard';
+import { bragText, cardBlob, copyText, download, drawShareCard, mapLabel, shareLink, shareNative } from './sharecard';
 import { shareActs, shareFlow, type ShareMethod } from './sharechoice';
-import { t } from './i18n';
+import { escapeHtml, t } from './i18n';
+import { sendTo, type SendApp } from './sendto';
 import './share.css';
 import type { KnifeSkin } from '../../shared/skins';
 
+/** How a card went out: a share-dialog way (sharechoice.ts) or an app's share page. */
+export type SentMethod = ShareMethod | SendApp;
 export type { ShareMethod };
 
 export interface ShareOptions {
@@ -22,8 +27,10 @@ export interface ShareOptions {
   room?: boolean;
   /** A line over the card (e.g. the 1v1 room that is open). */
   note?: string;
-  /** Opened, and each time the player shares (analytics). */
-  onShared?: (method: ShareMethod) => void;
+  /** Each time the player shares (analytics). */
+  onShared?: (method: SentMethod) => void;
+  /** 改開 1v1 房間: open a private 1v1 room and share its link instead (cards without a room). */
+  onDuel?: () => void;
   onClose?: () => void;
 }
 
@@ -43,14 +50,20 @@ export async function openSharePanel(o: ShareOptions) {
   root.setAttribute('aria-label', t('share.title'));
   const acts = shareActs({ files: canShareFiles(), link: canShareLink() }, !!o.room);
   // The main button is the first; a room's is worded as sending the challenge.
-  const label = (a: ShareMethod) => (a === 'native' || a === 'link' ? t(o.room ? 'chal.send' : 'share.native') : t(a === 'download' ? 'share.download' : 'share.copy'));
+  const label = (a: ShareMethod) => (a === 'native' ? t('share.picture') : a === 'link' ? t('share.native') : t(a === 'download' ? 'share.download' : 'share.copy'));
   root.innerHTML = `<div class="sp-box">
     <header><b>${t('share.title')}</b><button type="button" class="sp-close" aria-label="${t('share.close')}">×</button></header>
     ${o.note ? `<p class="sp-note"></p>` : ''}
     <div class="sp-body">
       <div class="sp-card"><span>${t('share.making')}</span></div>
       <div class="sp-acts">
-        ${acts.map((a, i) => `<button type="button" class="${i ? '' : 'sp-go'}" data-act="${a}">${label(a)}</button>`).join('\n        ')}
+        <label class="sp-say">${escapeHtml(t('share.say'))}<textarea rows="3" maxlength="300"></textarea></label>
+        <div class="sp-apps">
+          <button type="button" class="sp-line" data-act="line">${escapeHtml(t('invite.line'))}</button>
+          <button type="button" class="sp-threads" data-act="threads">${escapeHtml(t('invite.threads'))}</button>
+          ${acts.map(a => `<button type="button" data-act="${a}">${label(a)}</button>`).join('\n          ')}
+        </div>
+        ${!o.room && o.onDuel ? `<button type="button" class="sp-duel" data-act="duel">${escapeHtml(t('share.duelRoom'))}</button>` : ''}
         <input class="sp-url" readonly aria-label="${t('share.copy')}">
         <p class="sp-hold">${t('share.hold')}</p>
       </div>
@@ -82,20 +95,27 @@ export async function openSharePanel(o: ShareOptions) {
   }
   const file = () => new File([blob!], `turfwar-${o.summary.name.replace(/[^\p{L}\p{N}]+/gu, '') || 'card'}.png`, { type: 'image/png' });
   const text = bragText(o.summary, o.knife);
+  const say = root.querySelector('textarea')!;
+  const words = { brag: text, map: mapLabel(o.summary.mapId), kills: o.summary.kills };
+  say.value = t(o.room ? 'share.sayRoom' : 'share.text', words);
+  // The words typed here stay the player's (the dialog keeps keys from the game).
+  const message = () => say.value.trim() || t('share.text', words);
   const copyButton = () => root.querySelector<HTMLButtonElement>('[data-act="copy"]')!;
   const copied = () => {
     const b = copyButton();
     b.textContent = t('share.copied'); setTimeout(() => { b.textContent = label('copy'); }, 2000);
   };
   root.querySelector('.sp-acts')!.addEventListener('click', async e => {
-    const act = (e.target as HTMLElement).closest<HTMLElement>('[data-act]')?.dataset.act as ShareMethod | undefined;
+    const act = (e.target as HTMLElement).closest<HTMLElement>('[data-act]')?.dataset.act as SentMethod | 'duel' | undefined;
     if (!act) return;
     if (act === 'download') { if (blob) { download(blob, file().name); o.onShared?.('download'); } return; }
+    if (act === 'line' || act === 'threads') { sendTo(act, `${message()}\n${o.url}`); o.onShared?.(act); return; }
+    if (act === 'duel') { close(); o.onDuel?.(); return; }
     // The share sheet needs the tap's own gesture: nothing is awaited before it.
     const first = act === 'copy' ? 'copy' : act === 'link' || !blob ? 'link' : 'native';
     const done = await shareFlow(first, {
-      shareFile: () => shareNative(file(), t('share.text', { brag: text }), o.url),
-      shareLink: () => shareLink(t('share.text', { brag: text }), o.url),
+      shareFile: () => shareNative(file(), message(), o.url),
+      shareLink: () => shareLink(message(), o.url),
       copy: () => copyText(o.url),
     });
     if (done === 'cancel') return;
