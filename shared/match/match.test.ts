@@ -12,7 +12,7 @@ import {
 } from './sim';
 import { ATTACKERS, ELIMINATION, PRACTICE_CONFIG, SABOTAGE, type MatchConfig, type MatchEvent, type MatchState, type Soldier, type Team } from './state';
 import { MOVE_SLACK, killSoldier, sideOf, smokeBlocks, type SimContext } from './combat';
-import { ROOKIE_EASE, updateBot } from './bots';
+import { updateBot } from './bots';
 import { CASH } from './economy';
 import { decodeFrame, encodeFrame } from './frame';
 
@@ -775,19 +775,26 @@ describe('new players (first rounds are winnable)', () => {
     expect(addSoldier(state, ctx, { name: 'Bot', team: 1, bot: true }).alive).toBe(false);
   });
 
-  it('bots take longer to react to a rookie', () => {
-    const reactionTo = (rookie: boolean) => {
+  it('bots take longer to react to a rookie, less with every round they have played', () => {
+    const reactionTo = (rounds?: number, roundsHere = 0) => {
       const { state, ctx } = setup({ ...ELIMINATION, warmup: 0 }, 7);
       const bot = addSoldier(state, ctx, { name: 'Bot', team: 0, bot: true });
-      const foe = addSoldier(state, ctx, { name: 'New', team: 1, bot: false, rookie });
+      const foe = addSoldier(state, ctx, { name: 'New', team: 1, bot: false, rounds });
       goLive(state, ctx);
+      foe.roundsHere = roundsHere;
       place(bot, -6, 22, ctx); place(foe, 6, 22, ctx); bot.yaw = -Math.PI / 2;
       bot.brain!.target = -1; bot.brain!.think = 0;
       updateBot(state, ctx, bot, 1 / TICK_RATE);
       expect(bot.brain!.target).toBe(foe.id);
       return bot.brain!.reaction;
     };
-    expect(reactionTo(true) - reactionTo(false)).toBeCloseTo(ROOKIE_EASE.reaction, 5);
+    const veteran = reactionTo();
+    expect(reactionTo(0) - veteran).toBeCloseTo(0.6, 5);
+    expect(reactionTo(5) - veteran).toBeCloseTo(0.3, 5);
+    // Rounds in this room count on top of the career rounds at joining: 4 + 3 of 10.
+    expect(reactionTo(4, 3) - veteran).toBeCloseTo(0.18, 5);
+    expect(reactionTo(10) - veteran).toBeCloseTo(0, 5);
+    expect(reactionTo(4, 8) - veteran).toBeCloseTo(0, 5);
   });
 });
 

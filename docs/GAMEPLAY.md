@@ -327,8 +327,10 @@ name, and either way the end screen says who won and offers their own card.
 ### New players, progress and staying in the match
 
 - **Rookies.** A player with fewer than 10 rounds played (online: the server's career stats; Solo: this
-  browser's progress) is a rookie: bots react about 0.35 s later to them and aim looser at them
-  (`ROOKIE_EASE` in `shared/match/bots.ts`), so a first fight is winnable.
+  browser's progress) is a rookie: bots react later to them (0.6 s on their first round, 0.06 s less for
+  every round played, counting rounds in the current match) and aim looser at them (`ROOKIE_EASE` and
+  `rookieEase` in `shared/match/bots.ts`), so a first fight is winnable. Online bots play at skill 0.3
+  (`ONLINE_CONFIG`; Solo 0.45, Practice 0.4).
 - **Touch aim assist** (Settings → Controls → Aim assist, on by default; touch screens only): the crosshair
   slows over an enemy you can see and, while you fire, drifts onto them at most 20°/s; the cones narrow
   with the scope's zoom (`src/game/aimassist.ts`).
