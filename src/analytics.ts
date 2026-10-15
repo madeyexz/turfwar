@@ -53,8 +53,9 @@ export interface Events {
   match_joined: { online: boolean; room?: string; map: string; mode: Mode; size: string; team: 'swat' | 'militia'; server_choice?: ServerId; device: DeviceKind; rejoin?: boolean; touch?: boolean; upright?: boolean; in_app?: string; aim_assist?: boolean; private?: boolean; hosted?: boolean; wait_ms?: number };
   /** Online, also the match's connection quality (shared/netstats.ts): ping percentiles over the newest ≤600 samples, totals for the rest. */
   /** `sideways`: the page was turned at some point (an upright phone); `knife_kills` (the 藍白拖) and `bobas_drunk` (珍奶) over the stay. */
+  /** `seconds`: the stay with the tab in view, `hidden_s`: with it hidden; `kills` and `deaths` over the whole stay, every match in it. */
   /** How it was drawn (MatchRender): the graphics card the browser names, the preset, the pixel ratio drawn at when leaving and its adaptive scale. */
-  match_left: { seconds: number; kills: number; deaths: number; rounds_played: number; reason: Reason; exit?: Exit; sideways?: boolean; knife_kills?: number; bobas_drunk?: number; fps?: number; fps_low?: number; frames?: number } & Partial<MatchRender> & Partial<Omit<NetFields, 'seconds'>>;
+  match_left: { seconds: number; hidden_s?: number; kills: number; deaths: number; rounds_played: number; reason: Reason; exit?: Exit; sideways?: boolean; knife_kills?: number; bobas_drunk?: number; fps?: number; fps_low?: number; frames?: number } & Partial<MatchRender> & Partial<Omit<NetFields, 'seconds'>>;
   round_ended: { won: boolean; mode: Mode; map: string };
   /**
    * The 30-second performance check (?bench, src/game/bench.ts) finished: the only event a ?bench page sends. Frame times in ms,
@@ -261,10 +262,31 @@ export function benchFinished(r: BenchResult) {
 
 // ---- Match sessions: match_joined → round_ended… → match_left (once) ----------------------
 
-let match: { start: number; rounds: number; sideways: boolean; knifeKills: number; bobas: number } | undefined;
+/** When a stay began and how long its tab was hidden (ms; `hiddenSince` set while hidden now). */
+export interface StayClock { start: number; hiddenMs: number; hiddenSince?: number }
+
+/**
+ * A stay's seconds in view and hidden at `now`. A tab left open in the background keeps its stay going
+ * (for days, at times) without anyone playing, so hidden time is kept apart from the play time.
+ */
+export function stayTimes(c: StayClock, now: number): { seconds: number; hidden: number } {
+  const hiddenMs = c.hiddenMs + (c.hiddenSince === undefined ? 0 : now - c.hiddenSince);
+  return { seconds: Math.round(Math.max(0, now - c.start - hiddenMs) / 1000), hidden: Math.round(hiddenMs / 1000) };
+}
+
+/** Mark the stay's clock hidden or in view at `now`. */
+export function stayVisibility(c: StayClock, hidden: boolean, now: number) {
+  if (hidden && c.hiddenSince === undefined) c.hiddenSince = now;
+  else if (!hidden && c.hiddenSince !== undefined) { c.hiddenMs += now - c.hiddenSince; c.hiddenSince = undefined; }
+}
+
+let match: StayClock & { rounds: number; kills: number; deaths: number; sideways: boolean; knifeKills: number; bobas: number } | undefined;
+const pageHidden = () => typeof document !== 'undefined' && document.visibilityState === 'hidden';
+if (typeof document !== 'undefined') document.addEventListener('visibilitychange', () => { if (match) stayVisibility(match, pageHidden(), performance.now()); });
 
 export function matchJoined(props: Events['match_joined']) {
-  match = { start: performance.now(), rounds: 0, sideways: false, knifeKills: 0, bobas: 0 };
+  const now = performance.now();
+  match = { start: now, hiddenMs: 0, ...(pageHidden() ? { hiddenSince: now } : {}), rounds: 0, kills: 0, deaths: 0, sideways: false, knifeKills: 0, bobas: 0 };
   track('match_joined', props, { setOnce: { first_map: props.map } });
 }
 
@@ -282,18 +304,23 @@ export function roundEnded(props: Events['round_ended']) {
 export interface MatchRender { gpu: string; quality: string; pixel_ratio: number; dpr_scale: number }
 
 /** The match is over for us (menu, a dropped connection, or the tab closing); sent once. `net`: online connection quality; `exit`: exactly how. */
-export function matchLeft(reason: Reason, score: { kills: number; deaths: number }, net?: Omit<NetFields, 'seconds'>, exit?: Exit, frames?: { fps: number; low: number; frames: number }, render?: MatchRender) {
+export function matchLeft(reason: Reason, net?: Omit<NetFields, 'seconds'>, exit?: Exit, frames?: { fps: number; low: number; frames: number }, render?: MatchRender) {
   if (!match) return;
-  const seconds = Math.round((performance.now() - match.start) / 1000);
-  const { rounds, sideways, knifeKills, bobas } = match;
+  const { seconds, hidden } = stayTimes(match, performance.now());
+  const { rounds, kills, deaths, sideways, knifeKills, bobas } = match;
   match = undefined;
-  track('match_left', { seconds, kills: score.kills, deaths: score.deaths, rounds_played: rounds, reason, ...(exit ? { exit } : {}), sideways, knife_kills: knifeKills, bobas_drunk: bobas, ...(frames?.frames ? { fps: frames.fps, fps_low: frames.low, frames: frames.frames } : {}), ...render, ...net }, { beacon: reason === 'close' });
+  track('match_left', { seconds, ...(hidden ? { hidden_s: hidden } : {}), kills, deaths, rounds_played: rounds, reason, ...(exit ? { exit } : {}), sideways, knife_kills: knifeKills, bobas_drunk: bobas, ...(frames?.frames ? { fps: frames.fps, fps_low: frames.low, frames: frames.frames } : {}), ...render, ...net }, { beacon: reason === 'close' });
 }
 
-/** Counted into this stay's match_left: a knife (藍白拖) kill, a 珍奶 drunk, the page turned sideways. */
-export function matchNote(what: 'knife_kill' | 'boba' | 'sideways') {
+/**
+ * Counted into this stay's match_left: a kill or death (summed here because each new match zeroes the
+ * scoreboard), a knife (藍白拖) kill, a 珍奶 drunk, the page turned sideways.
+ */
+export function matchNote(what: 'kill' | 'death' | 'knife_kill' | 'boba' | 'sideways') {
   if (!match) return;
-  if (what === 'knife_kill') match.knifeKills++;
+  if (what === 'kill') match.kills++;
+  else if (what === 'death') match.deaths++;
+  else if (what === 'knife_kill') match.knifeKills++;
   else if (what === 'boba') match.bobas++;
   else match.sideways = true;
 }

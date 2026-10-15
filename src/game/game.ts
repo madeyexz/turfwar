@@ -1265,6 +1265,8 @@ export class Game {
         const killer = find(e.killer), victim = find(e.victim);
         this.tally.kill(e, myId);
         this.hud.killfeed(killer, victim, e.weapon, e.head, e.killer === myId || e.victim === myId);
+        if (e.killer === myId && e.victim !== myId) matchNote('kill');
+        if (e.victim === myId) matchNote('death');
         if (e.killer === myId && e.victim !== myId && e.weapon === 'knife') matchNote('knife_kill');
         if (e.killer === myId && e.victim !== myId) { noteKill(this.link.mode === 'online'); this.hud.hit('kill'); this.audio.hitmarker(e.head, true); this.progress({ type: 'kill', head: e.head }); }
         if (e.victim === myId) this.hud.announce(t('hud.youDied'), killer && killer.id !== myId ? `${killer.name} · ${weaponLabel(e.weapon, e.weapon === 'knife' ? skinOf(killer).knife : undefined)}` : '', 'var(--crimson)');
