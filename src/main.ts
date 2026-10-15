@@ -13,7 +13,7 @@ import type { MatchSummary } from './game/matchstats';
 import './ui/share.css';
 import { Audio } from './audio';
 import { Game } from './game/game';
-import { settings } from './game/settings';
+import { setChatDisabled, settings } from './game/settings';
 import { loadLayout, matches } from './game/keybinds';
 import type { GameLink } from './game/link';
 import { OfflineLink } from './game/offline';
@@ -1597,7 +1597,8 @@ const startAction = (): Action => benchMode ? 'solo' : params.get('room') ? 'cod
 /** CrazyGames, once the lobby is ready: loading done, their settings, the player's name, and invites. */
 function crazyReady() {
   crazyLoadingStop();
-  onCrazySettings(s => audio.setMuted(s.muteAudio));
+  // Their sound and chat switches win over ours while they are on.
+  onCrazySettings(s => { audio.setMuted(s.muteAudio); setChatDisabled(s.disableChat); });
   // Friends know each other by their CrazyGames names, so a logged-in player plays under theirs.
   void crazyUser().then(user => {
     const name = user && cleanCallsign(user.username);
