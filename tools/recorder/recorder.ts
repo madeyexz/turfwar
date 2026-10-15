@@ -38,12 +38,14 @@ const bucket = r2(process.env.REC_BUCKET ?? 'turfwar-rec', 'R2_REC_VM');
 const log = (msg: string, extra: Record<string, unknown> = {}) => console.log(JSON.stringify({ at: new Date().toISOString(), msg, ...extra }));
 
 // ---- Module and map hashes ----------------------------------------------------------------------
+/** sha256 of the module's schema (`/v1/database/<db>/schema?version=9`): it changes whenever tables, reducers or views do. */
 let moduleHash = '';
 async function refreshModuleHash() {
   try {
-    const res = await fetch(`${URI.replace(/^ws/, 'http')}/v1/database/${DB}`);
-    const info = await res.json() as { initial_program?: string };
-    if (info.initial_program && info.initial_program !== moduleHash) { moduleHash = info.initial_program; log('module', { moduleHash }); }
+    const res = await fetch(`${URI.replace(/^ws/, 'http')}/v1/database/${DB}/schema?version=9`);
+    if (!res.ok) throw new Error(`schema ${res.status}`);
+    const h = `schema:${sha256Hex(await res.text())}`;
+    if (h !== moduleHash) { moduleHash = h; log('module', { moduleHash }); }
   } catch (e) { log('module hash failed', { error: String(e) }); }
 }
 const mapHashes = new Map<string, string>();

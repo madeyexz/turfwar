@@ -57,7 +57,7 @@ Bucket **`turfwar-rec`** (internal set; Taipei under `v1/`, `lawbreaker-dev` und
 | `v1/stats/clean-hours.json`, `v1/stats/recount.json` | processor, recount | the admin summary |
 
 **Segment** (`.tfr`): "TFR1", header JSON (versions: `recFormat`, `frameVersion`, recorder git SHA,
-module hash, map id and hash, match config, mode, size, room kind, random match id, round, ticks
+module schema hash, map id and hash, match config, mode, size, room kind, random match id, round, ticks
 expected/received, gap ratio, ticks/s, truncated, the soldiers with team, bot, pid, device, region
 flag), then records: the packed frame exactly as the server sent it (30/s), filtered events (kill,
 damage, round, bomb, …; never chat), roster changes without names, and tick gaps.
