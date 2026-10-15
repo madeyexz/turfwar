@@ -190,7 +190,11 @@ function connect() {
       db.matchEvent.onInsert((_c, e) => segmenter.event(e.room, e.json));
       ctx.subscriptionBuilder()
         .onApplied(() => { refresh(); log('subscribed', { rooms: rooms.size }); })
-        .onError(ctx => log('subscription error', { error: String((ctx as { event?: unknown }).event ?? 'unknown') }))
+        .onError(ec => {
+          // An older module (no recorder_subjects yet), or a revoked admin: try again from a fresh connection.
+          log('subscription error; reconnecting in 60 s', { error: String((ec as { event?: unknown }).event ?? 'unknown') });
+          setTimeout(() => { try { ctx.disconnect(); } catch { /* already closed */ } }, 60_000);
+        })
         .subscribe(['SELECT * FROM match', 'SELECT * FROM private_room', 'SELECT * FROM roster', 'SELECT * FROM frame', 'SELECT * FROM match_event', 'SELECT * FROM recorder_subjects']);
     })
     .onConnectError((_c, e) => { log('connect failed', { error: String(e) }); retry(); })
