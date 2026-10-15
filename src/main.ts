@@ -1387,7 +1387,8 @@ function reportRoom(link: GameLink, server: ServerId | undefined) {
   const report = () => {
     if (game !== playing) return;
     const info = link.roomInfo?.();
-    if (info?.code) crazyRoom(`${server ?? 'tw'}-${info.room}`, true, { r: info.code });
+    // The room's index is reused once it closes, so its code is part of the id.
+    if (info?.code) crazyRoom(`${server ?? 'tw'}-${info.room}-${info.code}`, true, { r: info.code });
     else if (info && ++tries >= 8) crazyRoom(`${server ?? 'tw'}-${info.room}`, false, {});
     else setTimeout(report, 250);
   };

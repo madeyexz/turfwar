@@ -590,6 +590,8 @@
   border: 1px solid var(--line); background: var(--glass); color: var(--ink); font-size: 13px; line-height: 1.4;
 }
 #menu .privacy-notice p { margin: 0 0 10px; }
+/* An invite or challenge banner takes the top of the lobby: the note waits until it is gone. */
+#menu:has(.challenge-banner) .privacy-notice { display: none; }
 #menu .privacy-notice .acts { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
 #menu .privacy-notice a { color: #7ff6ff; font-weight: 700; }
 #menu .privacy-notice button {
