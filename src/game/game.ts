@@ -8,7 +8,7 @@ import { ATTACKERS, vehicleTarget, type MatchEvent, type MatchState, type Soldie
 import { VEHICLES, obstaclesOf, raycastVehicle, seatPosition, speedOf, type Vehicle } from '../../shared/vehicles';
 import { seatFor } from '../../shared/match/vehicles';
 import { BOBA, WEAPONS, pelletCone, pelletDirs, weaponStats, type HitZone, type WeaponId } from '../../shared/weapons';
-import { CASH, CRATE_REACH, canBuyWeapons, inBase } from '../../shared/match/economy';
+import { CASH, CRATE_REACH, betweenRounds, canBuyWeapons, inBase } from '../../shared/match/economy';
 import { seatOf, shieldedIds, sideOf } from '../../shared/match/combat';
 import { BOMB_REACH, canSwitchTeam, modeOf, onSite } from '../../shared/match/sim';
 import type { Assets } from '../assets';
@@ -46,7 +46,7 @@ import { challengeUrl, inviteUrl, shareRef } from './challenge';
 import { MatchTally, type MatchSummary } from './matchstats';
 import { openSharePanel } from '../ui/sharepanel';
 import { mySkin } from './skins';
-import { skinOf } from '../../shared/skins';
+import { SWING, skinOf } from '../../shared/skins';
 import { TouchControls, type TouchInfo } from '../ui/touchcontrols';
 import { holdAimMode } from './holdfire';
 import { onTouchLayout, touchActive, touchAimAssist, type TouchContext } from './touchlayout';
@@ -63,6 +63,10 @@ type Sample = { x: number; y: number; z: number; vx: number; vy: number; vz: num
 const LOD_NEAR = 30, LOD_MID = 70;
 /** Remote gunfire farther than this is not drawn or heard. */
 const SHOT_FX_RANGE = 110, SHOT_AUDIO_RANGE = 85;
+/** Least time (ms) between hit markers for one opponent burning in this player's fire. */
+const BURN_MARK_EVERY = 500;
+/** How hard a soldier struck by a knife skin flinches, against 1 for a bullet. */
+const MELEE_FLINCH = 2.4;
 const frustum = new THREE.Frustum(), projScreen = new THREE.Matrix4(), lodSphere = new THREE.Sphere(new THREE.Vector3(), 1.3);
 
 /** `peek`: auto-peek lean as rendered (-1..1), easing toward `peekSide` (shared/peek.ts). */
@@ -125,6 +129,14 @@ export class Game {
   private lastReport = new Map<number, number>();
   /** Online: hit markers already shown for predicted hits, so the server's confirmations don't repeat them. */
   private predictedHits: { at: number; target: number }[] = [];
+  /** When each opponent last showed a burn hit marker (performance.now()). */
+  private burnMarked = new Map<number, number>();
+  /** The field-of-view punch (degrees) added to the camera last frame. */
+  private fovKick = 0;
+  /** Presentation held back to a moment in game time (a swing's hit, shown when it lands on screen). */
+  private later: { at: number; run: () => void }[] = [];
+  /** Opponents this player's swing has hit but not yet landed on screen, and whether the hit killed them. */
+  private meleePending = new Map<number, boolean>();
   private deathCam = new THREE.Vector3();
   /** Dead: the soldier whose eyes we watch (the killer first; right click cycles). */
   private spectating = -1;
@@ -591,6 +603,11 @@ export class Game {
     this.bodies.update(dt, renderTime, this.time);
     this.crates.update(this.time);
     this.sites.update(this.time, state.bomb, sabotage);
+    if (this.later.length) {
+      const due = this.later.filter(l => l.at <= this.time);
+      this.later = this.later.filter(l => l.at > this.time);
+      for (const l of due) l.run();
+    }
     this.effects.update(dt);
     this.level.update(this.time);
 
@@ -620,7 +637,11 @@ export class Game {
       const w = this.player.weapon;
       const base = settings.fov;
       const targetFov = base + (this.player.aimFov - base) * this.player.ads + (this.player.sprinting ? 6 : 0) + (this.player.m.slideTime > 0 ? 4 : 0);
+      // A landed blow zooms the view in for a moment, on top of the eased field of view.
+      cam.fov += this.fovKick;
       cam.fov += (targetFov - cam.fov) * Math.min(1, dt * 14);
+      this.fovKick = -this.player.fovPunch;
+      cam.fov += this.fovKick;
       cam.updateProjectionMatrix();
       // Aiming: open sights keep the weapon small (more of the world visible); scopes bring the lens up large.
       this.renderer.viewCamera.fov = 58 - this.player.ads * (isMagnified(w) ? 12 : -4);
@@ -667,13 +688,14 @@ export class Game {
       this.hudTimer = 0.1;
       // Dead: the HUD shows the watched soldier's gun and magazine.
       this.hud.tick(!this.player.alive && this.watched.alive ? this.watched : this.player, state, me);
-      const free = !!state.config.freeBuy;
-      const buyLeft = free ? -1 : Math.max(0, state.config.buyTime - state.roundClock);
+      const free = !!state.config.freeBuy, between = betweenRounds(state);
+      // Between rounds the store has no countdown: it stays open anywhere until the next round begins.
+      const buyLeft = free ? -1 : between ? 0 : Math.max(0, state.config.buyTime - state.roundClock);
       this.buymenu.update(me, buyWindow, buyLeft, free);
-      const showBuy = !!me && buyWindow && (free || !me.alive || inBase(me, this.map.def, side)) && !this.buymenu.open;
+      const showBuy = !!me && buyWindow && (free || between || !me.alive || inBase(me, this.map.def, side)) && !this.buymenu.open;
       // On a phone there is no key to press: the cart button pulses and the hint says to tap it.
       const touch = this.input.touch;
-      this.hud.buyHint(showBuy ? (free ? (touch ? t('hud.storeTap') : t('hud.store', { key: kbd('store') })) : (touch ? t('hud.storeTapLeft', { n: Math.ceil(buyLeft) }) : t('hud.storeLeft', { key: kbd('store'), n: Math.ceil(buyLeft) }))) : undefined);
+      this.hud.buyHint(showBuy ? (free || between ? (touch ? t('hud.storeTap') : t('hud.store', { key: kbd('store') })) : (touch ? t('hud.storeTapLeft', { n: Math.ceil(buyLeft) }) : t('hud.storeLeft', { key: kbd('store'), n: Math.ceil(buyLeft) }))) : undefined);
       this.hud.prompt(this.promptText(state, me, site, myJob));
       this.hud.vehicle(this.vehicleInfo(state));
       const bomb = state.bomb;
@@ -1154,10 +1176,13 @@ export class Game {
     const target = [...counts.entries()].sort((a, b) => b[1] - a[1])[0]?.[0] ?? -1;
     const claimed = traces.find(t => t.target === target) ?? traces[0];
     this.link.fire({ weapon: this.player.slot, origin, dir, target: claimed.target, zone: claimed.zone, point: claimed.point });
-    if (melee) this.audio.knife(target !== -1);
+    if (melee) {
+      this.audio.knife(target !== -1);
+      if (target !== -1) this.meleeLanded(claimed, target, rider !== undefined);
+      return;
+    }
     traces.forEach((t, i) => {
       const end = new THREE.Vector3(t.point.x, t.point.y, t.point.z);
-      if (melee) { if (t.target !== -1) this.effects.hitSpark(end, false); return; }
       const tracer = !w.suppressed && (w.pellets > 1 ? i % 3 === 0 : Math.random() < (w.auto ? 0.5 : 1));
       if (tracer) this.effects.tracer(muzzle, end, 0xffe2a0, w.class === 'sniper' ? 1.8 : 1, w.velocity);
       if (t.target !== -1) this.effects.hitSpark(end, false);
@@ -1170,6 +1195,34 @@ export class Game {
       this.audio.hitmarker(head, false);
       this.predictedHits.push({ at: performance.now(), target });
     }
+  }
+
+  /**
+   * This player's swing connected: the server's damage event is absorbed, and when the swing lands
+   * on screen (SWING contact) the blow shows: hit-stop, a camera jolt and zoom, the skin's burst and
+   * sound word, the target's flinch and the hit marker. (The sound times itself: Audio.knife.)
+   */
+  private meleeLanded(t: { point: Vec3; zone: HitZone | '' }, target: number, chase: boolean) {
+    const skin = mySkin().knife, head = t.zone === 'head';
+    this.predictedHits.push({ at: performance.now() + SWING[skin].contact * 1000, target });
+    this.meleePending.set(target, false);
+    this.later.push({ at: this.time + SWING[skin].contact, run: () => {
+      // The server's kill can beat the swing to the target: it is shown here, as the blow lands.
+      const kill = !!this.meleePending.get(target);
+      this.meleePending.delete(target);
+      const cam = this.renderer.camera.position;
+      this.effects.meleeHit(new THREE.Vector3(t.point.x, t.point.y, t.point.z), cam, skin, !chase, kill);
+      if (!chase) {
+        this.viewmodel.impact(kill ? 1.4 : 1);
+        this.player.punchVel -= 45;
+        this.player.punchYaw += (skin === 'knife' ? Math.random() - 0.5 : 0.6) * 0.03;
+        this.player.shake = Math.min(3, this.player.shake + 0.5);
+        this.player.fovPunch = Math.max(this.player.fovPunch, skin === 'broom' ? 5 : 4);
+      }
+      this.remotes.get(target)?.view.hit(Math.random() < 0.5, MELEE_FLINCH);
+      this.hud.hit(kill ? 'kill' : head ? 'head' : 'body', true);
+      this.audio.hitmarker(head, kill);
+    } });
   }
 
   /** One ray against the world and enemy soldiers as rendered. */
@@ -1224,7 +1277,17 @@ export class Game {
           const vm = this.viewmodelFor(this.watched.team), now = performance.now();
           if (now - (this.lastReport.get(e.shooter) ?? -1e9) >= 40) vm.fire();
         }
-        if (e.weapon === 'knife') { r?.view.shoot(); if (shooterDistance < 12) this.audio.knife(e.hit > 0, undefined, undefined, shooter && skinOf(shooter).knife); break; }
+        if (e.weapon === 'knife') {
+          r?.view.shoot();
+          const skin = shooter ? skinOf(shooter).knife : 'slipper';
+          if (shooterDistance < 12) this.audio.knife(e.hit > 0, undefined, undefined, skin);
+          // Watching someone else's blow land: its burst where it struck, as their swing meets it.
+          if (e.hit > 0 && shooterDistance < SHOT_FX_RANGE / 3) {
+            const at = new THREE.Vector3(e.to.x, e.to.y, e.to.z);
+            this.later.push({ at: this.time + SWING[skin].contact, run: () => this.effects.meleeHit(at, this.renderer.camera.position, skin) });
+          }
+          break;
+        }
         const suppressed = !!shooter && weaponStats(e.weapon, shooter.attachments[e.weapon]).suppressed;
         // A shotgun blast arrives as one event per pellet: one report and muzzle flash per trigger pull.
         const now = performance.now(), pellet = now - (this.lastReport.get(e.shooter) ?? -1e9) < 40;
@@ -1246,16 +1309,22 @@ export class Game {
           this.predictedHits = this.predictedHits.filter(h => now - h.at < 1000);
           const shown = e.zone === 'blast' || e.zone === 'burn' ? -1 : this.predictedHits.findIndex(h => h.target === e.target);
           if (shown >= 0) this.predictedHits.splice(shown, 1);
-          // Burning goes on four times a second: no hit marker for each lick of the flames.
-          else if (e.zone !== 'burn') { this.hud.hit(e.zone === 'head' ? 'head' : 'body'); this.audio.hitmarker(e.zone === 'head', false); }
+          else if (e.zone === 'burn') {
+            // Burning goes on four times a second: an orange marker and a soft tick on the first lick, then at most every half second.
+            if (now - (this.burnMarked.get(e.target) ?? -1e9) >= BURN_MARK_EVERY) { this.burnMarked.set(e.target, now); this.hud.hit('burn'); this.audio.hitmarker(false, false, true); }
+          } else { this.hud.hit(e.zone === 'head' ? 'head' : 'body'); this.audio.hitmarker(e.zone === 'head', false); }
         }
+        // A knife skin's strike (the attacker holds the knife slot) lands harder than a bullet.
+        const melee = (e.zone === 'head' || e.zone === 'body' || e.zone === 'limb') && find(e.attacker)?.weapon === 2;
         if (e.target === myId) {
           const angle = Math.atan2(-(e.x - this.player.m.x), -(e.z - this.player.m.z));
           if (e.zone !== 'fall' && e.zone !== 'burn') this.hud.damage(angle);
           this.audio.damage(false);
           this.player.shake = Math.min(3, this.player.shake + e.amount * (e.zone === 'burn' ? 0.02 : 0.05));
           this.player.punchVel -= e.amount * 0.08;
-        } else this.remotes.get(e.target)?.view.hit(Math.random() < 0.5);
+          // Slapped: the head snaps aside, away from the blow.
+          if (melee) { this.player.punchYaw += Math.sign(Math.sin(angle - this.player.yaw) || 1) * 0.05; this.player.fovPunch = Math.max(this.player.fovPunch, 3); }
+        } else this.remotes.get(e.target)?.view.hit(Math.random() < 0.5, melee ? MELEE_FLINCH : 1);
         break;
       }
       case 'kill': {
@@ -1263,7 +1332,13 @@ export class Game {
         this.tally.kill(e, myId);
         this.hud.killfeed(killer, victim, e.weapon, e.head, e.killer === myId || e.victim === myId);
         if (e.killer === myId && e.victim !== myId && e.weapon === 'knife') matchNote('knife_kill');
-        if (e.killer === myId && e.victim !== myId) { noteKill(this.link.mode === 'online'); this.hud.hit('kill'); this.audio.hitmarker(e.head, true); this.progress({ type: 'kill', head: e.head }); }
+        if (e.killer === myId && e.victim !== myId) {
+          noteKill(this.link.mode === 'online');
+          // A swing still on its way to the victim shows the kill marker itself, when it lands.
+          if (e.weapon === 'knife' && this.meleePending.has(e.victim)) this.meleePending.set(e.victim, true);
+          else { this.hud.hit('kill'); this.audio.hitmarker(e.head, true); }
+          this.progress({ type: 'kill', head: e.head });
+        }
         if (e.victim === myId) this.hud.announce(t('hud.youDied'), killer && killer.id !== myId ? `${killer.name} · ${weaponLabel(e.weapon, e.weapon === 'knife' ? skinOf(killer).knife : undefined)}` : '', 'var(--crimson)');
         break;
       }
@@ -1343,7 +1418,7 @@ export class Game {
         // A hit names its victim: the thrower is whoever threw the slipper that struck there.
         const owner = e.action === 'hit' ? this.bodies.throwerNear(e.x, e.z) : e.id;
         const thrower = owner === undefined ? undefined : find(owner), knife = thrower && skinOf(thrower).knife;
-        if (e.action === 'hit') { this.audio.slipper('hit', this.listener(), at, knife); this.effects.hitSpark(at, false); break; }
+        if (e.action === 'hit') { this.audio.slipper('hit', this.listener(), at, knife); this.effects.meleeHit(at, this.renderer.camera.position, knife || 'slipper', false, true); break; }
         if (e.id !== myId) { this.remotes.get(e.id)?.view.shoot(); this.audio.slipper('throw', this.listener(), at, knife); }
         break;
       }

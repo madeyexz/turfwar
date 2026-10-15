@@ -15,7 +15,7 @@ export const CASH = {
   matchBonus: 1000, max: 16000,
   kill: 500, grenadeKill: 900, knifeKill: 600, firstKill: 300, lastEnemy: 300,
   multiKill: 300, multiKillWindow: 4, streakEvery: 5, streak: 100,
-  assist: 200, assistWindow: 3, trade: 100, firstBlood: 300, headshot: 100, headshotCap: 3,
+  assist: 200, assistWindow: 3, trade: 100, firstBlood: 300, headshot: 100, headshotCap: 3, burn: 100,
   roundWin: 500, survivor: 200, lastStanding: 300, lossBonus: 500, lossBonusAfter: 3,
   loyalty: 1000, loyaltyEvery: 5, bomb: 500, crate: 300,
 };
@@ -25,7 +25,7 @@ export type BuyItem = WeaponId | 'grenade' | 'highExplosive' | 'smoke' | 'moloto
 /** Distance (m) within which an ammo crate can be used. */
 export const CRATE_REACH = 2.4;
 
-export const newRoundStats = (): RoundStats => ({ kills: 0, streak: 0, lastKillAt: -99, chain: 0, lastVictim: -1, hits: [], headshots: {}, damage: 0, crate: false });
+export const newRoundStats = (): RoundStats => ({ kills: 0, streak: 0, lastKillAt: -99, chain: 0, lastVictim: -1, hits: [], headshots: {}, burned: [], damage: 0, crate: false });
 
 /** Effective stats of the weapon in a slot, with its attachments. */
 export function statsOf(s: Soldier, slot = s.weapon): WeaponDef {
@@ -61,9 +61,12 @@ export function inBase(s: Soldier, map: MapDef, side: Team) {
   return map.spawns.some(p => p.team === side && Math.hypot(p.x - s.m.x, p.z - s.m.z) < 16);
 }
 
-/** Weapons: own base during buy time (dead players may shop for next round). Attachments: anywhere. */
+/** Between rounds (the round is over, the next not yet begun) the store sells weapons anywhere, to everyone. */
+export const betweenRounds = (state: MatchState) => state.phase === 'live' && state.roundPhase === 'over';
+
+/** Weapons: own base during buy time (dead players may shop for next round), or anywhere once the round is over. Attachments: anywhere. */
 export function canBuyWeapons(state: MatchState, map: MapDef, s: Soldier, side: Team) {
-  if (state.config.freeBuy) return true;
+  if (state.config.freeBuy || betweenRounds(state)) return true;
   if (state.roundClock > state.config.buyTime) return false;
   return !s.alive || inBase(s, map, side);
 }

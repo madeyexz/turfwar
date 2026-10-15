@@ -121,6 +121,8 @@ export interface RoundStats {
   hits: { by: number; at: number }[];
   /** Headshot bullets already paid per opponent (capped at 3). */
   headshots: Record<number, number>;
+  /** Opponents this soldier's fires already paid for burning (once each a round). Missing in rows saved before it. */
+  burned?: number[];
   damage: number;
   /** Ammo crate already paid for this round. */
   crate: boolean;

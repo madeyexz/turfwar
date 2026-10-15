@@ -14,7 +14,7 @@ import { ATTACKERS, ELIMINATION, PRACTICE_CONFIG, SABOTAGE, type MatchConfig, ty
 import { MOVE_SLACK, feetOf, killSoldier, sideOf, smokeBlocks, type SimContext } from './combat';
 import { firePatches, inFire } from './fire';
 import { updateBot } from './bots';
-import { CASH } from './economy';
+import { CASH, newRoundStats } from './economy';
 import { decodeFrame, encodeFrame } from './frame';
 
 function setup(config: MatchConfig = ELIMINATION, seed = 1, mapId = 'cinder') {
@@ -483,6 +483,27 @@ describe('store and cash', () => {
     expect(buyItem(state, ctx, a.id, 'mp5').ok).toBe(false);
   });
 
+  it('sells weapons anywhere, to the living and the dead, once the round is over, until the next round\'s buy time ends', () => {
+    const { state, ctx, a, b } = duel();
+    a.money = 5000; b.money = 5000;
+    tick(state, ctx, state.config.buyTime);
+    // Mid-map, late in the round: closed.
+    expect(buyItem(state, ctx, a.id, 'm4a1').ok).toBe(false);
+    killSoldier(state, ctx, b, a, 'mp5', false);
+    tick(state, ctx, 1 / TICK_RATE);
+    expect(state.roundPhase).toBe('over');
+    expect(buyItem(state, ctx, a.id, 'm4a1').ok).toBe(true);
+    expect(buyItem(state, ctx, b.id, 'm1014').ok).toBe(true);
+    // The next round deploys them with what they bought; past its buy time, mid-map is closed again.
+    tick(state, ctx, state.config.roundOverTime + 0.1);
+    expect(state.roundPhase).toBe('freeze');
+    expect(a.weapons[0]).toBe('m4a1');
+    expect(b.weapons[0]).toBe('m1014');
+    tick(state, ctx, state.config.buyTime);
+    place(a, -6, 22, ctx);
+    expect(buyItem(state, ctx, a.id, 'mp5').ok).toBe(false);
+  });
+
   it('attachments fit by weapon, replace their category and change stats', () => {
     const { state, a } = duel();
     a.money = 10000;
@@ -719,6 +740,28 @@ describe('燃燒彈 molotov', () => {
     expect(b.alive).toBe(false);
     expect(events.find(e => e.type === 'kill')).toMatchObject({ killer: a.id, victim: b.id, weapon: 'molotov' });
     expect(a.money).toBeGreaterThanOrEqual(cash + CASH.kill);
+  });
+
+  it('pays the thrower once per opponent per round for burning them, even when the fire does not kill', () => {
+    const { state, ctx, a, b, events } = duel();
+    const mate = addSoldier(state, ctx, { name: 'C', team: 0, bot: false });
+    place(b, 6, 22, ctx); place(mate, 6.5, 22.5, ctx);
+    state.bodies.push(body('fire', b.m.x, b.m.y, b.m.z, { owner: a.id, team: a.team, timer: 1 }));
+    const cash = a.money;
+    tick(state, ctx, 1.2);
+    expect(b.alive).toBe(true);
+    expect(b.health).toBeLessThan(100);
+    // Several licks, one teammate in it too: one award, for the opponent.
+    expect(events.filter(e => e.type === 'reward' && e.reason === 'Burned')).toEqual([{ type: 'reward', id: a.id, amount: CASH.burn, reason: 'Burned' }]);
+    expect(a.money).toBe(cash + CASH.burn + CASH.firstBlood);
+    // A second fire the same round pays nothing more for the same opponent; a new round pays again.
+    state.bodies.push(body('fire', b.m.x, b.m.y, b.m.z, { owner: a.id, team: a.team, timer: 0.5 }));
+    tick(state, ctx, 0.6);
+    expect(events.filter(e => e.type === 'reward' && e.reason === 'Burned')).toHaveLength(1);
+    a.round = newRoundStats();
+    state.bodies.push(body('fire', b.m.x, b.m.y, b.m.z, { owner: a.id, team: a.team, timer: 0.3 }));
+    tick(state, ctx, 0.4);
+    expect(events.filter(e => e.type === 'reward' && e.reason === 'Burned')).toHaveLength(2);
   });
 
   it('fizzles when its fuse runs out in the air', () => {

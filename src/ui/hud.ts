@@ -473,11 +473,14 @@ export class Hud {
 
   // ---- Events ---------------------------------------------------------------------------------
 
-  hit(kind: 'body' | 'head' | 'kill') {
+  /** The hit marker; `melee` makes it a bigger one that punches in (a knife skin's blow landing). */
+  hit(kind: 'body' | 'head' | 'kill' | 'burn', melee = false) {
     const e = this.el.hit;
-    e.classList.remove('head', 'kill');
+    e.classList.remove('head', 'kill', 'burn', 'melee');
     e.classList.add('on');
     if (kind !== 'body') e.classList.add(kind);
+    // Restart the punch-in animation even when the last one is still running.
+    if (melee) { void e.offsetWidth; e.classList.add('melee'); }
     this.hitTimer = kind === 'kill' ? 0.4 : 0.15;
   }
 

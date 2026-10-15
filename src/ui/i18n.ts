@@ -328,7 +328,7 @@ const en = {
   'store.previewOff': 'Preview unavailable', 'store.previewHint': 'Drag to rotate · scroll to zoom',
 
   // ---- Cash awards (server reasons) ----
-  'reward.Kill': 'Kill', 'reward.First kill': 'First kill', 'reward.First blood': 'First blood', 'reward.Headshot': 'Headshot',
+  'reward.Kill': 'Kill', 'reward.First kill': 'First kill', 'reward.First blood': 'First blood', 'reward.Headshot': 'Headshot', 'reward.Burned': 'Burned',
   'reward.Assist': 'Assist', 'reward.Last enemy': 'Last enemy', 'reward.Trade': 'Trade', 'reward.Bomb armed': 'Bomb armed',
   'reward.Bomb disarmed': 'Bomb disarmed', 'reward.Round won': 'Round won', 'reward.Survived': 'Survived',
   'reward.Last man standing': 'Last man standing', 'reward.Loss bonus': 'Loss bonus', 'reward.Loyalty': 'Loyalty',
@@ -678,7 +678,7 @@ const zhTW: Record<Key, string> = {
   'store.slotOn': '{slot}槽 · 裝於 {weapon}', 'store.primaryKey': '主武器 · 按鍵 {key}', 'store.secondaryKey': '副武器 · 按鍵 {key}',
   'store.previewOff': '無法預覽', 'store.previewHint': '拖曳旋轉 · 滾輪縮放',
 
-  'reward.Kill': '擊殺', 'reward.First kill': '首殺', 'reward.First blood': '首先命中', 'reward.Headshot': '爆頭',
+  'reward.Kill': '擊殺', 'reward.First kill': '首殺', 'reward.First blood': '首先命中', 'reward.Headshot': '爆頭', 'reward.Burned': '燒到人',
   'reward.Assist': '助攻', 'reward.Last enemy': '最後一名敵人', 'reward.Trade': '換命', 'reward.Bomb armed': '安裝炸彈',
   'reward.Bomb disarmed': '拆除炸彈', 'reward.Round won': '回合勝利', 'reward.Survived': '存活',
   'reward.Last man standing': '最後倖存', 'reward.Loss bonus': '連敗補助', 'reward.Loyalty': '忠誠獎勵',

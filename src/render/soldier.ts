@@ -269,6 +269,7 @@ export class SoldierView {
   private wasAlive = true;
   private flinch = 0;
   private flinchDir = 1;
+  private flinchStrength = 1;
   private legYaw = 0;
   private recoil = 0;
   private stab = 0;
@@ -380,7 +381,11 @@ export class SoldierView {
     for (const l of sides) solveLimb(l.thigh, l.calf, l.foot, l.target, l.thigh.getWorldPosition(v1).addScaledVector(forward, 1));
   }
 
-  hit(fromLeft: boolean) { this.flinch = 1; this.flinchDir = fromLeft ? 1 : -1; }
+  /** Struck: the torso twists away (`strength` 1 for a bullet; a knife skin's blow also rocks it back and snaps the head). */
+  hit(fromLeft: boolean, strength = 1) {
+    if (this.flinch <= 0.3 || strength >= this.flinchStrength) { this.flinchStrength = strength; this.flinchDir = fromLeft ? 1 : -1; }
+    this.flinch = 1;
+  }
   /** A shot (no flash when suppressed), or a knife stab. */
   shoot() {
     if (this.currentGun === 'knife') { this.stab = 1; return; }
@@ -536,7 +541,15 @@ export class SoldierView {
     rotateWorld(spine2, bend, pitch * 0.35);
     rotateWorld(spine3, bend, pitch * 0.35);
     this.flinch = Math.max(0, this.flinch - dt * 5);
-    if (this.flinch > 0) rotateWorld(spine3, up, this.flinch * 0.25 * this.flinchDir);
+    if (this.flinch > 0) {
+      rotateWorld(spine3, up, this.flinch * 0.25 * this.flinchDir * Math.min(this.flinchStrength, 1.6));
+      const heavy = this.flinchStrength - 1;
+      if (heavy > 0) {
+        // Rocked back from the waist, the head snapped round with the blow.
+        rotateWorld(spine2, right, this.flinch * 0.22 * heavy);
+        rotateWorld(this.bones.get('Head')!, up, this.flinch * 0.35 * heavy * this.flinchDir);
+      }
+    }
     rotateWorld(this.bones.get('neck_01')!, bend, pitch * 0.3);
 
     // ---- Weapon placement ----

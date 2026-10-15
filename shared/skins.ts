@@ -14,6 +14,17 @@ export const KNIFE_SKINS = ['slipper', 'gold', 'broom', 'knife'] as const;
 export type KnifeSkin = (typeof KNIFE_SKINS)[number];
 /** Skins that swing, sound and fly as a slipper. */
 export const isSlipper = (k: KnifeSkin) => k === 'slipper' || k === 'gold';
+/**
+ * How each skin's swing plays on screen: `time` (s) for the whole swing, `contact` (s after the
+ * click) when it lands. The strike itself resolves at the click; the client holds back the hit's
+ * sound, sparks, hit-stop and marker until `contact` so they meet the swing (src/render/viewmodel.ts).
+ */
+export const SWING: Record<KnifeSkin, { time: number; contact: number }> = {
+  knife: { time: 0.34, contact: 0.13 },
+  slipper: { time: 0.28, contact: 0.11 },
+  gold: { time: 0.28, contact: 0.11 },
+  broom: { time: 0.36, contact: 0.19 },
+};
 /** Friends who must arrive through a player's link and enter a room before the 金拖 is theirs. */
 export const GOLD_INVITES = 3;
 /** `skin` as someone with `invited` friends who played may wear it: a locked 金拖 falls back to the 藍白拖. */
