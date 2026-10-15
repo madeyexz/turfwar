@@ -27,7 +27,8 @@ Two names, one game: 角頭械鬥 (Traditional Chinese) and Turf War: Taipei (En
 - [Guide (English)](https://turfwar.ianhsiao.me/en/guide) · [攻略 (繁體中文)](https://turfwar.ianhsiao.me/guide): every weapon's price, damage, magazine, reload and movement, the attachments, the cash awards, items, what to buy first and Sabotage tips
 - [Maps (English)](https://turfwar.ianhsiao.me/en/maps) · [地圖 (繁體中文)](https://turfwar.ianhsiao.me/maps): the 13 maps with room sizes, modes, bomb sites, vehicles and landmarks
 - [Turf War: Taipei and BeGone (English)](https://turfwar.ianhsiao.me/en/begone) · [角頭械鬥與 BeGone (繁體中文)](https://turfwar.ianhsiao.me/begone): what this unofficial homage keeps from nPlay's BeGone and what is new
-- [Privacy](https://turfwar.ianhsiao.me/privacy): no accounts; what is stored in the browser, what the server keeps, and the anonymous analytics
+- [Privacy](https://turfwar.ianhsiao.me/privacy): no accounts; what is stored in the browser, what the server keeps, the anonymous analytics, and match recording (de-identified match data may be licensed to companies that build AI; a Settings switch leaves a player out)
+- [Terms](https://turfwar.ianhsiao.me/terms): pressing Play accepts them; players aged 13 and older; Taiwan law
 - [Fuller text for AI assistants](https://turfwar.ianhsiao.me/llms-full.txt): modes, economy, weapons, maps, controls and credits in one file
 
 ## Source and documentation

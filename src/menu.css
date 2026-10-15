@@ -304,6 +304,10 @@
 #menu .code-go:disabled { color: var(--muted); background: transparent; cursor: not-allowed; }
 #menu .unavailable { margin: 0; color: var(--amber); font-size: 13px; line-height: 1.3; font-weight: 600; }
 #menu .unavailable:empty { display: none; }
+/* Clickwrap: pressing Play accepts the Terms and the Privacy Policy (src/game/consent.ts). */
+#menu .clickwrap { margin: 2px 0 0; max-width: 30em; color: var(--muted); font-size: 12px; line-height: 1.35; }
+#menu .clickwrap a { color: inherit; text-decoration: underline; text-underline-offset: 2px; }
+#menu .clickwrap a:hover { color: var(--ink); }
 
 /* Status line (connecting, errors) under the panel, only when there is something to say. */
 #menu .status { margin: -4px 0 0; padding: 8px 12px; border: 1px solid var(--line); border-radius: 3px; background: rgba(4, 9, 12, 0.85); font-size: 13px; color: var(--ink); letter-spacing: 0.06em; font-weight: 600; }

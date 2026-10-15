@@ -12,5 +12,5 @@
     "noEmit": true,
     "types": ["vite/client", "node"]
   },
-  "include": ["src", "shared", "api", "vite.config.ts"]
+  "include": ["src", "shared", "api", "deploy/cloudflare/*/src", "vite.config.ts"]
 }

@@ -48,8 +48,10 @@ export interface DecodedFrame extends FrameClock {
 
 export type FrameVehicle = Pick<Vehicle, 'id' | 'kind' | 'x' | 'y' | 'z' | 'vx' | 'vy' | 'vz' | 'yaw' | 'pitch' | 'roll' | 'rotor' | 'grounded' | 'health' | 'driver' | 'passenger' | 'wrecked'>;
 
-const HEADER = 1 + 4 + 4 * 2 + 1 + 2 + 1 + 1 + 1 + 2 + 2 + 2 + 2 + 1;
-const POSE = 23, BODY = 16, SHOT = 16, VEHICLE = 27;
+/** Byte sizes of the header and of each record (shared/rec/ edits frames in place with them). */
+export const FRAME_HEADER = 1 + 4 + 4 * 2 + 1 + 2 + 1 + 1 + 1 + 2 + 2 + 2 + 2 + 1;
+export const FRAME_POSE = 23, FRAME_BODY = 16, FRAME_SHOT = 16, FRAME_VEHICLE = 27;
+const HEADER = FRAME_HEADER, POSE = FRAME_POSE, BODY = FRAME_BODY, SHOT = FRAME_SHOT, VEHICLE = FRAME_VEHICLE;
 const i16 = (v: number) => Math.max(-32768, Math.min(32767, Math.round(v)));
 const u8 = (v: number) => Math.max(0, Math.min(255, Math.round(v)));
 

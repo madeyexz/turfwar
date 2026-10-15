@@ -39,7 +39,7 @@ const pageRoutes: Plugin = {
   name: 'page-routes',
   configureServer(server) {
     server.middlewares.use((req, _res, next) => {
-      for (const page of ['/admin', '/privacy', ...INFO_PAGES.flatMap(p => [`/${p}`, `/en/${p}`])]) {
+      for (const page of ['/admin', '/privacy', '/terms', ...INFO_PAGES.flatMap(p => [`/${p}`, `/en/${p}`])]) {
         if (req.url === page || req.url?.startsWith(`${page}?`)) req.url = `${page}/${req.url.slice(page.length)}`;
       }
       const invite = /^(?:\/r\/[A-Za-z]{4}|\/c)\/?(\?.*)?$/.exec(req.url ?? '');
@@ -168,7 +168,7 @@ export default defineConfig(({ mode }) => {
       rollupOptions: {
         // The game, the privacy notice at /privacy, the info pages (/about, /guide, /maps, /begone in 繁體中文 and under /en/ in English; static text for search and answer engines, docs/SEO.md), the owner's admin dashboard at /admin (not linked from the game) and the service worker at /sw.js.
         input: crazygames ? { main: resolve(__dirname, 'index.html') } : {
-          main: resolve(__dirname, 'index.html'), privacy: resolve(__dirname, 'privacy/index.html'),
+          main: resolve(__dirname, 'index.html'), privacy: resolve(__dirname, 'privacy/index.html'), terms: resolve(__dirname, 'terms/index.html'),
           ...Object.fromEntries(INFO_PAGES.flatMap(p => [[p, resolve(__dirname, `${p}/index.html`)], [`${p}En`, resolve(__dirname, `en/${p}/index.html`)]])),
           admin: resolve(__dirname, 'admin/index.html'), sw: resolve(__dirname, 'src/pwa/sw.ts'),
         },

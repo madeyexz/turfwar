@@ -1,0 +1,20 @@
+# The recording processor (docs/RECORDING.md): clean-rule classification, the admin summary, retention.
+[Unit]
+Description=Turf War recording processor
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+User=turfwar-rec
+EnvironmentFile=/etc/turfwar-rec/env
+ExecStart=/opt/turfwar-rec/bin/bun /opt/turfwar-rec/process.js
+Nice=15
+CPUWeight=10
+MemoryMax=400M
+NoNewPrivileges=true
+ProtectSystem=strict
+ProtectHome=true
+ReadWritePaths=/var/lib/turfwar-rec
+PrivateTmp=true
+TimeoutStartSec=50min

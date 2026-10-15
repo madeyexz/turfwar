@@ -106,6 +106,11 @@ Back to the [README](../README.md) · [Gameplay](GAMEPLAY.md) · [Development](D
 - Trust model and limits: movement is client-reported (validated, not simulated), hit detection is
   shooter-favoured within tolerances (no full lag compensation), and every room shares one database
   (reducers run one at a time), so very many busy rooms will need more databases.
+- Match recording (docs/RECORDING.md): a separate SDK client on the Taipei VM (`tools/recorder/`) records
+  every room's frames, events and roster per round to R2, and browsers that consented send their input logs
+  to a Cloudflare Worker, never through reducers. The module only adds the `consent` reducer, the private
+  `player_consent` table and the admin-only `recorder_subjects` view; the recorder is one more subscriber
+  of `frame` (all rooms) and does not change the tick.
 
 ## Performance
 
@@ -191,10 +196,13 @@ shared/        Pure TypeScript shared by browser, tests and the SpacetimeDB modu
                  Memorial Hall (memorial*.ts) and Sanchong (sanchong*.ts),
                  with ladders, bomb sites and ammo crates
   match/         State, rounds and bomb, combat validation, economy, bots, navigation, packed frame
+  rec/           Match recording formats (segments, input logs, export files), clean rules, segmenter, policy
 src/           Browser client: lobby, game loop, prediction, rendering, view model, soldiers, HUD, store, audio, net
 spacetimedb/   SpacetimeDB module (tables, scheduled tick, validated reducers)
 api/           Link previews for shared /c and /r/<code> links (Vercel: preview.ts crawler page, og.ts picture; _og/ assets)
-scripts/       Local load test and simulation benchmark
-tools/         Reproducible CC0 asset import, sound and texture fetch scripts, and the Chinese font subset
+scripts/       Local load test, simulation benchmark, recording recount/bias/deletion
+tools/         Reproducible CC0 asset import, sound and texture fetch scripts, the Chinese font subset,
+               and the match recorder, processor and export (tools/recorder/)
+deploy/        Taipei VM (gcp-taipei/, recorder/), server image (instacloud/), ingest Worker (cloudflare/rec-ingest/)
 dev/           Development preview pages
 ```

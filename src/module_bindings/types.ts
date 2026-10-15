@@ -482,6 +482,17 @@ export const Player = __t.object("Player", {
 });
 export type Player = __Infer<typeof Player>;
 
+export const PlayerConsent = __t.object("PlayerConsent", {
+  identity: __t.identity(),
+  termsVersion: __t.u32(),
+  acceptedAt: __t.timestamp(),
+  excluded: __t.bool(),
+  excludedBy: __t.string(),
+  excludedAt: __t.timestamp(),
+  platform: __t.string(),
+});
+export type PlayerConsent = __Infer<typeof PlayerConsent>;
+
 export const PlayerDay = __t.object("PlayerDay", {
   key: __t.string(),
   day: __t.u32(),
@@ -631,6 +642,22 @@ export const Profile = __t.object("Profile", {
   matchesPlayed: __t.u32(),
 });
 export type Profile = __Infer<typeof Profile>;
+
+export const RecorderSubjectRow = __t.object("RecorderSubjectRow", {
+  identity: __t.string(),
+  soldierId: __t.u32(),
+  room: __t.u8(),
+  termsVersion: __t.u32(),
+  excluded: __t.bool(),
+  excludedBy: __t.string(),
+  platform: __t.string(),
+  device: __t.string(),
+  euUk: __t.bool(),
+});
+export type RecorderSubjectRow = __Infer<typeof RecorderSubjectRow>;
+
+export const RecorderSubjects = __t.object("RecorderSubjects", {});
+export type RecorderSubjects = __Infer<typeof RecorderSubjects>;
 
 export const RoomCode = __t.object("RoomCode", {
   room: __t.u8(),

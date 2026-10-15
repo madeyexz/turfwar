@@ -238,6 +238,15 @@ Try it locally with `bun run dev:crazygames` (or the built zip from any static s
 localhost the SDK runs in its `local` mode, which logs its calls ("HTML5 SDK"), shows fake ads, and takes
 `?czy_invite=true&r=<CODE>`, `?disableChat=true` and `?muteAudio=true`.
 
+### Recording
+
+Match recording (bot training and the licensed dataset) has its own services: the Cloudflare Worker
+`turfwar-rec-ingest` at `rec.turfwar.ianhsiao.me`, the recorder and its hourly processor on the Taipei VM,
+and the R2 buckets `turfwar-rec` and `turfwar-export`. How they work, their keys, deletion, the recount and
+the export: [docs/RECORDING.md](RECORDING.md). Deploy the Worker with `bun deploy/cloudflare/rec-ingest/deploy.ts`
+and the VM side with `deploy/gcp-taipei/recorder/deploy.sh`; a release that changes the frame format or the
+recording formats must update the recorder in the same release.
+
 ### Orb credentials
 
 Amp orbs get the deploy credentials as Amp secrets. `.agents/setup` installs the clients (bun
@@ -255,6 +264,9 @@ its tool. Releases still need the owner's go-ahead (see AGENTS.md).
 | `POSTHOG_PERSONAL_API_KEY` | project | read-only queries on PostHog project 649207 |
 | `GSC_SERVICE_ACCOUNT_JSON` | project | `bun run seo:report` / `seo:ping`: Google Search Console API on `sc-domain:ianhsiao.me` (service account of Google Cloud project `turfwar-seo`, Full user) |
 | `BING_WEBMASTER_API_KEY` | project | the same scripts' Bing Webmaster Tools API (site `https://turfwar.ianhsiao.me/`) |
+| `CLOUDFLARE_API_TOKEN`, `CLOUDFLARE_ACCOUNT_ID` | project | R2 buckets, account API tokens, the ingest Worker and its route/DNS on `ianhsiao.me` (docs/RECORDING.md) |
+| `REC_SALT` | project | the recording pid salt (also a Worker secret and in the VM's `/etc/turfwar-rec/env`); never rotate it without a plan |
+| `R2_REC_VM_*`, `R2_REC_READ_*`, `R2_REC_EXPORT_*` | project | R2 S3 keys (`_ACCESS_KEY_ID`, `_SECRET_ACCESS_KEY`): VM read/write, read-only, export (docs/RECORDING.md) |
 
 Set or rotate one with `amp secrets set NAME --user|--project ianhsiao/turfwar --secret --data-file -`
 (value on stdin), or in Amp Settings; never paste a value into a thread. Read-only checks: `spacetime list

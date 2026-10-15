@@ -32,6 +32,7 @@ import { SkinPanel } from './ui/skinpanel';
 import { SettingsMenu, type GraphicsQuality, type SettingsFocus, type SettingsTab } from './ui/settingsmenu';
 import { cjkFontReady } from './ui/fonts';
 import { drawMapThumb } from './ui/mapthumb';
+import { acceptTerms } from './game/consent';
 import { L, applyI18n, escapeHtml as esc, isZh, lang, mapName as localMapName, modeName, onLang, plural, serverError, sizeName, t, type Key } from './ui/i18n';
 import './style.css';
 import './menu.css';
@@ -112,6 +113,14 @@ const SITE_URL = 'https://turfwar.ianhsiao.me';
  * The privacy page in the lobby's language (a `?lang=` visit passes it on; otherwise the page reads the saved choice).
  * On CrazyGames it is our website's page, always with the language (the saved choice lives on their address).
  */
+/** "By pressing Play you accept the Terms and Privacy Policy" under the ways to play (not in the CrazyGames build). */
+const termsHref = () => `/terms${params.get('lang') ? `?lang=${lang()}` : ''}`;
+function renderClickwrap() {
+  const el = document.getElementById('clickwrap');
+  if (!el) return;
+  el.innerHTML = esc(t('lobby.clickwrap', { terms: '\u0001', privacy: '\u0002' }))
+    .replace('\u0001', `<a href="${termsHref()}">${esc(t('lobby.terms'))}</a>`).replace('\u0002', `<a href="${privacyHref()}">${esc(t('lobby.privacyPolicy'))}</a>`);
+}
 const privacyHref = () => CRAZYGAMES ? `${SITE_URL}/privacy?lang=${lang()}` : `/privacy${params.get('lang') ? `?lang=${lang()}` : ''}`;
 /** The static about page (how to play, modes, maps, FAQ; crawlable text for search engines, docs/SEO.md) in the lobby's language. */
 const aboutHref = () => isZh() ? '/about' : '/en/about';
@@ -170,6 +179,7 @@ menu.innerHTML = `
       <button type="button" class="way" id="open-solo" aria-haspopup="dialog" aria-expanded="false" aria-controls="solo-pop">${L('lobby.solo', 'b')}</button>
       <button type="button" class="way" id="go-range" title="${t('lobby.rangeHint')}" data-i18n-title="lobby.rangeHint">${L('lobby.sub.range', 'b')}</button>
     </nav>
+    ${CRAZYGAMES ? '' : '<p class="clickwrap" id="clickwrap"></p>'}
     <div class="unreachable" id="unreachable" hidden>
       <div class="unreachable-say" role="status" aria-live="polite">
         <b class="unreachable-head"><span class="conn down"><i></i></span><span id="unreachable-title"></span></b>
@@ -237,6 +247,7 @@ menu.innerHTML = `
     <div class="field">${L('lobby.field.skill', 'span', 'class="label"')}${choice('skills', 'skill', [['0.25', L('lobby.skill.recruit')], ['0.45', L('lobby.skill.veteran')], ['0.75', L('lobby.skill.elite')]], 'lobby.field.skill')}</div>
     <button type="button" class="go" id="solo-go">${t('lobby.startMatch')}</button>${L('lobby.botsHint', 'p', 'class="hint"')}`)}`;
 app.appendChild(menu);
+renderClickwrap();
 document.body.classList.add('menu-open');
 
 // ---- Phones and tablets: touch controls, the rotate prompt and the install hint. ----
@@ -981,6 +992,7 @@ onLang(next => {
   track('language_changed', { to: next }, { set: { lang: next } });
   applyI18n(menu);
   $<HTMLAnchorElement>('#privacy-link').href = privacyHref();
+  renderClickwrap();
   const about = menu.querySelector<HTMLAnchorElement>('#about-link');
   if (about) about.href = aboutHref();
   $('#map-grid').dataset.key = '';
@@ -1261,6 +1273,8 @@ function fullscreenForTouch() {
 async function start(action: Action, retried = false) {
   // Before the first await: still inside the player's tap.
   if (!benchMode) fullscreenForTouch();
+  // Clickwrap: pressing Play accepts the Terms and Privacy Policy linked beside the buttons (src/game/consent.ts).
+  if (!benchMode) acceptTerms();
   const name = callsign.value.trim().slice(0, 16) || t('lobby.fallbackName');
   const via = modeOf(action);
   // A 發起單挑 start (the challenger's room, their bot double, or our own 1v1 room) leaves the form as it was.

@@ -1,0 +1,71 @@
+/**
+ * What the processor, the recount, the deletion and the export scripts share: reading segments and a
+ * subject's input sessions from R2, and the clean-rules classification of one segment.
+ */
+import type { S3Client } from 'bun';
+import { classify, decodeFrames, segmentChecks, type InputSession, type Quality, type SegmentChecks } from '../../shared/rec/clean';
+import { decodeBatch } from '../../shared/rec/inputlog';
+import { decodeSegment, type Segment } from '../../shared/rec/segment';
+import { getBytes, listAll } from './r2';
+
+export interface Manifest {
+  key: string; bytes: number; rawBytes: number; sha256: string; rawSha256: string;
+  recorderSha: string; moduleHash: string; frameVersion: number; mapId: string; mapHash: string;
+  mode: string; teamSize: number; roomKind: string; matchUid: string; round: number; startMs: number; endMs: number;
+  ticksExpected: number; ticksReceived: number; gapRatio: number; truncated: boolean; pids: string[];
+}
+/** One processed segment: its checks, a quality record per soldier, and the input batches it used. */
+export interface QualityFile { rules: string; segment: string; checks: SegmentChecks; qualities: Quality[]; inputs: string[]; at: number }
+
+export const qualityKey = (manifestKey: string) => manifestKey.replace('/manifest/', '/quality/');
+export const manifestKey = (segKey: string) => segKey.replace('/seg/', '/manifest/').replace(/\.tfr\.zst$/, '.json');
+
+export async function loadSegment(c: S3Client, key: string, sha256?: string): Promise<Segment> {
+  const zst = await getBytes(c, key);
+  if (sha256 && new Bun.CryptoHasher('sha256').update(zst).digest('hex') !== sha256) throw new Error(`checksum mismatch: ${key}`);
+  return decodeSegment(new Uint8Array(Bun.zstdDecompressSync(zst)));
+}
+
+const DAY = 86_400_000;
+/**
+ * The input sessions a subject sent from that room and soldier around the segment's time: the index lists
+ * their sessions by day; each session's batches are read and joined in order.
+ */
+export async function inputsFor(c: S3Client, prefix: string, pid: string, seg: Segment, soldierId: number, cache = new Map<string, InputSession[]>()): Promise<{ sessions: InputSession[]; keys: string[] }> {
+  const days = new Set([-1, 0, 1].map(d => new Date(seg.header.startMs + d * DAY).toISOString().slice(0, 10)));
+  const index = await listAll(c, `${prefix}/index/pid=${pid}/input-`);
+  const sessions: InputSession[] = [], keys: string[] = [];
+  for (const { key } of index) {
+    const m = key.match(/input-(\d{4}-\d{2}-\d{2})-([0-9a-f]{24})\.json$/);
+    if (!m || !days.has(m[1])) continue;
+    const base = `${prefix}/input/dt=${m[1]}/pid=${pid}/s=${m[2]}/`;
+    let batches = cache.get(base);
+    const batchKeys = (await listAll(c, base)).map(x => x.key).sort();
+    if (!batches) {
+      batches = [];
+      for (const k of batchKeys) {
+        try { batches.push(decodeBatch(new Uint8Array(Bun.gunzipSync(await getBytes(c, k))))); } catch { /* a broken batch is skipped */ }
+      }
+      cache.set(base, batches);
+    }
+    const mine = batches.filter(b => b.header.room === seg.header.room && b.header.soldierId === soldierId);
+    if (!mine.length) continue;
+    mine.sort((a, b) => a.header.seq - b.header.seq);
+    sessions.push({ header: mine[0].header, records: mine.flatMap(b => b.records) });
+    keys.push(...batchKeys);
+  }
+  return { sessions, keys };
+}
+
+/** Classify every soldier of one segment (bots and excluded humans get their tier and no clean seconds). */
+export async function qualityOf(c: S3Client, prefix: string, segKey: string, seg: Segment, rules: string, cache?: Map<string, InputSession[]>): Promise<QualityFile> {
+  const d = decodeFrames(seg);
+  const qualities: Quality[] = [], inputs: string[] = [];
+  for (const s of seg.header.soldiers) {
+    if (s.bot) continue;
+    const found = s.pid && !s.excluded ? await inputsFor(c, prefix, s.pid, seg, s.soldierId, cache) : { sessions: [], keys: [] };
+    inputs.push(...found.keys);
+    qualities.push(classify(d, s, found.sessions, segKey));
+  }
+  return { rules, segment: segKey, checks: segmentChecks(d), qualities, inputs: [...new Set(inputs)], at: Date.now() };
+}

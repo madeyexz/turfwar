@@ -38,6 +38,13 @@ const factories: Record<string, () => MapDef> = {
   memorial: memorialHall, sanchong,
 };
 
+/** A map's definition alone, without building its collision world (the recorder hashes it to tell map versions apart). */
+export function mapDef(id: string): MapDef {
+  const factory = factories[id];
+  if (!factory) throw new Error(`Unknown map ${id}`);
+  return factory();
+}
+
 export interface LoadedMap { def: MapDef; world: CollisionWorld; nav?: NavGraph }
 const cache = new Map<string, LoadedMap>();
 
