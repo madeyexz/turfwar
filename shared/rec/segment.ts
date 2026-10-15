@@ -32,7 +32,7 @@ export interface SegmentHeader {
   frameVersion: number;
   env: RecEnv;
   recorderSha: string;
-  /** The module's program hash (`initial_program` of the database). */
+  /** `schema:` + sha256 of the module's schema as the server describes it (changes with tables, reducers and views). */
   moduleHash: string;
   mapId: string;
   mapHash: string;
