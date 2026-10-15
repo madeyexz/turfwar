@@ -8,6 +8,17 @@ the CrazyGames build is always left out). Only matches played after the change (
 version 1) are recorded. The plan with the forecast and the reasons is kept outside the repo; this file
 describes what runs.
 
+## At a glance
+
+| | |
+| --- | --- |
+| **Collected** | Server: the packed match frame (30/s: every soldier's pose, velocity, aim, weapon, health, actions; grenades, vehicles, shots, bomb), match events without chat or names. Client: raw mouse, keys and touch per frame, the aim-assist correction, and the server tick. Metadata: map, mode, size, versions, ping, bot flag, device, input type, `aimAssist`, a salted-hash pid. |
+| **How** | Recorder on the Taipei VM subscribes to every room on localhost and uploads one zstd segment per round. The browser posts a gzip input batch every 30 s to the Worker `rec.turfwar.ianhsiao.me`. Players who opt out, or send GPC/DNT, are blanked. |
+| **Where** | Cloudflare R2: `turfwar-rec` (internal, for bot training) and `turfwar-export` (de-identified, for licensing). |
+| **Volume** | About 11 MB per 6v6 room-hour of frames (zstd; 2.7 MB for 1v1, 32 MB for 24v24; measured on bot matches) and about 1 MB per player-hour of input (estimate). About 0.4 GB/day at 30 human room-hours/day (estimate). |
+| **Cost** | R2 is about US$0.015 per GB-month after the 10 GB free tier, with no egress fee: about US$0.20 more every month at current traffic, about US$2/month after a year. The Worker is free, or US$5/month on Workers Paid. VM-to-R2 upload is GCP egress, about US$0.12/GB (about US$1.50/month now). List prices; check the bills. |
+| **Targets** | 200 h movement-clean and 50 h aim-clean for bots (about 2 weeks and 8 days at launch traffic), 1,000 h for the dataset (about 74 days to 1,000 h movement-clean; the export set keeps about 83 % of it). Progress is on `/admin` → Recording. |
+
 ```
  browser (online match)                     Taipei VM (turfwar-tw)                         Cloudflare
 ┌──────────────────────┐  consent reducer  ┌───────────────────────┐
