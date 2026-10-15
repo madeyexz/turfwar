@@ -4,6 +4,7 @@
  * and link under 「發起單挑 →」. Shared with the Web Share API where the browser can share files
  * (phones: IG Stories, LINE, Threads), else saved and the link copied.
  */
+import { assetUrl } from '../assetUrl';
 import qrcode from 'qrcode-generator';
 import { sizeLabel } from '../../shared/match/rooms';
 import { bragLine, nationalDay, type MatchSummary } from '../game/matchstats';
@@ -110,7 +111,7 @@ export async function drawShareCard(input: CardInput): Promise<HTMLCanvasElement
     cjkFontReady(words, 900), cjkFontReady(words, 700),
     document.fonts?.load(`700 64px Rajdhani`).catch(() => undefined), document.fonts?.load(`600 64px Rajdhani`).catch(() => undefined),
   ]);
-  const icon = await image('/icons/icon-512.png');
+  const icon = await image(assetUrl('icons/icon-512.png'));
 
   const canvas = document.createElement('canvas');
   canvas.width = CARD_W; canvas.height = CARD_H;
