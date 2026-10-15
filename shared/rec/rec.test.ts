@@ -238,4 +238,24 @@ describe('segmenter', () => {
     for (const x of state.soldiers) expect(text).not.toContain(`"${x.name}"`);
     expect(a.records.filter(r => r.type === Rec.Event).map(r => recordJson<{ type: string }>(r).type)).toEqual(['join']);
   });
+
+  it('blanks a human the server has not described yet without leaving them out of the round', () => {
+    const { seg, state } = recordRound(2);
+    const frames = seg.records.filter(r => r.type === Rec.Frame);
+    const id = state.soldiers[0].id;
+    const closed: Segment[] = [];
+    let n = 0;
+    const s = new Segmenter({ env: 'dev', recorderSha: 'x', moduleHash: () => 'm', mapHash: () => 'h', now: () => n, uid: () => 'u', onClose: x => closed.push(x) });
+    const roster = (q: number) => ({ id: q, team: 0, bot: q !== id });
+    const info = { configJson: '{}', mode: 'elimination', teamSize: 6, private: false };
+    frames.forEach((f, i) => { n = i; s.frame(1, 'cinder', f.data, info, roster, q => (q === id && i >= 10 ? { pid: 'p', subject: true, device: 'desktop', euUk: false, termsVersion: 1 } : undefined)); });
+    s.closeAll(false);
+    const h = closed[0].header.soldiers.find(x => x.soldierId === id)!;
+    expect(h).toMatchObject({ pid: 'p' });
+    expect(h.excluded).toBeUndefined();
+    expect(closed[0].header.hasExcluded).toBe(false);
+    const at = (i: number) => decodeFrame(closed[0].records.filter(r => r.type === Rec.Frame)[i].data)!.poses.find(p => p.id === id)!;
+    expect(at(5)).toMatchObject({ x: 0, z: 0, alive: false });
+    expect(at(20).alive).toBe(true);
+  });
 });

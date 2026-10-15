@@ -164,7 +164,13 @@ function connect() {
         return { configJson: m?.configJson ?? '', mode: cfg.mode ?? '', teamSize: cfg.teamSize ?? 0, private: priv.has(room) };
       };
       const subjectIn = (room: number) => (id: number) => subjects.get(room)?.get(id);
-      const refresh = () => void rebuildSubjects([...db.recorderSubjects.iter()] as SubjectRow[]);
+      // One rebuild at a time, always from the newest rows (rows arrive one callback each).
+      let rebuilding = false, again = false;
+      const refresh = () => {
+        if (rebuilding) { again = true; return; }
+        rebuilding = true;
+        void rebuildSubjects([...db.recorderSubjects.iter()] as SubjectRow[]).finally(() => { rebuilding = false; if (again) { again = false; refresh(); } });
+      };
       db.match.onInsert((_c, m) => rooms.set(m.id, m));
       db.match.onUpdate((_c, _o, m) => rooms.set(m.id, m));
       db.match.onDelete((_c, m) => { rooms.delete(m.id); segmenter.close(m.id, false); });

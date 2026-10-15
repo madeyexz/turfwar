@@ -76,6 +76,8 @@ export class Segmenter {
       const id = v.getUint16(FRAME_HEADER + i * FRAME_POSE, true);
       const row = who(id);
       const bot = row?.bot ?? false;
+      // `undefined`: the server has not told us about this human yet (they just joined): blank them for now
+      // without deciding. A known human who is not a subject is left out for the rest of the round.
       const sub = bot ? undefined : subject(id);
       const ok = !bot && !!sub?.subject && !!sub.pid;
       let s = cur.soldiers.get(id);
@@ -90,11 +92,12 @@ export class Segmenter {
         if (ok) {
           // A subject keeps their pid; one who turns datasets off mid-round is blanked from here on and the round is theirs no longer.
           if (!s.excluded) Object.assign(s, { pid: sub!.pid, device: sub!.device, euUk: sub!.euUk, termsVersion: sub!.termsVersion });
-        } else {
+        } else if (sub) {
           s.excluded = true;
           delete s.device; delete s.euUk; delete s.termsVersion;
         }
-        if (s.excluded) { blank.add(id); cur.hasExcluded = true; }
+        if (s.excluded) cur.hasExcluded = true;
+        if (s.excluded || !ok) blank.add(id);
       }
     }
     cur.records.push({ type: Rec.Frame, tick: head.tick, ms: now, data: zeroSoldiers(bytes, blank) });
