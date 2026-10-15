@@ -31,9 +31,29 @@ describe('touch-primary devices', () => {
     expect(touchEnabled('auto', IPHONE, null)).toBe(true);
   });
 
-  it('phones start on low graphics, computers on medium', () => {
+  it('phones and computers on weak graphics start on low graphics, other computers on medium', () => {
     expect(defaultQuality(true)).toBe('low');
     expect(defaultQuality(false)).toBe('medium');
+    // Renderer strings as players' browsers report them (PostHog match_left.gpu).
+    const low = [
+      'ANGLE (Intel, Intel(R) UHD Graphics 630 (0x00003E9B) Direct3D11 vs_5_0 ps_5_0, D3D11)',
+      'ANGLE (Intel, Intel(R) Iris(R) Xe Graphics (0x00009A49) Direct3D11 vs_5_0 ps_5_0, D3D11)',
+      'ANGLE (Intel, Intel(R) HD Graphics 530 Direct3D11 vs_5_0 ps_5_0, D3D11)',
+      'ANGLE (Apple, ANGLE Metal Renderer: Intel(R) UHD Graphics 630, Unspecified Version)',
+      'ANGLE (Google, Vulkan 1.3.0 (SwiftShader Device (Subzero) (0x0000C0DE)), SwiftShader driver)',
+      'ANGLE (Microsoft, Microsoft Basic Render Driver Direct3D11 vs_5_0 ps_5_0, D3D11)',
+    ];
+    const medium = [
+      'ANGLE (NVIDIA, NVIDIA GeForce RTX 3060 (0x00002544) Direct3D11 vs_5_0 ps_5_0, D3D11)',
+      'ANGLE (AMD, AMD Radeon(TM) Graphics (0x00001636) Direct3D11 vs_5_0 ps_5_0, D3D11)',
+      'ANGLE (Intel, Intel(R) Arc(TM) A770 Graphics Direct3D11 vs_5_0 ps_5_0, D3D11)',
+      'ANGLE (Apple, ANGLE Metal Renderer: Apple M1, Unspecified Version)',
+      'Apple GPU',
+      '',
+    ];
+    for (const gpu of low) expect([gpu, defaultQuality(false, gpu)]).toEqual([gpu, 'low']);
+    for (const gpu of medium) expect([gpu, defaultQuality(false, gpu)]).toEqual([gpu, 'medium']);
+    expect(defaultQuality(true, medium[0])).toBe('low');
   });
 });
 

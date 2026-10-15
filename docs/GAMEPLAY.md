@@ -441,7 +441,7 @@ crate or bomb site (hold it to arm or defuse), vehicle buttons replace the on-fo
 scooter rider keeps fire and the one-handed guns, and the dead get Next. Quick chat opens the keyboard
 on Type. **Edit touch layout** (Settings → Controls) drags, pinches or slides to resize, hides, sets
 opacity, assigns two custom slots any action, swaps to left-handed and resets; it is saved in the browser
-(versioned, only the changes). Phones start on Low graphics, ask for landscape during a
+(versioned, only the changes). Phones, and computers on Intel integrated graphics or a software renderer, start on Low graphics (until the player picks a preset); phones ask for landscape during a
 match, request fullscreen on Android, and keep page scroll, zoom and long-press menus off in play.
 
 The game installs as a web app: `public/manifest.webmanifest` (fullscreen, landscape, icons from
