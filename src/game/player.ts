@@ -19,6 +19,8 @@ export interface FrameResult {
   grenade?: { origin: Vec3; dir: Vec3 };
   /** An M18 smoke grenade left the hand (same arc as the M67). */
   smoke?: { origin: Vec3; dir: Vec3 };
+  /** A 燃燒彈 left the hand (same arc as the M67). */
+  molotov?: { origin: Vec3; dir: Vec3 };
   /** The 藍白拖 left the hand, wound up to `power` (0..1). `noSlipper`: asked for it with an empty hand. */
   slipper?: { origin: Vec3; dir: Vec3; power: number };
   noSlipper?: boolean;
@@ -64,9 +66,10 @@ export class LocalPlayer {
   bloom = 0;
   ads = 0;
   grenades = 0;
-  /** M18 smoke grenades carried; `throwingSmoke`: the throw under way is a smoke, not the M67. */
+  /** M18 smoke grenades and 燃燒彈 carried; `throwing`: what the throw under way (`throwLeft`) lets go of. */
   smokes = 0;
-  throwingSmoke = false;
+  molotovs = 0;
+  throwing: 'grenade' | 'smoke' | 'molotov' = 'grenade';
   private sinceThrow = 9;
   throwLeft = 0;
   /** 珍奶 carried; `drinkLeft`: the sip under way (BOBA.drinkTime, no shooting); `health` as the host last said. */
@@ -149,7 +152,7 @@ export class LocalPlayer {
     this.weapons = [...s.weapons]; this.attachments = structuredClone(s.attachments); this.reserve = [...s.reserve];
     this.ammo = [this.statsOf(0).magazine, this.statsOf(1).magazine];
     this.reloadLeft = 0; this.switchLeft = this.statsOf(0).equipTime; this.fireCooldown = 0; this.bloom = 0; this.ads = 0; this.lean = 0; this.peekSide = 0;
-    this.grenades = s.grenades; this.smokes = s.smokes; this.bobas = s.bobas; this.drinkLeft = 0; this.slippers = s.slippers ?? 1; this.slipperCharge = -1; this.slipperFollow = 0; this.health = s.health; this.alive = true; this.recoilDebt = 0; this.accumulator = 0;
+    this.grenades = s.grenades; this.smokes = s.smokes; this.molotovs = s.molotovs; this.bobas = s.bobas; this.drinkLeft = 0; this.slippers = s.slippers ?? 1; this.slipperCharge = -1; this.slipperFollow = 0; this.health = s.health; this.alive = true; this.recoilDebt = 0; this.accumulator = 0;
     this.stamina = STAMINA.max; this.binoculars = false; this.zoomLevel = 0;
   }
 
@@ -171,7 +174,7 @@ export class LocalPlayer {
       for (const i of [0, 1] as const) this.ammo[i] = Math.min(this.ammo[i], this.statsOf(i).magazine);
     }
     if (this.reloadLeft <= 0) this.reserve = [...s.reserve];
-    if (this.sinceThrow > 1.5 && this.throwLeft <= 0) { this.grenades = s.grenades; this.smokes = s.smokes; }
+    if (this.sinceThrow > 1.5 && this.throwLeft <= 0) { this.grenades = s.grenades; this.smokes = s.smokes; this.molotovs = s.molotovs; }
     if (this.sinceDrink > 1.5 && this.drinkLeft <= 0) this.bobas = s.bobas;
     if (this.sinceSlipper > 1 && this.slipperFollow <= 0) this.slippers = s.slippers ?? 1;
     this.health = s.health;
@@ -320,11 +323,15 @@ export class LocalPlayer {
       if (this.slot !== 2 && this.ammo[this.slot] <= 0 && this.switchLeft <= 0 && this.throwLeft <= 0) this.startReload(result);
       const throwKey = input!.take('grenade');
       if (throwKey && !this.rider && this.grenades > 0 && this.throwLeft <= 0 && this.reloadLeft <= 0) {
-        this.throwLeft = 0.32; this.grenades--; this.sinceThrow = 0; this.binoculars = false; this.throwingSmoke = false;
+        this.throwLeft = 0.32; this.grenades--; this.sinceThrow = 0; this.binoculars = false; this.throwing = 'grenade';
       }
       const smokeKey = input!.take('smoke');
       if (smokeKey && !this.rider && this.smokes > 0 && this.throwLeft <= 0 && this.drinkLeft <= 0 && this.reloadLeft <= 0) {
-        this.throwLeft = 0.32; this.smokes--; this.sinceThrow = 0; this.binoculars = false; this.throwingSmoke = true;
+        this.throwLeft = 0.32; this.smokes--; this.sinceThrow = 0; this.binoculars = false; this.throwing = 'smoke';
+      }
+      const molotovKey = input!.take('molotov');
+      if (molotovKey && !this.rider && this.molotovs > 0 && this.throwLeft <= 0 && this.drinkLeft <= 0 && this.reloadLeft <= 0) {
+        this.throwLeft = 0.32; this.molotovs--; this.sinceThrow = 0; this.binoculars = false; this.throwing = 'molotov';
       }
       // 珍奶: only when hurt; the sip blocks shooting and throwing until it is drunk.
       const drinkKey = input!.take('drink');
@@ -352,7 +359,7 @@ export class LocalPlayer {
     }
     if (this.throwLeft > 0) {
       this.throwLeft -= dt;
-      if (this.throwLeft <= 0) result[this.throwingSmoke ? 'smoke' : 'grenade'] = { origin: this.eye(), dir: dirFromAngles(this.yaw, this.pitch + 0.06) };
+      if (this.throwLeft <= 0) result[this.throwing] = { origin: this.eye(), dir: dirFromAngles(this.yaw, this.pitch + 0.06) };
     }
 
     const trigger = wantsFire && !this.sprinting && this.sprintRecover <= 0 && this.throwLeft <= 0 && this.drinkLeft <= 0 && this.slipperCharge < 0 && this.slipperFollow <= 0 && this.usable(this.slot);

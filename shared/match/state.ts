@@ -73,6 +73,8 @@ export interface Soldier {
   smokes: number;
   /** 珍奶 carried (0 or 1): drinking one heals (BOBA in shared/weapons.ts). */
   bobas: number;
+  /** 燃燒彈 molotovs carried (0 or 1). */
+  molotovs: number;
   /** 藍白拖 in hand (0 or 1; SLIPPER in shared/weapons.ts): 1 at every spawn, 0 once thrown until one is picked up. */
   slippers: number;
   /** Chosen cosmetic skin (shared/skins.ts); absent = the defaults (bots wear one from their id). */
@@ -229,6 +231,8 @@ export type MatchEvent =
   | { type: 'explosion'; x: number; y: number; z: number; owner: number; radius?: number; weapon?: string }
   /** A smoke grenade popped here (its cloud is a `smokeCloud` body from now on). */
   | { type: 'smoke'; x: number; y: number; z: number; owner: number }
+  /** A molotov broke and lit a fire here (`burst`), broke without one (`fizzle`: in the air or in smoke), or smoke put its fire out (`out`). */
+  | { type: 'molotov'; action: 'burst' | 'fizzle' | 'out'; x: number; y: number; z: number; owner: number }
   /** A 藍白拖 left `id`'s hand, struck `id` (who dies of it), or `id` picked one up, here. */
   | { type: 'slipper'; action: 'throw' | 'hit' | 'pickup'; id: number; x: number; y: number; z: number }
   /** A soldier drank a 珍奶 and is back to `health`. */

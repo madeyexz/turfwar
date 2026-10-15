@@ -1,6 +1,7 @@
 import { toView } from './viewport';
 import * as THREE from 'three';
 import { bobaCupModel } from '../render/meme';
+import { molotovModel } from '../render/molotov';
 import { RoomEnvironment } from 'three/examples/jsm/environments/RoomEnvironment.js';
 import { weaponModel, type Assets } from '../assets';
 import { mySkin } from '../game/skins';
@@ -8,14 +9,15 @@ import { GUN_FIT, fitAttachments } from '../render/optics';
 import { ATTACHMENT_SLOTS, WEAPONS, type AttachmentCategory, type Attachments, type WeaponId } from '../../shared/weapons';
 import { applyI18n, t } from './i18n';
 
-/** What the store's preview shows: a weapon with a set of attachments (one slot called out), the M67 or the M18 smoke. */
+/** What the store's preview shows: a weapon with a set of attachments (one slot called out), the M67, the M18 smoke, the 燃燒彈 or the 珍奶. */
 export type PreviewItem =
   | { kind: 'weapon'; id: WeaponId; attachments: Attachments; focus?: AttachmentCategory; label?: string }
   | { kind: 'grenade'; he: boolean }
   | { kind: 'smoke' }
+  | { kind: 'molotov' }
   | { kind: 'boba' };
 
-const key = (item: PreviewItem) => item.kind === 'smoke' || item.kind === 'boba' ? item.kind : item.kind === 'grenade' ? `grenade|${item.he}` : item.id === 'knife' ? `knife|${mySkin().knife}` : `${item.id}|${ATTACHMENT_SLOTS.map(c => item.attachments[c] ?? '').join('|')}`;
+const key = (item: PreviewItem) => item.kind === 'smoke' || item.kind === 'molotov' || item.kind === 'boba' ? item.kind : item.kind === 'grenade' ? `grenade|${item.he}` : item.id === 'knife' ? `knife|${mySkin().knife}` : `${item.id}|${ATTACHMENT_SLOTS.map(c => item.attachments[c] ?? '').join('|')}`;
 
 /** The M18 (no model in the packs): an olive canister, a pale band, the fuse and its spoon. */
 function smokeCanister() {
@@ -236,7 +238,7 @@ export class StorePreview {
   private build(item: PreviewItem): Built {
     const weapons = this.assets!.weapons;
     const object = new THREE.Group();
-    const model = item.kind === 'boba' ? bobaCupModel() : item.kind === 'smoke' ? smokeCanister() : weapons.get(item.kind === 'grenade' ? 'Prop_Grenade' : weaponModel(WEAPONS[item.id].model, mySkin().knife))!.clone();
+    const model = item.kind === 'boba' ? bobaCupModel() : item.kind === 'smoke' ? smokeCanister() : item.kind === 'molotov' ? molotovModel() : weapons.get(item.kind === 'grenade' ? 'Prop_Grenade' : weaponModel(WEAPONS[item.id].model, mySkin().knife))!.clone();
     model.position.set(0, 0, 0);
     model.updateMatrixWorld(true);
     // Frame by the bare item so trying attachments on never rescales the view.

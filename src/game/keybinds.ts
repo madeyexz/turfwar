@@ -68,6 +68,8 @@ export const ACTIONS = {
   smoke: { group: 'equipment', scopes: ARMED, keys: ['Digit5', 'KeyX'] },
   /** Drink the 珍奶 (heals). */
   drink: { group: 'equipment', scopes: ARMED, keys: ['Digit6', 'KeyY'] },
+  /** The 燃燒彈. */
+  molotov: { group: 'equipment', scopes: ARMED, keys: ['Digit7', 'KeyU'] },
   lastWeapon: { group: 'equipment', scopes: ARMED, keys: ['KeyQ'] },
   /** Also steps a sniper scope's zoom while scoped. */
   nextWeapon: { group: 'equipment', scopes: ARMED, keys: ['WheelDown'] },

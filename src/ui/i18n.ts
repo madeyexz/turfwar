@@ -287,6 +287,11 @@ const en = {
   'store.cloud': 'Cloud', 'store.lasts': 'Lasts',
   'store.m18Note': 'Throw with {key}. A thick cloud nobody sees through — players or bots. Bullets still pass.',
   'store.m18Title': 'Smoke grenade · tactical · key {key}',
+  'item.molotov': 'Molotov', 'item.molotovShort': 'Molotov', 'act.molotov': 'Molotov', 'tc.molotov': 'Fire', 'cause.molotov': 'MOLOTOV',
+  'store.molotov': 'Fire on the floor', 'store.oneMolotov': 'You carry one molotov at a time — throw it to buy another',
+  'store.fireArea': 'Fire', 'store.burn': 'Burns', 'store.perSecond': '{n}/s',
+  'store.molotovNote': 'Throw with {key}. It breaks on the floor and sets it alight: anyone standing in it burns, enemies and you, not teammates. Smoke puts it out.',
+  'store.molotovTitle': 'Molotov · tactical · key {key}',
   'store.frag': 'Frag grenade', 'store.he': 'High Explosive', 'store.heUpgrade': 'M67 upgrade',
   'store.oneM67': 'You carry one M67 at a time — throw it to buy another',
   'store.freeDefault': 'Free default', 'store.onYourGun': 'On your gun',
@@ -611,7 +616,7 @@ const zhTW: Record<Key, string> = {
   'note.extendedClip': '每個彈匣裝更多子彈；稍微加重。',
   'note.recoilPad': '減輕後座力；稍微加重。',
   'note.explosiveAmmo': '威力強大，爆頭尤其致命。彈匣容量減少。',
-  'note.incendiaryAmmo': '燃燒彈，擊中身體傷害更高。彈匣容量減少。',
+  'note.incendiaryAmmo': '燃燒子彈，擊中身體傷害更高。彈匣容量減少。',
   'bar.damage': '傷害', 'bar.headshot': '爆頭', 'bar.rate': '射速', 'bar.accuracy': '精準度', 'bar.aimAcc': '瞄準精準',
   'bar.recoil': '後座力', 'bar.mobility': '機動性',
   'stat.head': '頭部傷害', 'stat.body': '身體傷害', 'stat.limb': '四肢傷害', 'stat.magazine': '彈匣容量',
@@ -625,6 +630,11 @@ const zhTW: Record<Key, string> = {
   'store.cloud': '煙幕', 'store.lasts': '持續',
   'store.m18Note': '按 {key} 投擲。濃煙擋住所有視線，玩家和機器人都看不穿，但子彈照樣穿過。',
   'store.m18Title': '煙霧彈 · 戰術裝備 · 按鍵 {key}',
+  'item.molotov': '燃燒彈', 'item.molotovShort': '燃燒彈', 'act.molotov': '燃燒彈', 'tc.molotov': '燃燒', 'cause.molotov': '燃燒彈',
+  'store.molotov': '地面火海', 'store.oneMolotov': '一次只能攜帶一瓶燃燒彈 — 丟出後才能再買',
+  'store.fireArea': '火海', 'store.burn': '灼燒', 'store.perSecond': '每秒 {n}',
+  'store.molotovNote': '按 {key} 投擲。瓶子落地碎裂、地面起火：站在火裡的人都會被燒傷，敵人和你自己都會，隊友不會。煙霧彈可以把火撲滅。',
+  'store.molotovTitle': '燃燒彈 · 戰術裝備 · 按鍵 {key}',
   'store.frag': '破片手榴彈', 'store.he': '高爆強化', 'store.heUpgrade': 'M67 升級',
   'store.oneM67': '一次只能攜帶一顆 M67 — 丟出後才能再買',
   'store.freeDefault': '免費預設', 'store.onYourGun': '已裝在槍上',
@@ -780,7 +790,7 @@ const MAPS_ZH: Record<MapId, { name: string }> = {
 const ATTACHMENTS_ZH: Record<AttachmentId, string> = {
   irons: '機械瞄具', reflex: '紅點瞄準鏡', holo: '全像瞄準鏡', acog: 'ACOG 瞄準鏡', x4: '4 倍鏡', x6: '6 倍鏡',
   ammoCounter: '彈藥計數器', laser: '雷射瞄準器', flashlight: '戰術槍燈', suppressor: '消音器',
-  extendedClip: '擴充彈匣', recoilPad: '後座力緩衝墊', explosiveAmmo: '爆裂彈', incendiaryAmmo: '燃燒彈',
+  extendedClip: '擴充彈匣', recoilPad: '後座力緩衝墊', explosiveAmmo: '爆裂彈', incendiaryAmmo: '燃燒子彈',
 };
 
 // ---- Current language ----

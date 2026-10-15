@@ -8,6 +8,7 @@ import { BOBA, FALL, HEALTH, STAMINA, oneHanded, type AttachmentId, type Slot, t
 import { PHYSICS_STEP, stepBodies, type Body } from '../world';
 import { cleanSkin, isDefaultSkin } from '../skins';
 import { ROOKIE_ROUNDS, botName, createBrain, updateBot } from './bots';
+import { breakMolotov, burnFires, smokeInFire, smotherFires, throwMolotovFrom } from './fire';
 import {
   CASH, award, botShop, buy, buyAttachment, finishReload, newRoundStats, refillAmmo, resetInventory, statsOf, useCrate, type BuyItem,
 } from './economy';
@@ -57,7 +58,7 @@ export function addSoldier(state: MatchState, ctx: SimContext, opts: { name: str
     ...(!opts.bot && opts.rounds !== undefined && opts.rounds < ROOKIE_ROUNDS ? { rookieRounds: Math.max(0, Math.floor(opts.rounds)) } : {}),
     m: createMoveState(0, 0, 0), yaw: 0, pitch: 0, alive: false, health: 0, weapon: 0,
     weapons: ['mp5', 'm9a1'], owned: [], attachments: {}, ammo: [0, 0], reserve: [0, 0],
-    reloadLeft: 0, fireCooldown: 0, switchLeft: 0, grenades: 0, grenadeHE: false, smokes: 0, bobas: 0, slippers: 1, stamina: STAMINA.max, money: 0,
+    reloadLeft: 0, fireCooldown: 0, switchLeft: 0, grenades: 0, grenadeHE: false, smokes: 0, bobas: 0, molotovs: 0, slippers: 1, stamina: STAMINA.max, money: 0,
     sinceHit: 99, lastAttacker: -1, kills: 0, deaths: 0, assists: 0, score: 0, sprint: false, ads: false, sinceShot: 99, using: false,
     corrections: 0, moveSlack: MOVE_SLACK.max, groundY: 0, idle: 0, round: newRoundStats(), roundsHere: 0,
   };
@@ -356,6 +357,15 @@ export function throwSmoke(state: MatchState, ctx: SimContext, id: number, origi
   return !!throwSmokeFrom(state, s, o, normalize3(dir));
 }
 
+/** Throw the 燃燒彈: the same checks as the M67. */
+export function throwMolotov(state: MatchState, ctx: SimContext, id: number, origin: Vec3, dir: Vec3) {
+  const s = state.soldiers.find(x => x.id === id);
+  if (!s || !s.alive || state.phase !== 'live' || state.roundPhase === 'freeze' || seatOf(state, id)?.seat === 0) return false;
+  const eye = eyeOf(s);
+  const o = [origin.x, origin.y, origin.z, dir.x, dir.y, dir.z].every(Number.isFinite) && dist3(origin, eye) < 2.5 ? origin : eye;
+  return !!throwMolotovFrom(state, s, o, normalize3(dir));
+}
+
 /** Throw the 藍白拖 wound up to `power` (0..1): the same checks as the M67. */
 export function throwSlipper(state: MatchState, ctx: SimContext, id: number, origin: Vec3, dir: Vec3, power: number) {
   const s = state.soldiers.find(x => x.id === id);
@@ -564,16 +574,21 @@ function stepWorld(state: MatchState, ctx: SimContext, dt: number) {
     });
   }
   pickUpSlippers(state, ctx);
+  burnFires(state, ctx, dt);
   const b0 = ctx.map.bounds;
   for (const b of [...state.bodies]) {
     const far = b.x < b0.minX - 60 || b.x > b0.maxX + 60 || b.z < b0.minZ - 60 || b.z > b0.maxZ + 60 || b.y < -40 || b.y > 260;
     b.timer -= dt;
-    if (b.timer <= 0 || far) {
+    // A smoke grenade landing in flames pops there and then (and puts them out).
+    if (b.kind === 'smoke' && state.bodies.some(f => f.kind === 'fire') && smokeInFire(state, ctx, b)) b.timer = 0;
+    // A molotov goes the moment it lands (or, still flying, when its fuse runs out).
+    if (b.timer <= 0 || far || (b.kind === 'molotov' && b.hp <= 0)) {
       removeBody(state, b);
       if (far) continue;
       if (b.kind === 'grenade') explode(state, ctx, b);
-      else if (b.kind === 'smoke') popSmoke(state, ctx, b);
-      // A cloud whose time is up just clears.
+      else if (b.kind === 'smoke') { popSmoke(state, ctx, b); smotherFires(state, ctx, b); }
+      else if (b.kind === 'molotov') breakMolotov(state, ctx, b);
+      // A cloud or a fire whose time is up just clears.
     }
   }
 }

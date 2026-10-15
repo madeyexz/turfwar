@@ -48,7 +48,7 @@ Starting money $1,000 per match; maximum $16,000. Kill $500 (knife kill $600, gr
 - M9A1 (secondary, default): 29 / 22 / 15, semi-auto, 12 + 36
 - MP7 ($1,800): 18 / 12 / 8, automatic, 13 rounds/s, 20 + 60
 - Knife (free, always carried): 33 anywhere at about 2 m; by default shown as a blue-and-white slipper (藍白拖); each player can pick a broom (掃把) or the plain knife instead in the lobby's Skins (外觀) panel, which changes looks, name and sound only. Militia players can also pick their street character. With the slipper in hand, holding aim winds up a throw (飛拖) of up to 0.8 s; only a full wind-up kills outright.
-- M67 grenade ($1,000): 70 damage with falloff, 2.1 s fuse. M18 smoke ($300): a 9 m cloud for 15 s that blocks sight, not bullets (not in BeGone). 珍奶 bubble tea ($400): a 1.4 s sip, then +50 health up to 100 (not in BeGone).
+- M67 grenade ($1,000): 70 damage with falloff, 2.1 s fuse. M18 smoke ($300): a 9 m cloud for 15 s that blocks sight, not bullets (not in BeGone). 燃燒彈 molotov ($400): breaks on the floor it lands on and burns anyone standing in the 6 m of fire for 7 s, 32 health a second, enemies and the thrower but not teammates; smoke puts it out (not in BeGone). 珍奶 bubble tea ($400): a 1.4 s sip, then +50 health up to 100 (not in BeGone).
 - Attachments (one per category per weapon, kept for the match): optics Iron Sight (free), Reflex $800, Holographic $1,000, ACOG $1,100, Zoom x4 $600 (M9A1 only), Zoom x6 $1,200 (M110 only); tactical Ammo Counter $200, Laser Sight $800, Flashlight $600, Suppressor from $600 to $1,100; mods Extended Clip $900, Recoil Pad $1,200; ammo Explosive $1,600, Incendiary $1,400.
 - Gunplay is hitscan with per-weapon fire rate, magazine, reload, recoil, zoom and move speed. Right mouse button zooms through the fitted optic; Z raises binoculars (10× zoom). Auto-peek: aiming right behind cover leans you out past its edge, with no extra key.
 
@@ -68,7 +68,7 @@ On Ximending, Meridian District and Taipei 101 · Xinyi: cars and taxis (top spe
 
 ## Controls (defaults; every key can be rebound in Settings → Controls)
 
-W A S D move · mouse look · left click fire · right click aim (zoom) · Shift sprint · Space jump · C or Ctrl crouch · 1 / 2 / 3 primary, secondary, knife · 4 or G grenade · 5 or X smoke · 6 or Y bubble tea · Q or mouse wheel cycle weapons · R reload · E use · Z binoculars · B store · Enter chat · T team chat · Tab scoreboard · F fullscreen · Esc or P menu · V vehicle camera.
+W A S D move · mouse look · left click fire · right click aim (zoom) · Shift sprint · Space jump · C or Ctrl crouch · 1 / 2 / 3 primary, secondary, knife · 4 or G grenade · 5 or X smoke · 6 or Y bubble tea · 7 or U molotov · Q or mouse wheel cycle weapons · R reload · E use · Z binoculars · B store · Enter chat · T team chat · Tab scoreboard · F fullscreen · Esc or P menu · V vehicle camera.
 Phones and tablets: on-screen controls (a floating stick on the left, a look pad elsewhere, fire, aim, jump, crouch, reload and use buttons), an editable layout, touch aim assist and aim-while-firing on by default. The game can be installed as a web app. In-app browsers such as Threads and Instagram never rotate to landscape; the game turns the page 90 degrees so the player can turn the phone.
 
 ## Languages, privacy, licence

@@ -24,6 +24,8 @@ export interface GameLink {
   grenade(origin: Vec3, dir: Vec3): void;
   /** Throw the M18 smoke grenade (the host checks we carry one). */
   smoke(origin: Vec3, dir: Vec3): void;
+  /** Throw the 燃燒彈 (the host checks we carry one). */
+  molotov(origin: Vec3, dir: Vec3): void;
   /** Throw the 藍白拖 in hand, wound up to `power` (0..1); the host checks we hold one. Hosts without it leave it out. */
   slipper?(origin: Vec3, dir: Vec3, power: number): void;
   /** Wear a cosmetic skin (shared/skins.ts); the host cleans it. Hosts without skins leave it out. */
