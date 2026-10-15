@@ -41,6 +41,7 @@ import AdminRevokeAllReducer from "./admin_revoke_all_reducer";
 import BuyReducer from "./buy_reducer";
 import BuyAttachmentReducer from "./buy_attachment_reducer";
 import ChangeTeamReducer from "./change_team_reducer";
+import ConsentReducer from "./consent_reducer";
 import CreateRoomReducer from "./create_room_reducer";
 import DeviceReducer from "./device_reducer";
 import DrinkReducer from "./drink_reducer";
@@ -110,6 +111,7 @@ import PlayerRow from "./player_table";
 import PointRow from "./point_table";
 import PrivateRoomRow from "./private_room_table";
 import ProfileRow from "./profile_table";
+import RecorderSubjectsRow from "./recorder_subjects_table";
 import RosterRow from "./roster_table";
 import SoldierRow from "./soldier_table";
 
@@ -416,6 +418,13 @@ const tablesSchema = __schema({
     constraints: [
     ],
   }, MyRoomCodeRow),
+  recorderSubjects: __table({
+    name: 'recorder_subjects',
+    indexes: [
+    ],
+    constraints: [
+    ],
+  }, RecorderSubjectsRow),
 });
 
 /** The schema information for all reducers in this module. This is defined the same way as the reducers would have been defined in the server, except the body of the reducer is omitted in code generation. */
@@ -427,6 +436,7 @@ const reducersSchema = __reducers(
   __reducerSchema("buy", BuyReducer),
   __reducerSchema("buy_attachment", BuyAttachmentReducer),
   __reducerSchema("change_team", ChangeTeamReducer),
+  __reducerSchema("consent", ConsentReducer),
   __reducerSchema("create_room", CreateRoomReducer),
   __reducerSchema("device", DeviceReducer),
   __reducerSchema("drink", DrinkReducer),

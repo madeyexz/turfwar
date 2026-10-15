@@ -1,3 +1,4 @@
+import { bindRecording, forgetRecKey, recordingContent, rememberRecKey } from './recording';
 import type { Infer } from 'spacetimedb';
 import { DbConnection } from '../module_bindings';
 import type AdminPlayersRow from '../module_bindings/admin_players_table';
@@ -274,7 +275,7 @@ function renderLogin() {
       setTimeout(() => {
         loggingIn = false;
         const s = status();
-        if (s?.admin) { store.set(flagKey(), '1'); message = ''; render(); return; }
+        if (s?.admin) { store.set(flagKey(), '1'); message = ''; rememberRecKey(key); render(); return; }
         const left = Math.max(0, 5 - (s?.failures ?? 0));
         message = left > 0 ? `Wrong key. ${left} attempt${left === 1 ? '' : 's'} left in this 10-minute window.` : 'Wrong key. Too many attempts; try again in 10 minutes.';
         render();
@@ -404,13 +405,13 @@ const group = (id: string, title: string, sub: string, tiles: string[], cards: s
 const card = (title: string, sub: string, content: string, cls = '') => `<section class="card${cls ? ` ${cls}` : ''}"><h3>${title} <small>${sub}</small></h3>${content}</section>`;
 const SECTIONS: [string, string][] = [
   ['metrics', 'Key metrics'], ['scorecard', 'Score'], ['now', 'Now'], ['growth', 'Acquisition'], ['activation', 'Activation'], ['retention', 'Retention'], ['play', 'Engagement'],
-  ['virality', 'Virality'], ['health', 'Health'], ['errors', 'Errors'], ['connection', 'Quality'], ['benchmarks', 'Benchmarks'], ['players', 'Players'],
+  ['virality', 'Virality'], ['health', 'Health'], ['errors', 'Errors'], ['connection', 'Quality'], ['recording', 'Recording'], ['benchmarks', 'Benchmarks'], ['players', 'Players'],
 ];
 /** The sidebar's headings over the sections (ids from SECTIONS, in order). */
 const NAV_GROUPS: [string, string[]][] = [
   ['Overview', ['metrics', 'scorecard', 'now']],
   ['Growth', ['growth', 'activation', 'retention', 'play', 'virality']],
-  ['Operations', ['health', 'errors', 'connection']],
+  ['Operations', ['health', 'errors', 'connection', 'recording']],
   ['Reference', ['benchmarks', 'players']],
 ];
 /** The section on show: the page's #hash when it names one, else Key metrics. */
@@ -560,6 +561,7 @@ function dashboard() {
       <div class="grid2 even">${card('Frame rate', 'players by their typical fps, last 7 days', fpsPanel(G, now))}${card('By browser', 'in-app browsers against plain browsers, last 7 days, slowest first', browserTable(G.all, now))}</div>
       <div class="grid2">${card('Ping', `median of players' p50 (tick: p95) ${rangeText()}`, pingChart(G))}${card('Ping by country', 'median typical p50, time zone → country', countryPing(G))}</div>
       ${card('Devices', 'players by the device they last played on online, last 7 days', devicePanel(players, now))}`)}
+    ${group('recording', 'Recording', 'clean human hours for bot training and the dataset, counted from R2', [], recordingContent(server.database, card))}
     ${group('benchmarks', 'Benchmarks', 'BeGone (nplay) in Taiwan at its peak, estimated', [], benchmarks(G.all, peaks, today))}
     ${group('players', 'Players', `${num(shown.length)} · sorted by ${sortLabel()}`, [], `<section class="card">${chips}${playerTable(shown)}</section>`)}
     <footer><p>Updates live. Players are identities that said hello or joined a room; ids are anonymous. <b>Phone</b> and <b>Computer</b> group players by
@@ -576,6 +578,7 @@ function dashboard() {
       the K-factor counts players who arrived through a share code and entered a room; drops are connections that closed in a room.
       Purple flags on the charts are releases to production (hover for what shipped).</p>
       <button type="button" class="btn revoke" id="revoke">Sign out all admins</button></footer>`;
+  bindRecording(body, server.database, render);
   body.querySelectorAll<HTMLButtonElement>('th button[data-sort]').forEach(b => b.addEventListener('click', () => {
     const k = b.dataset.sort as typeof sortKey;
     if (sortKey === k) sortDir = sortDir === 1 ? -1 : 1; else { sortKey = k; sortDir = k === 'name' || k === 'country' || k === 'tz' || k === 'deviceName' || k === 'channel' ? 1 : -1; }
@@ -1511,6 +1514,7 @@ function unreachableCard() {
 
 logoutBtn.addEventListener('click', () => {
   store.del(flagKey());
+  forgetRecKey();
   message = 'Logged out.'; messageError = false;
   void conn?.reducers.adminLogout({}).catch(() => undefined).finally(render);
 });
@@ -1585,6 +1589,7 @@ function switchServer(next: AdminServer) {
   driver.stop();
   conn = undefined; loggingIn = false; message = ''; messageError = true; playerLimit = 100; views = freshViews();
   server = next;
+  forgetRecKey();
   rememberServer(server, storage);
   renderServer();
   driver = makeDriver();

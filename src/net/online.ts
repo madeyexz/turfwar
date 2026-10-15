@@ -23,6 +23,8 @@ import { currentServer } from './servers';
 import { currentDeviceKind } from '../game/device';
 import { takePerfReport, visitReport } from '../growth';
 import { PERF_RATE_LIMIT_MICROS } from '../../shared/metrics';
+import type { InputLog, LogAuth } from '../game/inputlog';
+import { consentState, onConsent } from '../game/consent';
 
 type RosterRow = Infer<typeof RosterTable>;
 
@@ -125,6 +127,17 @@ export class OnlineLink implements GameLink {
   private reloadStart = new Map<number, number>();
   private lastShot = new Map<number, number>();
 
+  /** Match recording's input logger while one runs (src/game/inputlog.ts), and what it uploads with. */
+  private log?: InputLog;
+  /** The connection's token and database: the ingest Worker checks the token's signature to know the player. */
+  token = '';
+  database = '';
+  recAuth(): LogAuth | undefined {
+    if (!this.token || this.room < 0 || this.me < 0) return undefined;
+    return { token: this.token, database: this.database, room: this.room, soldierId: this.me };
+  }
+  attachLog(log: InputLog | undefined) { this.log = log; }
+
   constructor(private conn: DbConnection, private identity: Identity) {
     const bump = () => { this.dirty = true; };
     const db = conn.db;
@@ -138,6 +151,7 @@ export class OnlineLink implements GameLink {
       const decoded = decodeFrame(row.data);
       if (!decoded) return;
       this.frame = decoded; this.frameMap = row.mapId; this.dirty = true;
+      this.log?.serverTick(decoded.tick);
       const now = this.lastFrameAt = performance.now();
       for (const shot of decoded.shots) { this.events.push(shot); this.lastShot.set(shot.shooter, now); }
     };
@@ -314,8 +328,9 @@ export class OnlineLink implements GameLink {
     if (this.reportsInFlight > 3) return; // never queue up stale movement
     this.reportsInFlight++;
     const sent = performance.now();
+    this.log?.sent(0);
     void this.conn.reducers.report({ ...r, slide: !!r.slide, weapon: r.weapon, use: !!r.use })
-      .then(() => this.samplePing(sent))
+      .then(() => { this.log?.rtt(performance.now() - sent); this.samplePing(sent); })
       .catch(() => undefined)
       .finally(() => { this.reportsInFlight--; });
   }
@@ -362,6 +377,7 @@ export class OnlineLink implements GameLink {
   }
   fire(c: ShotClaim) {
     if (!this.inMatch()) return;
+    this.log?.sent(1);
     void this.conn.reducers.fire({ weapon: c.weapon, ox: c.origin.x, oy: c.origin.y, oz: c.origin.z, dx: c.dir.x, dy: c.dir.y, dz: c.dir.z, target: c.target, zone: c.zone, px: c.point.x, py: c.point.y, pz: c.point.z }).catch(() => undefined);
   }
   buy(item: BuyItem) { if (!this.inMatch()) return; void this.conn.reducers.buy({ item }).catch(() => undefined); }
@@ -387,7 +403,10 @@ export class OnlineLink implements GameLink {
   reload() { if (!this.inMatch()) return; void this.conn.reducers.reloadWeapon({}).catch(() => undefined); }
   switchWeapon(slot: Slot) { if (!this.inMatch()) return; void this.conn.reducers.switchSlot({ slot }).catch(() => undefined); }
 
+  /** Called once on dispose (stops the consent listener). */
+  onDispose?: () => void;
   dispose() {
+    this.onDispose?.(); this.onDispose = undefined;
     this.lifetime.abort();
     this.netLeft();
     // Already dropped by the server: there is nothing to leave (it would only answer "Not joined").
@@ -407,6 +426,12 @@ function sayHello(conn: DbConnection) {
   try { void conn.reducers.device({ kind: currentDeviceKind() }).catch(() => undefined); } catch { /* server without device */ }
   // Then where this browser came from and whom it invited (src/growth.ts; older servers lack `visit`).
   try { void conn.reducers.visit(visitReport()).catch(() => undefined); } catch { /* server without visit */ }
+  sendConsent(conn);
+}
+
+/** The Terms accepted with Play and the dataset switch (src/game/consent.ts; older servers lack `consent`). */
+function sendConsent(conn: DbConnection) {
+  try { void conn.reducers.consent(consentState()).catch(() => undefined); } catch { /* server without consent */ }
 }
 
 /** A server published before a reducer existed refuses the call by name. */
@@ -543,6 +568,10 @@ export async function connectOnline(name: string, team: Team | undefined, how: O
         // PostHog people can be matched to SpacetimeDB profiles by this property (never identify()).
         setPerson({ stdb_identity: identity.toHexString() });
         link = new OnlineLink(connection, identity);
+        link.token = nextToken; link.database = database;
+        // The dataset switch changed in Settings: tell the server at once (the recorder stops at its next frame).
+        const stopConsent = onConsent(() => sendConsent(connection));
+        link.onDispose = stopConsent;
         connection.subscriptionBuilder()
           .onApplied(async () => {
             if (done) return;

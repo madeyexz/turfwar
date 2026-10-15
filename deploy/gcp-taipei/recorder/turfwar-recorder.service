@@ -1,0 +1,24 @@
+# The match recorder (docs/RECORDING.md): an SDK client of the local SpacetimeDB that writes one segment
+# per round to R2. Low priority and capped, so the game server always comes first.
+[Unit]
+Description=Turf War match recorder
+After=network-online.target docker.service
+Wants=network-online.target
+
+[Service]
+User=turfwar-rec
+EnvironmentFile=/etc/turfwar-rec/env
+ExecStart=/opt/turfwar-rec/bin/bun /opt/turfwar-rec/recorder.js
+Restart=always
+RestartSec=5
+Nice=10
+CPUWeight=20
+MemoryMax=350M
+NoNewPrivileges=true
+ProtectSystem=strict
+ProtectHome=true
+ReadWritePaths=/var/lib/turfwar-rec
+PrivateTmp=true
+
+[Install]
+WantedBy=multi-user.target

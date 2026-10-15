@@ -1,0 +1,15 @@
+<!doctype html>
+<html lang="en"><head><meta charset="UTF-8"><title>Recording replay</title>
+<style>
+body{margin:0;background:#0b0f12;color:#dfe7ea;font:13px system-ui,sans-serif;display:flex;flex-direction:column;height:100vh}
+header{display:flex;gap:10px;align-items:center;padding:8px 10px;border-bottom:1px solid #223}
+header input[type=range]{flex:1}
+#info{white-space:pre;font:12px monospace;padding:6px 10px;border-top:1px solid #223;max-height:30vh;overflow:auto}
+canvas{flex:1;min-height:0;width:100%;display:block}
+button{background:#1d2a33;color:#dfe7ea;border:1px solid #345;border-radius:4px;padding:4px 10px;cursor:pointer}
+</style></head>
+<body>
+<header><input type="file" id="file" accept=".tfr,.tfx,.zst"><button id="play">Play</button><select id="speed"><option>0.5</option><option selected>1</option><option>2</option><option>4</option></select><input type="range" id="seek" min="0" max="0" value="0"><span id="tick"></span></header>
+<canvas id="map"></canvas>
+<div id="info">Open a segment (.tfr) or an export file (.tfx). Files from R2 are zstd-compressed: decompress them first (zstd -d file.tfr.zst).</div>
+<script type="module" src="./replay.ts"></script></body></html>

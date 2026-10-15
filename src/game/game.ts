@@ -50,10 +50,13 @@ import { skinOf } from '../../shared/skins';
 import { TouchControls, type TouchInfo } from '../ui/touchcontrols';
 import { holdAimMode } from './holdfire';
 import { onTouchLayout, touchActive, touchAimAssist, type TouchContext } from './touchlayout';
+import { InputLog } from './inputlog';
+import { mayRecord } from './consent';
+import { currentDeviceKind } from './device';
 import { ASSIST, aimAssist, anglesTo } from './aimassist';
 import { GOALS, NUDGE_ROUNDS, levelOf, loadProgress, recordProgress, type ProgressEvent } from './progress';
 import { smokeBlocks } from '../../shared/match/combat';
-import { crazyGameplay, shareableLink } from '../crazygames';
+import { CRAZYGAMES, crazyGameplay, shareableLink } from '../crazygames';
 
 type Sample = { x: number; y: number; z: number; vx: number; vy: number; vz: number; yaw: number; pitch: number; crouch: number };
 /** Remote soldiers closer than this get full animation and shadows; up to LOD_MID, half rate. */
@@ -109,6 +112,9 @@ export class Game {
   /** The match-end screen has buttons: free the mouse once when it appears. */
   private endShown = false;
   private corrections = 0;
+  /** Match recording's input logger (online, consenting players only), and this frame's aim-assist effect for it. */
+  private inputLog?: InputLog;
+  private assisted = { scale: 1, yaw: 0, pitch: 0 };
   /** Weapon (and attachments) the view model shows, to rebuild it only on change. */
   private shownWeapon = '';
   /** Remote gunshot sounds started this frame. */
@@ -235,6 +241,15 @@ export class Game {
     renderer.scene.add(this.crates.group, this.sites.group, this.vehicles.group, this.skids.mesh);
     this.input = new Input(renderer.renderer.domElement);
     this.input.sensitivity = settings.sensitivity;
+    // Match recording (docs/RECORDING.md): online, for players who accepted the Terms and kept datasets on
+    // (never in the CrazyGames build, which leaves the logger out entirely).
+    if (!CRAZYGAMES && link.mode === 'online' && link.recAuth && mayRecord()) {
+      this.inputLog = new InputLog(renderer.renderer.domElement, () => this.input.locked, () => link.recAuth!(), () => ({
+        device: currentDeviceKind(), touch: touchActive(), assist: touchActive() && touchAimAssist(),
+        sens: this.player.sensitivity * this.input.sensitivity, fov: settings.fov,
+      }));
+      link.attachLog?.(this.inputLog);
+    }
     const me = link.state()?.soldiers.find(s => s.id === link.myId());
     this.myTeam = me?.team ?? 0;
     this.viewmodel = new ViewModel(assets, this.myTeam, mySkin().knife);
@@ -311,6 +326,8 @@ export class Game {
 
   stop(keepLink = false) {
     this.running = false;
+    this.link.attachLog?.(undefined);
+    this.inputLog?.close(); this.inputLog = undefined;
     if (!keepLink) this.link.dispose();
     this.hud.dispose();
     this.buymenu.dispose?.();
@@ -452,8 +469,10 @@ export class Game {
       if (p) this.player.seat(seatPosition({ ...p, kind: seat.vehicle.kind }, seat.seat), VEHICLES[seat.vehicle.kind].sit, { vx: p.vx, vy: 0, vz: p.vz });
     }
     // Touch screens get aim assist (aimassist.ts): friction near a visible enemy, magnetism while firing.
+    this.assisted = { scale: 1, yaw: 0, pitch: 0 };
     if (active && this.player.alive && !this.driving.active && touchActive() && touchAimAssist()) this.assistAim(state, myId, dt);
     const aimed = { yaw: this.player.yaw, pitch: this.player.pitch };
+    const lookScale = this.player.sensitivity * this.input.sensitivity * this.player.lookScale;
     const result = this.driving.active && !this.driving.armed
       ? this.player.update(dt, undefined, this.map.world, false, true)
       : this.player.update(dt, active ? this.input : undefined, this.map.world, active && state.phase !== 'ended', this.player.frozen || state.roundPhase === 'over',
@@ -465,6 +484,7 @@ export class Game {
       this.driving.camPitch = Math.max(-0.9, Math.min(this.driving.firstPerson ? 0.9 : 0.6, this.driving.camPitch));
       if (result.shots.length) this.driving.aiming();
     }
+    this.inputLog?.frame({ lookX: look.x, lookY: look.y, scale: lookScale, assistYaw: this.assisted.yaw, assistPitch: this.assisted.pitch, assistScale: this.assisted.scale, yaw: this.player.yaw, pitch: this.player.pitch, alive: this.player.alive });
     if (result.move.jumped) this.audio.jump();
     if (result.move.landed > 4) this.audio.land(result.move.landed);
     if (result.move.slideStarted) this.audio.slide();
@@ -852,6 +872,7 @@ export class Game {
     const assist = aimAssist({ eye, yaw: this.player.yaw, pitch: this.player.pitch, targets, firing: this.input.fire, dt, zoom });
     this.input.lookX *= assist.lookScale; this.input.lookY *= assist.lookScale;
     this.player.yaw += assist.yaw; this.player.pitch += assist.pitch;
+    this.assisted = { scale: assist.lookScale, yaw: assist.yaw, pitch: assist.pitch };
   }
 
   /** The vehicles' bodies where we see them (as rendered): they block us, carry us on their roofs and push us aside. */

@@ -60,7 +60,8 @@ h2 {
 .lead { margin: 22px 0 0; font-size: 18px; line-height: 1.6; }
 p, li { font-size: 16px; line-height: 1.7; color: #d3e2e6; }
 p { margin: 0 0 10px; }
-ul { margin: 0 0 10px; padding-left: 22px; }
+ul, ol { margin: 0 0 10px; padding-left: 22px; }
+ol.terms li { margin-bottom: 10px; }
 li + li { margin-top: 4px; }
 
 .foot {

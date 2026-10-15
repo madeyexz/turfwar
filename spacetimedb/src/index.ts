@@ -23,6 +23,7 @@ import { acceptNetReport, foldNetDay } from '../../shared/netstats';
 import { acceptDevice } from '../../shared/devicekind';
 import { firstTaipeiDay, taipeiDay, taipeiDayStart } from '../../shared/taipei';
 import { maskProfanity } from '../../shared/profanity';
+import { cleanExcludedBy, leftOutZone, TERMS_VERSION } from '../../shared/rec/policy';
 import { acceptPerf, acceptVisit, countRoomEvent, foldRoomMinute, noteMilestones, type RoomHour } from '../../shared/metrics';
 import * as Admin from './admin';
 import { AdminError, bumpPeak, dailyNetRows, playerMilestoneRows, playerPerfRows, playerSourceRows, dailyRows, dailyTimeRows, dayOf, forAdmin, playerDayNetRows, playerDayRows, playerDayTimeRows, playerHourRows, playerDeviceRows, playerNetRows, playerRows, playTimeRows, onlineBySide, type AdminStore } from './admin';
@@ -315,6 +316,16 @@ const serverErrorTable = table({ name: 'server_error' }, { id: t.u64().primaryKe
 /** Failed admin logins per identity in the current 10-minute window (the rate limit). Private. */
 const adminAttemptTable = table({ name: 'admin_attempt' }, { identity: t.identity().primaryKey(), windowStart: t.timestamp(), failures: t.u32() });
 
+/**
+ * Match recording consent per identity (shared/rec/policy.ts, docs/RECORDING.md): the Terms version the
+ * player accepted by pressing Play, and whether they are left out of the datasets (their Settings switch,
+ * their browser's GPC/DNT, or the platform). Written by `consent`; read by the recorder through
+ * `recorder_subjects`. Private.
+ */
+const consentTable = table({ name: 'player_consent' }, {
+  identity: t.identity().primaryKey(), termsVersion: t.u32(), acceptedAt: t.timestamp(), excluded: t.bool(), excludedBy: t.string(), excludedAt: t.timestamp(), platform: t.string(),
+});
+
 const tickTable = table({ name: 'tick_schedule' }, { scheduledId: t.u64().primaryKey().autoInc(), scheduledAt: t.scheduleAt(), room: t.u8().default(0) });
 
 const spacetimedb = schema({
@@ -325,6 +336,7 @@ const spacetimedb = schema({
   playerDay: dayTable, admin: adminTable, serverError: serverErrorTable, adminAttempt: adminAttemptTable, playerTime: timeTable, playerDayTime: dayTimeTable,
   playerNet: netTable, playerDayNet: dayNetTable, playerHour: hourTable, peakHour: peakTable, playerPerf: perfTable, playerSource: sourceTable, playerMilestone: milestoneTable, roomHour: roomHourTable, playerDevice: deviceTable, roomCode: roomCodeTable, privateRoom: privateRoomTable,
   taipeiPlayerDay: taipeiDayTable, taipeiPlayerDayTime: taipeiDayTimeTable, taipeiPlayerDayNet: taipeiDayNetTable, taipeiCoverage: taipeiCoverageTable, taipeiRebuild: taipeiRebuildTable,
+  playerConsent: consentTable,
 });
 export default spacetimedb;
 
@@ -1159,6 +1171,25 @@ export const device = spacetimedb.reducer({ kind: t.string() }, (ctx, { kind }) 
 });
 
 /**
+ * Match recording consent (docs/RECORDING.md): the Terms version accepted with Play (at most the current
+ * one), and whether the player is left out of the datasets and why ('setting', 'gpc', 'dnt', 'platform').
+ * Sent on connecting and whenever the Settings switch changes. Per-identity bookkeeping only.
+ */
+export const consent = spacetimedb.reducer({ termsVersion: t.u32(), excluded: t.bool(), excludedBy: t.string(), platform: t.string() }, (ctx, a) => {
+  const row = ctx.db.playerConsent.identity.find(ctx.sender);
+  const termsVersion = Math.min(TERMS_VERSION, a.termsVersion);
+  const excludedBy = a.excluded ? cleanExcludedBy(a.excludedBy) : '';
+  const platform = a.platform === 'crazygames' ? 'crazygames' : 'web';
+  const next = {
+    identity: ctx.sender, termsVersion, excluded: a.excluded, excludedBy, platform,
+    acceptedAt: row && row.termsVersion === termsVersion ? row.acceptedAt : ctx.timestamp,
+    excludedAt: row && row.excluded === a.excluded ? row.excludedAt : ctx.timestamp,
+  };
+  if (!row) ctx.db.playerConsent.insert(next);
+  else if (row.termsVersion !== next.termsVersion || row.excluded !== next.excluded || row.excludedBy !== next.excludedBy || row.platform !== next.platform) ctx.db.playerConsent.identity.update(next);
+});
+
+/**
  * The client's frame rate since its previous report and its load times (shared/metrics.ts): median
  * fps, 1% low and the seconds behind them, ms from pressing Play to being in the match and from
  * opening the page to the lobby being ready (0 = not in this report). Sent with the 2-minute
@@ -1459,6 +1490,24 @@ export const adminRooms = spacetimedb.view({ name: 'admin_rooms', public: true }
     let bots = 0;
     for (const r of ctx.db.roster.room.filter(m.id)) if (r.bot) bots++;
     return { room: m.id, code: ctx.db.roomCode.room.find(m.id)?.code ?? m.code, mapId: m.mapId, mode: config.mode ?? 'elimination', size: config.teamSize ?? 6, humans: m.humans, bots, round: m.score0 + m.score1 + 1, phase: m.phase };
+  })));
+
+/**
+ * For the match recorder on the game server's machine (logged in as admin; docs/RECORDING.md): every
+ * player in a room with their soldier, consent, device and one region flag (EU, EEA, UK, Switzerland or
+ * an unknown time zone). The time zone itself stays here.
+ */
+export const recorderSubjects = spacetimedb.view({ name: 'recorder_subjects', public: true },
+  t.array(t.row('RecorderSubjectRow', {
+    identity: t.string(), soldierId: t.u32(), room: t.u8(), termsVersion: t.u32(), excluded: t.bool(), excludedBy: t.string(), platform: t.string(), device: t.string(), euUk: t.bool(),
+  })),
+  ctx => forAdmin(viewAdmins(ctx.db), ctx.sender.toHexString(), () => [...ctx.db.player.iter()].map(p => {
+    const c = ctx.db.playerConsent.identity.find(p.identity);
+    return {
+      identity: p.identity.toHexString(), soldierId: p.soldierId, room: p.room, termsVersion: c?.termsVersion ?? 0, excluded: c?.excluded ?? false,
+      excludedBy: c?.excludedBy ?? '', platform: c?.platform ?? '', device: ctx.db.playerDevice.identity.find(p.identity)?.device ?? '',
+      euUk: leftOutZone(ctx.db.playerSeen.identity.find(p.identity)?.tz ?? ''),
+    };
   })));
 
 /** The code of the private room the caller plays in (no row otherwise): the in-game line the host shares it from. */
