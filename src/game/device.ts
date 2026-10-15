@@ -119,8 +119,36 @@ export function touchEnabled(pref: TouchPref, env: DeviceEnv, flag?: string | nu
   return touchPrimary(env);
 }
 
-/** Phones and tablets start on low graphics (lower resolution, lighter shadows) unless the player chose. */
-export const defaultQuality = (touch: boolean): 'low' | 'medium' => touch ? 'low' : 'medium';
+/**
+ * Graphics Medium is too much for: Intel's integrated graphics (UHD, HD, Iris; not the Arc cards) and software
+ * renderers (no graphics card drawing at all). In October 2026 Windows computers on Intel UHD 630 and Iris Xe
+ * played Medium at about 30 fps with 1% lows of 10–20 even after the adaptive resolution had reached its 0.6
+ * floor (a school's computer room among them), while AMD and NVIDIA cards held 60 or more.
+ */
+export function weakGpu(renderer: string): boolean {
+  if (/swiftshader|llvmpipe|softpipe|basic render|software/i.test(renderer)) return true;
+  return /\bintel\b/i.test(renderer) && !/\barc\b/i.test(renderer);
+}
+
+let renderer: string | undefined;
+/** The graphics card as WebGL names it ('' without WebGL or a name), read once from a throwaway context. */
+export function gpuRenderer(): string {
+  if (renderer !== undefined) return renderer;
+  renderer = '';
+  try {
+    const canvas = document.createElement('canvas');
+    const gl = (canvas.getContext('webgl2') ?? canvas.getContext('webgl')) as WebGLRenderingContext | null;
+    if (gl) {
+      const ext = gl.getExtension('WEBGL_debug_renderer_info');
+      renderer = String(gl.getParameter(ext ? ext.UNMASKED_RENDERER_WEBGL : gl.RENDERER) ?? '');
+      gl.getExtension('WEBGL_lose_context')?.loseContext();
+    }
+  } catch { /* no WebGL, no document (tests) */ }
+  return renderer;
+}
+
+/** Phones, tablets and computers on weak graphics (weakGpu) start on low graphics (lower resolution, lighter shadows, no bloom) unless the player chose. */
+export const defaultQuality = (touch: boolean, gpu = ''): 'low' | 'medium' => touch || weakGpu(gpu) ? 'low' : 'medium';
 
 /**
  * The lobby's install hint for a touch device that is not running as an installed app.

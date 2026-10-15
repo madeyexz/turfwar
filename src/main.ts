@@ -36,7 +36,7 @@ import { L, applyI18n, escapeHtml as esc, isZh, lang, mapName as localMapName, m
 import './style.css';
 import './menu.css';
 import './ui/lang-zh.css';
-import { currentDeviceKind, defaultQuality, inAppBrowserName, readEnv } from './game/device';
+import { currentDeviceKind, defaultQuality, gpuRenderer, inAppBrowserName, readEnv } from './game/device';
 import { onTouchLayout, touchActive, touchAimAssist } from './game/touchlayout';
 import { InstallBanner } from './ui/installhint';
 import { isSideways, onSideways, watchSideways } from './ui/viewport';
@@ -294,9 +294,9 @@ let joinSize: SizeId | '' = '';
 let joinMode: Mode | '' = '';
 let team = params.get('team') ?? store.get('team', 'auto');
 let skill = params.get('skill') ?? store.get('skill', '0.45');
-// Phones and tablets start on low graphics unless the player chose a preset.
-let quality = (params.get('quality') ?? store.get('quality', defaultQuality(touchActive()))) as keyof typeof QUALITY;
-if (!QUALITY[quality]) quality = defaultQuality(touchActive());
+// Phones, tablets and weak graphics (Intel integrated, software) start on low unless the player chose a preset.
+let quality = (params.get('quality') ?? store.get('quality', '')) as keyof typeof QUALITY;
+if (!QUALITY[quality]) quality = defaultQuality(touchActive(), gpuRenderer());
 /** ?bench: scripted solo run that measures frame times on this device (Elimination, Squad unless ?size). */
 const benchMode = params.has('bench');
 if (benchMode) { mode = 'elimination'; size = sizeOf(params.get('size') ?? 'squad').id; }

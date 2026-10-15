@@ -2,7 +2,7 @@ import { OPTIC_DETAILS, RETICLE_COLORS, RETICLE_STYLES, SCOPE_MODES, settings, t
 import { RETICLE_CSS } from '../render/sights';
 import type { CrosshairStyle } from './hud';
 import { matches, onBindings } from '../game/keybinds';
-import { defaultQuality } from '../game/device';
+import { defaultQuality, gpuRenderer } from '../game/device';
 import { touchActive } from '../game/touchlayout';
 import { ControlsPanel } from './controlspanel';
 import { TouchSettings } from './touchsettings';
@@ -263,7 +263,7 @@ export class SettingsMenu {
   }
 
   private current: SettingsTab = 'options';
-  private quality: GraphicsQuality = load('quality', defaultQuality(touchActive())) as GraphicsQuality;
+  private quality: GraphicsQuality = (load('quality', '') || defaultQuality(touchActive(), gpuRenderer())) as GraphicsQuality;
   get open() { return !this.root.hidden; }
 
   /**
@@ -355,7 +355,7 @@ export class SettingsMenu {
     pick('lang', lang());
     pick('crosshair', load('crosshair', 'classic')); pick('scope', settings.scopeMode); pick('rcolor', settings.reticleColor);
     pick('rstyle', settings.reticleStyle); pick('optic', settings.opticDetail);
-    pick('quality', this.lobby ? this.quality : load('quality', defaultQuality(touchActive())));
+    pick('quality', this.lobby ? this.quality : (load('quality', '') || defaultQuality(touchActive(), gpuRenderer())));
     pick('server', currentServer()?.id ?? '');
     this.refreshPings();
   }
