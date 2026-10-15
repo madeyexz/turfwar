@@ -3,9 +3,12 @@ import { extname, join } from 'node:path';
 import { brotliDecompressSync } from 'node:zlib';
 import { describe, expect, it } from 'vitest';
 import { cjkChars, cjkUnicodeRange } from './cjk';
+import { CJK_STACK } from './fonts';
 
 const ROOT = join(__dirname, '../..');
+/** The game's own characters (every page with Chinese loads it) and the rest of the common ones (loaded only when shown). */
 const FONT = join(ROOT, 'public/fonts/noto-sans-tc.woff2');
+const EXTRA = join(ROOT, 'public/fonts/noto-sans-tc-extra.woff2');
 
 /** WOFF2's known-table index (flags & 63); 63 means a 4-byte tag follows. */
 const KNOWN = 'cmap head hhea hmtx maxp name OS/2 post cvt  fpgm glyf loca prep CFF  VORG EBDT EBLC gasp hdmx kern LTSH PCLT VDMX vhea vmtx BASE GDEF GPOS GSUB EBSC JSTF MATH CBDT CBLC COLR CPAL SVG  sbix acnt avar bdat bloc bsln cvar fdsc feat fmtx fvar gvar hsty just lcar mort morx opbd prop trak Zapf Silf Glat Gloc Feat Sill'
@@ -75,30 +78,40 @@ function sourceChars() {
 }
 
 describe('bundled Traditional Chinese font', () => {
-  const tables = woff2Tables(readFileSync(FONT));
+  const tables = woff2Tables(readFileSync(FONT)), extraTables = woff2Tables(readFileSync(EXTRA));
   const mapped = cmapCodePoints(tables.get('cmap')!);
+  const all = new Set([...mapped, ...cmapCodePoints(extraTables.get('cmap')!)]);
 
-  it('has every Chinese character the game draws (re-run `bun tools/subset-font.ts` if this fails)', () => {
+  it('has every Chinese character the game draws in the first file (re-run `bun tools/subset-font.ts` if this fails)', () => {
     const chars = sourceChars();
     expect(chars.size).toBeGreaterThan(500);
     const missing = [...chars].filter(ch => !mapped.has(ch.codePointAt(0)!));
     expect(missing.join('')).toBe('');
+    expect([...'，。、：；！？（）「」『』《》【】ㄅㄆㄇ'].filter(ch => !mapped.has(ch.codePointAt(0)!)).join('')).toBe('');
+    // It comes with the first screen whenever Chinese shows (the logo, the Taipei signs): kept small.
+    expect(statSync(FONT).size).toBeLessThan(400_000);
   });
 
-  it("has Taiwan's 4,808 common characters and the full-width punctuation", () => {
+  it("has Taiwan's 4,808 common characters across the two files", () => {
     const common = readFileSync(join(ROOT, 'tools/font/edu-standard-4808.txt'), 'utf8').split('\n').filter(l => !l.startsWith('#')).join('');
     expect([...common].length).toBe(4808);
-    expect([...common].filter(ch => !mapped.has(ch.codePointAt(0)!)).join('')).toBe('');
-    expect([...'，。、：；！？（）「」『』《》【】ㄅㄆㄇ'].filter(ch => !mapped.has(ch.codePointAt(0)!)).join('')).toBe('');
+    expect([...common].filter(ch => !all.has(ch.codePointAt(0)!)).join('')).toBe('');
     // About 5,000 glyphs; the size stays well under 2 MB.
-    expect(tables.get('maxp')!.readUInt16BE(4)).toBeGreaterThan(5000);
-    expect(statSync(FONT).size).toBeLessThan(2_000_000);
+    expect(tables.get('maxp')!.readUInt16BE(4) + extraTables.get('maxp')!.readUInt16BE(4)).toBeGreaterThan(5000);
+    expect(statSync(FONT).size + statSync(EXTRA).size).toBeLessThan(2_000_000);
   });
 
   it("is declared for exactly the code points src/ui/cjk.ts calls Chinese", () => {
     const css = readFileSync(join(ROOT, 'src/style.css'), 'utf8');
-    const face = /@font-face\s*\{[^}]*'Noto Sans TC'[^}]*\}/.exec(css)?.[0] ?? '';
-    expect(face).toContain('/fonts/noto-sans-tc.woff2');
-    expect(/unicode-range:\s*([^;]+);/.exec(face)?.[1].trim()).toBe(cjkUnicodeRange());
+    for (const [family, file] of [['Noto Sans TC', '/fonts/noto-sans-tc.woff2'], ['Noto Sans TC Extra', '/fonts/noto-sans-tc-extra.woff2']]) {
+      const face = new RegExp(`@font-face\\s*\\{[^}]*font-family: '${family}';[^}]*\\}`).exec(css)?.[0] ?? '';
+      expect(face).toContain(file);
+      expect(/unicode-range:\s*([^;]+);/.exec(face)?.[1].trim()).toBe(cjkUnicodeRange());
+    }
+  });
+
+  it('falls back to the extra file right after the first one', () => {
+    const stacks = [/--font: ([^;]+);/.exec(readFileSync(join(ROOT, 'src/style.css'), 'utf8'))![1], /--font: ([^;]+);/.exec(readFileSync(join(ROOT, 'src/menu.css'), 'utf8'))![1], CJK_STACK];
+    for (const stack of stacks) expect(stack.replace(/\s/g, '')).toContain("'NotoSansTC','NotoSansTCExtra'");
   });
 });

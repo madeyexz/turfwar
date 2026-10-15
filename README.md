@@ -246,9 +246,11 @@ texture, sound and line of code here is original or CC0/OFL.
   (`public/fonts/NotoSansTC-OFL.txt`), from google/fonts. `tools/subset-font.ts` (`bun tools/subset-font.ts`;
   needs `uv`, or Python with fontTools and brotli) cuts the variable font to weights 500–900 and to the
   characters the game uses (every Chinese character in `src/`, `shared/` and `index.html`, Taiwan's 4,808
-  common characters from `tools/font/edu-standard-4808.txt`, CJK punctuation, Bopomofo and full-width forms):
-  `public/fonts/noto-sans-tc.woff2`, about 1.4 MB and 5,084 glyphs, loaded only for Chinese text
-  (`unicode-range`). `src/ui/font.test.ts` fails when the source uses a character the font lacks.
+  common characters from `tools/font/edu-standard-4808.txt`, CJK punctuation, Bopomofo and full-width forms),
+  in two files: `public/fonts/noto-sans-tc.woff2` (the game's own characters and the punctuation, about 280 KB),
+  loaded only for Chinese text (`unicode-range`), and `public/fonts/noto-sans-tc-extra.woff2` (the rest of the
+  common characters, about 1.1 MB), loaded only when a name or chat line needs one. `src/ui/font.test.ts`
+  fails when the source uses a character the first file lacks.
 - The Taipei maps (Ximending, Taipei 101 · Xinyi, Taipei 101 · 88F), the Taipei 101 outline and the
   other city maps' layouts are this project's own, drawn from public knowledge of the real places
   (`shared/maps/ximending*.ts`, `xinyi*.ts`, `taipei101.ts`, `tower101.ts`); the city past each map is a
