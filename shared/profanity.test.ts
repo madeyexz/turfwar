@@ -20,8 +20,18 @@ describe('maskProfanity', () => {
     expect(maskProfanity('幹 又死了')).toBe('＊ 又死了');
   });
 
+  it('masks English spelled out one letter at a time, keeping the separators', () => {
+    expect(maskProfanity('f u c k you')).toBe('＊ ＊ ＊ ＊ you');
+    expect(maskProfanity('what the f.u.c.k')).toBe('what the ＊.＊.＊.＊');
+    expect(maskProfanity('S-H-1-T')).toBe('＊-＊-＊-＊');
+    expect(maskProfanity('$ h ! t!')).toBe('＊ ＊ ＊ ＊!');
+    expect(maskProfanity('x y z c u n t')).toBe('x y z ＊ ＊ ＊ ＊');
+  });
+
   it('leaves clean words alone, even ones with a bad word inside', () => {
-    for (const ok of ['class', 'assassin', 'Scunthorpe', 'Hancock', 'cocktail', 'analysis', 'pass the ammo', 'grass',
+    for (const ok of ['class', 'assassin', 'Scunthorpe', 'Hancock', 'cocktail', 'cockpit', 'analysis', 'pass the ammo', 'grass',
+      // Spelled out, a clean word stays clean: the letters are matched as one word, not as text around them.
+      'a s s e m b l y', 'c l a s s', 'p a s s', 'B A S S', 'g g w p', 'A B C site', 'U.S.A', 'a.s.a.p', 'I am a b c', 'e.g. go B',
       '你在幹嘛', '他很能幹', '樹幹後面', '幹部', 'B 點有人', 'gg wp']) expect(maskProfanity(ok)).toBe(ok);
   });
 

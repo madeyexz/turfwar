@@ -21,8 +21,8 @@ export interface Challenge {
   ref?: string;
 }
 
-/** Callsigns: letters, digits, space, _ - . (as `enter_room` keeps them), at most 16 characters, bad words masked. */
-export const cleanName = (s: string) => maskProfanity(s.replace(/[^\p{L}\p{N} _\-.]/gu, '').replace(/\s+/g, ' ').trim().slice(0, 16));
+/** Callsigns: letters, digits, space, _ - . (as `enter_room` keeps them), at most 16 characters, bad words masked (＊ kept). */
+export const cleanName = (s: string) => maskProfanity(s.replace(/[^\p{L}\p{N} _\-.＊]/gu, '').replace(/\s+/g, ' ').trim().slice(0, 16));
 const REF = /^[a-z0-9]{6,12}$/;
 const MAP = /^[a-z0-9]{2,20}$/;
 

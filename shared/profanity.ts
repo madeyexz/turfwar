@@ -3,14 +3,28 @@
  * words are masked with ＊, one per character, and the rest of the line stays. English comes from
  * `obscenity` (its dataset already spares "class", "assassin", "Scunthorpe" and the like, and its
  * transformers catch "sh1t", "f*ck" and "fuuuck"); Mandarin and Taiwanese insults from the list below,
- * in Traditional and Simplified forms. The server runs it on every chat line and callsign (authoritative);
- * Solo runs the same code.
+ * in Traditional and Simplified forms. English spelled out one letter at a time ("f u c k", "f.u.c.k")
+ * is read as one word. The server runs it on every chat line and callsign (authoritative); Solo, the
+ * challenge link and its preview picture run the same code.
  */
 import { RegExpMatcher, englishDataset, englishRecommendedTransformers } from 'obscenity';
 
 export const MASK = '＊';
 
-const english = new RegExpMatcher({ ...englishDataset.build(), ...englishRecommendedTransformers });
+const dataset = englishDataset.build();
+const english = new RegExpMatcher({
+  ...dataset, ...englishRecommendedTransformers,
+  // Everyday words the dataset would mask ("cockpit": the helicopter's).
+  whitelistedTerms: [...dataset.whitelistedTerms ?? [], 'cockpit', 'cumin'],
+});
+
+/**
+ * English spelled one letter at a time: three or more single letters (or the look-alikes @ $ !) with
+ * spaces or punctuation between them. The letters are joined and matched as one word on their own,
+ * so "a s s e m b l y" is "assembly" and stays, while "f u c k" is masked.
+ */
+const SPELLED = /(?<![\p{L}\p{N}])[\p{L}\p{N}@$!](?:[\s.,\-_·•~+*/\\|:;'"`^=]+[\p{L}\p{N}@$!]){2,}(?![\p{L}\p{N}])/gu;
+const LETTER = /[\p{L}\p{N}@$!]/gu;
 
 /**
  * Mandarin and Taiwanese insults (Hokkien written in Han characters). Phrases rather than single
@@ -38,11 +52,18 @@ export function maskProfanity(text: string): string {
   const masked = new Uint8Array(text.length);
   for (const m of english.getAllMatches(text)) masked.fill(1, m.startIndex, m.endIndex + 1);
   for (const re of [chinese, ganAlone]) for (const m of text.matchAll(re)) masked.fill(1, m.index, m.index + m[0].length);
+  for (const run of text.matchAll(SPELLED)) {
+    // The joined word, and for each of its UTF-16 units the letter's place in the text.
+    let word = '';
+    const from: number[] = [];
+    for (const l of run[0].matchAll(LETTER)) { word += l[0]; for (let k = 0; k < l[0].length; k++) from.push(run.index + l.index + k); }
+    for (const m of english.getAllMatches(word)) for (let k = m.startIndex; k <= m.endIndex; k++) masked[from[k]] = 1;
+  }
   if (!masked.includes(1)) return text;
   let out = '', i = 0;
   for (const ch of text) {
-    // Spaces and punctuation inside a masked span ("幹 你 娘") stay; letters and digits become ＊.
-    out += masked[i] && /[\p{L}\p{N}]/u.test(ch) ? MASK : ch;
+    // Spaces and punctuation inside a masked span ("幹 你 娘") stay; letters, digits and the look-alikes @ $ ! become ＊.
+    out += masked[i] && /[\p{L}\p{N}@$!]/u.test(ch) ? MASK : ch;
     i += ch.length;
   }
   return out;
