@@ -4,7 +4,7 @@ import { loadMap } from '../../shared/maps/index';
 import { wrapAngle, type Vec3 } from '../../shared/math';
 import { eyeHeight } from '../../shared/movement';
 import { PEEK, easePeek, peekShift, peekSide, type PeekSide } from '../../shared/peek';
-import { ATTACKERS, vehicleTarget, type MatchEvent, type MatchState, type Soldier, type Team } from '../../shared/match/state';
+import { AFK, ATTACKERS, turned, vehicleTarget, type MatchEvent, type MatchState, type Soldier, type Team } from '../../shared/match/state';
 import { VEHICLES, obstaclesOf, raycastVehicle, seatPosition, speedOf, type Vehicle } from '../../shared/vehicles';
 import { seatFor } from '../../shared/match/vehicles';
 import { BOBA, WEAPONS, pelletCone, pelletDirs, weaponStats, type HitZone, type WeaponId } from '../../shared/weapons';
@@ -115,6 +115,8 @@ export class Game {
   /** Match recording's input logger (online, consenting players only), and this frame's aim-assist effect for it. */
   private inputLog?: InputLog;
   private assisted = { scale: 1, yaw: 0, pitch: 0 };
+  /** The server's away (AFK) warning: when it removes us, and our pose when it came (any move or turn ends it). */
+  private afkWarn?: { until: number; x: number; z: number; yaw: number; pitch: number };
   /** Weapon (and attachments) the view model shows, to rebuild it only on change. */
   private shownWeapon = '';
   /** Remote gunshot sounds started this frame. */
@@ -448,6 +450,7 @@ export class Game {
       this.wasAlive = me.alive;
     }
     if (this.player.alive) this.showWeapon(this.viewmodel, this.player);
+    this.afkCountdown();
 
     // ---- Bomb: hold use (E) still on a site ----
     this.player.using = active && myJob && !seat && state.roundPhase === 'live' && this.input.down('use');
@@ -1390,6 +1393,23 @@ export class Game {
         break;
       }
       case 'spawn': break;
+      case 'afk': {
+        if (e.id !== myId) break;
+        const p = this.player;
+        this.afkWarn = { until: performance.now() + e.left * 1000, x: p.m.x, z: p.m.z, yaw: p.yaw, pitch: p.pitch };
+        this.audio.ui();
+        break;
+      }
     }
+  }
+
+  /** The AFK warning's countdown; it ends when the player moves, turns or fires, as the server sees it (shared/match/state.ts AFK). */
+  private afkCountdown() {
+    const w = this.afkWarn;
+    if (!w) return;
+    const p = this.player, left = Math.ceil((w.until - performance.now()) / 1000);
+    const acted = Math.hypot(p.m.x - w.x, p.m.z - w.z) > AFK.move || turned(p.yaw, w.yaw) || turned(p.pitch, w.pitch)
+      || this.input.fire;
+    if (acted || left < 0) { this.afkWarn = undefined; this.hud.afk(undefined); } else this.hud.afk(Math.max(0, left));
   }
 }

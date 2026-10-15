@@ -16,7 +16,7 @@ import {
   MOVE_SLACK, TICK_RATE, applyDamage, shapeOf, crewTeam, explode, eyeOf, feetOf, killSoldier, onSite, pickUpSlippers, popSmoke, resolvePellets, resolveShot, seatOf, shieldedIds, sideOf, slipperStrike, spawnSoldier, throwSmokeFrom,
   throwGrenadeFrom, throwSlipperFrom, traceShot, weaponOf, type SimContext, type TraceResult,
 } from './combat';
-import { ATTACKERS, targetVehicle, type ClientReport, type MatchConfig, type MatchEvent, type MatchState, type RoundEnd, type ShotClaim, type Soldier, type Team } from './state';
+import { AFK, ATTACKERS, noteAction, targetVehicle, turned, type ClientReport, type MatchConfig, type MatchEvent, type MatchState, type RoundEnd, type ShotClaim, type Soldier, type Team } from './state';
 import { resetVehicles, shoverSpeed, updateVehicles, vehicleRoof, walksIntoVehicle } from './vehicles';
 import { VEHICLES, obstaclesOf, speedOf, vehicleBoxDistance } from '../vehicles';
 
@@ -60,7 +60,7 @@ export function addSoldier(state: MatchState, ctx: SimContext, opts: { name: str
     weapons: ['mp5', 'm9a1'], owned: [], attachments: {}, ammo: [0, 0], reserve: [0, 0],
     reloadLeft: 0, fireCooldown: 0, switchLeft: 0, grenades: 0, grenadeHE: false, smokes: 0, bobas: 0, molotovs: 0, slippers: 1, stamina: STAMINA.max, money: 0,
     sinceHit: 99, lastAttacker: -1, kills: 0, deaths: 0, assists: 0, score: 0, sprint: false, ads: false, sinceShot: 99, using: false,
-    corrections: 0, moveSlack: MOVE_SLACK.max, groundY: 0, idle: 0, round: newRoundStats(), roundsHere: 0,
+    corrections: 0, moveSlack: MOVE_SLACK.max, groundY: 0, idle: 0, afk: 0, quiet: 0, round: newRoundStats(), roundsHere: 0,
   };
   resetInventory(s);
   refillAmmo(s);
@@ -77,11 +77,11 @@ export function addSoldier(state: MatchState, ctx: SimContext, opts: { name: str
   return s;
 }
 
-export function removeSoldier(state: MatchState, ctx: SimContext, id: number) {
+export function removeSoldier(state: MatchState, ctx: SimContext, id: number, reason?: 'afk') {
   const i = state.soldiers.findIndex(s => s.id === id);
   if (i < 0) return;
   const [s] = state.soldiers.splice(i, 1);
-  ctx.emit({ type: 'leave', id, name: s.name, team: s.team, bot: s.bot });
+  ctx.emit({ type: 'leave', id, name: s.name, team: s.team, bot: s.bot, ...(reason ? { reason } : {}) });
 }
 
 /** Soldiers per team on this server (BeGone sizes: Duel 1, Team Duel 2, Mini 4, Medium 6, Large 8, Mega 12). */
@@ -135,6 +135,19 @@ export function switchTeam(state: MatchState, ctx: SimContext, id: number) {
 // Human commands (validated). The same functions back the offline host and server reducers.
 // ---------------------------------------------------------------------------------------
 
+/**
+ * Whether a report shows a real action against the server's pose. Only in a live round: at a spawn the
+ * server moves and turns the soldier, and the client's reports catch up with that during the freeze.
+ */
+function reportActs(state: MatchState, s: Soldier, r: ClientReport, seated: boolean) {
+  if (!s.alive || state.phase !== 'live' || state.roundPhase !== 'live') return false;
+  if (turned(r.yaw, s.yaw) || turned(clamp(r.pitch, -1.5, 1.5), s.pitch)) return true;
+  if (r.weapon !== s.weapon || r.ads !== s.ads) return true;
+  if (seated) return false;
+  return Math.hypot(r.x - s.m.x, r.z - s.m.z) > AFK.move || Math.abs(r.y - s.m.y) > AFK.jump
+    || Math.abs(r.crouch - s.m.crouch) > 0.3 || r.sprint !== s.sprint || !!r.use !== s.using;
+}
+
 /** Accept a client's own movement report if it is physically plausible. */
 const JUMP_APEX = MOVE.jumpSpeed ** 2 / (2 * MOVE.gravity);
 
@@ -144,9 +157,11 @@ export function reportState(state: MatchState, ctx: SimContext, id: number, r: C
   s.idle = 0;
   const finite = [r.x, r.y, r.z, r.vx, r.vy, r.vz, r.yaw, r.pitch, r.crouch].every(Number.isFinite);
   if (!finite) return false;
+  const seated = !!seatOf(state, id);
+  if (reportActs(state, s, r, seated)) noteAction(s);
   s.yaw = r.yaw; s.pitch = clamp(r.pitch, -1.5, 1.5);
   if (!s.alive) return true;
-  if (seatOf(state, id)) {
+  if (seated) {
     // In a vehicle the seat decides where you are: only the view, aim and weapon count.
     s.ads = r.ads; s.using = false;
     if (r.weapon !== s.weapon) switchWeapon(state, id, r.weapon);
@@ -527,7 +542,9 @@ export function tickMatch(state: MatchState, ctx: SimContext, dt: number) {
   const frozen = state.roundPhase === 'freeze' || state.phase !== 'live';
   // The vehicles' bodies, built once per tick: bots walk round them and are pushed by them.
   const obstacles = state.vehicles.length ? obstaclesOf(state.vehicles) : undefined;
+  const live = state.phase === 'live' && state.roundPhase === 'live';
   for (const s of state.soldiers) {
+    if (!s.bot) { s.quiet += dt; if (live && s.alive) s.afk += dt; }
     updateTimers(state, ctx, s, dt);
     if (s.bot && s.alive && !frozen) updateBot(state, ctx, s, dt, obstacles);
   }

@@ -64,7 +64,7 @@ function soldierFrom(r: RosterRow, p: FramePose, reloadLeft: number, sinceShot: 
     reloadLeft, fireCooldown: 0, switchLeft: 0, grenades: r.grenades, grenadeHE: r.grenadeHe, smokes: gear.smokes, molotovs: gear.molotovs, bobas: gear.bobas, slippers: gear.slippers, stamina: STAMINA.max, money: r.money,
     sinceHit: 99, lastAttacker: r.lastAttacker, kills: r.kills, deaths: r.deaths, assists: r.assists, score: r.score,
     sprint: p.sprint, ads: p.ads, sinceShot, using: p.using, corrections: r.corrections,
-    idle: 0, moveSlack: 0, groundY: 0, round: newRoundStats(), roundsHere: 0,
+    idle: 0, afk: 0, quiet: 0, moveSlack: 0, groundY: 0, round: newRoundStats(), roundsHere: 0,
     ...(gear.skin ? { skin: gear.skin } : {}),
   };
 }
@@ -114,7 +114,7 @@ export class OnlineLink implements GameLink {
   /** When our player row went missing (0 = it is there). */
   private missingSince = 0;
   /** Why the link ended: the server removed us from the match, or the connection dropped. */
-  dropReason?: 'removed' | 'lost';
+  dropReason?: 'removed' | 'lost' | 'afk';
   /** How we got in, kept so the client can rejoin its room if the server drops an idle soldier. */
   entry?: { name: string; team: number; how: OnlineEntry };
   /** Our room, and the subscription to its roster, frame and events. */
@@ -157,7 +157,15 @@ export class OnlineLink implements GameLink {
     };
     db.frame.onInsert((_ctx, row) => onFrame(row));
     db.frame.onUpdate((_ctx, _old, row) => onFrame(row));
-    db.matchEvent.onInsert((_ctx, row) => { if (row.room === this.room) try { this.events.push(JSON.parse(row.json)); } catch { /* malformed event */ } });
+    db.matchEvent.onInsert((_ctx, row) => {
+      if (row.room !== this.room) return;
+      let e: MatchEvent;
+      try { e = JSON.parse(row.json); } catch { return; /* malformed event */ }
+      this.events.push(e);
+      // The server removed us for being away (AFK): no transparent rejoin (it would refuse one for a while
+      // anyway); the next state() read ends the link, back to the lobby with that note.
+      if (e.type === 'leave' && e.reason === 'afk' && e.id === this.me && !this.disconnected) this.dropReason = 'afk';
+    });
     // Back in the foreground (a phone app returning, a tab shown, the back-forward cache): check the socket is alive.
     if (typeof document !== 'undefined') {
       const back = () => { if (document.visibilityState === 'visible') this.probeAlive(); };
@@ -244,6 +252,7 @@ export class OnlineLink implements GameLink {
    */
   private checkRemoved() {
     if (this.disconnected || !this.joinedOnce) return;
+    if (this.dropReason === 'afk') { this.markDisconnected(); return; }
     if (this.conn.db.player.identity.find(this.identity)) { this.missingSince = 0; return; }
     const now = performance.now();
     if (!this.missingSince) this.missingSince = now;
@@ -279,7 +288,7 @@ export class OnlineLink implements GameLink {
     const bodies: Body[] = frame.bodies.map(b => ({ ...b, age: 0, owner: -1, hp: 1, timer: 0 }));
     const vehicles: Vehicle[] = frame.vehicles.map(v => ({ ...v, steer: 0, slack: maxSlack(v.kind), lastAttacker: -1, lastRun: -9 }));
     // No other human left: the room closes on its next tick, so a rejoin could only fail.
-    if (this.me < 0 && this.entry && !this.rejoining && !this.disconnected && soldiers.some(s => !s.bot)) {
+    if (this.me < 0 && this.entry && !this.rejoining && !this.disconnected && !this.dropReason && soldiers.some(s => !s.bot)) {
       // Backgrounded tabs stop reporting and get dropped as idle; rejoin the same room transparently.
       this.rejoining = true;
       const info = this.roomInfo();

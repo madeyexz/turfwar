@@ -8,7 +8,7 @@ import {
 import { oneHanded } from '../weapons';
 import { MOVE_SLACK, applyDamage, damageVehicle, seatOf, type SimContext } from './combat';
 import { statsOf } from './economy';
-import type { MatchState, Soldier, VehicleReport } from './state';
+import { AFK, noteAction, turned, type MatchState, type Soldier, type VehicleReport } from './state';
 
 export { seatOf } from './combat';
 
@@ -100,6 +100,9 @@ export function reportVehicle(state: MatchState, ctx: SimContext, id: number, r:
   const v = Number.isInteger(r.vehicle) ? state.vehicles[r.vehicle] : undefined;
   if (!v || v.driver !== id || v.wrecked || !s.alive) return false;
   if (![r.x, r.y, r.z, r.vx, r.vy, r.vz, r.yaw, r.pitch, r.roll].every(Number.isFinite)) return false;
+  // Driving or turning in a live round is a real action (AFK); a parked vehicle with an idle driver is not.
+  if (state.phase === 'live' && state.roundPhase === 'live' && (Math.hypot(r.x - v.x, r.z - v.z) > AFK.move || turned(r.yaw, v.yaw)
+    || (Number.isFinite(r.aimYaw) && turned(r.aimYaw!, s.yaw)) || (Number.isFinite(r.aimPitch) && turned(clamp(r.aimPitch!, -1.5, 1.5), s.pitch)))) noteAction(s);
   const spec = VEHICLES[v.kind];
   const dt = clamp(elapsed, 0, 0.5);
   // Another vehicle may have shoved this one since the last report: its speed adds to the budget.

@@ -90,6 +90,9 @@ A subject-round is dropped whole for: leaving or changing team (E5); report roun
 server did not take (E8); median client-vs-server yaw error > 2° or a clock-fit residual > 3 ticks
 (E9); input-log coverage < 90 % of alive live ticks (E10, "server-only"). AFK stretches (no input, no
 movement, no turning for 10 s, plus 2 s each side) are cut; a round more than half AFK goes (E4).
+A subject the server removes for being away (the 90 s AFK kick, docs/ARCHITECTURE.md) leaves before
+the round's end, so E5 drops that round; the AFK seconds of earlier rounds are already cut by E4. The
+`leave` event keeps its `reason: 'afk'` in the segment, and the `afk` warning event is not recorded.
 
 Two measures:
 

@@ -16,6 +16,15 @@ export const Admin = __t.object("Admin", {
 });
 export type Admin = __Infer<typeof Admin>;
 
+export const AdminAfkHour = __t.object("AdminAfkHour", {});
+export type AdminAfkHour = __Infer<typeof AdminAfkHour>;
+
+export const AdminAfkHourRow = __t.object("AdminAfkHourRow", {
+  hour: __t.u32(),
+  afk: __t.u32(),
+});
+export type AdminAfkHourRow = __Infer<typeof AdminAfkHourRow>;
+
 export const AdminAttempt = __t.object("AdminAttempt", {
   identity: __t.identity(),
   windowStart: __t.timestamp(),
@@ -325,6 +334,19 @@ export const AdminTaipeiRebuildRow = __t.object("AdminTaipeiRebuildRow", {
   estimatedFrom: __t.u32(),
 });
 export type AdminTaipeiRebuildRow = __Infer<typeof AdminTaipeiRebuildRow>;
+
+export const AfkHour = __t.object("AfkHour", {
+  hour: __t.u32(),
+  afk: __t.u32(),
+});
+export type AfkHour = __Infer<typeof AfkHour>;
+
+export const AfkKick = __t.object("AfkKick", {
+  identity: __t.identity(),
+  room: __t.u8(),
+  at: __t.u64(),
+});
+export type AfkKick = __Infer<typeof AfkKick>;
 
 export const Body = __t.object("Body", {
   id: __t.u32(),

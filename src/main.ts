@@ -1440,6 +1440,7 @@ function joined(link: GameLink, map: string, serverChoice: ServerId | undefined,
   // blip) reconnects and rejoins the same room first.
   if (link instanceof OnlineLink) link.onDrop = () => {
     if (link.dropReason === 'lost' && !benchMode && link.entry) void rejoinAfterDrop(link);
+    else if (link.dropReason === 'afk') backToLobby('disconnect', t('net.afk'), 'afk');
     else backToLobby('disconnect', t(link.dropReason === 'removed' ? 'net.removed' : 'net.lost'), link.dropReason === 'removed' ? 'removed' : 'lost');
   };
 }
