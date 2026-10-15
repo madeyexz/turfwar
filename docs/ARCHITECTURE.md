@@ -148,6 +148,16 @@ triangles, resolution and the GPU string, with a verdict (met = average ≥ 58 f
 and a *Copy results* button (JSON). Browsers cap frames at the display refresh rate, so 120 Hz
 screens can exceed 60. The lobby also has Low / Medium / High graphics presets (`?quality=` works too).
 
+**First download.** CrazyGames' mobile homepage allows at most 20 MB from page open to the first
+playable moment, and most players are on phones. Measured on 2026-10-15 (fresh profile, Solo on the default
+map Ximending, text brotli-compressed as Vercel serves it): about 9.7 MB on a phone (Low) and 14.3 MB on a
+desktop (Medium); a map with its own ground textures (Railyard) about 10.4 MB and 16.2 MB. What keeps it
+there: GLBs are not compressed by the host, so props.glb holds only the placed props and the bundles'
+geometry is meshopt-compressed losslessly (`tools/compress-models.ts`); the Chinese font is split so only the
+game's own characters (about 280 KB) come with the first screen (`tools/subset-font.ts`); textures are ETC1S
+KTX2, half size on Low; the service worker's install takes this build's hashed files from the HTTP cache
+instead of downloading them again, and leaves the 512 px icons to the browser's install.
+
 ## Known limitations and what remains
 
 - Online has Quick Play, Start a Server (public or private) and a live room list, but no clans, vote kick or

@@ -9,7 +9,7 @@
  */
 /* The lobby and its dialogs are set in Oswald (Latin) and Noto Sans TC (Chinese). */
 #menu, .lb-settings.lobby, .share-panel, .challenge-banner, .ask-dialog {
-  --font: 'Oswald', 'Noto Sans TC', 'PingFang TC', 'Microsoft JhengHei', 'Segoe UI', system-ui, sans-serif;
+  --font: 'Oswald', 'Noto Sans TC', 'Noto Sans TC Extra', 'PingFang TC', 'Microsoft JhengHei', 'Segoe UI', system-ui, sans-serif;
   font-family: var(--font);
 }
 #menu {

@@ -109,8 +109,9 @@ const pwa: Plugin = {
     const info = new RegExp(`^(en/)?(${INFO_PAGES.join('|')})/`);
     const built = Object.keys(bundle).filter(f => f !== 'sw.js' && !f.startsWith('admin') && !f.includes('/admin') && !info.test(f) && !f.endsWith('.map'));
     const pub = filesIn(publicDir).sort();
-    // Precached: the page, this build's scripts and styles, the manifest, the icons and the Latin fonts.
-    const shell = [...built.map(f => `/${f}`), ...pub.filter(f => f === 'manifest.webmanifest' || f.startsWith('icons/') || /^fonts\/rajdhani-\d+\.woff2$/.test(f)).map(versioned)].sort();
+    // Precached: the page, this build's scripts and styles, the manifest, the small icons and the Latin fonts
+    // (the 512 px icons are only for installing, and the browser fetches them then).
+    const shell = [...built.map(f => `/${f}`), ...pub.filter(f => f === 'manifest.webmanifest' || (f.startsWith('icons/') && !f.includes('512')) || /^fonts\/rajdhani-\d+\.woff2$/.test(f)).map(versioned)].sort();
     const data = { shell, shellVersion: `${appVersion()}-${hash(built.sort().join('|'))}`, assets: Object.keys(VERSIONS).map(versioned) };
     const file = join(options.dir!, 'sw.js');
     const code = readFileSync(file, 'utf8');

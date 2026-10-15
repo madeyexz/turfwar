@@ -5,7 +5,7 @@
  * their content version, `?v=`); SpacetimeDB, PostHog and `/admin` are never touched (`policy.ts`).
  * A new build replaces the shell's cache and drops only the assets whose files changed.
  */
-import { cacheNames, routeOf, staleAssets, staleCaches } from './policy';
+import { cacheNames, immutableShellFile, routeOf, staleAssets, staleCaches } from './policy';
 
 // Filled in by the build (see vite.config.ts): JSON of { shell: string[], shellVersion, assets: string[] } (assets as `/path?v=version`).
 const BUILD = JSON.parse('__TURFWAR_BUILD__') as { shell: string[]; shellVersion: string; assets: string[] };
@@ -25,8 +25,9 @@ const SHELL = new Set(BUILD.shell.map(p => p.split('?')[0]));
 const ASSETS = new Set(BUILD.assets);
 
 sw.addEventListener('install', e => {
-  // Precache this build's shell; a file that fails to load just loads later.
-  e.waitUntil(caches.open(CACHES.shell).then(c => Promise.all(BUILD.shell.map(p => c.add(new Request(p, { cache: 'reload' })).catch(() => undefined))))
+  // Precache this build's shell; a file that fails to load just loads later. Hashed files come from the
+  // HTTP cache when the page already has them (a first visit is not downloaded twice).
+  e.waitUntil(caches.open(CACHES.shell).then(c => Promise.all(BUILD.shell.map(p => c.add(new Request(p, immutableShellFile(p) ? {} : { cache: 'reload' })).catch(() => undefined))))
     .then(() => sw.skipWaiting()));
 });
 

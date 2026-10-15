@@ -108,11 +108,11 @@ ship as KTX2 copies that the game transcodes to the GPU's own format (ASTC, ETC2
 (`src/render/textures.ts`, three's `KTX2Loader`); the `.webp` files are the source and the fallback
 (no WebAssembly, a file that fails, or `?ktx2=0`). Medium and High load `tex/<set>_<kind>.ktx2`
 (1024², ETC1S; normals ETC1S tuned for normals); Low, the
-phones' default, loads the `low/` copies (512², normals UASTC + Zstandard), shrinks
+phones' default, loads the `low/` copies (512², the same codecs), shrinks
 the models' own textures to 512 px, caps the sign atlas at 2048×1024 and anisotropic filtering at 4×.
 After changing a source `.webp`, or updating three, rebuild them (about three minutes) with
 [Basis Universal](https://github.com/BinomialLLC/basis_universal) installed
-(`brew install basis_universal`; tested with basisu 2.50):
+(`brew install basis_universal`; tested with basisu 2.50, and 2.00 built from the v2_0_2 tag):
 
 ```sh
 bun install --cwd tools --frozen-lockfile
