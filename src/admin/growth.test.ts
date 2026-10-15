@@ -110,10 +110,10 @@ describe('virality', () => {
 describe('server health', () => {
   const rows = [
     { hour: 100, roomMinutes: 60, seatMinutes: 720, humanMinutes: 180, botMinutes: 540, joins: 20, leaves: 15, drops: 2, kicks: 1 },
-    { hour: 101, roomMinutes: 60, seatMinutes: 120, humanMinutes: 120, botMinutes: 0, joins: 0, leaves: 0, drops: 0, kicks: 0 },
+    { hour: 101, roomMinutes: 60, seatMinutes: 120, humanMinutes: 120, botMinutes: 0, joins: 0, leaves: 0, drops: 0, kicks: 0, afk: 1 },
   ];
   it('gives fill, humans per room and drops per join', () => {
-    expect(roomHealth(rows, 100, 101)).toMatchObject({ fill: 300 / 840, humansPerRoom: 2.5, dropRate: 0.1, kickRate: 0.05 });
+    expect(roomHealth(rows, 100, 101)).toMatchObject({ fill: 300 / 840, humansPerRoom: 2.5, dropRate: 0.1, kickRate: 0.1, kicks: 1, afk: 1 });
     expect(roomHealth(rows, 0, 1).fill).toBeUndefined();
     expect([...roomHealthBy(rows, [99, 100, 101], true).keys()]).toEqual([100, 101]);
   });

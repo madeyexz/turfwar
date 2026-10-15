@@ -1018,6 +1018,80 @@ describe('idle humans (the server drops a client quiet for over 45 s)', () => {
   });
 });
 
+describe('away from keyboard (the server removes a human with no real action for AFK.kick s)', () => {
+  /** `a` and a teammate against two humans; rounds of `roundTime` s; everyone reports a standing-still pose. */
+  function room(roundTime = 600) {
+    const { ctx, state, events } = setup({ ...ELIMINATION, roundTime, roundTimeSingle: roundTime });
+    const a = addSoldier(state, ctx, { name: 'A', team: 0, bot: false });
+    for (const [name, team] of [['B', 0], ['C', 1], ['D', 1]] as const) addSoldier(state, ctx, { name, team, bot: false });
+    const still = (seconds: number) => {
+      for (let t = 0; t < seconds * 10; t++) {
+        for (const s of state.soldiers) if (s.alive) reportState(state, ctx, s.id, report(s, { pitch: s.pitch }), 0.1);
+        tick(state, ctx, 0.1);
+      }
+    };
+    return { ctx, state, events, a, still };
+  }
+
+  it('counts only time alive in live rounds; the buy freeze and time dead do not count', () => {
+    const { ctx, state, a, still } = room();
+    resetMatch(state, ctx);
+    tick(state, ctx, state.config.freezeTime - 0.5);
+    expect(state.roundPhase).toBe('freeze');
+    expect(a.afk).toBe(0);
+    expect(a.quiet).toBeGreaterThan(3);
+    tick(state, ctx, 1);
+    still(30);
+    expect(a.afk).toBeGreaterThan(30); expect(a.afk).toBeLessThan(31);
+    killSoldier(state, ctx, a, undefined, 'fall', false);
+    const atDeath = a.afk;
+    still(40);
+    expect(a.afk).toBe(atDeath);
+    expect(a.quiet).toBeGreaterThan(atDeath + 40);
+  });
+
+  it('a real turn, step, crouch or weapon change resets it; float noise and tiny drift do not', () => {
+    const { ctx, state, a, still } = room();
+    goLive(state, ctx);
+    const act = (over: Partial<Parameters<typeof reportState>[3]>) => { still(5); const before = a.afk; reportState(state, ctx, a.id, report(a, { pitch: a.pitch, ...over }), 0.1); return [before, a.afk]; };
+    // Noise: under 0.002 rad of turn, 0.05 m of step.
+    expect(act({ yaw: a.yaw + 0.001 })[1]).toBeGreaterThan(4.9);
+    expect(act({ x: a.m.x + 0.03 })[1]).toBeGreaterThan(9.9);
+    for (const over of [{ yaw: a.yaw - 0.01 }, { pitch: 0.2 }, { x: a.m.x + 0.2 }, { crouch: 1 }, { weapon: 1 as const }, { ads: true }]) {
+      const [before, after] = act(over);
+      expect(before, JSON.stringify(over)).toBeGreaterThan(4.9);
+      expect(after, JSON.stringify(over)).toBe(0);
+    }
+    expect(a.quiet).toBe(0);
+  });
+
+  it('turning across ±π is a small turn, and a huge reported yaw is still a finite check', () => {
+    const { ctx, state, a, still } = room();
+    goLive(state, ctx);
+    a.yaw = Math.PI - 0.0004;
+    still(3);
+    reportState(state, ctx, a.id, report(a, { yaw: -Math.PI + 0.0004, pitch: a.pitch }), 0.1);
+    expect(a.afk).toBeGreaterThan(2.9);
+    reportState(state, ctx, a.id, report(a, { yaw: 1e30, pitch: a.pitch }), 0.1);
+    expect(a.afk).toBe(0);
+  });
+
+  it('the spawn teleport at a round start is not an action: a stale pose reported in the freeze keeps the count', () => {
+    const { ctx, state, a, still } = room(20);
+    goLive(state, ctx);
+    still(15);
+    const stale = { x: a.m.x + 3, z: a.m.z + 3, yaw: a.yaw + 1, pitch: 0.3 };
+    still(5 + state.config.roundOverTime + 0.2);
+    expect(state.roundPhase).toBe('freeze');
+    const before = a.afk;
+    expect(before).toBeGreaterThan(19);
+    reportState(state, ctx, a.id, report(a, stale), 0.1);
+    expect(a.afk).toBe(before);
+    still(state.config.freezeTime + 2);
+    expect(a.afk).toBeGreaterThan(before + 1.5);
+  });
+});
+
 describe('join and leave events (clients note humans in the chat)', () => {
   it('say whether the soldier is a bot, and which team a leaver was on', () => {
     const { ctx, state, events } = setup();

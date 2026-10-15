@@ -114,6 +114,7 @@ const en = {
   'net.players.one': '1 PLAYER', 'net.players.other': '{n} PLAYERS',
   'net.solo': 'SOLO', 'net.practice': 'PRACTICE RANGE',
   'net.removed': 'Connection timed out. Rejoin the match.',
+  'net.afk': 'You were kicked for being away (AFK): no movement or action for 90 seconds.',
   'net.lost': 'Lost the connection to the match server.', 'net.reconnecting': 'Reconnecting…', 'net.reconnectingSub': 'The connection dropped; getting you back into the same match.',
 
   // ---- Performance check ----
@@ -247,6 +248,7 @@ const en = {
   'hud.rideAlong': 'RIDE ALONG · {name}', 'hud.enterCar': 'DRIVE THE {name}', 'hud.enterScooter': 'RIDE {name}', 'hud.enterHeli': 'FLY {name}',
   'hud.holdDisarm': 'HOLD {key} TO DISARM THE BOMB', 'hud.holdArm': 'HOLD {key} TO ARM THE BOMB AT {site}',
   'hud.crate': 'AMMO CRATE', 'hud.youDied': 'YOU DIED',
+  'hud.afk': 'Away? You leave the match in {n} s. Move or look around to stay.',
   'hud.goal.elim': 'Eliminate the enemy team', 'hud.goal.attack': 'Arm the bomb or eliminate SWAT', 'hud.goal.defend': 'Defend the sites or eliminate the Militia',
   'hud.roundDraw': 'DRAW · ROUND REPLAYS', 'hud.winsRound': '{team} WINS THE ROUND',
   'hud.armedTitle': 'BOMB ARMED', 'hud.disarmedTitle': 'BOMB DISARMED', 'hud.site': 'Site {site}',
@@ -471,6 +473,7 @@ const zhTW: Record<Key, string> = {
   'net.players.one': '1 名玩家', 'net.players.other': '{n} 名玩家',
   'net.solo': '單人', 'net.practice': '練習場',
   'net.removed': '連線逾時，請重新加入對戰。',
+  'net.afk': '你因閒置（AFK）被移出對戰：90 秒沒有移動或任何動作。',
   'net.lost': '與對戰伺服器的連線中斷。', 'net.reconnecting': '重新連線中…', 'net.reconnectingSub': '連線中斷了，正在回到同一場對戰。',
 
   'bench.title': '效能檢測', 'bench.met': '此裝置達到 60 fps 目標', 'bench.notMet': '此裝置未達 60 fps 目標',
@@ -599,6 +602,7 @@ const zhTW: Record<Key, string> = {
   'hud.rideAlong': '搭乘 · {name}', 'hud.enterCar': '駕駛{name}', 'hud.enterScooter': '騎乘{name}', 'hud.enterHeli': '駕駛{name}',
   'hud.holdDisarm': '按住 {key} 拆除炸彈', 'hud.holdArm': '按住 {key} 在 {site} 點安裝炸彈',
   'hud.crate': '彈藥箱', 'hud.youDied': '你陣亡了',
+  'hud.afk': '還在嗎？{n} 秒後會被移出對戰。移動或轉動視角即可留下。',
   'hud.goal.elim': '殲滅敵方隊伍', 'hud.goal.attack': '安裝炸彈，或殲滅特警', 'hud.goal.defend': '守住炸彈點，或殲滅民兵',
   'hud.roundDraw': '平手 · 本回合重打', 'hud.winsRound': '{team} 贏得本回合',
   'hud.armedTitle': '炸彈已安裝', 'hud.disarmedTitle': '炸彈已拆除', 'hud.site': '{site} 點',
