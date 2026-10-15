@@ -147,6 +147,8 @@ const en = {
   'set.optic.highTip': 'Smoothest optic models, sharper scope view', 'set.optic.lowTip': 'Lighter optic models and scope view',
   'set.quality': 'Graphics', 'set.q.low': 'Low', 'set.q.medium': 'Medium', 'set.q.high': 'High',
   'set.q.lowTip': 'No bloom, 1k shadows', 'set.q.mediumTip': 'Bloom, 2k shadows', 'set.q.highTip': '1.5× resolution',
+  'set.chat': 'Player chat', 'set.chat.on': 'On', 'set.chat.off': 'Off', 'set.chat.offTip': 'Hide chat from other players and the chat box',
+  'set.chat.forced': 'Chat is turned off on this site.',
   'key.mouse': 'Mouse', 'key.lmb': 'LMB', 'key.mmb': 'MMB', 'key.rmb': 'RMB', 'key.mouseN': 'Mouse {n}',
   'key.wheelUp': 'Wheel ↑', 'key.wheelDown': 'Wheel ↓',
   // Key bindings (Controls tab): groups, actions, and the rebinding flow.
@@ -495,6 +497,8 @@ const zhTW: Record<Key, string> = {
   'set.optic.highTip': '最平滑的瞄具模型，更清晰的鏡內畫面', 'set.optic.lowTip': '較輕量的瞄具模型與鏡內畫面',
   'set.quality': '畫質', 'set.q.low': '低', 'set.q.medium': '中', 'set.q.high': '高',
   'set.q.lowTip': '無光暈、1k 陰影', 'set.q.mediumTip': '光暈、2k 陰影', 'set.q.highTip': '1.5 倍解析度',
+  'set.chat': '玩家聊天', 'set.chat.on': '開啟', 'set.chat.off': '關閉', 'set.chat.offTip': '隱藏其他玩家的聊天訊息與聊天輸入框',
+  'set.chat.forced': '此網站已關閉聊天功能。',
   'key.mouse': '滑鼠', 'key.lmb': '左鍵', 'key.mmb': '中鍵', 'key.rmb': '右鍵', 'key.mouseN': '滑鼠 {n} 鍵',
   'key.wheelUp': '滾輪 ↑', 'key.wheelDown': '滾輪 ↓',
   'grp.movement': '移動', 'grp.combat': '戰鬥', 'grp.equipment': '裝備', 'grp.vehicles': '載具', 'grp.interface': '介面',

@@ -9,6 +9,7 @@ import type { BuyItem } from '../../shared/match/economy';
 import type { AttachmentId, Slot, WeaponId } from '../../shared/weapons';
 import type { GameLink } from './link';
 import type { Skin } from '../../shared/skins';
+import { maskProfanity } from '../../shared/profanity';
 import { t } from '../ui/i18n';
 
 /** Solo match: the authoritative simulation runs in this tab with bots on both teams. */
@@ -91,7 +92,7 @@ export class OfflineLink implements GameLink {
   }
   say(text: string, team: boolean) {
     const s = this.match.soldiers.find(x => x.id === this.me);
-    const clean = text.trim().slice(0, 120);
+    const clean = maskProfanity(text.trim().slice(0, 120));
     if (s && clean) this.events.push({ type: 'chat', id: s.id, name: s.name, team: s.team, text: clean, teamOnly: team });
   }
   dispose() { this.events = []; }

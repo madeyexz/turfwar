@@ -22,6 +22,7 @@ import { beginPlay, endPlay, flushDue, flushPlay, type PlayStore } from '../../s
 import { acceptNetReport, foldNetDay } from '../../shared/netstats';
 import { acceptDevice } from '../../shared/devicekind';
 import { firstTaipeiDay, taipeiDay, taipeiDayStart } from '../../shared/taipei';
+import { maskProfanity } from '../../shared/profanity';
 import { acceptPerf, acceptVisit, countRoomEvent, foldRoomMinute, noteMilestones, type RoomHour } from '../../shared/metrics';
 import * as Admin from './admin';
 import { AdminError, bumpPeak, dailyNetRows, playerMilestoneRows, playerPerfRows, playerSourceRows, dailyRows, dailyTimeRows, dayOf, forAdmin, playerDayNetRows, playerDayRows, playerDayTimeRows, playerHourRows, playerDeviceRows, playerNetRows, playerRows, playTimeRows, onlineBySide, type AdminStore } from './admin';
@@ -833,7 +834,8 @@ function markDay(ctx: Ctx) {
 
 /** Put the caller into `room` (leaving any other room first). Every way in (quick_any, start_room, quick_play, quick_join, join, create_room, join_room, join_public) ends here. */
 function enterRoom(ctx: Ctx, room: number, name: string, team: number) {
-  const clean = name.replace(/[^\p{L}\p{N} _\-.]/gu, '').trim().slice(0, 16) || 'Operator';
+  // Others see the callsign (scoreboard, kill feed, chat): bad words in it are masked like chat.
+  const clean = maskProfanity(name.replace(/[^\p{L}\p{N} _\-.]/gu, '').trim().slice(0, 16)) || 'Operator';
   markSeen(ctx, { name: clean });
   const existing = ctx.db.player.identity.find(ctx.sender);
   if (existing && existing.room === room && ctx.db.soldier.id.find(existing.soldierId)) return;
@@ -1301,10 +1303,10 @@ export const vehicleReport = spacetimedb.reducer({
   if (prev) ctx.db.vehicleInbox.soldierId.update(next); else ctx.db.vehicleInbox.insert(next);
 });
 
-/** Chat (Enter for everyone, T for the team). Rate-limited; clients filter team lines. */
+/** Chat (Enter for everyone, T for the team). Rate-limited and profanity-masked; clients filter team lines. */
 export const say = spacetimedb.reducer({ text: t.string(), team: t.bool() }, (ctx, { text, team }) => {
   const player = mySoldier(ctx);
-  const clean = text.replace(/[\u0000-\u001f\u007f]/g, '').trim().slice(0, 120);
+  const clean = maskProfanity(text.replace(/[\u0000-\u001f\u007f]/g, '').trim().slice(0, 120));
   if (!clean) return;
   const now = micros(ctx);
   const fresh = now - player.chatWindowMicros > 10_000_000n;

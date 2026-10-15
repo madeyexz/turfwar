@@ -48,8 +48,8 @@ const SCAN = ['src', 'shared', 'index.html'];
 const TEXT = new Set(['.ts', '.css', '.html', '.json']);
 function scan(path: string) {
   if (statSync(path).isDirectory()) { for (const f of readdirSync(path)) scan(join(path, f)); return; }
-  // Tests are not drawn (i18n.test.ts lists Simplified characters on purpose).
-  if (TEXT.has(extname(path)) && !path.endsWith('.test.ts')) cjkChars(readFileSync(path, 'utf8'), chars);
+  // Tests are not drawn (i18n.test.ts lists Simplified characters on purpose), nor is the profanity list (its words are masked).
+  if (TEXT.has(extname(path)) && !path.endsWith('.test.ts') && !path.endsWith('profanity.ts')) cjkChars(readFileSync(path, 'utf8'), chars);
 }
 for (const p of SCAN) scan(join(ROOT, p));
 const fromSource = chars.size;

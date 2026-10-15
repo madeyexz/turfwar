@@ -37,7 +37,7 @@ import { Input } from './input';
 import type { GameLink } from './link';
 import { Driving } from './driving';
 import { LocalPlayer } from './player';
-import { isMagnified, settings } from './settings';
+import { chatDisabled, isMagnified, settings } from './settings';
 import { ownedOf, purchaseOf, type BuyRequest, type Owned } from './purchases';
 import { matchNote, roundEnded, track } from '../analytics';
 import { noteDuel, noteKill, noteShare } from '../growth';
@@ -384,7 +384,7 @@ export class Game {
       // The store is open anywhere: weapons only sell in base during buy time, attachments always.
       if (this.input.take('store') && me) { this.buymenu.show(this.player.weapons[this.player.slot === 2 ? 0 : this.player.slot]); this.input.clear(); }
       const chat = this.input.take('chat') ? false : this.input.take('teamChat') ? true : undefined;
-      if (chat !== undefined) { this.input.clear(); this.hud.openChat(chat, text => this.link.say(text, chat)); }
+      if (chat !== undefined && !chatDisabled()) { this.input.clear(); this.hud.openChat(chat, text => this.link.say(text, chat)); }
       // Use (E): into the vehicle in reach, else the ammo crate; seated, exit (E) gets us out.
       if ((this.seated ? this.input.take('exitVehicle') : this.input.take('use')) && me?.alive) {
         const i = this.crates.nearest(this.player.m.x, this.player.m.y, this.player.m.z, CRATE_REACH);

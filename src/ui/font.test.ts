@@ -68,7 +68,8 @@ function sourceChars() {
   const chars = new Set<string>();
   const scan = (path: string) => {
     if (statSync(path).isDirectory()) { for (const f of readdirSync(path)) scan(join(path, f)); return; }
-    if (['.ts', '.css', '.html', '.json'].includes(extname(path)) && !path.endsWith('.test.ts')) cjkChars(readFileSync(path, 'utf8'), chars);
+    // The profanity list is never drawn (its words are masked), like tests.
+    if (['.ts', '.css', '.html', '.json'].includes(extname(path)) && !path.endsWith('.test.ts') && !path.endsWith('profanity.ts')) cjkChars(readFileSync(path, 'utf8'), chars);
   };
   for (const p of ['src', 'shared', 'index.html']) scan(join(ROOT, p));
   return chars;
