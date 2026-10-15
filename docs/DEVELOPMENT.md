@@ -204,6 +204,40 @@ the matching commit to `main`, which triggers Vercel's GitHub deployment.
 Verify the production URL and two separate Online clients after each release.
 Then run `bun run seo:ping` (sitemap to Google and Bing, the public pages to IndexNow; docs/SEO.md, "Search data").
 
+### CrazyGames build
+
+The game is also uploaded to CrazyGames (developer.crazygames.com) as a zip of static files. Build it with
+the production server variables, as Vercel's production build has them:
+
+```sh
+VITE_SPACETIMEDB_URI=wss://tw.turfwar.ianhsiao.me VITE_SPACETIMEDB_DATABASE=turfwar bun run build:crazygames
+```
+
+This writes `dist-crazygames/` and `turfwar-crazygames.zip` (`vite build --mode crazygames`, vite.config.ts):
+the game page only, every URL relative (`base: './'`; CrazyGames serves it from its CDN under an unknown
+path), no service worker, info/privacy/admin pages, search metadata or Vercel Web Analytics, and the
+CrazyGames SDK script in the head. Upload the zip in the developer portal. The players share the
+production databases with the website, so the module and this build must stay compatible like the website.
+
+`src/crazygames.ts` holds the `CRAZYGAMES` flag and the SDK wrapper; every call is a no-op on the website,
+when an ad blocker stops the script, and outside CrazyGames' domains. In that build:
+
+- loading start/stop (bootstrap and the lobby), gameplay start/stop from the game loop (playing unless the
+  match has ended or the menu is open), and a midgame video ad when a player leaves a finished match (the SDK
+  keeps ads 3 minutes apart; none during Basic Launch);
+- the platform's `muteAudio` and `disableChat` settings, its locale (unless the player chose a language) and,
+  for a logged-in player, the CrazyGames username as callsign; the callsign prompt is skipped;
+- invite and challenge links become CrazyGames invite links (`r` room code, `c` challenge; no UTM tags),
+  read back at boot and by the join-room listener; a private room is reported with `updateRoom`; instant
+  multiplayer opens the invite room;
+- no links back to the playable website (GitHub, about pages), no install hint and no fullscreen key (the site
+  has its own button); the privacy page is linked on the website, with a first-visit notice in the lobby;
+- analytics events carry `platform: crazygames` (`web` on the website).
+
+Try it locally with `bun run dev:crazygames` (or the built zip from any static server under a subpath): on
+localhost the SDK runs in its `local` mode, which logs its calls ("HTML5 SDK"), shows fake ads, and takes
+`?czy_invite=true&r=<CODE>`, `?disableChat=true` and `?muteAudio=true`.
+
 ### Orb credentials
 
 Amp orbs get the deploy credentials as Amp secrets. `.agents/setup` installs the clients (bun
