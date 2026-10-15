@@ -2,7 +2,8 @@ All models, textures and animations in this folder were converted from CC0 1.0 p
 (https://quaternius.com): Sci-Fi Essentials Kit, Modular Sci-Fi MegaKit, Universal Base Characters,
 Universal Animation Library and Universal Animation Library 2 (free Standard editions).
 CC0 1.0 Universal Public Domain Dedication: https://creativecommons.org/publicdomain/zero/1.0/
-Converted with tools/import-assets.ts (textures resized to WebP; animations meshopt-compressed).
+Converted with tools/import-assets.ts (textures resized to WebP; animations meshopt-compressed; props.glb
+cut to the placed props and geometry meshopt-compressed losslessly by tools/compress-models.ts).
 
 soldiers.glb, soldier-anims.glb: the soldier characters and their clips from Quaternius' "Ultimate Modular Men"
 pack (Swat, Farmer, Punk, Worker, Adventurer, Casual_2, Casual_Hoodie; Feb 2022), CC0 1.0 Universal

@@ -34,6 +34,7 @@ requests.
   navigation, the packed per-tick frame, and the simulation tick.
 - `src/game/`: client loop, player prediction/input, Solo link, settings, performance check.
 - `src/net/online.ts`: SpacetimeDB connection, replicated state, interpolation, and intents.
+- `src/crazygames.ts`: the CrazyGames build flag and SDK wrapper (`bun run build:crazygames`; docs/DEVELOPMENT.md "CrazyGames build"). Keep that build free of links back to the playable website.
 - `src/analytics.ts`: PostHog product analytics (lazy, guarded; see `docs/DEVELOPMENT.md` "Players, analytics and the admin page").
 - `src/errors.ts`, `src/exceptions.ts`, `src/bootstrap.ts`: bounded client stacks and early/boot errors. Preserve analytics opt-outs and error-property filtering. Hidden maps must be removed from build output; private upload setup is in `docs/DEVELOPMENT.md`. Never claim PostHog symbolication from local parsing alone.
 - `privacy/index.html`, `src/privacy/`: the public `/privacy` page (English and 繁體中文). Keep it true

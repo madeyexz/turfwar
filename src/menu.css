@@ -9,7 +9,7 @@
  */
 /* The lobby and its dialogs are set in Oswald (Latin) and Noto Sans TC (Chinese). */
 #menu, .lb-settings.lobby, .share-panel, .challenge-banner, .ask-dialog {
-  --font: 'Oswald', 'Noto Sans TC', 'PingFang TC', 'Microsoft JhengHei', 'Segoe UI', system-ui, sans-serif;
+  --font: 'Oswald', 'Noto Sans TC', 'Noto Sans TC Extra', 'PingFang TC', 'Microsoft JhengHei', 'Segoe UI', system-ui, sans-serif;
   font-family: var(--font);
 }
 #menu {
@@ -583,3 +583,17 @@
 :lang(en) #menu .choice b, :lang(en) #menu .label, :lang(en) #menu .pop-head b { letter-spacing: 0.06em; }
 /* Oswald's tall ascenders: two-line choices keep a tight line height so the second line is never clipped. */
 #menu .choice b, #menu .choice small, .lb-settings.lobby .seg button { line-height: 1.15; }
+
+/* ---- CrazyGames build: the first-visit privacy note (src/ui/privacynotice.ts), under the top bar, clear of the menu ---- */
+#menu .privacy-notice {
+  position: absolute; right: 20px; top: 76px; z-index: 5; max-width: 340px; padding: 12px 14px;
+  border: 1px solid var(--line); background: var(--glass); color: var(--ink); font-size: 13px; line-height: 1.4;
+}
+#menu .privacy-notice p { margin: 0 0 10px; }
+/* An invite or challenge banner takes the top of the lobby: the note waits until it is gone. */
+#menu:has(.challenge-banner) .privacy-notice { display: none; }
+#menu .privacy-notice .acts { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+#menu .privacy-notice a { color: #7ff6ff; font-weight: 700; }
+#menu .privacy-notice button {
+  padding: 4px 14px; border: 1px solid var(--line); background: rgba(255, 255, 255, 0.08); color: var(--ink); font: inherit; font-weight: 700; cursor: pointer;
+}

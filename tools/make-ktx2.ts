@@ -7,9 +7,10 @@
  *   public/assets/tex/<set>_<kind>.ktx2       1024², for Medium and High
  *   public/assets/tex/low/<set>_<kind>.ktx2   512², for Low (phones' default)
  *
- * Colour and roughness are ETC1S (small files, 4 bpp on phones); normal maps are UASTC + Zstandard
- * on Low (the codec that keeps normals clean) and ETC1S tuned for normals at 1024 (a quarter of
- * UASTC's download for the desktop set, where the extra pixels hide its blocks). Every file has
+ * Every file is ETC1S (small files, 4 bpp on phones); normal maps are ETC1S tuned for normals
+ * (`-normal_map -mip_renorm`). UASTC + Zstandard keeps normals a little cleaner but costs 2.8× the
+ * download (4.5 MB against 1.6 MB for the Low set); side by side on the maps the difference does not
+ * show, and phones' first download has to stay small (CrazyGames' mobile limit is 20 MB). Every file has
  * mipmaps and is stored bottom-up (`-y_flip`), as WebGL samples it, so it lines up with the .webp.
  * Sizes are powers of two, which every compressed format accepts at every mip level.
  *
@@ -31,16 +32,15 @@ const SETS = ['concrete', 'metalplate', 'container', 'brick', 'planks', 'corruga
   'sand', 'cliff', 'dirt', 'snow', 'icerock', 'lichen', 'path'];
 
 const ETC1S = ['-etc1s', '-quality', '100', '-effort', '5'];
-const UASTC_NORMAL = ['-uastc', '-quality', '70', '-effort', '4', '-normal_map', '-mip_renorm'];
 const ETC1S_NORMAL = [...ETC1S, '-normal_map', '-mip_renorm'];
 
 interface Job { name: string; src: string; out: string; width: number; height: number; args: string[] }
 const jobs: Job[] = [];
 for (const set of SETS) for (const kind of ['diff', 'nor', 'rough'] as const) {
   const src = join(ASSETS, `tex/${set}_${kind}.webp`);
-  const codec = (low: boolean) => kind === 'nor' ? (low ? UASTC_NORMAL : ETC1S_NORMAL) : kind === 'rough' ? [...ETC1S, '-linear'] : [...ETC1S, '-srgb'];
-  jobs.push({ name: set, src, out: join(ASSETS, `tex/${set}_${kind}.ktx2`), width: 1024, height: 1024, args: codec(false) });
-  jobs.push({ name: set, src, out: join(ASSETS, `tex/low/${set}_${kind}.ktx2`), width: 512, height: 512, args: codec(true) });
+  const codec = kind === 'nor' ? ETC1S_NORMAL : kind === 'rough' ? [...ETC1S, '-linear'] : [...ETC1S, '-srgb'];
+  jobs.push({ name: set, src, out: join(ASSETS, `tex/${set}_${kind}.ktx2`), width: 1024, height: 1024, args: codec });
+  jobs.push({ name: set, src, out: join(ASSETS, `tex/low/${set}_${kind}.ktx2`), width: 512, height: 512, args: codec });
 }
 
 if (spawnSync('basisu', ['-version']).status !== 0) {

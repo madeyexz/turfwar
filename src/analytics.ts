@@ -1,4 +1,5 @@
 import type { Mode } from '../shared/match/state';
+import { CRAZYGAMES } from './crazygames';
 import type { VehicleKind } from '../shared/vehicles';
 import type { NetFields } from '../shared/netstats';
 import type { DeviceKind } from '../shared/devicekind';
@@ -235,6 +236,8 @@ export function startAnalytics(base: { lang: string; online_db: string; server_h
         ph.register({
           lang: base.lang, app_version: version, online_db: base.online_db, server_host: base.server_host, server_choice: base.server_choice,
           screen: screenBucket(screen.width, screen.height), ...(guard.test ? { test: true } : {}),
+          // Which build: the website or the CrazyGames upload (src/crazygames.ts), so their players can be told apart.
+          platform: CRAZYGAMES ? 'crazygames' : 'web',
           // Not even counted (or kept in storage) when the player has opted out (Do Not Track).
           ...(ph.has_opted_out_capturing() ? {} : currentVisitProps()),
         });

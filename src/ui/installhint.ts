@@ -1,3 +1,4 @@
+import { assetUrl } from '../assetUrl';
 import { installHint, isAndroid, isIOS, openInBrowserUrl, readEnv, type InstallHint } from '../game/device';
 import { onTouchLayout, touchActive } from '../game/touchlayout';
 import { canPromptInstall, onInstallChange, promptInstall } from '../pwa';
@@ -57,7 +58,7 @@ export class InstallBanner {
     this.el.setAttribute('aria-label', kind ? t('inst.title') : t('inst.tipTitle'));
     // In an app's own browser the game still plays (sideways); the real browser gives full screen and installing.
     const title = kind === 'browser' ? t('inst.inAppTitle') : t('inst.title');
-    this.el.innerHTML = (kind ? `<img class="mark" src="/icons/icon-192.png" alt="" width="40" height="40"><b>${esc(title)}</b><p>${how}</p>` : '')
+    this.el.innerHTML = (kind ? `<img class="mark" src="${assetUrl('icons/icon-192.png')}" alt="" width="40" height="40"><b>${esc(title)}</b><p>${how}</p>` : '')
       + `<div class="acts">${kind === 'prompt' ? `<button type="button" class="inst-go" data-act="install">${esc(t('inst.install'))}</button>` : ''}`
       + `${chrome ? `<a class="inst-go" href="${esc(chrome)}">${esc(t('inst.openChrome'))}</a>` : ''}<button type="button" class="x" data-act="close" aria-label="${esc(t('inst.dismiss'))}" title="${esc(t('inst.dismiss'))}">✕</button></div>`
       + (tip || kind ? `<p class="tip">${esc(t('inst.tip'))}</p>` : '');

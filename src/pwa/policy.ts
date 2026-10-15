@@ -30,6 +30,14 @@ export function routeOf(req: { url: string; method: string; mode?: string }, ori
   return STATIC.test(path) ? 'static' : 'bypass';
 }
 
+/**
+ * Whether a precached shell file can come from the browser's HTTP cache: this build's hashed scripts
+ * and styles and the versioned fonts never change under their URL, and the page has usually just
+ * loaded them, so the worker's install does not download them a second time. The rest (the page,
+ * the manifest, the icons) is asked for afresh (`cache: 'reload'`).
+ */
+export const immutableShellFile = (path: string) => /^\/assets\/[^/?]+-[\w-]{8}\.(js|css)$/.test(path) || /\?v=\w+$/.test(path);
+
 /** Cache names: the shell is versioned with the build; the static assets share one cache, versioned file by file. */
 export const cacheNames = (shellVersion: string) => ({ shell: `turfwar-shell-${shellVersion}`, static: 'turfwar-static-files' });
 

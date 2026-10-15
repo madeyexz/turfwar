@@ -8,6 +8,7 @@ import { lang, onLang, t, type Lang } from './i18n';
 export interface NewsItem { id: string; date: string; text: Record<Lang, string> }
 
 export const NEWS: readonly NewsItem[] = [
+  { id: 'faster-chat-filter', date: '2026-10-15', text: { 'zh-TW': '手機載入更快（下載量少約四成），聊天會過濾髒話，設定裡也能關閉玩家聊天', en: 'Faster loading on phones, a chat swear filter, and a setting to turn player chat off' } },
   { id: 'molotov', date: '2026-10-14', text: { 'zh-TW': '新增燃燒彈（$400，按 7）：落地起火，站在火裡會被燒；煙霧彈可以滅火', en: 'New: the molotov ($400, key 7). It sets the floor alight; a smoke grenade puts it out' } },
   { id: 'invite-gold', date: '2026-10-14', text: { 'zh-TW': '新增「邀請朋友」：開私人房一鍵傳 LINE，揪 3 位朋友來玩解鎖金拖', en: 'Invite friends: a private room sent on LINE in one tap. 3 friends unlock the gold slipper' } },
   { id: 'skins-broom', date: '2026-10-13', text: { 'zh-TW': '新增外觀：刀可以換成掃把，民兵也能挑角色（大廳右上的衣服）', en: 'Skins: swap the knife for a broom and pick your Militia character (the T-shirt, top right)' } },

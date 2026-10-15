@@ -5,13 +5,21 @@
 @font-face { font-family: 'Oswald'; font-weight: 500 700; font-display: swap; src: url('/fonts/oswald.woff2') format('woff2'); unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD; }
 /*
  * Traditional Chinese: Noto Sans TC (OFL), subset by tools/subset-font.ts, weights 500–900 in one
- * variable file. The unicode-range (src/ui/cjk.ts) keeps Latin on Rajdhani and stops English pages
- * downloading it. Rajdhani's own ascent and descent keep line boxes the same height when a line
+ * variable file. The unicode-range (src/ui/cjk.ts) keeps Latin on Rajdhani and stops pages without
+ * Chinese downloading it. Rajdhani's own ascent and descent keep line boxes the same height when a line
  * holds Chinese, and size-adjust sets the ideographs to sit with Rajdhani's tall, narrow capitals.
+ * 'Noto Sans TC' has the characters the game itself writes; 'Noto Sans TC Extra', next in every stack,
+ * the rest of Taiwan's common characters (names, chat), so it downloads only when such a character shows.
  */
 @font-face {
   font-family: 'Noto Sans TC'; font-weight: 500 900; font-display: swap;
   src: url('/fonts/noto-sans-tc.woff2') format('woff2');
+  unicode-range: U+2E80-2FDF, U+3000-303F, U+3100-312F, U+31A0-31BF, U+3400-4DBF, U+4E00-9FFF, U+F900-FAFF, U+FE10-FE1F, U+FE30-FE4F, U+FF00-FFEF;
+  size-adjust: 92%; ascent-override: 101%; descent-override: 37.6%; line-gap-override: 0%;
+}
+@font-face {
+  font-family: 'Noto Sans TC Extra'; font-weight: 500 900; font-display: swap;
+  src: url('/fonts/noto-sans-tc-extra.woff2') format('woff2');
   unicode-range: U+2E80-2FDF, U+3000-303F, U+3100-312F, U+31A0-31BF, U+3400-4DBF, U+4E00-9FFF, U+F900-FAFF, U+FE10-FE1F, U+FE30-FE4F, U+FF00-FFEF;
   size-adjust: 92%; ascent-override: 101%; descent-override: 37.6%; line-gap-override: 0%;
 }
@@ -23,7 +31,7 @@
   --vw: 1vw; --vh: 1vh;
   --safe-t: env(safe-area-inset-top, 0px); --safe-r: env(safe-area-inset-right, 0px);
   --safe-b: env(safe-area-inset-bottom, 0px); --safe-l: env(safe-area-inset-left, 0px);
-  --font: 'Rajdhani', 'Noto Sans TC', 'PingFang TC', 'Microsoft JhengHei', 'Segoe UI', system-ui, sans-serif;
+  --font: 'Rajdhani', 'Noto Sans TC', 'Noto Sans TC Extra', 'PingFang TC', 'Microsoft JhengHei', 'Segoe UI', system-ui, sans-serif;
   --ink: #e9f3f5;
   --muted: #9fb3b9;
   --panel: rgba(8, 16, 22, 0.62);

@@ -13,7 +13,7 @@ import type { MatchSummary } from './game/matchstats';
 import './ui/share.css';
 import { Audio } from './audio';
 import { Game } from './game/game';
-import { settings } from './game/settings';
+import { setChatDisabled, settings } from './game/settings';
 import { loadLayout, matches } from './game/keybinds';
 import type { GameLink } from './game/link';
 import { OfflineLink } from './game/offline';
@@ -43,12 +43,15 @@ import { isSideways, onSideways, watchSideways } from './ui/viewport';
 import { mountProgressBadge } from './ui/progressbadge';
 import { levelOf, loadProgress, onProgress } from './game/progress';
 import { mountNews } from './ui/news';
-import { askCallsign, madeUpCallsign } from './ui/callsign';
+import { mountPrivacyNotice } from './ui/privacynotice';
+import { askCallsign, cleanCallsign, madeUpCallsign } from './ui/callsign';
 import { ask, confirmDialog } from './ui/ask';
 import { reportBootFailure, watchClientErrors } from './errors';
 import { registerServiceWorker, warmServiceWorker } from './pwa';
+import { CRAZYGAMES, crazyGameplay, crazyInstantMultiplayer, crazyLeftRoom, crazyLinkPlace, crazyLoadingStop, crazyMidgameAd, crazyRoom, crazySettings, crazyUser, linkPlace, onCrazyJoinRoom, onCrazySettings } from './crazygames';
 
-inject();
+// Vercel Web Analytics exists only on the website (CrazyGames serves the files themselves).
+if (!CRAZYGAMES) inject();
 registerServiceWorker();
 
 const app = document.querySelector<HTMLDivElement>('#app')!;
@@ -103,8 +106,13 @@ const DISCORD = '<svg class="mark" viewBox="0 0 24 24" aria-hidden="true"><path 
 const REPO_URL = 'https://github.com/madeyexz/turfwar';
 /** The players' Discord server, linked from the lobby's top bar. */
 const DISCORD_URL = 'https://discord.gg/ugFv3GzwcD';
-/** The privacy page in the lobby's language (a `?lang=` visit passes it on; otherwise the page reads the saved choice). */
-const privacyHref = () => `/privacy${params.get('lang') ? `?lang=${lang()}` : ''}`;
+/** The website, where the CrazyGames build links its privacy page (CrazyGames serves the game from its own address). */
+const SITE_URL = 'https://turfwar.ianhsiao.me';
+/**
+ * The privacy page in the lobby's language (a `?lang=` visit passes it on; otherwise the page reads the saved choice).
+ * On CrazyGames it is our website's page, always with the language (the saved choice lives on their address).
+ */
+const privacyHref = () => CRAZYGAMES ? `${SITE_URL}/privacy?lang=${lang()}` : `/privacy${params.get('lang') ? `?lang=${lang()}` : ''}`;
 /** The static about page (how to play, modes, maps, FAQ; crawlable text for search engines, docs/SEO.md) in the lobby's language. */
 const aboutHref = () => isZh() ? '/about' : '/en/about';
 const LOCK = '<svg class="lock" viewBox="0 0 24 24" aria-hidden="true"><rect x="5" y="11" width="14" height="10" rx="2"/><path d="M8 11V8a4 4 0 0 1 8 0v3"/></svg>';
@@ -140,7 +148,7 @@ const deploy = (id: string, label: Key, right = '', title?: Key) =>
  */
 menu.innerHTML = `
   <header class="top">
-    <button type="button" class="mark" id="tab-quick" data-tab="quick" aria-label="${t('lobby.home')}" data-i18n-aria-label="lobby.home"><img src="/icons/icon-192.png" width="40" height="40" alt=""><span class="mark-back" aria-hidden="true">‹</span><span class="mark-name">${L('brand.short')}</span></button>
+    <button type="button" class="mark" id="tab-quick" data-tab="quick" aria-label="${t('lobby.home')}" data-i18n-aria-label="lobby.home"><img src="${assetUrl('icons/icon-192.png')}" width="40" height="40" alt=""><span class="mark-back" aria-hidden="true">‹</span><span class="mark-name">${L('brand.short')}</span></button>
     <div class="who">
       <button type="button" class="profile" id="open-profile" aria-haspopup="dialog" aria-expanded="false" aria-controls="profile-pop"><b id="profile-name"></b><span class="dot" aria-hidden="true">·</span><span id="profile-lv"></span>${CARET}</button>
       <div class="icons">
@@ -212,11 +220,11 @@ menu.innerHTML = `
   </section>
   <section class="news" id="news" hidden></section>
   <footer class="site-links" aria-label="${t('lobby.siteLinks')}" data-i18n-aria-label="lobby.siteLinks">
-    <a href="${REPO_URL}" target="_blank" rel="noopener" title="${t('lobby.openSourceTitle')}" data-i18n-title="lobby.openSourceTitle">${GITHUB}${L('lobby.openSource')}</a>
+    ${CRAZYGAMES ? '' : `<a href="${REPO_URL}" target="_blank" rel="noopener" title="${t('lobby.openSourceTitle')}" data-i18n-title="lobby.openSourceTitle">${GITHUB}${L('lobby.openSource')}</a>
     <span class="dot" aria-hidden="true">·</span>
     <a href="${aboutHref()}" id="about-link">${L('lobby.about')}</a>
-    <span class="dot" aria-hidden="true">·</span>
-    <a href="${privacyHref()}" id="privacy-link">${L('lobby.privacy')}</a>
+    <span class="dot" aria-hidden="true">·</span>`}
+    <a href="${privacyHref()}" id="privacy-link"${CRAZYGAMES ? ' target="_blank" rel="noopener"' : ''}>${L('lobby.privacy')}</a>
   </footer>
   ${pop('profile-pop', 'lobby.profile', `<label class="callsign">${L('lobby.callsign', 'span', 'class="label"')}<input type="text" id="callsign" maxlength="16" autocomplete="off" spellcheck="false"></label>
     <div class="prog" id="prog"></div>
@@ -257,12 +265,15 @@ onSideways(on => {
 });
 watchSideways();
 // Inside the lobby, so it goes away with it during a match.
-if (!params.has('bench')) new InstallBanner(menu);
+// (Not on CrazyGames: the game is theirs to install there.)
+if (!params.has('bench') && !CRAZYGAMES) new InstallBanner(menu);
 // Level and the day's goal in the profile popover (game/progress.ts); the chip shows the level.
 mountProgressBadge(menu.querySelector<HTMLElement>('#prog')!);
 onProgress(() => renderProfile());
 // 最新更新: the newest entry of src/ui/news.ts.
 mountNews(menu.querySelector<HTMLElement>('#news')!);
+// CrazyGames: a first-visit note on what the game collects, with the privacy page (src/ui/privacynotice.ts).
+if (CRAZYGAMES && !params.has('bench')) mountPrivacyNotice(menu, privacyHref);
 
 const $ = <T extends HTMLElement = HTMLElement>(sel: string) => menu.querySelector<T>(sel)!;
 const select = (group: string, attr: string, value: string) => menu.querySelectorAll<HTMLButtonElement>(`#${group} [data-${attr}]`).forEach(b => b.setAttribute('aria-pressed', String(b.dataset[attr] === value)));
@@ -970,7 +981,8 @@ onLang(next => {
   track('language_changed', { to: next }, { set: { lang: next } });
   applyI18n(menu);
   $<HTMLAnchorElement>('#privacy-link').href = privacyHref();
-  $<HTMLAnchorElement>('#about-link').href = aboutHref();
+  const about = menu.querySelector<HTMLAnchorElement>('#about-link');
+  if (about) about.href = aboutHref();
   $('#map-grid').dataset.key = '';
   if (benchPanel) { benchPanel.remove(); if (benchResult) showBenchResult(benchResult); }
   refresh();
@@ -1042,8 +1054,11 @@ function showBackdrop() {
   renderer.scene.add(backdrop.group);
 }
 
-/** A player still on the made-up callsign is asked for one before playing (automation and `?name=` skip it). */
-const needsCallsign = () => !benchMode && !params.get('autostart') && !params.has('name') && madeUpCallsign(callsign.value);
+/**
+ * A player still on the made-up callsign is asked for one before playing (automation and `?name=` skip it).
+ * Not on CrazyGames: new players land in play with one tap there, as a logged-in player's CrazyGames name or a made-up one.
+ */
+const needsCallsign = () => !CRAZYGAMES && !benchMode && !params.get('autostart') && !params.has('name') && madeUpCallsign(callsign.value);
 
 // ---- 發起單挑 (src/game/challenge.ts) ----------------------------------------------------------------
 
@@ -1058,12 +1073,14 @@ type Duel = { kind: 'join'; c: Challenge; mapId: string }
   | { kind: 'invite'; mapId: string; mode: Mode }
   | { kind: 'joinInvite'; ref: string };
 let special: Duel | undefined;
+/** Where this page's link points: on CrazyGames, the invite it was opened with (src/crazygames.ts). */
+const place = crazyLinkPlace() ?? location;
 /** The challenge this page was opened with. */
-const challenge = parseChallenge(location.search, location.pathname);
+const challenge = parseChallenge(place.search, place.pathname);
 if (challenge) noteArrival(challenge.ref);
 if (challenge) track('challenge_link_opened', { ref: challenge.ref ?? '', has_room: !!challenge.room }, { setOnce: { ref_by: challenge.ref ?? '' } });
 /** The private room an invite link (`/r/<code>`) asks this page to join; a challenge link wins if both. */
-const invite = challenge ? undefined : parseInvite(location.pathname, location.search);
+const invite = challenge ? undefined : parseInvite(place.pathname, place.search);
 if (invite) noteArrival(invite.ref);
 if (invite) track('invite_link_opened', { ref: invite.ref ?? '' }, { setOnce: { ref_by: invite.ref ?? '' } });
 
@@ -1233,7 +1250,8 @@ function offlineRules(): { mapId: string; mode: Mode } {
  * Fullscreen API, so there the installed app is the full-screen way). Must run inside the tap.
  */
 function fullscreenForTouch() {
-  if (!touchActive() || document.fullscreenElement || !document.documentElement.requestFullscreen) return;
+  // CrazyGames has its own fullscreen button and allows no other.
+  if (CRAZYGAMES || !touchActive() || document.fullscreenElement || !document.documentElement.requestFullscreen) return;
   void document.documentElement.requestFullscreen({ navigationUI: 'hide' }).then(() => {
     const orientation = screen.orientation as ScreenOrientation & { lock?: (o: string) => Promise<void> };
     return orientation?.lock?.('landscape');
@@ -1322,6 +1340,7 @@ async function start(action: Action, retried = false) {
   launch(link, linkMap);
   joined(link, linkMap, playServer, false, duel?.kind === 'host' || duel?.kind === 'invite');
   matchServer = playServer;
+  reportRoom(link, playServer);
   if (duel) startedDuel(duel, link);
   // The map's own files have loaded by now: cache them too on a first visit.
   setTimeout(warmServiceWorker, 15000);
@@ -1343,14 +1362,37 @@ function launch(link: GameLink, map: string) {
 /** Leave the match for the lobby: chosen (menu), or because the server removed us or the connection dropped. */
 function backToLobby(reason: 'menu' | 'disconnect', message = '', exit?: Exit) {
   if (!game) return;
+  const finished = game.link.state()?.phase === 'ended';
   leftMatch(reason, exit);
   game.stop(); game = undefined;
+  crazyGameplay(false);
+  crazyLeftRoom();
+  // CrazyGames: a video ad after a finished match (their SDK keeps ads 3 minutes apart; none during Basic Launch).
+  if (finished && reason === 'menu') void crazyMidgameAd(() => audio.setMuted(true), () => audio.setMuted(crazySettings().muteAudio));
   track('lobby_view', {});
   document.body.classList.add('menu-open'); menu.hidden = false;
   syncOptions();
   inMenu = !benchMode; menuMusic();
   watchLobbyRooms(); refresh();
   if (message) status.textContent = message;
+}
+/**
+ * CrazyGames: the room we play in, for their "join friend" buttons. A private room is joinable with its code
+ * (it arrives a moment after the join); a Quick Play room is matched by the server, so friends cannot follow.
+ */
+function reportRoom(link: GameLink, server: ServerId | undefined) {
+  if (!CRAZYGAMES || link.mode !== 'online') return;
+  const playing = game;
+  let tries = 0;
+  const report = () => {
+    if (game !== playing) return;
+    const info = link.roomInfo?.();
+    // The room's index is reused once it closes, so its code is part of the id.
+    if (info?.code) crazyRoom(`${server ?? 'tw'}-${info.room}-${info.code}`, true, { r: info.code });
+    else if (info && ++tries >= 8) crazyRoom(`${server ?? 'tw'}-${info.room}`, false, {});
+    else setTimeout(report, 250);
+  };
+  report();
 }
 /** The server of the online match being played (for a rejoin after a dropped connection). */
 let matchServer: ServerId | undefined;
@@ -1442,6 +1484,7 @@ addEventListener('pagehide', () => leftMatch('close', 'close'));
 
 /** Fullscreen on or off. Entering it can drop pointer lock, so recapture after. */
 function toggleFullscreen() {
+  if (CRAZYGAMES) return;
   if (document.fullscreenElement) { void document.exitFullscreen().catch(() => undefined); return; }
   const relock = !!game?.input.locked;
   void document.documentElement.requestFullscreen?.({ navigationUI: 'hide' }).then(() => {
@@ -1552,6 +1595,30 @@ function showBenchResult(r: BenchResult) {
 /** What ?autostart (and the dev hook) runs: ?room joins by code, else the remembered or given `mode`. */
 const startAction = (): Action => benchMode ? 'solo' : params.get('room') ? 'code' : startMode === 'offline' ? 'solo' : startMode === 'lab' ? 'range' : online.ok ? 'quick' : 'solo';
 
+/** CrazyGames, once the lobby is ready: loading done, their settings, the player's name, and invites. */
+function crazyReady() {
+  crazyLoadingStop();
+  // Their sound and chat switches win over ours while they are on.
+  onCrazySettings(s => { audio.setMuted(s.muteAudio); setChatDisabled(s.disableChat); });
+  // Friends know each other by their CrazyGames names, so a logged-in player plays under theirs.
+  void crazyUser().then(user => {
+    const name = user && cleanCallsign(user.username);
+    if (!name) return;
+    callsign.value = name; store.set('name', name); renderProfile();
+  });
+  // A friend's invite accepted while the game is open: leave what we play and join their room.
+  onCrazyJoinRoom(params => {
+    const where = linkPlace(params), room = where && parseInvite(where.pathname, where.search);
+    if (!room) return;
+    if (game) backToLobby('menu', '', 'menu_button');
+    roomCode.value = room.room;
+    special = { kind: 'joinInvite', ref: room.ref ?? '' };
+    run('code');
+  });
+  // "Play with friends" on CrazyGames: straight into our own private room, with its invite dialog open.
+  if (crazyInstantMultiplayer() && !challenge && !invite) openInviteRoom();
+}
+
 async function boot() {
   renderer = new Renderer(app, QUALITY[quality]);
   // The page's own failures go to PostHog; a lost graphics context also asks the player to reload.
@@ -1563,6 +1630,7 @@ async function boot() {
   await fonts;
   ready = true;
   if (!benchMode) lobbyReady();
+  if (CRAZYGAMES) crazyReady();
   warmServiceWorker();
   refresh();
   renderChallenge();

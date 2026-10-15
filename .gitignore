@@ -1,5 +1,7 @@
 node_modules/
 dist/
+dist-crazygames/
+*.zip
 .env*
 !.env.example
 .vercel/

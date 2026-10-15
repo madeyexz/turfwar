@@ -7,6 +7,7 @@ import {
   touchSensitivity, visibleControls, type ControlId, type PlaceId, type TouchContext, type TouchLayout,
 } from '../game/touchlayout';
 import { onLang, t, type Key } from './i18n';
+import { chatDisabled } from '../game/settings';
 import './touch.css';
 
 const esc = (s: string) => s.replace(/[&<>"']/g, c => `&#${c.charCodeAt(0)};`);
@@ -197,6 +198,8 @@ export class TouchControls {
     this.lastSlot = info.slot;
     const layout = touchLayout();
     const shown = visibleControls(ctx, layout);
+    // Chat off (Settings or the host platform): no chat button, and no quick-chat sheet left open.
+    if (chatDisabled()) { shown.delete('chat'); if (!this.sheet.hidden) this.closeSheet(); }
     const key = [...shown].join() + (stickShown(ctx.scope) ? '|s' : '');
     if (key !== this.shownKey) {
       this.shownKey = key;
