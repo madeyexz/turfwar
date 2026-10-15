@@ -21,7 +21,7 @@ const infoPaths = INFO.flatMap(p => [`/${p}`, `/en/${p}`]);
 const infoFile = (path: string) => `${path.slice(1)}/index.html`;
 const INFO_FILES = infoPaths.map(infoFile);
 /** The public routes: URL path → the HTML file Vite builds for it. */
-const PAGES: Record<string, string> = { '/': 'index.html', ...Object.fromEntries(infoPaths.map(p => [p, infoFile(p)])), '/privacy': 'privacy/index.html' };
+const PAGES: Record<string, string> = { '/': 'index.html', ...Object.fromEntries(infoPaths.map(p => [p, infoFile(p)])), '/privacy': 'privacy/index.html', '/terms': 'terms/index.html' };
 const INDEXED = Object.keys(PAGES);
 
 const attr = (html: string, tag: string, key: string, value: string, want: string) => {
@@ -299,7 +299,7 @@ describe('vercel.json', () => {
   const config = JSON.parse(read('vercel.json')) as { rewrites: { source: string; destination: string }[]; headers: { source: string; headers: { key: string; value: string }[] }[]; redirects?: unknown[] };
 
   it('rewrites each extensionless page to its built file', () => {
-    for (const path of ['/admin', '/privacy', ...infoPaths]) {
+    for (const path of ['/admin', '/privacy', '/terms', ...infoPaths]) {
       expect(config.rewrites).toContainEqual({ source: path, destination: `${path}/index.html` });
     }
   });

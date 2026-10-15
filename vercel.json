@@ -8,6 +8,7 @@
     { "source": "/r/:code([A-Za-z]{4})", "has": [{ "type": "header", "key": "user-agent", "value": ".*(facebookexternalhit|Facebot|line-poker|Linespider|Twitterbot|Slackbot|Discordbot|TelegramBot|WhatsApp/|LinkedInBot|SkypeUriPreview|Embedly|Pinterestbot|redditbot|Applebot|Googlebot|bingbot|kakaotalk-scrap|Iframely|vkShare|Mastodon|Bluesky).*" }], "destination": "/api/preview?room=:code" },
     { "source": "/admin", "destination": "/admin/index.html" },
     { "source": "/privacy", "destination": "/privacy/index.html" },
+    { "source": "/terms", "destination": "/terms/index.html" },
     { "source": "/about", "destination": "/about/index.html" },
     { "source": "/en/about", "destination": "/en/about/index.html" },
     { "source": "/guide", "destination": "/guide/index.html" },

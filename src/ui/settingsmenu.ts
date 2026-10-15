@@ -1,3 +1,4 @@
+import { excludeLocked, excludedBy, onConsent, setExcludeDatasets } from '../game/consent';
 import { CHAT_SETTINGS, OPTIC_DETAILS, RETICLE_COLORS, RETICLE_STYLES, SCOPE_MODES, chatDisabled, chatForcedOff, onChatDisabled, setChatSetting, settings, type ChatSetting, type OpticDetail, type ReticleColor, type ReticleStyle, type ScopeMode } from '../game/settings';
 import { RETICLE_CSS } from '../render/sights';
 import type { CrosshairStyle } from './hud';
@@ -106,6 +107,7 @@ export class SettingsMenu {
   private stopKeys: () => void;
   private stopServer: () => void;
   private stopChat: () => void;
+  private stopConsent: () => void;
   private readonly controls = new ControlsPanel();
   /** Touch controls on or off, finger look speed and the layout editor, above the key list. */
   private readonly touch = new TouchSettings();
@@ -144,6 +146,7 @@ export class SettingsMenu {
       if (d.tab) return this.tab(d.tab as SettingsTab);
       if (d.lang) return setLang(d.lang as Lang);
       if (d.chat && !chatForcedOff()) setChatSetting(d.chat as ChatSetting);
+      if (d.datasets && !excludeLocked()) setExcludeDatasets(d.datasets === 'on');
       if (d.server) selectServer(d.server as ServerId);
       if (d.crosshair) { save('crosshair', d.crosshair); this.actions.crosshair(d.crosshair as CrosshairStyle); }
       if (d.scope) { settings.scopeMode = d.scope as ScopeMode; save('scopeMode', d.scope); }
@@ -173,6 +176,8 @@ export class SettingsMenu {
     this.stopServer = onServer(() => this.refresh());
     // Chat forced off (or back) by the host platform while the menu is open.
     this.stopChat = onChatDisabled(() => this.refresh());
+    // The dataset switch changed in the other menu.
+    this.stopConsent = onConsent(() => this.refresh());
     // A new language: rebuild the text, keep the open tab and the focused control.
     this.stopLang = onLang(() => {
       const focused = document.activeElement instanceof HTMLElement && this.root.contains(document.activeElement)
@@ -201,6 +206,8 @@ export class SettingsMenu {
         <div class="row"><span>${t('set.language')}</span>${choice('lang', LANGS.map(l => l.id), v => `<span lang="${v}">${LANGS.find(l => l.id === v)!.label}</span>`)}</div>
         <div class="row chat-row"><span>${t('set.chat')}</span><div class="server-pick">${choice('chat', CHAT_SETTINGS, v => t(`set.chat.${v}`), v => v === 'off' ? t('set.chat.offTip') : t('set.chat.on'))}
           <p class="row-note" data-k="chatForced" hidden>${t('set.chat.forced')}</p></div></div>
+        <div class="row chat-row" title="${t('set.datasets.tip')}"><span>${t('set.datasets')}</span><div class="server-pick">${choice('datasets', ['off', 'on'] as const, v => t(`set.datasets.${v}`), () => t('set.datasets.tip'))}
+          <p class="row-note" data-k="datasetsLocked" hidden></p></div></div>
         ${this.serverRow()}
         <div class="row"><span>${t('set.crosshair')}</span>${choice('crosshair', ['classic', 'dot', 'circle', 't'] as const, v => `${icon(CROSSHAIRS[v])}${t(`set.cross.${v}`)}`)}</div>
         <div class="row"><span>${t('set.scope')}</span>${choice('scope', SCOPE_MODES, v => t(`set.scope.${v}`), v => t(`set.scope.${v}Tip`))}</div>
@@ -364,6 +371,11 @@ export class SettingsMenu {
     this.root.querySelectorAll<HTMLButtonElement>('[data-group="chat"] button').forEach(b => { b.disabled = forced; });
     const note = this.root.querySelector<HTMLElement>('[data-k="chatForced"]');
     if (note) note.hidden = !forced;
+    const by = excludedBy(), locked = excludeLocked();
+    pick('datasets', by ? 'on' : 'off');
+    this.root.querySelectorAll<HTMLButtonElement>('[data-group="datasets"] button').forEach(b => { b.disabled = locked; });
+    const lockNote = this.root.querySelector<HTMLElement>('[data-k="datasetsLocked"]');
+    if (lockNote) { lockNote.hidden = !locked; lockNote.textContent = by === 'platform' ? t('set.datasets.platform') : locked ? t('set.datasets.gpc') : ''; }
     pick('crosshair', load('crosshair', 'classic')); pick('scope', settings.scopeMode); pick('rcolor', settings.reticleColor);
     pick('rstyle', settings.reticleStyle); pick('optic', settings.opticDetail);
     pick('quality', this.lobby ? this.quality : (load('quality', '') || defaultQuality(touchActive(), gpuRenderer())));
@@ -385,5 +397,5 @@ export class SettingsMenu {
     }
   }
 
-  dispose() { this.stopLang(); this.stopKeys(); this.stopServer(); this.stopChat(); this.controls.dispose(); this.touch.dispose(); this.root.remove(); }
+  dispose() { this.stopLang(); this.stopKeys(); this.stopServer(); this.stopChat(); this.stopConsent(); this.controls.dispose(); this.touch.dispose(); this.root.remove(); }
 }

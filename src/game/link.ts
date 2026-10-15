@@ -1,3 +1,4 @@
+import type { InputLog, LogAuth } from './inputlog';
 import type { Vec3 } from '../../shared/math';
 import type { ClientReport, MatchEvent, MatchState, ShotClaim, VehicleReport } from '../../shared/match/state';
 import type { BuyItem } from '../../shared/match/economy';
@@ -55,6 +56,9 @@ export interface GameLink {
   leaderboard?(): CareerStats[];
   /** Online: our room's private code ('' = Quick Play), size label and room id. */
   roomInfo?(): { code: string; size: string; room: number } | undefined;
+  /** Online: what the match-recording input logger needs to upload (src/game/inputlog.ts), and the hook that feeds it ticks, sends and round trips. */
+  recAuth?(): LogAuth | undefined;
+  attachLog?(log: InputLog | undefined): void;
   dispose(): void;
 }
 

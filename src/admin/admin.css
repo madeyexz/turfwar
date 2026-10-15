@@ -496,3 +496,18 @@ table.funnel tr.leak td, table.funnel tr.leak th { background: color-mix(in srgb
 .tile.one b { font-size: 30px; }
 .tile.one > span { display: block; }
 .tile.one.hero b:not(.st) { color: var(--accent); }
+
+/* Recording: clean human hours against their targets (src/admin/recording.ts). */
+.rec-goals { display: grid; gap: 14px; margin: 4px 0 10px; }
+.rec-goal-h { display: flex; justify-content: space-between; gap: 12px; align-items: baseline; }
+.rec-goal-h span { font-variant-numeric: tabular-nums; color: var(--muted); }
+.rec-bar { height: 10px; border-radius: 5px; background: rgba(127, 127, 127, 0.18); overflow: hidden; margin: 6px 0 4px; }
+.rec-bar i { display: block; height: 100%; background: var(--accent); border-radius: 5px; }
+.rec-goal small { color: var(--muted); }
+.rec-key .row { display: flex; gap: 8px; max-width: 420px; }
+.rec-key input { flex: 1; }
+.card p.ok { color: var(--cash); }
+.card p.warn { color: var(--amber); }
+.rec-table { width: 100%; table-layout: fixed; }
+.rec-table th, .rec-table td { white-space: normal; overflow-wrap: anywhere; }
+.rec-table tbody th { width: 38%; }

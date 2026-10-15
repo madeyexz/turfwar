@@ -46,6 +46,7 @@ requests.
 - Server error summaries use private `server_error` and admin-only `admin_errors`. The optional `deploy/gcp-taipei/watch-errors.py` writes fixed log counts in a separate transaction. Do not swallow reducer errors or commit partial match state to preserve a diagnostic. Watcher install and module publication require approval.
 - `src/module_bindings/`: generated client bindings; regenerate after module API changes.
 - `public/assets/`, `public/fonts/`: runtime assets and licenses.
+- `shared/rec/`: match recording formats, clean rules, segmenter and export transform (docs/RECORDING.md). `tools/recorder/` (recorder, processor, export), `scripts/rec-*.ts` (recount, bias, deletion), `deploy/cloudflare/rec-ingest/` (ingest Worker) and `deploy/gcp-taipei/recorder/` run it; `src/game/consent.ts` and `src/game/inputlog.ts` are the client side. Keep `/privacy` and `/terms` true to what is recorded; never record chat, callsigns or players who are not subjects.
 - `tools/`: asset conversion/fetch tools with their own dependencies; not runtime code.
 - `dev/`: development-only map, model, soldier, and first-person weapon preview pages.
 
