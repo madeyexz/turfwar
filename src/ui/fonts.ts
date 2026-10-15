@@ -5,8 +5,11 @@
  * `cjkFontReady(text)` first.
  */
 export const CJK_FAMILY = 'Noto Sans TC';
-/** Chinese signs and plates: the bundled face, then the platforms' own Traditional Chinese fonts. */
-export const CJK_STACK = `'${CJK_FAMILY}','PingFang TC','Microsoft JhengHei','Heiti TC',sans-serif`;
+/**
+ * Chinese signs and plates: the bundled faces (the game's own characters, then the extra file with the
+ * rest of the common ones, style.css), then the platforms' own Traditional Chinese fonts.
+ */
+export const CJK_STACK = `'${CJK_FAMILY}','${CJK_FAMILY} Extra','PingFang TC','Microsoft JhengHei','Heiti TC',sans-serif`;
 /** HUD-style canvas text: Rajdhani for Latin, then the Chinese stack. */
 export const UI_STACK = `Rajdhani,'Arial Narrow',${CJK_STACK}`;
 

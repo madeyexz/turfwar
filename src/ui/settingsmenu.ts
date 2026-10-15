@@ -1,4 +1,4 @@
-import { OPTIC_DETAILS, RETICLE_COLORS, RETICLE_STYLES, SCOPE_MODES, settings, type OpticDetail, type ReticleColor, type ReticleStyle, type ScopeMode } from '../game/settings';
+import { CHAT_SETTINGS, OPTIC_DETAILS, RETICLE_COLORS, RETICLE_STYLES, SCOPE_MODES, chatDisabled, chatForcedOff, onChatDisabled, setChatSetting, settings, type ChatSetting, type OpticDetail, type ReticleColor, type ReticleStyle, type ScopeMode } from '../game/settings';
 import { RETICLE_CSS } from '../render/sights';
 import type { CrosshairStyle } from './hud';
 import { matches, onBindings } from '../game/keybinds';
@@ -83,7 +83,7 @@ let uid = 0;
 /**
  * In-game menu (Esc or the menu key, P): resume, an Options tab with the settings that matter
  * mid-match (sensitivity, aim sensitivity, field of view, volume, crosshair, scope view, reticle,
- * graphics, language, game server), a Controls tab to rebind every key (`ControlsPanel`), and leave
+ * graphics, language, player chat, game server), a Controls tab to rebind every key (`ControlsPanel`), and leave
  * match. Solo pauses while it is open; online the match keeps going. A server chosen here applies
  * from the next match (the menu says so): the match in progress keeps its connection.
  *
@@ -105,6 +105,7 @@ export class SettingsMenu {
   private stopLang: () => void;
   private stopKeys: () => void;
   private stopServer: () => void;
+  private stopChat: () => void;
   private readonly controls = new ControlsPanel();
   /** Touch controls on or off, finger look speed and the layout editor, above the key list. */
   private readonly touch = new TouchSettings();
@@ -142,6 +143,7 @@ export class SettingsMenu {
       const d = btn.dataset;
       if (d.tab) return this.tab(d.tab as SettingsTab);
       if (d.lang) return setLang(d.lang as Lang);
+      if (d.chat && !chatForcedOff()) setChatSetting(d.chat as ChatSetting);
       if (d.server) selectServer(d.server as ServerId);
       if (d.crosshair) { save('crosshair', d.crosshair); this.actions.crosshair(d.crosshair as CrosshairStyle); }
       if (d.scope) { settings.scopeMode = d.scope as ScopeMode; save('scopeMode', d.scope); }
@@ -169,6 +171,8 @@ export class SettingsMenu {
     this.stopKeys = onBindings(() => { const hint = this.root.querySelector('[data-k="hint"]'); if (hint) hint.innerHTML = this.hint(); });
     // A server chosen in the other menu (lobby or in-game) shows here too.
     this.stopServer = onServer(() => this.refresh());
+    // Chat forced off (or back) by the host platform while the menu is open.
+    this.stopChat = onChatDisabled(() => this.refresh());
     // A new language: rebuild the text, keep the open tab and the focused control.
     this.stopLang = onLang(() => {
       const focused = document.activeElement instanceof HTMLElement && this.root.contains(document.activeElement)
@@ -195,6 +199,8 @@ export class SettingsMenu {
       </div>
       <div class="rows">
         <div class="row"><span>${t('set.language')}</span>${choice('lang', LANGS.map(l => l.id), v => `<span lang="${v}">${LANGS.find(l => l.id === v)!.label}</span>`)}</div>
+        <div class="row chat-row"><span>${t('set.chat')}</span><div class="server-pick">${choice('chat', CHAT_SETTINGS, v => t(`set.chat.${v}`), v => v === 'off' ? t('set.chat.offTip') : t('set.chat.on'))}
+          <p class="row-note" data-k="chatForced" hidden>${t('set.chat.forced')}</p></div></div>
         ${this.serverRow()}
         <div class="row"><span>${t('set.crosshair')}</span>${choice('crosshair', ['classic', 'dot', 'circle', 't'] as const, v => `${icon(CROSSHAIRS[v])}${t(`set.cross.${v}`)}`)}</div>
         <div class="row"><span>${t('set.scope')}</span>${choice('scope', SCOPE_MODES, v => t(`set.scope.${v}`), v => t(`set.scope.${v}Tip`))}</div>
@@ -353,6 +359,11 @@ export class SettingsMenu {
       b.classList.toggle('on', on); b.setAttribute('aria-pressed', String(on));
     });
     pick('lang', lang());
+    pick('chat', chatDisabled() ? 'off' : 'on');
+    const forced = chatForcedOff();
+    this.root.querySelectorAll<HTMLButtonElement>('[data-group="chat"] button').forEach(b => { b.disabled = forced; });
+    const note = this.root.querySelector<HTMLElement>('[data-k="chatForced"]');
+    if (note) note.hidden = !forced;
     pick('crosshair', load('crosshair', 'classic')); pick('scope', settings.scopeMode); pick('rcolor', settings.reticleColor);
     pick('rstyle', settings.reticleStyle); pick('optic', settings.opticDetail);
     pick('quality', this.lobby ? this.quality : (load('quality', '') || defaultQuality(touchActive(), gpuRenderer())));
@@ -374,5 +385,5 @@ export class SettingsMenu {
     }
   }
 
-  dispose() { this.stopLang(); this.stopKeys(); this.stopServer(); this.controls.dispose(); this.touch.dispose(); this.root.remove(); }
+  dispose() { this.stopLang(); this.stopKeys(); this.stopServer(); this.stopChat(); this.controls.dispose(); this.touch.dispose(); this.root.remove(); }
 }

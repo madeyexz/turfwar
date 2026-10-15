@@ -41,6 +41,7 @@
 .lb-settings .team-switch[hidden] { display: none; }
 .lb-settings .team { padding: 8px 16px; font-size: 13px; font-weight: 700; background: rgba(127, 246, 255, 0.08); border: 1px solid var(--accent); color: var(--accent); }
 .lb-settings .team:disabled { border-color: var(--line); color: var(--muted); background: transparent; cursor: not-allowed; }
+.lb-settings .seg button:disabled { opacity: 0.55; cursor: not-allowed; }
 .lb-settings .team-switch small { min-width: 0; font-size: 11px; letter-spacing: 0.04em; text-transform: none; color: var(--muted); }
 .lb-settings :focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
 

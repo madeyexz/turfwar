@@ -4,6 +4,8 @@
  * Chrome, Edge, Samsung Internet) so the lobby's install hint can offer an Install button.
  */
 
+import { CRAZYGAMES } from './crazygames';
+
 interface InstallPromptEvent extends Event {
   prompt(): Promise<void>;
   userChoice: Promise<{ outcome: 'accepted' | 'dismissed' }>;
@@ -40,7 +42,8 @@ export function onInstallChange(f: () => void) { listeners.add(f); return () => 
 
 /** Register `/sw.js` once the page has loaded (it caches the app for the next visit). */
 export function registerServiceWorker() {
-  if (!import.meta.env.PROD || !('serviceWorker' in navigator)) return;
+  // CrazyGames serves the game in their frame from their CDN: no worker there (and none is built).
+  if (CRAZYGAMES || !import.meta.env.PROD || !('serviceWorker' in navigator)) return;
   const go = () => { navigator.serviceWorker.register('/sw.js', { scope: '/' }).catch(error => console.warn('Service worker not registered', error)); };
   if (document.readyState === 'complete') go(); else addEventListener('load', go, { once: true });
 }
@@ -50,7 +53,7 @@ export function registerServiceWorker() {
  * fetched, so a first visit (which loads before the worker takes control) is cached as well.
  */
 export function warmServiceWorker() {
-  if (!import.meta.env.PROD || !('serviceWorker' in navigator)) return;
+  if (CRAZYGAMES || !import.meta.env.PROD || !('serviceWorker' in navigator)) return;
   void navigator.serviceWorker.ready.then(reg => {
     const urls = performance.getEntriesByType('resource').map(e => e.name).filter(u => u.startsWith(location.origin));
     reg.active?.postMessage({ type: 'warm', urls });

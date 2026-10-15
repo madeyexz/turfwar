@@ -13,6 +13,15 @@ describe('link previews', () => {
     expect(previewOf(at('/r/KXPBQ'))).toBeUndefined();
   });
 
+  it('mask bad words in the challenger name, also when the picture reads the name back', () => {
+    const p = previewOf(at('/c?ch=shitlord%20%E5%B9%B9%E4%BD%A0%E5%A8%98'))!;
+    expect(p).toEqual({ kind: 'duel', name: '＊＊＊＊lord ＊＊＊' });
+    expect(previewText(p).title).toBe('＊＊＊＊lord ＊＊＊ 向你發起單挑！《角頭械鬥》');
+    // api/og.ts reads the name from the picture's address through previewOf again: the ＊ stay.
+    expect(previewOf(new URL(previewImage('https://x.test', p).replace('/api/og?', '/c?')))).toEqual(p);
+    expect(previewOf(at('/c?ch=class%20assassin'))).toEqual({ kind: 'duel', name: 'class assassin' });
+  });
+
   it('say who challenges and where', () => {
     expect(previewText({ kind: 'duel', name: '阿翔', map: 'taipei', beat: 14 }).description).toContain('在西門町打出 14 殺');
     expect(previewText({ kind: 'invite', room: 'KXPB' }).description).toContain('私人房 KXPB');

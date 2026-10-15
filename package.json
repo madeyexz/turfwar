@@ -13,11 +13,14 @@
     "typecheck:module": "bun run --cwd spacetimedb typecheck",
     "publish:prod": "bash deploy/publish-prod.sh",
     "seo:report": "bun scripts/seo.ts report",
-    "seo:ping": "bun scripts/seo.ts ping"
+    "seo:ping": "bun scripts/seo.ts ping",
+    "build:crazygames": "tsc --noEmit && vite build --mode crazygames && cd dist-crazygames && rm -f ../turfwar-crazygames.zip && python3 -m zipfile -c ../turfwar-crazygames.zip *",
+    "dev:crazygames": "vite --host 0.0.0.0 --mode crazygames"
   },
   "dependencies": {
     "@vercel/analytics": "^2.0.1",
     "@vercel/og": "0.8.6",
+    "obscenity": "^0.4.6",
     "posthog-js": "^1.438.1",
     "qrcode-generator": "1.4.4",
     "spacetimedb": "2.10.2",

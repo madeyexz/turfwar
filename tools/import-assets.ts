@@ -10,6 +10,7 @@ import { Document, NodeIO, type Node } from '@gltf-transform/core';
 import { ALL_EXTENSIONS, EXTMeshoptCompression } from '@gltf-transform/extensions';
 import { dedup, mergeDocuments, meshopt, prune, resample, textureCompress, unpartition } from '@gltf-transform/functions';
 import { MeshoptEncoder } from 'meshoptimizer';
+import { compressLossless, slimProps } from './compress-models';
 import sharp from 'sharp';
 import { copyFileSync, existsSync, mkdirSync, readdirSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
@@ -63,6 +64,11 @@ async function finish(doc: Document, file: string, size: number, compress = fals
     textureCompress({ encoder: sharp, targetFormat: 'webp', resize: [size, size], quality: 82 }),
   );
   if (compress) await doc.transform(meshopt({ encoder: MeshoptEncoder, level: 'medium' }));
+  else {
+    // The bundles keep their float geometry (code merges and reads it): lossless meshopt only (tools/compress-models.ts).
+    if (file === 'props.glb') await slimProps(doc);
+    await compressLossless(doc);
+  }
   await io.write(join(OUT, file), doc);
   console.log('wrote', file);
 }
@@ -157,5 +163,6 @@ writeFileSync(join(OUT, 'LICENSE.txt'), `All models, textures and animations in 
 (https://quaternius.com): Sci-Fi Essentials Kit, Modular Sci-Fi MegaKit, Universal Base Characters,
 Universal Animation Library and Universal Animation Library 2 (free Standard editions).
 CC0 1.0 Universal Public Domain Dedication: https://creativecommons.org/publicdomain/zero/1.0/
-Converted with tools/import-assets.ts (textures resized to WebP; animations meshopt-compressed).
+Converted with tools/import-assets.ts (textures resized to WebP; animations meshopt-compressed; props.glb
+cut to the placed props and geometry meshopt-compressed losslessly by tools/compress-models.ts).
 `);

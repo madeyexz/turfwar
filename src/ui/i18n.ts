@@ -78,6 +78,7 @@ const en = {
   // The footer links: the source on GitHub and the privacy page.
   'lobby.openSource': 'Open source', 'lobby.openSourceTitle': 'The source code on GitHub (opens in a new tab)',
   'lobby.privacy': 'Privacy', 'lobby.about': 'How to play', 'lobby.siteLinks': 'About this game',
+  'privacy.notice': 'This game sends anonymous play statistics to help us improve it, and online matches keep your callsign and stats on our game server.', 'privacy.noticeLink': 'Privacy policy', 'privacy.noticeOk': 'OK',
   'lobby.discord': 'Discord', 'lobby.discordTitle': 'Join the players on Discord (opens in a new tab)',
   'tab.quick': 'Quick play', 'tab.quickSub': 'No setup', 'tab.start': 'Create room', 'tab.startSub': 'Your rules',
   'tab.join': 'Join room', 'tab.joinSub': 'Rooms · code',
@@ -146,6 +147,8 @@ const en = {
   'set.optic.highTip': 'Smoothest optic models, sharper scope view', 'set.optic.lowTip': 'Lighter optic models and scope view',
   'set.quality': 'Graphics', 'set.q.low': 'Low', 'set.q.medium': 'Medium', 'set.q.high': 'High',
   'set.q.lowTip': 'No bloom, 1k shadows', 'set.q.mediumTip': 'Bloom, 2k shadows', 'set.q.highTip': '1.5× resolution',
+  'set.chat': 'Player chat', 'set.chat.on': 'On', 'set.chat.off': 'Off', 'set.chat.offTip': 'Hide chat from other players and the chat box',
+  'set.chat.forced': 'Chat is turned off on this site.',
   'key.mouse': 'Mouse', 'key.lmb': 'LMB', 'key.mmb': 'MMB', 'key.rmb': 'RMB', 'key.mouseN': 'Mouse {n}',
   'key.wheelUp': 'Wheel ↑', 'key.wheelDown': 'Wheel ↓',
   // Key bindings (Controls tab): groups, actions, and the rebinding flow.
@@ -428,6 +431,7 @@ const zhTW: Record<Key, string> = {
   'lobby.ways': '線上玩法', 'lobby.offline': '離線',
   'lobby.openSource': '開放原始碼', 'lobby.openSourceTitle': 'GitHub 上的原始碼（在新分頁開啟）',
   'lobby.privacy': '隱私權', 'lobby.about': '玩法介紹', 'lobby.siteLinks': '關於本遊戲',
+  'privacy.notice': '本遊戲會傳送匿名的遊玩統計，幫助我們改善遊戲；線上對戰會在我們的遊戲伺服器保存你的呼號與戰績。', 'privacy.noticeLink': '隱私權政策', 'privacy.noticeOk': '知道了',
   'lobby.discord': 'Discord 社群', 'lobby.discordTitle': '加入玩家的 Discord 社群（在新分頁開啟）',
   'tab.quick': '快速遊戲', 'tab.quickSub': '免設定', 'tab.start': '開設房間', 'tab.startSub': '自訂規則',
   'tab.join': '加入房間', 'tab.joinSub': '房間列表 · 代碼',
@@ -493,6 +497,8 @@ const zhTW: Record<Key, string> = {
   'set.optic.highTip': '最平滑的瞄具模型，更清晰的鏡內畫面', 'set.optic.lowTip': '較輕量的瞄具模型與鏡內畫面',
   'set.quality': '畫質', 'set.q.low': '低', 'set.q.medium': '中', 'set.q.high': '高',
   'set.q.lowTip': '無光暈、1k 陰影', 'set.q.mediumTip': '光暈、2k 陰影', 'set.q.highTip': '1.5 倍解析度',
+  'set.chat': '玩家聊天', 'set.chat.on': '開啟', 'set.chat.off': '關閉', 'set.chat.offTip': '隱藏其他玩家的聊天訊息與聊天輸入框',
+  'set.chat.forced': '此網站已關閉聊天功能。',
   'key.mouse': '滑鼠', 'key.lmb': '左鍵', 'key.mmb': '中鍵', 'key.rmb': '右鍵', 'key.mouseN': '滑鼠 {n} 鍵',
   'key.wheelUp': '滾輪 ↑', 'key.wheelDown': '滾輪 ↓',
   'grp.movement': '移動', 'grp.combat': '戰鬥', 'grp.equipment': '裝備', 'grp.vehicles': '載具', 'grp.interface': '介面',
@@ -810,6 +816,11 @@ function urlLang(): Lang | undefined {
   if (v === 'en' || v.startsWith('en-')) return 'en';
   if (v === 'zh' || v === 'tw' || v.startsWith('zh-')) return 'zh-TW';
   return undefined;
+}
+/** Whether the player picked a language (`?lang=` or a saved choice), so a platform's locale must not replace it. */
+export function hasChosenLang() {
+  if (urlLang()) return true;
+  try { return isLang(localStorage.getItem(STORAGE_KEY)); } catch { return false; }
 }
 function initialLang(): Lang {
   const fromUrl = urlLang();

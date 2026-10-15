@@ -6,6 +6,8 @@
  * comes from the URL, so it is cleaned and escaped.
  */
 
+import { maskProfanity } from '../../shared/profanity.js';
+
 export type Preview = { kind: 'duel'; name: string; map?: string; beat?: number } | { kind: 'invite'; room: string };
 
 /** Maps with a backdrop in `api/_og/maps` (the ones whose art is public), by their 繁體中文 names (src/ui/i18n.ts MAPS_ZH). */
@@ -14,8 +16,11 @@ export const MAP_NAMES: Record<string, string> = {
   sanchong: '三重', skyline: '天際屋頂', taipei: '西門町', taipei101: '台北101・88F', timbertown: '伐木鎮', warehouse: '倉庫', xinyi: '台北101・信義',
 };
 
-/** Callsigns as the game cleans them: letters, digits, space, _ - . (at most 16). */
-const cleanName = (s: string) => s.replace(/[^\p{L}\p{N} _\-.]/gu, '').replace(/\s+/g, ' ').trim().slice(0, 16);
+/**
+ * Callsigns as the game cleans them: letters, digits, space, _ - . (at most 16), bad words masked with
+ * ＊ (kept when the name comes back masked, as the picture's own address carries it).
+ */
+const cleanName = (s: string) => maskProfanity(s.replace(/[^\p{L}\p{N} _\-.＊]/gu, '').replace(/\s+/g, ' ').trim().slice(0, 16));
 
 /** The preview a link's address asks for, or undefined (an address the game would not read as a challenge or invite). */
 export function previewOf(url: URL): Preview | undefined {

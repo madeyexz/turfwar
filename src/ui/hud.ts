@@ -10,7 +10,7 @@ import type { CareerStats } from '../game/link';
 import type { ActionId } from '../game/keybinds';
 import { kbd } from './keys';
 import type { LocalPlayer } from '../game/player';
-import { isMagnified, settings } from '../game/settings';
+import { chatDisabled, isMagnified, onChatDisabled, settings } from '../game/settings';
 import { knifeIcon } from '../game/skins';
 import { skinOf, type KnifeSkin } from '../../shared/skins';
 import { RETICLE_CSS } from '../render/sights';
@@ -620,10 +620,11 @@ export class Hud {
     this.set('board', `<header>${escape(t('hud.boardHead', { map: mapName(this.map.id, this.map.name), mode: modeName(cfg.mode), n: state.round, m: cfg.roundsToWin }))}</header>${table(0)}${table(1)}`, 'html');
   }
 
-  /** Chat line: team messages are prefixed *TEAM* on a team-tinted background, dead players' *DEAD*. */
+  /** Chat line: team messages are prefixed *TEAM* on a team-tinted background, dead players' *DEAD*. None while chat is off. */
   chatLine(name: string, team: number, text: string, teamOnly: boolean, dead: boolean) {
+    if (chatDisabled()) return;
     const line = document.createElement('div');
-    line.className = `line${teamOnly ? ` team t${team}` : ''}`;
+    line.className = `line said${teamOnly ? ` team t${team}` : ''}`;
     line.innerHTML = `${dead ? `<em>${t('hud.chatDead')}</em>` : ''}${teamOnly ? `<em>${t('hud.chatTeam')}</em>` : ''}<b class="t${team}">${escape(name)}:</b> ${escape(text)}`;
     const box = this.el.chatLines;
     box.appendChild(line);
@@ -648,6 +649,7 @@ export class Hud {
    * touch screen opened it, and iOS shows the keyboard only for a focus inside that tap.
    */
   openChat(team: boolean, send: (text: string) => void, focusNow = false) {
+    if (chatDisabled()) return;
     this.chatSend = send;
     this.chatOpen = true;
     (this.last ??= {}).chatTeam = team;
@@ -660,6 +662,14 @@ export class Hud {
     if (focusNow) this.input.focus();
     else setTimeout(() => { if (this.chatOpen) this.input.focus(); });
   }
+
+  /** Chat turned off (Settings or the host platform): players' lines go and the input closes; join and leave notices stay. */
+  private chatOff = (off: boolean) => {
+    if (!off) return;
+    this.closeChat();
+    this.el.chatLines.querySelectorAll('.said').forEach(l => l.remove());
+  };
+  private stopChat = onChatDisabled(this.chatOff);
 
   private closeChat() {
     if (!this.chatOpen) return;
@@ -792,7 +802,7 @@ export class Hud {
   }
   net(text: string) { this.set('net', text); }
   fps(text: string) { this.set('fps', text); }
-  dispose() { clearTimeout(this.toastTimer); this.stopLang(); this.root.remove(); document.body.classList.remove('hud-board'); }
+  dispose() { clearTimeout(this.toastTimer); this.stopLang(); this.stopChat(); this.root.remove(); document.body.classList.remove('hud-board'); }
 }
 
 function escape(s: string) { return s.replace(/[&<>"']/g, c => `&#${c.charCodeAt(0)};`); }

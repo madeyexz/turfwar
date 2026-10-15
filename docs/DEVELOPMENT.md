@@ -108,11 +108,11 @@ ship as KTX2 copies that the game transcodes to the GPU's own format (ASTC, ETC2
 (`src/render/textures.ts`, three's `KTX2Loader`); the `.webp` files are the source and the fallback
 (no WebAssembly, a file that fails, or `?ktx2=0`). Medium and High load `tex/<set>_<kind>.ktx2`
 (1024², ETC1S; normals ETC1S tuned for normals); Low, the
-phones' default, loads the `low/` copies (512², normals UASTC + Zstandard), shrinks
+phones' default, loads the `low/` copies (512², the same codecs), shrinks
 the models' own textures to 512 px, caps the sign atlas at 2048×1024 and anisotropic filtering at 4×.
 After changing a source `.webp`, or updating three, rebuild them (about three minutes) with
 [Basis Universal](https://github.com/BinomialLLC/basis_universal) installed
-(`brew install basis_universal`; tested with basisu 2.50):
+(`brew install basis_universal`; tested with basisu 2.50, and 2.00 built from the v2_0_2 tag):
 
 ```sh
 bun install --cwd tools --frozen-lockfile
@@ -203,6 +203,40 @@ atomically; subsequent joins preserve its state. Publish the compatible module b
 the matching commit to `main`, which triggers Vercel's GitHub deployment.
 Verify the production URL and two separate Online clients after each release.
 Then run `bun run seo:ping` (sitemap to Google and Bing, the public pages to IndexNow; docs/SEO.md, "Search data").
+
+### CrazyGames build
+
+The game is also uploaded to CrazyGames (developer.crazygames.com) as a zip of static files. Build it with
+the production server variables, as Vercel's production build has them:
+
+```sh
+VITE_SPACETIMEDB_URI=wss://tw.turfwar.ianhsiao.me VITE_SPACETIMEDB_DATABASE=turfwar bun run build:crazygames
+```
+
+This writes `dist-crazygames/` and `turfwar-crazygames.zip` (`vite build --mode crazygames`, vite.config.ts):
+the game page only, every URL relative (`base: './'`; CrazyGames serves it from its CDN under an unknown
+path), no service worker, info/privacy/admin pages, search metadata or Vercel Web Analytics, and the
+CrazyGames SDK script in the head. Upload the zip in the developer portal. The players share the
+production databases with the website, so the module and this build must stay compatible like the website.
+
+`src/crazygames.ts` holds the `CRAZYGAMES` flag and the SDK wrapper; every call is a no-op on the website,
+when an ad blocker stops the script, and outside CrazyGames' domains. In that build:
+
+- loading start/stop (bootstrap and the lobby), gameplay start/stop from the game loop (playing unless the
+  match has ended or the menu is open), and a midgame video ad when a player leaves a finished match (the SDK
+  keeps ads 3 minutes apart; none during Basic Launch);
+- the platform's `muteAudio` and `disableChat` settings, its locale (unless the player chose a language) and,
+  for a logged-in player, the CrazyGames username as callsign; the callsign prompt is skipped;
+- invite and challenge links become CrazyGames invite links (`r` room code, `c` challenge; no UTM tags),
+  read back at boot and by the join-room listener; a private room is reported with `updateRoom`; instant
+  multiplayer opens the invite room;
+- no links back to the playable website (GitHub, about pages), no install hint and no fullscreen key (the site
+  has its own button); the privacy page is linked on the website, with a first-visit notice in the lobby;
+- analytics events carry `platform: crazygames` (`web` on the website).
+
+Try it locally with `bun run dev:crazygames` (or the built zip from any static server under a subpath): on
+localhost the SDK runs in its `local` mode, which logs its calls ("HTML5 SDK"), shows fake ads, and takes
+`?czy_invite=true&r=<CODE>`, `?disableChat=true` and `?muteAudio=true`.
 
 ### Orb credentials
 

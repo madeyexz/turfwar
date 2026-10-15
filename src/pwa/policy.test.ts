@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { cacheNames, routeOf, staleAssets, staleCaches } from './policy';
+import { cacheNames, immutableShellFile, routeOf, staleAssets, staleCaches } from './policy';
 
 const ORIGIN = 'https://turfwar.ianhsiao.me';
 const SHELL = new Set(['/index.html', '/assets/main-abc123.js', '/assets/main-def456.css', '/manifest.webmanifest', '/icons/icon-192.png']);
@@ -62,5 +62,20 @@ describe('service worker routes', () => {
     const current = new Set(['/assets/props.glb?v=new111', '/assets/tex/brick_diff.webp?v=same22']);
     const stored = [`${ORIGIN}/assets/props.glb?v=old000`, `${ORIGIN}/assets/tex/brick_diff.webp?v=same22`, `${ORIGIN}/assets/soldier.glb`];
     expect(staleAssets(stored, current)).toEqual([`${ORIGIN}/assets/props.glb?v=old000`, `${ORIGIN}/assets/soldier.glb`]);
+  });
+});
+
+describe('service worker install', () => {
+  it('takes hashed and versioned files from the HTTP cache and asks afresh for the rest', () => {
+    expect(immutableShellFile('/assets/main-C6AxeiP3.js')).toBe(true);
+    expect(immutableShellFile('/assets/servers-DPjwh_-v.js')).toBe(true);
+    expect(immutableShellFile('/assets/module.slim.no-external-yhhi0i1e.js')).toBe(true);
+    expect(immutableShellFile('/assets/main-BrmoMTkT.css')).toBe(true);
+    expect(immutableShellFile('/fonts/rajdhani-600.woff2?v=433a7007e474')).toBe(true);
+    expect(immutableShellFile('/index.html')).toBe(false);
+    expect(immutableShellFile('/privacy/index.html')).toBe(false);
+    expect(immutableShellFile('/manifest.webmanifest')).toBe(false);
+    expect(immutableShellFile('/icons/icon-192.png')).toBe(false);
+    expect(immutableShellFile('/sw.js')).toBe(false);
   });
 });

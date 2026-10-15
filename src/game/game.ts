@@ -37,7 +37,7 @@ import { Input } from './input';
 import type { GameLink } from './link';
 import { Driving } from './driving';
 import { LocalPlayer } from './player';
-import { isMagnified, settings } from './settings';
+import { chatDisabled, isMagnified, settings } from './settings';
 import { ownedOf, purchaseOf, type BuyRequest, type Owned } from './purchases';
 import { matchNote, roundEnded, track } from '../analytics';
 import { noteDuel, noteKill, noteShare } from '../growth';
@@ -53,6 +53,7 @@ import { onTouchLayout, touchActive, touchAimAssist, type TouchContext } from '.
 import { ASSIST, aimAssist, anglesTo } from './aimassist';
 import { GOALS, NUDGE_ROUNDS, levelOf, loadProgress, recordProgress, type ProgressEvent } from './progress';
 import { smokeBlocks } from '../../shared/match/combat';
+import { crazyGameplay, shareableLink } from '../crazygames';
 
 type Sample = { x: number; y: number; z: number; vx: number; vy: number; vz: number; yaw: number; pitch: number; crouch: number };
 /** Remote soldiers closer than this get full animation and shadows; up to LOD_MID, half rate. */
@@ -368,6 +369,8 @@ export class Game {
     if (this.menu.open && performance.now() - this.menuAt > 250 && (this.input.takeCode('Escape') || this.input.take('menu'))) {
       this.menu.hide(); this.input.clear(); this.resume();
     }
+    // CrazyGames counts play time from these: playing, unless the match is over or the menu is open.
+    crazyGameplay(state.phase !== 'ended' && !this.menu.open);
     const side = me ? sideOf(state, this.map.def, me.team) : 0;
     const buyWindow = !!me && state.phase === 'live' && canBuyWeapons(state, this.map.def, me, side);
     const site = sabotage && me?.alive ? this.siteHere(state) : -1;
@@ -381,7 +384,7 @@ export class Game {
       // The store is open anywhere: weapons only sell in base during buy time, attachments always.
       if (this.input.take('store') && me) { this.buymenu.show(this.player.weapons[this.player.slot === 2 ? 0 : this.player.slot]); this.input.clear(); }
       const chat = this.input.take('chat') ? false : this.input.take('teamChat') ? true : undefined;
-      if (chat !== undefined) { this.input.clear(); this.hud.openChat(chat, text => this.link.say(text, chat)); }
+      if (chat !== undefined && !chatDisabled()) { this.input.clear(); this.hud.openChat(chat, text => this.link.say(text, chat)); }
       // Use (E): into the vehicle in reach, else the ammo crate; seated, exit (E) gets us out.
       if ((this.seated ? this.input.take('exitVehicle') : this.input.take('use')) && me?.alive) {
         const i = this.crates.nearest(this.player.m.x, this.player.m.y, this.player.m.z, CRATE_REACH);
@@ -747,7 +750,7 @@ export class Game {
     if (!summary) return;
     const ref = this.shareCode();
     const source = o.room ? 'duel' : o.source ?? 'share';
-    const url = challengeUrl(location.origin, { name: summary.name, room: o.room, map: summary.mapId, beat: summary.kills, ref }, { source, medium: 'share_card' });
+    const url = shareableLink(challengeUrl(location.origin, { name: summary.name, room: o.room, map: summary.mapId, beat: summary.kills, ref }, { source, medium: 'share_card' }));
     this.input.release();
     track('share_card_opened', { ref, solo: summary.solo, result: summary.result, room: !!o.room });
     await openSharePanel({
@@ -790,7 +793,7 @@ export class Game {
     this.input.release();
     track('invite_opened', { ref });
     openInvitePanel({
-      code, where, url: inviteUrl(location.origin, code, ref), seats: this.link.state()?.config.teamSize ?? 6,
+      code, where, url: shareableLink(inviteUrl(location.origin, code, ref)), seats: this.link.state()?.config.teamSize ?? 6,
       people: () => (this.link.state()?.soldiers ?? []).filter(s => !s.bot)
         .map(s => ({ name: s.name, me: s.id === this.link.myId() })).sort((a, b) => Number(b.me) - Number(a.me)),
       onSent: method => { noteShare(); track('invite_sent', { ref, method }); },

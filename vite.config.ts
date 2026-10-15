@@ -1,6 +1,6 @@
 import { execSync } from 'node:child_process';
 import { createHash } from 'node:crypto';
-import { readFileSync, readdirSync, statSync, writeFileSync } from 'node:fs';
+import { readFileSync, readdirSync, rmSync, statSync, writeFileSync } from 'node:fs';
 import { join, resolve } from 'node:path';
 import { defineConfig, type Plugin } from 'vite';
 import { mergeReleases, parseReleaseLog, type Release } from './src/admin/releases';
@@ -76,7 +76,14 @@ const fontPreload: Plugin = {
 const publicDir = resolve(__dirname, 'public');
 const VERSIONS: Record<string, string> = Object.fromEntries(filesIn(publicDir).filter(f => /^(assets|fonts|media\/maps)\//.test(f)).sort()
   .map(f => [f, hash(readFileSync(join(publicDir, f)))]));
-const versioned = (file: string) => `/${file}${VERSIONS[file] ? `?v=${VERSIONS[file]}` : ''}`;
+/**
+ * The CrazyGames build (`vite build --mode crazygames`, `bun run build:crazygames`): the game page alone, uploaded to
+ * CrazyGames and served from their CDN under a path we do not know, so every URL is relative (`base: './'`),
+ * with no service worker, no info/privacy/admin pages and no search metadata. Set before any plugin hook runs.
+ */
+let crazygames = false;
+/** A public/ file's URL with its version, from the site root (or, in the CrazyGames build, from the page). */
+const versioned = (file: string) => `${crazygames ? '' : '/'}${file}${VERSIONS[file] ? `?v=${VERSIONS[file]}` : ''}`;
 
 /** Stylesheets' `url(/fonts/…)` and the like get their file's version too. */
 const versionedCssUrls: Plugin = {
@@ -84,7 +91,8 @@ const versionedCssUrls: Plugin = {
   enforce: 'pre',
   transform(code, id) {
     if (!/\.css($|\?)/.test(id)) return;
-    return code.replace(/url\((['"]?)\/([^'")?#]+)\1\)/g, (all, quote: string, file: string) => VERSIONS[file] ? `url(${quote}${versioned(file)}${quote})` : all);
+    // The CrazyGames build's stylesheets sit in assets/, so a public/ file is one folder up.
+    return code.replace(/url\((['"]?)\/([^'")?#]+)\1\)/g, (all, quote: string, file: string) => VERSIONS[file] ? `url(${quote}${crazygames ? '../' : ''}${versioned(file)}${quote})` : all);
   },
 };
 
@@ -95,14 +103,15 @@ const versionedCssUrls: Plugin = {
  */
 const pwa: Plugin = {
   name: 'pwa-service-worker',
-  apply: 'build',
+  apply: (_, env) => env.command === 'build' && env.mode !== 'crazygames',
   writeBundle(options, bundle) {
     // The info pages are for search engines and links: the game does not need them offline.
     const info = new RegExp(`^(en/)?(${INFO_PAGES.join('|')})/`);
     const built = Object.keys(bundle).filter(f => f !== 'sw.js' && !f.startsWith('admin') && !f.includes('/admin') && !info.test(f) && !f.endsWith('.map'));
     const pub = filesIn(publicDir).sort();
-    // Precached: the page, this build's scripts and styles, the manifest, the icons and the Latin fonts.
-    const shell = [...built.map(f => `/${f}`), ...pub.filter(f => f === 'manifest.webmanifest' || f.startsWith('icons/') || /^fonts\/rajdhani-\d+\.woff2$/.test(f)).map(versioned)].sort();
+    // Precached: the page, this build's scripts and styles, the manifest, the small icons and the Latin fonts
+    // (the 512 px icons are only for installing, and the browser fetches them then).
+    const shell = [...built.map(f => `/${f}`), ...pub.filter(f => f === 'manifest.webmanifest' || (f.startsWith('icons/') && !f.includes('512')) || /^fonts\/rajdhani-\d+\.woff2$/.test(f)).map(versioned)].sort();
     const data = { shell, shellVersion: `${appVersion()}-${hash(built.sort().join('|'))}`, assets: Object.keys(VERSIONS).map(versioned) };
     const file = join(options.dir!, 'sw.js');
     const code = readFileSync(file, 'utf8');
@@ -112,27 +121,59 @@ const pwa: Plugin = {
   },
 };
 
-export default defineConfig({
-  plugins: [pageRoutes, versionedCssUrls, fontPreload, pwa, sourcemaps(appVersion())],
-  define: { __APP_VERSION__: JSON.stringify(appVersion()), __ASSET_VERSIONS__: JSON.stringify(VERSIONS), __RELEASES__: JSON.stringify(releases()) },
-  server: {
-    allowedHosts: true,
-    // Same-origin websocket route to a local SpacetimeDB so one preview URL serves the game and the match server
-    // (port 3000 unless STDB_PROXY_TARGET names another, e.g. a throwaway server for a cold-start test).
-    proxy: { '/stdb': { target: process.env.STDB_PROXY_TARGET || 'http://127.0.0.1:3000', ws: true, rewrite: path => path.replace(/^\/stdb/, '') } },
+/**
+ * The CrazyGames page: their SDK script first in the head (docs.crazygames.com/sdk/intro), relative icon links,
+ * and none of the site's search and link-preview metadata (canonical, Open Graph, JSON-LD, the web app manifest).
+ */
+const crazygamesPage: Plugin = {
+  name: 'crazygames-page',
+  apply: (_, env) => env.mode === 'crazygames',
+  transformIndexHtml: { order: 'pre', handler: html => html
+    .replace(/\s*<link rel="(canonical|manifest|apple-touch-icon)"[^>]*>/g, '')
+    .replace(/\s*<meta (property="og:|name="twitter:|name="robots"|name="apple-mobile-web-app-|name="mobile-web-app-)[^>]*>/g, '')
+    .replace(/\s*<script type="application\/ld\+json">[\s\S]*?<\/script>/, '')
+    .replace(/<noscript>[\s\S]*?<\/noscript>/, '')
+    .replace(/href="\/icons\//g, 'href="icons/')
+    .replace('<meta charset="UTF-8" />', '<meta charset="UTF-8" />\n    <script src="https://sdk.crazygames.com/crazygames-sdk-v3.js"></script>') },
+};
+
+/** The public/ files only the website serves (search, link previews, the installable app), left out of the CrazyGames upload. */
+const crazygamesPrune: Plugin = {
+  name: 'crazygames-prune',
+  apply: (_, env) => env.command === 'build' && env.mode === 'crazygames',
+  writeBundle(options) {
+    for (const f of readdirSync(options.dir!)) {
+      if (/^(og|robots\.txt|sitemap\.xml|llms.*\.txt|manifest\.webmanifest|[0-9a-f]{32}\.txt)$/.test(f)) rmSync(join(options.dir!, f), { recursive: true });
+    }
   },
-  build: {
-    // Hidden: maps are written but not linked from the scripts; src/buildtools/sourcemaps.ts uploads them to PostHog (when its env vars are set) and deletes them from dist.
-    sourcemap: 'hidden',
-    chunkSizeWarningLimit: 900,
-    rollupOptions: {
-      // The game, the privacy notice at /privacy, the info pages (/about, /guide, /maps, /begone in 繁體中文 and under /en/ in English; static text for search and answer engines, docs/SEO.md), the owner's admin dashboard at /admin (not linked from the game) and the service worker at /sw.js.
-      input: {
-        main: resolve(__dirname, 'index.html'), privacy: resolve(__dirname, 'privacy/index.html'),
-        ...Object.fromEntries(INFO_PAGES.flatMap(p => [[p, resolve(__dirname, `${p}/index.html`)], [`${p}En`, resolve(__dirname, `en/${p}/index.html`)]])),
-        admin: resolve(__dirname, 'admin/index.html'), sw: resolve(__dirname, 'src/pwa/sw.ts'),
-      },
-      output: { manualChunks: { three: ['three'] }, entryFileNames: chunk => chunk.name === 'sw' ? 'sw.js' : 'assets/[name]-[hash].js' },
+};
+
+export default defineConfig(({ mode }) => {
+  crazygames = mode === 'crazygames';
+  return {
+    base: crazygames ? './' : '/',
+    plugins: [pageRoutes, versionedCssUrls, fontPreload, crazygamesPage, crazygamesPrune, pwa, sourcemaps(appVersion())],
+    define: { __APP_VERSION__: JSON.stringify(appVersion()), __ASSET_VERSIONS__: JSON.stringify(VERSIONS), __RELEASES__: JSON.stringify(releases()) },
+    server: {
+      allowedHosts: true,
+      // Same-origin websocket route to a local SpacetimeDB so one preview URL serves the game and the match server
+      // (port 3000 unless STDB_PROXY_TARGET names another, e.g. a throwaway server for a cold-start test).
+      proxy: { '/stdb': { target: process.env.STDB_PROXY_TARGET || 'http://127.0.0.1:3000', ws: true, rewrite: path => path.replace(/^\/stdb/, '') } },
     },
-  },
+    build: {
+      outDir: crazygames ? 'dist-crazygames' : 'dist',
+      // Hidden: maps are written but not linked from the scripts; src/buildtools/sourcemaps.ts uploads them to PostHog (when its env vars are set) and deletes them from dist.
+      sourcemap: 'hidden',
+      chunkSizeWarningLimit: 900,
+      rollupOptions: {
+        // The game, the privacy notice at /privacy, the info pages (/about, /guide, /maps, /begone in 繁體中文 and under /en/ in English; static text for search and answer engines, docs/SEO.md), the owner's admin dashboard at /admin (not linked from the game) and the service worker at /sw.js.
+        input: crazygames ? { main: resolve(__dirname, 'index.html') } : {
+          main: resolve(__dirname, 'index.html'), privacy: resolve(__dirname, 'privacy/index.html'),
+          ...Object.fromEntries(INFO_PAGES.flatMap(p => [[p, resolve(__dirname, `${p}/index.html`)], [`${p}En`, resolve(__dirname, `en/${p}/index.html`)]])),
+          admin: resolve(__dirname, 'admin/index.html'), sw: resolve(__dirname, 'src/pwa/sw.ts'),
+        },
+        output: { manualChunks: { three: ['three'] }, entryFileNames: chunk => chunk.name === 'sw' ? 'sw.js' : 'assets/[name]-[hash].js' },
+      },
+    },
+  };
 });

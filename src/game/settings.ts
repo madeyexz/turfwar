@@ -13,6 +13,9 @@ export const SCOPE_MODES: ScopeMode[] = ['pip', 'overlay'];
 export const RETICLE_COLORS: ReticleColor[] = ['red', 'green', 'amber', 'white'];
 export const RETICLE_STYLES: ReticleStyle[] = ['stock', 'dot', 'circle', 'chevron', 'cross'];
 export const OPTIC_DETAILS: OpticDetail[] = ['high', 'low'];
+/** Player chat: 'off' hides other players' lines, the chat box and the chat buttons. */
+export type ChatSetting = 'on' | 'off';
+export const CHAT_SETTINGS: ChatSetting[] = ['on', 'off'];
 
 /** Saved under `lawbreaker.<key>` (the deploy screen writes them; storage may be disabled). */
 const saved = <T extends string>(key: string, options: readonly T[], fallback: T): T => {
@@ -32,7 +35,37 @@ export const settings = {
   reticleColor: saved<ReticleColor>('reticleColor', RETICLE_COLORS, 'red'),
   reticleStyle: saved<ReticleStyle>('reticleStyle', RETICLE_STYLES, 'stock'),
   opticDetail: saved<OpticDetail>('opticDetail', OPTIC_DETAILS, 'high'),
+  /** The player's own chat choice (Settings); `chatDisabled()` also counts the host platform's. */
+  chat: saved<ChatSetting>('chat', CHAT_SETTINGS, 'on'),
 };
+
+// ---- Chat off ----------------------------------------------------------------------------------
+// The player turns chat off in Settings (saved); a host platform (the CrazyGames SDK when its
+// `game.settings.disableChat` says so) forces it off with `setChatDisabled(true)` (not saved).
+
+let chatForced = false;
+const chatListeners = new Set<(off: boolean) => void>();
+const chatChanged = () => { const off = chatDisabled(); for (const f of chatListeners) f(off); };
+
+/** Chat is off: no chat lines from players, no chat box, no chat buttons. */
+export const chatDisabled = () => chatForced || settings.chat === 'off';
+/** The host platform turned chat off (the Settings row shows it and cannot turn it back on). */
+export const chatForcedOff = () => chatForced;
+/** For a host platform (CrazyGames): `true` forces chat off whatever the player chose; `false` gives the player's own choice back. */
+export function setChatDisabled(off: boolean) {
+  if (chatForced === off) return;
+  chatForced = off;
+  chatChanged();
+}
+/** The player's choice in Settings (saved under `lawbreaker.chat`). */
+export function setChatSetting(value: ChatSetting) {
+  if (settings.chat === value) return;
+  settings.chat = value;
+  try { localStorage.setItem('lawbreaker.chat', value); } catch { /* storage disabled */ }
+  chatChanged();
+}
+/** Calls `fn` whenever chat turns on or off; returns the unsubscribe. */
+export function onChatDisabled(fn: (off: boolean) => void) { chatListeners.add(fn); return () => { chatListeners.delete(fn); }; }
 
 const DEG = Math.PI / 180;
 /** Optics seen through a magnifying lens (picture-in-picture or full-screen eyepiece). */

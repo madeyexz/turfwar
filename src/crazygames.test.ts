@@ -1,0 +1,30 @@
+import { describe, expect, it } from 'vitest';
+import { linkParams, linkPlace } from './crazygames';
+import { challengeUrl, inviteUrl, parseChallenge, parseInvite } from './game/challenge';
+
+/** A link we hand out, through CrazyGames' invite parameters and back to what the lobby reads. */
+const roundTrip = (url: string) => linkPlace(linkParams(url))!;
+
+describe('CrazyGames invite links', () => {
+  it('carry an invite to a private room, with its share code, and no UTM tags', () => {
+    const params = linkParams(inviteUrl('https://cdn.example', 'qwer', 'abc12345'));
+    expect(params).toEqual({ r: 'QWER', ref: 'abc12345' });
+    const place = roundTrip(inviteUrl('https://cdn.example', 'QWER', 'abc12345'));
+    expect(parseInvite(place.pathname, place.search)).toEqual({ room: 'QWER', ref: 'abc12345' });
+    expect(parseChallenge(place.search, place.pathname)).toBeUndefined();
+  });
+
+  it('carry a challenge with its room, map and kills, dropping the UTM tags', () => {
+    const url = challengeUrl('https://cdn.example', { name: 'Ah-Bing', room: 'ZXCV', map: 'ximending', beat: 17, ref: 'abc12345' }, { source: 'duel', medium: 'share_card' });
+    expect(url).toContain('utm_source=');
+    const params = linkParams(url);
+    expect(Object.keys(params).some(k => k.startsWith('utm_'))).toBe(false);
+    const place = roundTrip(url);
+    expect(parseChallenge(place.search, place.pathname)).toEqual({ name: 'Ah-Bing', room: 'ZXCV', map: 'ximending', beat: 17, ref: 'abc12345' });
+    expect(parseInvite(place.pathname, place.search)).toBeUndefined();
+  });
+
+  it('stand for no place when the parameters are neither', () => {
+    expect(linkPlace({ foo: 'bar' })).toBeUndefined();
+  });
+});
