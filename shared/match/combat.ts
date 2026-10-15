@@ -89,7 +89,7 @@ export function spawnSoldier(state: MatchState, ctx: SimContext, s: Soldier) {
   ctx.emit({ type: 'spawn', id: s.id });
 }
 
-export function applyDamage(state: MatchState, ctx: SimContext, target: Soldier, attackerId: number, amount: number, zone: HitZone | 'blast' | 'fall', from: Vec3, weapon: string) {
+export function applyDamage(state: MatchState, ctx: SimContext, target: Soldier, attackerId: number, amount: number, zone: HitZone | 'blast' | 'burn' | 'fall', from: Vec3, weapon: string) {
   if (!target.alive || amount <= 0 || state.phase === 'ended' || state.roundPhase === 'over') return false;
   const attacker = state.soldiers.find(s => s.id === attackerId);
   if (attacker && attacker.team === target.team && attacker.id !== target.id) return false;

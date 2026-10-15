@@ -64,6 +64,9 @@ own eye. Use `taipei 6`, `xinyi 24`, and `taipei101 6` for the replaced maps. Th
 identities in a private 1v1 (placed with `spacetime sql`, owner-only): no wind-up does 30, a second throw
 with an empty hand does nothing, the other client's frame shows the slipper, walking onto it picks it
 up, and a full wind-up kills as a knife kill.
+`bun scripts/molotovcheck.ts ws://127.0.0.1:<port> <db>` (local only) checks the 燃燒彈 the same way: throwing
+without one does nothing, buying one costs $400 and rides in gearJson, the other client's frame shows the bottle
+and then the fire, the burst event arrives, the target burns (burn damage events) until moved out, and a second throw does nothing.
 `bun scripts/startcheck.ts ws://127.0.0.1:<port> <db>` (local only, an empty database) checks Quick Play and
 Start a Server with separate identities: Quick Play opens a 6v6 with bots and a second one joins it, a public
 started room is listed, fixed and joinable, a private one is hidden, never Quick Played into and joined by

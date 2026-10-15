@@ -509,6 +509,8 @@ function renderBrand() {
 // ---- Rendering: everything on screen follows the tab, the form, the rooms and the language. ----
 let ready = false;
 let starting: Action | undefined;
+/** The page was opened from an invite or challenge link still waiting to be accepted: the big white button accepts it (Not now gives Quick Play back). */
+let waitingLink: 'invite' | 'challenge' | undefined;
 /** The start under way is 邀請朋友's private room (its button says so). */
 let inviteStarting = false;
 let loadFraction = -1;
@@ -538,8 +540,9 @@ const queuedAction = () => lobbyConn.state.queued?.action;
 function renderDeploy(btn: HTMLButtonElement, action: Action, busyText: string, enabled: boolean) {
   const label = btn.querySelector<HTMLElement>('.deploy-t')!;
   const queued = queuedAction() === action;
-  label.textContent = !ready ? loadingText() : starting === action ? busyText : queued ? t('connect.waiting') : t(label.dataset.label as Key);
-  btn.disabled = !ready || !!starting || !enabled;
+  const linked = action === 'quick' && waitingLink;
+  label.textContent = !ready ? loadingText() : starting ? (starting === action ? busyText : t(label.dataset.label as Key)) : linked ? t(waitingLink === 'invite' ? 'invite.joinFriend' : 'chal.accept') : queued ? t('connect.waiting') : t(label.dataset.label as Key);
+  btn.disabled = !ready || !!starting || (!enabled && !linked);
   btn.classList.toggle('queued', queued && !starting);
 }
 
@@ -764,7 +767,13 @@ onClick('unreachable-retry', () => lobbyConn.retry());
 $('#unreachable-retry').addEventListener('click', () => { audio.ui(); lobbyConn.retry(); });
 roomCode.addEventListener('input', () => { roomCode.value = cleanCode(roomCode.value); renderJoin(); });
 callsign.addEventListener('input', renderProfile);
-$('#quick-go').addEventListener('click', () => { audio.ui(); run('quick'); });
+$('#quick-go').addEventListener('click', () => { audio.ui(); quickPressed(); });
+/** The big white button: the link the page was opened with if one waits, else Quick Play. */
+function quickPressed() {
+  if (waitingLink === 'invite') acceptInvite();
+  else if (waitingLink === 'challenge') acceptChallenge();
+  else run('quick');
+}
 $('#invite-go').addEventListener('click', () => { audio.ui(); openInviteRoom(); });
 $('#start-go').addEventListener('click', () => { audio.ui(); run('start'); });
 $('#go-range').addEventListener('click', () => { audio.ui(); run('range'); });
@@ -1073,8 +1082,9 @@ function showChallenge() {
   const go = el.querySelector<HTMLButtonElement>('.go')!;
   go.onclick = acceptChallenge;
   el.querySelector<HTMLButtonElement>('.later')!.textContent = t('chal.later');
-  el.querySelector<HTMLButtonElement>('.later')!.onclick = () => { el.remove(); };
+  el.querySelector<HTMLButtonElement>('.later')!.onclick = () => { el.remove(); waitingLink = undefined; refresh(); };
   challengeBanner = el;
+  waitingLink = 'challenge';
   menu.appendChild(el);
   renderChallenge();
 }
@@ -1095,8 +1105,9 @@ function showInvite() {
   el.querySelector('p')!.textContent = t('invite.bannerBody', { code: invite.room });
   el.querySelector<HTMLButtonElement>('.go')!.onclick = acceptInvite;
   el.querySelector<HTMLButtonElement>('.later')!.textContent = t('chal.later');
-  el.querySelector<HTMLButtonElement>('.later')!.onclick = () => { el.remove(); };
+  el.querySelector<HTMLButtonElement>('.later')!.onclick = () => { el.remove(); waitingLink = undefined; refresh(); };
   challengeBanner = el;
+  waitingLink = 'invite';
   menu.appendChild(el);
   renderChallenge();
 }
@@ -1104,6 +1115,7 @@ function showInvite() {
 function acceptInvite() {
   if (!invite || !ready || starting) return;
   challengeBanner?.remove();
+  waitingLink = undefined;
   roomCode.value = invite.room;
   if (!online.ok) { status.textContent = t('invite.gone'); return; }
   special = { kind: 'joinInvite', ref: invite.ref ?? '' };
@@ -1123,6 +1135,7 @@ function acceptChallenge() {
   if (!c || !ready || starting) return;
   const mapId = challengeMap(c.map, mapsFor(1));
   challengeBanner?.remove();
+  waitingLink = undefined;
   if (c.room && online.ok) { special = { kind: 'join', c, mapId }; roomCode.value = c.room; run('code'); }
   else { special = { kind: 'fallback', c, mapId, reason: c.room ? 'offline' : 'no_room' }; run('solo'); }
 }
@@ -1498,7 +1511,7 @@ document.addEventListener('keydown', e => {
     if (target.closest('button, summary, a')) return;
     e.preventDefault();
     if (openPop?.id === 'solo-pop') run('solo');
-    else if (tab === 'quick') run('quick');
+    else if (tab === 'quick') quickPressed();
     else if (tab === 'start') run('start');
   }
 });

@@ -5,6 +5,7 @@ import { peekOf } from '../peek';
 import { blocksHeight, near, penetration, type Obstacle } from '../obstacles';
 import { GRENADE, STAMINA } from '../weapons';
 import { eyeOf, feetOf, onSite, shapeOf, resolvePellets, resolveShot, sideOf, smokeBlocks, spreadFor, throwGrenadeFrom, traceShot, weaponOf, type SimContext } from './combat';
+import { fireNear, throwMolotovFrom } from './fire';
 import { findPath, nearestNode } from './nav';
 import { ATTACKERS, type BotBrain, type MatchState, type Soldier } from './state';
 
@@ -291,14 +292,17 @@ export function updateBot(state: MatchState, ctx: SimContext, bot: Soldier, dt: 
     if (bot.weapon === 2 && bot.switchLeft <= 0) { bot.weapon = 0; bot.switchLeft = weaponOf(bot).equipTime; }
     else if (bot.weapon !== 2 && bot.ammo[bot.weapon] < w.magazine * 0.4 && bot.reloadLeft <= 0) bot.reloadLeft = w.reload;
     // Grenade the last known position of an enemy who ducked behind cover.
-    if (target && brain.grenadeCooldown <= 0 && bot.grenades > 0 && state.time - brain.lastSeen < 2.5) {
+    // A molotov goes on a nearer one, where it would land at their feet.
+    if (target && brain.grenadeCooldown <= 0 && (bot.grenades > 0 || bot.molotovs > 0) && state.time - brain.lastSeen < 2.5) {
       const d = Math.hypot(brain.seenX - bot.m.x, brain.seenZ - bot.m.z);
-      if (d > 9 && d < 24 && ctx.random() < 0.35) {
+      const frag = bot.grenades > 0 && d > 9 && d < 24, molotov = bot.molotovs > 0 && d > 6 && d < 20;
+      if ((frag || molotov) && ctx.random() < 0.35) {
         const eye = eyeOf(bot);
         const yaw = yawTo(eye, { x: brain.seenX, y: 0, z: brain.seenZ });
         // Flat-ground ballistic estimate: pick a pitch whose range matches the distance.
         const v = GRENADE.throwSpeed, pitch = clamp(0.5 * Math.asin(clamp(d * 9.8 / (v * v), -1, 1)) - 0.08, 0.05, 0.9);
-        throwGrenadeFrom(state, bot, eye, dirFromAngles(yaw, pitch));
+        if (molotov && (!frag || ctx.random() < 0.5)) throwMolotovFrom(state, bot, eye, dirFromAngles(yaw, pitch));
+        else throwGrenadeFrom(state, bot, eye, dirFromAngles(yaw, pitch));
       }
       brain.grenadeCooldown = 9 + ctx.random() * 8;
     }
@@ -312,6 +316,14 @@ export function updateBot(state: MatchState, ctx: SimContext, bot: Soldier, dt: 
     const busy = state.bomb.by !== -1 && state.bomb.by !== bot.id;
     const myJob = state.bomb.armed ? bot.team !== ATTACKERS : bot.team === ATTACKERS;
     if (p && myJob && !busy && onSite(p, bot.m.x, bot.m.y, bot.m.z, SITE_STOP)) { bot.using = true; moveX = 0; moveZ = 0; }
+  }
+
+  // ---- Fire: step out of the flames, and keep a step clear of them --------------
+  const fire = state.bodies.length ? fireNear(state, ctx, feetOf(bot), 0.6) : undefined;
+  if (fire) {
+    const ax = bot.m.x - fire.x, az = bot.m.z - fire.z, d = Math.hypot(ax, az);
+    if (d > 0.05) { moveX = ax / d; moveZ = az / d; } else { moveX = -Math.sin(bot.yaw); moveZ = -Math.cos(bot.yaw); }
+    bot.using = false;
   }
 
   // ---- Vehicles in the way: the nav grid knows only where they park, so walk round the bodies ----

@@ -23,7 +23,7 @@ Back to the [README](../README.md) · [Architecture](ARCHITECTURE.md) · [Develo
 | Feel | First-person arms posed by IK onto CC0 gun models with optics that follow the fitted attachment (irons, reflex, holographic, ACOG, x4, x6), suppressor, laser and flashlight visuals; procedural sway, bob, kick, sprint carry, reloads and equips; muzzle flash, tracers (hidden when suppressed), impacts, explosions; hit markers, cash popups, damage arrows, kill feed, round banners; recorded CC0 gunshots per weapon (distance-muffled and panned, muffled when suppressed), knife, bomb, round and cash cues, footsteps and a 60-second menu theme sequenced from the game's own effects. |
 | Characters | CC0 rigged soldiers in two team outfits, CC0 animation library retargeted by bone name: idle/walk/jog/sprint/crouch/jump/death blend by speed, strafing leg twist, aim pitch, two-bone arm IK onto the weapon, a knife stab, hit flinches. |
 | Bots | Navigation grid per map (roofs, catwalks, stairs), A* paths, field of view and line of sight, reaction delays, aim error that settles, strafing, bursts, reloads and grenades. They shop at round start (the best primary they can afford, sometimes an optic and a grenade). In Sabotage Militia bots head for a site and arm it, SWAT bots spread over the sites, and everyone converges on an armed bomb. |
-| HUD | Score bar with the round clock, round score and an avatar per soldier (alive or dead, teammates' health), health and stamina, cash, weapon with its attachments, ammo and reserve, grenades (M67 and M18 smoke), bomb status and arming progress, minimap with sites, crates and smoke clouds, a grey screen inside smoke, kill feed, chat (Enter all, T team; it also notes human players joining and leaving the room, never bots), scoreboard (Tab), crosshair that widens with sustained fire, jumping and sprinting in four styles (classic, dot, circle, T), match result. |
+| HUD | Score bar with the round clock, round score and an avatar per soldier (alive or dead, teammates' health), health and stamina, cash, weapon with its attachments, ammo and reserve, grenades (M67, M18 smoke and 燃燒彈 molotov), bomb status and arming progress, minimap with sites, crates, smoke clouds and fires, a grey screen inside smoke, an orange glow at the screen's edges standing in fire, kill feed, chat (Enter all, T team; it also notes human players joining and leaving the room, never bots), scoreboard (Tab), crosshair that widens with sustained fire, jumping and sprinting in four styles (classic, dot, circle, T), match result. |
 | Vehicles | Cars and taxis, Taiwanese scooters and a light helicopter on Taipei and Meridian District (see [Vehicles](#vehicles)): E to get in or out, arcade driving and flying, chase camera, run-overs, body damage and wrecks; parked back at their spots every round. |
 | Profiles | Online, each identity keeps career stats (kills, deaths, assists, headshots, rounds and matches played and won) in a public `profile` table. |
 
@@ -58,6 +58,7 @@ Back to the [README](../README.md) · [Architecture](ARCHITECTURE.md) · [Develo
 | Melee (3) | Knife | free | 33 / 33 / 33 | Always carried; 2 swings/s; fastest movement |
 | Tactical (4 / G) | M67 grenade | $1,000 | 70 (falloff) | One carried, not restocked; High Explosive mod $1,500 (+45 body damage, smaller radius) |
 | Tactical (5 / X) | M18 smoke grenade | $300 | — | One carried; a 9 m cloud for 15 s that blocks sight, not bullets (not in BeGone) |
+| Tactical (7 / U) | 燃燒彈 molotov | $400 | 32 per second | One carried; thrown like the M67, it breaks on the first floor it lands on (walls bounce it) and sets up to 6 m of floor alight for 7 s; walls stop the flames and they do not pour over ledges. Whoever stands in it burns (enemies and the thrower, not teammates); still in the air after 2.5 s it fizzles; smoke puts it out (a bottle breaking in a cloud fizzles, a smoke popped on a fire smothers it, and a smoke grenade landing in the flames pops there at once, as in Counter-Strike); bots buy and throw them and step out of fires (not in BeGone, after Counter-Strike's) |
 | Tactical (6 / Y) | 珍奶 bubble tea | $400 | +50 health | One carried; drink when hurt: a 1.4 s sip (no shooting), then +50 health up to 100; the server applies it (`drinkBoba`, not in BeGone) |
 
 **Skins (外觀; cosmetic only, `shared/skins.ts`)**: the lobby's 外觀 button (the T-shirt) picks how the
@@ -407,6 +408,7 @@ fullscreen. On touch-only screens the Controls tab is read-only.
 | 4 or G | M67 grenade |
 | 5 or X | M18 smoke grenade |
 | 6 or Y | Drink the 珍奶 (heals +50) |
+| 7 or U | 燃燒彈 molotov |
 | Q or wheel | Cycle weapons |
 | R · E | Reload · use (arm or disarm the bomb, ammo crate, get in or out of a vehicle) |
 | On a ladder: toward it · away · Space | Climb up · climb down · let go (walk off its top to climb down) |
