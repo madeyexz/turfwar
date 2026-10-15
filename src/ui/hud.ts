@@ -140,6 +140,7 @@ export class Hud {
         <div class="zoomtag" data-k="zoomtag" hidden></div>
       </div>
       <div class="toast" data-k="toast"></div>
+      <div class="afk" data-k="afk" role="alert"></div>
       <div class="announce" data-k="announce"><b></b><small></small></div>
       <div class="chat" data-k="chat"><div class="lines" data-k="chatLines"></div><label class="chat-input" data-k="chatBox" hidden><span data-k="chatLabel">${t('hud.chatAll')}</span><input maxlength="75" autocomplete="off" spellcheck="false" enterkeyhint="send"></label></div>
       <div class="vitals" data-k="vitals">
@@ -510,6 +511,15 @@ export class Hud {
     this.el.toast.textContent = text;
     this.el.toast.classList.add('on');
     this.toastTimer = setTimeout(() => this.el.toast.classList.remove('on'), ms);
+  }
+
+  /** The away (AFK) warning: removed from the match in `left` seconds unless the player acts; undefined hides it. */
+  afk(left: number | undefined) {
+    const e = this.el.afk;
+    if (left === undefined) { e.classList.remove('on'); return; }
+    const text = t('hud.afk', { n: left });
+    if (e.textContent !== text) e.textContent = text;
+    e.classList.add('on');
   }
 
   /** Big centre banner (round won/lost, bomb armed…). */

@@ -96,6 +96,19 @@ Back to the [README](../README.md) · [Gameplay](GAMEPLAY.md) · [Development](D
   alive: the dead spectate without reporting). A dropped client stops sending inputs at once and
   rejoins its room automatically while other humans hold it; if it is not back within 8 s, or the
   connection is lost, it returns to the lobby with a message.
+- AFK kick: a client that keeps reporting the same pose is not idle, so the module also tracks each
+  human's last real action (`AFK` in `shared/match/state.ts`): a step over 5 cm, a jump, a turn of
+  the view over 0.002 rad, a crouch, sprint, aim, use or weapon change, driving, or any command but
+  a skin change. Only time alive in a live round counts (not the freeze, buy time, the round-over
+  pause or time dead), and report changes count only in a live round, so the spawn teleport and
+  the client catching up with it in the freeze are not actions. At 75 s the module sends an `afk`
+  event (the client shows a 15 s countdown that ends when the player moves, turns or fires); at
+  90 s it removes the human (`leave` event with `reason: 'afk'`), credits play time up to the last
+  real action and counts the kick in `afk_hour`. The new client then goes to the lobby with an AFK
+  note and does not rejoin. Older clients rejoin by room automatically, so for 3 minutes the room
+  refuses that identity's `join_public` and `join_room` (`afk_kick`; Quick Play and other rooms
+  stay open) and an older client returns to the lobby after its 8 s window. The AFK clocks live in
+  the soldier's `gearJson` (no new columns: a changed column set disconnects every client on publish).
 - Load test (local only): `bun scripts/loadtest.ts --uri ws://127.0.0.1:3100 --db <name> --clients 100`
   runs headless clients that move with the shared controller, fire validated shots and report the
   server tick rate, bytes per client, report round trips and corrections; it refuses non-local URIs.

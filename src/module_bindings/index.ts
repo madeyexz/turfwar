@@ -76,6 +76,7 @@ import VisitReducer from "./visit_reducer";
 // Import all procedure arg schemas
 
 // Import all table schema definitions
+import AdminAfkHourRow from "./admin_afk_hour_table";
 import AdminDailyRow from "./admin_daily_table";
 import AdminDailyNetRow from "./admin_daily_net_table";
 import AdminDailyTimeRow from "./admin_daily_time_table";
@@ -229,6 +230,13 @@ const tablesSchema = __schema({
       { name: 'soldier_id_key', constraint: 'unique', columns: ['id'] },
     ],
   }, SoldierRow),
+  adminAfkHour: __table({
+    name: 'admin_afk_hour',
+    indexes: [
+    ],
+    constraints: [
+    ],
+  }, AdminAfkHourRow),
   adminDaily: __table({
     name: 'admin_daily',
     indexes: [

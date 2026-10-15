@@ -101,6 +101,13 @@ export interface Soldier {
   groundY: number;
   /** Seconds since the last client report (humans) — used for disconnect cleanup. */
   idle: number;
+  /**
+   * Humans: seconds alive in live rounds since the last real action (a move, a turn or a command;
+   * `noteAction`). Online, the server warns at AFK.warn and removes the human at AFK.kick.
+   */
+  afk: number;
+  /** Humans: seconds since the last real action in any phase (play time is credited up to it). */
+  quiet: number;
   /** Per-round bookkeeping for credits (BeGone's cash awards). */
   round: RoundStats;
   /** Rounds played on this server, for the loyalty bonus. */
@@ -221,6 +228,18 @@ export interface MatchState {
   config: MatchConfig;
 }
 
+/**
+ * Away from keyboard (Online): a human with no real action (`noteAction`) for `kick` seconds alive in
+ * live rounds is removed from the room; the client is warned at `warn`. Changes smaller than `move`
+ * metres, `jump` metres up or down and `turn` radians are not actions (float rounding, settling).
+ */
+export const AFK = { warn: 75, kick: 90, move: 0.05, jump: 0.3, turn: 0.002 };
+
+/** A human did something real: a move, a turn or a command. Resets the AFK clocks. */
+export function noteAction(s: Soldier) { s.afk = 0; s.quiet = 0; }
+/** An angle changed by more than AFK.turn (the chord, not a wrapped difference: any finite angle, however large, costs the same). */
+export const turned = (a: number, b: number) => Math.abs(Math.sin((a - b) / 2)) * 2 > AFK.turn;
+
 export type RoundEnd = 'eliminated' | 'time' | 'armed' | 'disarmed' | 'exploded';
 
 export type MatchEvent =
@@ -242,9 +261,11 @@ export type MatchEvent =
   | { type: 'bomb'; action: 'armed' | 'disarmed' | 'exploded'; site: number; by: number }
   | { type: 'reward'; id: number; amount: number; reason: string }
   | { type: 'chat'; id: number; name: string; team: Team; text: string; teamOnly: boolean }
-  /** A soldier joined or left the room; `bot` and the leaver's `team` are missing from older servers. */
+  /** A soldier joined or left the room (`reason` 'afk': removed for no real action); `bot` and the leaver's `team` are missing from older servers. */
   | { type: 'join'; id: number; name: string; team: Team; bot?: boolean }
-  | { type: 'leave'; id: number; name: string; team?: Team; bot?: boolean }
+  | { type: 'leave'; id: number; name: string; team?: Team; bot?: boolean; reason?: 'afk' }
+  /** Online: human `id` has done nothing real for a while and is removed in `left` seconds unless they act (AFK). */
+  | { type: 'afk'; id: number; left: number }
   /** A human changed sides (`team` is the new one). */
   | { type: 'team'; id: number; name: string; team: Team }
   /** A soldier got in or out of vehicle `vehicle` (seat 0 drives), a hit on its body, or its wreck. */

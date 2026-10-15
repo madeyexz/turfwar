@@ -10,7 +10,7 @@ import {
   reportVehicle, resetMatch, switchWeapon, throwGrenade, tickMatch, useAmmoCrate, TICK_RATE,
 } from '../../shared/match/sim';
 import {
-  ONLINE_CONFIG, PUBLIC_ROUNDS_TO_WIN, type BombState, type BotBrain, type MatchConfig, type MatchEvent, type MatchState, type RoundStats, type Soldier, type Team,
+  AFK, ONLINE_CONFIG, PUBLIC_ROUNDS_TO_WIN, noteAction, type BombState, type BotBrain, type MatchConfig, type MatchEvent, type MatchState, type RoundStats, type Soldier, type Team,
 } from '../../shared/match/state';
 import { ATTACHMENTS, DEFAULT_WEAPONS, STAMINA, WEAPONS, normalizeAttachments, type AttachmentId, type Attachments, type Slot, type WeaponId } from '../../shared/weapons';
 import { newRoundStats, type BuyItem } from '../../shared/match/economy';
@@ -284,12 +284,25 @@ const milestoneTable = table({ name: 'player_milestone' }, { identity: t.identit
 /**
  * How full rooms are per hour (hours since the epoch; shared/metrics.ts): each room's minute flush adds
  * its seats, humans and bots; joins, leaves (on purpose), drops (the connection closed in a room) and
- * idle kicks are counted as they happen. Kept: 24 rows a day. Private.
+ * idle kicks (vanished clients) are counted as they happen (AFK kicks: `afk_hour`). Kept: 24 rows a day. Private.
  */
 const roomHourTable = table({ name: 'room_hour' }, {
   hour: t.u32().primaryKey(), roomMinutes: t.u32(), seatMinutes: t.u32(), humanMinutes: t.u32(), botMinutes: t.u32(),
   joins: t.u32(), leaves: t.u32(), drops: t.u32(), kicks: t.u32(),
 });
+
+/**
+ * AFK kicks per hour (hours since the epoch, as `room_hour`): humans removed for no real action (AFK in
+ * shared/match/state.ts), apart from `room_hour.kicks` (clients that stopped reporting). A table of its
+ * own so existing tables keep their columns (a changed column set disconnects every client). Private.
+ */
+const afkHourTable = table({ name: 'afk_hour' }, { hour: t.u32().primaryKey(), afk: t.u32() });
+
+/**
+ * Who was last removed for being away (AFK) from which room, and when. For a short while after, that
+ * room refuses them, so an older client's automatic rejoin cannot undo the kick. One row per identity. Private.
+ */
+const afkKickTable = table({ name: 'afk_kick' }, { identity: t.identity().primaryKey(), room: t.u8(), at: t.u64() });
 
 /**
  * What each player plays on (shared/devicekind.ts), from `device` reports (one per connection, after
@@ -336,7 +349,7 @@ const spacetimedb = schema({
   playerDay: dayTable, admin: adminTable, serverError: serverErrorTable, adminAttempt: adminAttemptTable, playerTime: timeTable, playerDayTime: dayTimeTable,
   playerNet: netTable, playerDayNet: dayNetTable, playerHour: hourTable, peakHour: peakTable, playerPerf: perfTable, playerSource: sourceTable, playerMilestone: milestoneTable, roomHour: roomHourTable, playerDevice: deviceTable, roomCode: roomCodeTable, privateRoom: privateRoomTable,
   taipeiPlayerDay: taipeiDayTable, taipeiPlayerDayTime: taipeiDayTimeTable, taipeiPlayerDayNet: taipeiDayNetTable, taipeiCoverage: taipeiCoverageTable, taipeiRebuild: taipeiRebuildTable,
-  playerConsent: consentTable,
+  playerConsent: consentTable, afkKick: afkKickTable, afkHour: afkHourTable,
 });
 export default spacetimedb;
 
@@ -383,6 +396,8 @@ interface Gear {
   rookie?: boolean;
   /** Cosmetic skin (shared/skins.ts); written only when not the defaults. */
   skin?: Skin;
+  /** Humans: seconds alive in live rounds, and wall seconds, since the last real action (AFK in shared/match/state.ts; no columns of their own). */
+  afk?: number; quiet?: number;
 }
 const slotOf = (v: number): Slot => (v === 1 || v === 2 ? v : 0);
 
@@ -403,7 +418,7 @@ function soldierFromRow(r: SoldierRow, brain?: BotBrain): Soldier {
     smokes: gear.smokes ?? 0, bobas: gear.bobas ?? 0, molotovs: gear.molotovs ?? 0, slippers: gear.slippers ?? 1, stamina: gear.stamina ?? STAMINA.max, money: r.money,
     sinceHit: r.sinceHit, lastAttacker: r.lastAttacker, kills: r.kills, deaths: r.deaths, assists: gear.assists ?? 0, score: r.score,
     sprint: r.sprint, ads: r.ads, sinceShot: r.sinceShot, using: gear.using ?? false, corrections: r.corrections,
-    moveSlack: r.moveSlack, groundY: r.groundY, idle: r.idle, round: gear.round ?? newRoundStats(), roundsHere: gear.roundsHere ?? 0, brain,
+    moveSlack: r.moveSlack, groundY: r.groundY, idle: r.idle, afk: gear.afk ?? 0, quiet: gear.quiet ?? 0, round: gear.round ?? newRoundStats(), roundsHere: gear.roundsHere ?? 0, brain,
     ...(typeof gear.rookieRounds === 'number' ? { rookieRounds: gear.rookieRounds } : gear.rookie ? { rookieRounds: 0 } : {}),
     ...(gear.skin ? { skin: cleanSkin(gear.skin) } : {}),
   };
@@ -421,6 +436,7 @@ function soldierToRow(s: Soldier, room: number): SoldierRow {
     ...(s.slippers <= 0 ? { slippers: 0 } : {}),
     ...(s.rookieRounds !== undefined ? { rookieRounds: s.rookieRounds } : {}),
     ...(s.skin ? { skin: s.skin } : {}),
+    ...(s.bot ? {} : { afk: Math.min(s.afk, 9999), quiet: Math.min(s.quiet, 1e7) }),
   };
   return {
     // Legacy columns (kit, shield, respawn, spawn protection, captures, law cooldown, purchases) stay neutral.
@@ -833,6 +849,12 @@ function updateRoomHour(ctx: Ctx, change: (h: RoomHour | undefined) => RoomHour)
   if (prev) ctx.db.roomHour.hour.update(row); else ctx.db.roomHour.insert(row);
 }
 const countRoom = (ctx: Ctx, kind: 'joins' | 'leaves' | 'drops' | 'kicks') => updateRoomHour(ctx, h => countRoomEvent(h, kind));
+/** One more AFK kick this hour (`afk_hour`). */
+function countAfk(ctx: Ctx) {
+  const hour = hourOf(micros(ctx));
+  const prev = ctx.db.afkHour.hour.find(hour);
+  if (prev) ctx.db.afkHour.hour.update({ hour, afk: prev.afk + 1 }); else ctx.db.afkHour.insert({ hour, afk: 1 });
+}
 
 /** One `player_day` row per player per UTC day they were active. */
 function markDay(ctx: Ctx) {
@@ -842,6 +864,28 @@ function markDay(ctx: Ctx) {
   markTaipeiDay(ctx, ctx.sender);
   const hour = hourOf(micros(ctx));
   if (!ctx.db.playerHour.key.find(`${ctx.sender.toHexString()}:${hour}`)) updateHour(ctx, ctx.sender, hour, r => r);
+}
+
+/**
+ * After an AFK kick, the room refuses the human's join by room or code (the ways an older client's
+ * automatic rejoin comes back) for this long, so the kick does not loop: kick, rejoin, 90 s away, kick.
+ * Quick Play and Play Online stay open (a player chooses those); so does every other room.
+ */
+const AFK_REJOIN_MICROS = 180_000_000n;
+function noteAfkKick(ctx: Ctx, identity: Identity, room: number) {
+  const row = { identity, room, at: micros(ctx) };
+  if (ctx.db.afkKick.identity.find(identity)) ctx.db.afkKick.identity.update(row); else ctx.db.afkKick.insert(row);
+}
+/** Expired `afk_kick` rows go with each room's minute flush (a few rows at most: kicks are rare). */
+function pruneAfkKicks(ctx: Ctx, now: bigint) {
+  for (const old of [...ctx.db.afkKick.iter()]) if (now - old.at >= AFK_REJOIN_MICROS) ctx.db.afkKick.identity.delete(old.identity);
+}
+function refuseAfterAfk(ctx: Ctx, room: number) {
+  const kicked = ctx.db.afkKick.identity.find(ctx.sender);
+  if (!kicked) return;
+  const wait = kicked.at + AFK_REJOIN_MICROS - micros(ctx);
+  if (wait <= 0n) { ctx.db.afkKick.identity.delete(ctx.sender); return; }
+  if (kicked.room === room) throw new SenderError(`Removed for inactivity: this room takes you back in ${Math.ceil(Number(wait) / 1e6)} s; Quick Play works now`);
 }
 
 /** Put the caller into `room` (leaving any other room first). Every way in (quick_any, start_room, quick_play, quick_join, join, create_room, join_room, join_public) ends here. */
@@ -984,6 +1028,8 @@ function applyInputs(ctx: Ctx, state: MatchState, sim: SimContext) {
       case 'team': switchTeam(state, sim, c.soldierId); break;
       case 'skin': wearSkin(state, c.soldierId, cmd.skin); break;
     }
+    // Every command but a skin change (a menu, also used while away) is a real action (AFK).
+    if (cmd.kind !== 'skin') { const s = state.soldiers.find(x => x.id === c.soldierId); if (s) noteAction(s); }
   }
 }
 
@@ -1008,6 +1054,7 @@ export const tick = spacetimedb.reducer({ onSchedule: tickTable }, { arg: tickTa
       for (const p of ctx.db.player.iter()) if (p.room === room && humans.has(p.soldierId)) here.push(p.identity);
       flushPlay(playStore(ctx), here, now);
       pruneHours(ctx, now);
+      pruneAfkKicks(ctx, now);
       notePeak(ctx);
       updateRoomHour(ctx, h => foldRoomMinute(h, { seats: state.config.teamSize * 2, humans: humans.size, bots: state.soldiers.length - humans.size }));
     }
@@ -1028,19 +1075,24 @@ export const tick = spacetimedb.reducer({ onSchedule: tickTable }, { arg: tickTa
       return;
     }
     tickMatch(state, sim, dt);
-    // Drop players whose clients vanished without a disconnect.
+    // Drop players whose clients vanished without a disconnect (45 s without a report), and players
+    // away from keyboard (AFK.kick seconds alive in live rounds without a real action; warned first).
     for (const s of [...state.soldiers]) {
-      if (!s.bot && s.idle > 45) {
-        // Their play time ends when they went quiet, not now.
-        const quietSince = now - BigInt(Math.round(s.idle * 1_000_000));
-        for (const p of [...ctx.db.player.iter()]) {
-          if (p.soldierId !== s.id) continue;
-          endPlay(playStore(ctx), p.identity, quietSince);
-          ctx.db.player.identity.delete(p.identity);
-          countRoom(ctx, 'kicks');
-        }
-        removeSoldier(state, sim, s.id); balanceTeams(state, sim);
+      if (s.bot) continue;
+      const afk = s.afk >= AFK.kick;
+      if (!afk && s.idle <= 45) {
+        if (s.afk >= AFK.warn && s.afk - dt < AFK.warn) sim.emit({ type: 'afk', id: s.id, left: AFK.kick - AFK.warn });
+        continue;
       }
+      // Their play time ends when they went quiet (or last acted), not now.
+      const quietSince = now - BigInt(Math.round((afk ? Math.max(s.quiet, s.idle) : s.idle) * 1_000_000));
+      for (const p of [...ctx.db.player.iter()]) {
+        if (p.soldierId !== s.id) continue;
+        endPlay(playStore(ctx), p.identity, quietSince);
+        ctx.db.player.identity.delete(p.identity);
+        if (afk) { noteAfkKick(ctx, p.identity, room); countAfk(ctx); } else countRoom(ctx, 'kicks');
+      }
+      removeSoldier(state, sim, s.id, afk ? 'afk' : undefined); balanceTeams(state, sim);
     }
   }, true);
 });
@@ -1105,6 +1157,7 @@ export const joinRoom = spacetimedb.reducer({ name: t.string(), code: t.string()
   const byCode = clean ? ctx.db.roomCode.code.find(clean) : undefined;
   const row = byCode ? ctx.db.match.id.find(byCode.room) : clean ? [...ctx.db.match.iter()].find(r => r.code === clean) : undefined;
   if (!row) throw new SenderError('No room with that code');
+  refuseAfterAfk(ctx, row.id);
   enterRoom(ctx, row.id, name, team);
 });
 
@@ -1112,6 +1165,7 @@ export const joinRoom = spacetimedb.reducer({ name: t.string(), code: t.string()
 export const joinPublic = spacetimedb.reducer({ name: t.string(), room: t.u8(), team: t.i8() }, (ctx, { name, room, team }) => {
   const row = ctx.db.match.id.find(room);
   if (!row || codeOf(ctx, row) !== '') throw new SenderError('That room is gone; try Quick Play');
+  refuseAfterAfk(ctx, room);
   enterRoom(ctx, room, name, team);
 });
 
@@ -1642,6 +1696,11 @@ export const adminRoomHour = spacetimedb.view({ name: 'admin_room_hour', public:
     hour: t.u32(), roomMinutes: t.u32(), seatMinutes: t.u32(), humanMinutes: t.u32(), botMinutes: t.u32(), joins: t.u32(), leaves: t.u32(), drops: t.u32(), kicks: t.u32(),
   })),
   ctx => forAdmin(viewAdmins(ctx.db), ctx.sender.toHexString(), () => [...ctx.db.roomHour.iter()]));
+
+/** AFK kicks per hour (`afk_hour`; joined to `admin_room_hour` by hour on the page). */
+export const adminAfkHour = spacetimedb.view({ name: 'admin_afk_hour', public: true },
+  t.array(t.row('AdminAfkHourRow', { hour: t.u32(), afk: t.u32() })),
+  ctx => forAdmin(viewAdmins(ctx.db), ctx.sender.toHexString(), () => [...ctx.db.afkHour.iter()]));
 
 // What players play on has a view of its own too (joined to `admin_players` by id on the page).
 

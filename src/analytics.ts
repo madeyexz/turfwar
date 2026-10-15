@@ -22,10 +22,11 @@ export type PlayKind = 'online' | 'start' | 'room' | 'solo' | 'practice' | 'priv
 export type Reason = 'menu' | 'disconnect' | 'close';
 /**
  * How a match ended for us, finer than `reason`: the in-game menu's Leave button, the end screen's
- * menu button, the leave key (M, after its confirmation), removed by the server (idle), the
+ * menu button, the leave key (M, after its confirmation), removed by the server (idle: the client stopped
+ * reporting; `afk`: no real action for 90 s), the
  * connection lost (and not recovered), the connection lost and the same room rejoined at once (`rejoined`: the next `match_joined` has `rejoin`), or the tab closing.
  */
-export type Exit = 'menu_button' | 'end_screen' | 'leave_key' | 'removed' | 'lost' | 'rejoined' | 'close';
+export type Exit = 'menu_button' | 'end_screen' | 'leave_key' | 'removed' | 'afk' | 'lost' | 'rejoined' | 'close';
 /** The page's own failures: an uncaught error, a promise nobody caught, the graphics (WebGL) context lost. */
 export type ClientErrorKind = 'error' | 'rejection' | 'boot' | 'webgl_lost' | 'webgl_restored';
 

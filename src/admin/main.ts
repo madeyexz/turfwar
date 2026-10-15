@@ -165,9 +165,10 @@ const OPTIONAL = {
   source: ['SELECT * FROM admin_player_source'],
   firsts: ['SELECT * FROM admin_player_milestone'],
   roomHours: ['SELECT * FROM admin_room_hour'],
+  afkHours: ['SELECT * FROM admin_afk_hour'],
 };
 type ViewState = 'wait' | 'on' | 'missing';
-const freshViews = (): Record<keyof typeof OPTIONAL, ViewState> => ({ errors: 'wait', net: 'wait', device: 'wait', days: 'wait', dayTime: 'wait', dayNet: 'wait', coverage: 'wait', rebuild: 'wait', hours: 'wait', peak: 'wait', perf: 'wait', source: 'wait', firsts: 'wait', roomHours: 'wait' });
+const freshViews = (): Record<keyof typeof OPTIONAL, ViewState> => ({ errors: 'wait', net: 'wait', device: 'wait', days: 'wait', dayTime: 'wait', dayNet: 'wait', coverage: 'wait', rebuild: 'wait', hours: 'wait', peak: 'wait', perf: 'wait', source: 'wait', firsts: 'wait', roomHours: 'wait', afkHours: 'wait' });
 let views = freshViews();
 /** Persisted collection boundary, never inferred from whichever player happens to have a row. */
 function recordingStart() {
@@ -723,7 +724,7 @@ function growthFigures(G: Record<GroupId, Player[]>, now: number, today: number)
     tile1('Drops / join', one(h => graded(pct(h.dropRate), grade(h.dropRate, TARGETS.drops), `${num(h.drops)} of ${num(h.joins)} joins`)), 'connection closed in a room, 7 d', true),
     tile1('Seats with humans', one(h => ({ ...graded(pct(h.fill), grade(h.fill, TARGETS.fill)), delta: h.fill !== undefined && hPrev.fill !== undefined ? [Math.round(h.fill * 100), Math.round(hPrev.fill * 100)] : undefined })), 'bots fill the rest, 7 d'),
     tile1('Humans / room', one(h => ({ v: h.humansPerRoom === undefined ? '—' : h.humansPerRoom.toFixed(1), sub: `${num(Math.round(h.roomMinutes / 60))} room-hours` })), 'average at once, 7 d'),
-    tile1('Idle kicks / join', one(h => ({ v: pct(h.kickRate), sub: `${num(h.kicks)}` })), 'removed after 45 s silent, 7 d'),
+    tile1('Kicks / join', one(h => ({ v: pct(h.kickRate), sub: `${num(h.kicks)} silent · ${num(h.afk)} AFK` })), 'removed: 45 s silent, or 90 s with no action, 7 d'),
     tile('Wait to match', per(ps => { if (!have('perf')) return undefined; const q = quality(ps, now - WEEK); return { v: secs(q.waitMs), sub: `median · ${num(q.waits)} player${q.waits === 1 ? '' : 's'}` }; }), 'Play pressed → in the match'),
   ];
 
@@ -833,10 +834,12 @@ function viralityCard(players: Player[]) {
     <p class="table-note">K-factor = players who arrived through a share and entered a room ÷ players. Above 1 the game spreads by itself; 0.3 makes sharing a real channel. ${num(v.referred)} player${v.referred === 1 ? '' : 's'} arrived through a share.</p>`);
 }
 
-/** This server's `admin_room_hour` rows (none until the view is there). */
+/** This server's `admin_room_hour` rows (none until the view is there), with `admin_afk_hour`'s AFK kicks where it has them. */
 function roomHourRows(): RoomHourOf[] {
   if (views.roomHours !== 'on' || !conn) return [];
-  return [...conn.db.adminRoomHour.iter()].map((r: RoomHour) => ({ ...r }));
+  const afk = new Map<number, number>();
+  if (views.afkHours === 'on') for (const r of conn.db.adminAfkHour.iter()) afk.set(r.hour, r.afk);
+  return [...conn.db.adminRoomHour.iter()].map((r: RoomHour) => ({ ...r, afk: afk.get(r.hour) ?? 0 }));
 }
 
 /** Human share of seats per bucket (bars) with drops per join (tick). */
@@ -851,7 +854,7 @@ function healthChart() {
     value: key => {
       const h = by.get(key);
       if (!h || h.fill === undefined) return undefined;
-      return { stack: [h.fill * 100], tick: h.dropRate !== undefined ? Math.min(100, h.dropRate * 100) : undefined, tip: { value: pct(h.fill), label: 'of seats had humans', detail: `${h.humansPerRoom?.toFixed(1) ?? '—'} per room · ${num(h.joins)} joins, ${num(h.drops)} drops (${pct(h.dropRate)}), ${num(h.kicks)} idle kicks` } };
+      return { stack: [h.fill * 100], tick: h.dropRate !== undefined ? Math.min(100, h.dropRate * 100) : undefined, tip: { value: pct(h.fill), label: 'of seats had humans', detail: `${h.humansPerRoom?.toFixed(1) ?? '—'} per room · ${num(h.joins)} joins, ${num(h.drops)} drops (${pct(h.dropRate)}), ${num(h.kicks + h.afk)} kicks` } };
     },
     axis: v => `${Math.round(v)}%`, legend: '<span><i class="g-all"></i>humans / seats</span><span><i class="line"></i>drops / join</span><span><i class="ref"></i>fill target</span>', dailyCoverage: false,
   });

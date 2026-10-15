@@ -228,21 +228,23 @@ export function virality(players: Iterable<GrowthPlayer>) {
 
 // ---- Server health -----------------------------------------------------------------------
 
-export interface RoomHourOf { hour: number; roomMinutes: number; seatMinutes: number; humanMinutes: number; botMinutes: number; joins: number; leaves: number; drops: number; kicks: number }
-export interface RoomHealth { roomMinutes: number; fill?: number; humansPerRoom?: number; joins: number; drops: number; kicks: number; leaves: number; dropRate?: number; kickRate?: number }
+/** A `room_hour` row; `afk` (AFK kicks) is missing from servers published before it. */
+export interface RoomHourOf { hour: number; roomMinutes: number; seatMinutes: number; humanMinutes: number; botMinutes: number; joins: number; leaves: number; drops: number; kicks: number; afk?: number }
+/** `kicks`: idle kicks (the client stopped reporting); `afk`: AFK kicks (no real action); `kickRate` counts both per join. */
+export interface RoomHealth { roomMinutes: number; fill?: number; humansPerRoom?: number; joins: number; drops: number; kicks: number; afk: number; leaves: number; dropRate?: number; kickRate?: number }
 
-/** Rooms over the hours from `from` to `to` (inclusive): human share of seats, humans per room, drops and idle kicks per join. */
+/** Rooms over the hours from `from` to `to` (inclusive): human share of seats, humans per room, drops and kicks (idle and AFK) per join. */
 export function roomHealth(rows: Iterable<RoomHourOf>, from: number, to: number): RoomHealth {
-  const t = { roomMinutes: 0, seatMinutes: 0, humanMinutes: 0, joins: 0, leaves: 0, drops: 0, kicks: 0 };
+  const t = { roomMinutes: 0, seatMinutes: 0, humanMinutes: 0, joins: 0, leaves: 0, drops: 0, kicks: 0, afk: 0 };
   for (const r of rows) {
     if (r.hour < from || r.hour > to) continue;
     t.roomMinutes += r.roomMinutes; t.seatMinutes += r.seatMinutes; t.humanMinutes += r.humanMinutes;
-    t.joins += r.joins; t.leaves += r.leaves; t.drops += r.drops; t.kicks += r.kicks;
+    t.joins += r.joins; t.leaves += r.leaves; t.drops += r.drops; t.kicks += r.kicks; t.afk += r.afk ?? 0;
   }
   return {
-    roomMinutes: t.roomMinutes, joins: t.joins, drops: t.drops, kicks: t.kicks, leaves: t.leaves,
+    roomMinutes: t.roomMinutes, joins: t.joins, drops: t.drops, kicks: t.kicks, afk: t.afk, leaves: t.leaves,
     fill: t.seatMinutes ? t.humanMinutes / t.seatMinutes : undefined, humansPerRoom: t.roomMinutes ? t.humanMinutes / t.roomMinutes : undefined,
-    dropRate: t.joins ? t.drops / t.joins : undefined, kickRate: t.joins ? t.kicks / t.joins : undefined,
+    dropRate: t.joins ? t.drops / t.joins : undefined, kickRate: t.joins ? (t.kicks + t.afk) / t.joins : undefined,
   };
 }
 

@@ -167,6 +167,8 @@ body.menu-open #hud, body.menu-open #hud * { visibility: hidden; }
 .progress .track i { display: block; height: 100%; background: var(--amber); }
 .toast { position: absolute; top: 128px; left: 50%; transform: translateX(-50%); padding: 7px 18px; font-weight: 600; font-size: 16px; text-transform: none; letter-spacing: 0.02em; max-width: calc(70 * var(--vw)); text-align: center; background: var(--panel); border: 1px solid var(--line); opacity: 0; transition: opacity 0.3s; }
 .toast.on { opacity: 1; }
+.afk { position: absolute; top: 172px; left: 50%; transform: translateX(-50%); padding: 8px 18px; font-weight: 700; font-size: 17px; text-transform: none; letter-spacing: 0.02em; max-width: calc(80 * var(--vw)); text-align: center; background: var(--panel); border: 1px solid var(--crimson); color: var(--ink); opacity: 0; transition: opacity 0.3s; pointer-events: none; }
+.afk.on { opacity: 1; }
 .announce { position: absolute; top: 30%; left: 50%; transform: translate(-50%, -50%); text-align: center; font-weight: 700; opacity: 0; white-space: nowrap; }
 .announce b { display: block; font-size: 46px; letter-spacing: 0.12em; text-shadow: 0 0 22px rgba(0, 0, 0, 0.85); }
 .announce small { font-size: 16px; letter-spacing: 0.3em; color: var(--ink); text-shadow: 0 1px 4px #000; }
