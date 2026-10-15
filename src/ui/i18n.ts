@@ -351,7 +351,7 @@ const en = {
   'invite.play': 'Play', 'invite.text': 'Come play Turf War: Taipei with me! Private room {code}: the link drops you right in 👇',
   'invite.sub': 'A private room, sent on LINE or Threads in one tap', 'invite.goal': 'Gold slipper {have}/{n}', 'invite.goalDone': 'Gold slipper unlocked',
   'invite.opening': 'Opening your private room…', 'invite.banner': 'A friend invited you!', 'invite.bannerBody': 'Private room {code}: join and you are in their match.',
-  'invite.join': 'Join', 'invite.gone': 'That room has closed. Quick Play finds you another.',
+  'invite.join': 'Join', 'invite.joinFriend': 'Join your friend', 'invite.gone': 'That room has closed. Quick Play finds you another.',
   // 珍奶 (shared/weapons.ts BOBA): a drink that heals
   'item.boba': 'Bubble Tea', 'item.bobaShort': 'Boba', 'tc.drink': 'Boba', 'store.boba': 'Drink: +{heal} health',
   'store.bobaTitle': 'Drink it when hurt: +{heal} health in {s} s, no shooting while you sip · {key}', 'store.oneBoba': 'You carry one bubble tea at a time; drink it to buy another',
@@ -685,7 +685,7 @@ const zhTW: Record<Key, string> = {
   'invite.play': '開始對戰', 'invite.text': '來《角頭械鬥》跟我一起打！私人房 {code}，點連結直接進來 👇',
   'invite.sub': '開一間私人房，一鍵傳 LINE / Threads', 'invite.goal': '金拖 {have}/{n}', 'invite.goalDone': '金拖已解鎖',
   'invite.opening': '私人房開房中…', 'invite.banner': '朋友邀你一起打！', 'invite.bannerBody': '私人房 {code}，按加入直接進朋友的對戰。',
-  'invite.join': '加入', 'invite.gone': '這間房已經關了，按快速遊戲幫你找別間。',
+  'invite.join': '加入', 'invite.joinFriend': '加入朋友的房間', 'invite.gone': '這間房已經關了，按快速遊戲幫你找別間。',
   'item.boba': '珍珠奶茶', 'item.bobaShort': '珍奶', 'tc.drink': '珍奶', 'store.boba': '喝了 +{heal} 血',
   'store.bobaTitle': '受傷時喝：{s} 秒回 {heal} 血，喝的時候不能開槍 · {key}', 'store.oneBoba': '一次只能帶一杯珍奶，喝掉才能再買',
   'hud.healed': '+{n} 血', 'hud.fullHealth': '血已經是滿的',

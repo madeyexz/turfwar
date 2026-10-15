@@ -24,8 +24,9 @@
     linear-gradient(180deg, rgba(5, 7, 9, 0.45) 0, rgba(5, 7, 9, 0) 120px);
 }
 /* A page dims and blurs the city behind it. */
-#menu::before { content: ''; position: absolute; inset: 0; z-index: -1; pointer-events: none; opacity: 0; background: rgba(5, 7, 9, 0.5); backdrop-filter: blur(14px); -webkit-backdrop-filter: blur(14px); transition: opacity 0.25s; }
-#menu:not([data-tab='quick'])::before { opacity: 1; }
+/* (Only on a page: a backdrop blur costs a full-screen read of the 3D canvas every frame, even while transparent.) */
+#menu::before { content: ''; position: absolute; inset: 0; z-index: -1; pointer-events: none; display: none; background: rgba(5, 7, 9, 0.5); backdrop-filter: blur(14px); -webkit-backdrop-filter: blur(14px); }
+#menu:not([data-tab='quick'])::before { display: block; }
 #menu :focus-visible { outline: 2px solid var(--accent); outline-offset: 3px; }
 #menu input:focus-visible { outline: none; }
 #menu .label { font-size: 11px; letter-spacing: 0.2em; color: var(--muted); font-weight: 700; text-transform: uppercase; white-space: nowrap; }
