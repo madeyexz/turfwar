@@ -26,6 +26,7 @@ export async function loadSegment(c: S3Client, key: string, sha256?: string): Pr
   return decodeSegment(new Uint8Array(Bun.zstdDecompressSync(zst)));
 }
 
+type InputBatch = ReturnType<typeof decodeBatch>;
 const DAY = 86_400_000;
 /** Per input session read in this run: its batch keys and the rooms and soldiers it covers (small; kept while the decoded batches come and go). */
 const SEEN = new Map<string, { keys: string[]; who: Set<string> }>();
@@ -48,10 +49,16 @@ export async function inputsFor(c: S3Client, prefix: string, pid: string, seg: S
     let batches = cache.get(base);
     if (!batches || !seen) {
       const batchKeys = (await listAll(c, base)).map(x => x.key).sort();
-      batches = [];
-      for (const k of batchKeys) {
-        try { batches.push(decodeBatch(new Uint8Array(Bun.gunzipSync(await getBytes(c, k))))); } catch { /* a broken batch is skipped */ }
-      }
+      // Eight reads at a time (each is a round trip to R2), kept in order; a broken batch is skipped.
+      const read = new Array<InputBatch | undefined>(batchKeys.length);
+      let next = 0;
+      await Promise.all(Array.from({ length: 8 }, async () => {
+        while (next < batchKeys.length) {
+          const i = next++;
+          try { read[i] = decodeBatch(new Uint8Array(Bun.gunzipSync(await getBytes(c, batchKeys[i])))); } catch { /* broken */ }
+        }
+      }));
+      batches = read.filter((b): b is InputBatch => !!b);
       cache.set(base, batches);
       SEEN.set(base, seen = { keys: batchKeys, who: new Set(batches.map(b => `${b.header.room}:${b.header.soldierId}`)) });
     }
