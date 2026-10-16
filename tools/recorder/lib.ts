@@ -27,6 +27,8 @@ export async function loadSegment(c: S3Client, key: string, sha256?: string): Pr
 }
 
 const DAY = 86_400_000;
+/** Per input session read in this run: its batch keys and the rooms and soldiers it covers (small; kept while the decoded batches come and go). */
+const SEEN = new Map<string, { keys: string[]; who: Set<string> }>();
 /**
  * The input sessions a subject sent from that room and soldier around the segment's time: the index lists
  * their sessions by day; each session's batches are read and joined in order.
@@ -35,19 +37,25 @@ export async function inputsFor(c: S3Client, prefix: string, pid: string, seg: S
   const days = new Set([-1, 0, 1].map(d => new Date(seg.header.startMs + d * DAY).toISOString().slice(0, 10)));
   const index = await listAll(c, `${prefix}/index/pid=${pid}/input-`);
   const found: { session: InputSession; keys: string[] }[] = [];
+  const who = `${seg.header.room}:${soldierId}`;
   for (const { key } of index) {
     const m = key.match(/input-(\d{4}-\d{2}-\d{2})-([0-9a-f]{24})\.json$/);
     if (!m || !days.has(m[1])) continue;
     const base = `${prefix}/input/dt=${m[1]}/pid=${pid}/s=${m[2]}/`;
+    // A session already read for another room or soldier is skipped without reading it again.
+    let seen = SEEN.get(base);
+    if (seen && !seen.who.has(who)) continue;
     let batches = cache.get(base);
-    const batchKeys = (await listAll(c, base)).map(x => x.key).sort();
-    if (!batches) {
+    if (!batches || !seen) {
+      const batchKeys = (await listAll(c, base)).map(x => x.key).sort();
       batches = [];
       for (const k of batchKeys) {
         try { batches.push(decodeBatch(new Uint8Array(Bun.gunzipSync(await getBytes(c, k))))); } catch { /* a broken batch is skipped */ }
       }
       cache.set(base, batches);
+      SEEN.set(base, seen = { keys: batchKeys, who: new Set(batches.map(b => `${b.header.room}:${b.header.soldierId}`)) });
     }
+    const batchKeys = seen.keys;
     const mine = batches.filter(b => b.header.room === seg.header.room && b.header.soldierId === soldierId);
     if (!mine.length) continue;
     mine.sort((a, b) => a.header.seq - b.header.seq);
