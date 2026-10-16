@@ -4,7 +4,7 @@
  */
 import type { S3Client } from 'bun';
 import { classify, decodeFrames, segmentChecks, type InputSession, type Quality, type SegmentChecks } from '../../shared/rec/clean';
-import { decodeBatch } from '../../shared/rec/inputlog';
+import { In, decodeBatch } from '../../shared/rec/inputlog';
 import { decodeSegment, type Segment } from '../../shared/rec/segment';
 import { getBytes, listAll } from './r2';
 
@@ -34,7 +34,7 @@ const DAY = 86_400_000;
 export async function inputsFor(c: S3Client, prefix: string, pid: string, seg: Segment, soldierId: number, cache = new Map<string, InputSession[]>()): Promise<{ sessions: InputSession[]; keys: string[] }> {
   const days = new Set([-1, 0, 1].map(d => new Date(seg.header.startMs + d * DAY).toISOString().slice(0, 10)));
   const index = await listAll(c, `${prefix}/index/pid=${pid}/input-`);
-  const sessions: InputSession[] = [], keys: string[] = [];
+  const found: { session: InputSession; keys: string[] }[] = [];
   for (const { key } of index) {
     const m = key.match(/input-(\d{4}-\d{2}-\d{2})-([0-9a-f]{24})\.json$/);
     if (!m || !days.has(m[1])) continue;
@@ -51,10 +51,29 @@ export async function inputsFor(c: S3Client, prefix: string, pid: string, seg: S
     const mine = batches.filter(b => b.header.room === seg.header.room && b.header.soldierId === soldierId);
     if (!mine.length) continue;
     mine.sort((a, b) => a.header.seq - b.header.seq);
-    sessions.push({ header: mine[0].header, records: mine.flatMap(b => b.records) });
-    keys.push(...batchKeys);
+    found.push({ session: { header: mine[0].header, records: mine.flatMap(b => b.records) }, keys: batchKeys });
   }
-  return { sessions, keys };
+  const chosen = ownSessions(found, seg);
+  return { sessions: chosen.map(x => x.session), keys: chosen.flatMap(x => x.keys) };
+}
+
+/**
+ * Soldier ids are reused (they wrap), so the same player may have had this room and id in another
+ * match. Keep the sessions that saw this segment's server ticks; when several did (ticks start again in
+ * every new room), the ones nearest in time. A client's clock may be off by hours, so time only breaks ties.
+ */
+function ownSessions<T extends { session: InputSession }>(found: T[], seg: Segment): T[] {
+  if (found.length < 2) return found;
+  const lo = seg.header.startTick - 30, hi = seg.header.endTick + 30;
+  const sees = found.filter(x => x.session.records.some(r => r.type === In.Frame && r.tick >= lo && r.tick <= hi));
+  if (sees.length < 2) return sees.length ? sees : found;
+  const off = (x: T) => {
+    const r = x.session.records, o = x.session.header.timeOrigin;
+    const from = o + (r[0]?.t ?? 0), to = o + (r[r.length - 1]?.t ?? 0);
+    return to < seg.header.startMs ? seg.header.startMs - to : from > seg.header.endMs ? from - seg.header.endMs : 0;
+  };
+  const best = Math.min(...sees.map(off));
+  return sees.filter(x => off(x) <= best + 3_600_000);
 }
 
 /** Classify every soldier of one segment (bots and excluded humans get their tier and no clean seconds). */

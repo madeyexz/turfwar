@@ -5,7 +5,7 @@ import { CLEAN_RULES } from './policy';
 import { Rec, recordJson, type Segment, type SegmentSoldier } from './segment';
 
 /**
- * The clean rules (`clean-v1`, docs/RECORDING.md "Clean"): which seconds of a recorded round are clean
+ * The clean rules (`clean-v2`, docs/RECORDING.md "Clean"): which seconds of a recorded round are clean
  * human play. The unit is one second of one recording subject alive in a live round; most rules drop the
  * whole subject-round. Two measures: **movement-clean** (every rule; touch aim assist allowed, its
  * per-frame correction is in the input log) and **aim-clean** (the same, but only mouse play or touch with
@@ -84,21 +84,80 @@ const quantile = (xs: number[], q: number) => { if (!xs.length) return NaN; cons
 
 export interface InputSession { header: InputHeader; records: InputRecord[] }
 
-/** Fit server tick = a + b · client time from the frames' arrival times; null without enough points. */
-export function clockFit(records: InputRecord[]): { a: number; b: number; residual: number } | null {
-  const seen = new Map<number, number>();
-  for (const r of records) if (r.type === In.Frame && r.tick > 0 && !seen.has(r.tick)) seen.set(r.tick, r.t - r.tickAgeMs);
-  const pts = [...seen].map(([tick, t]) => ({ tick, t }));
+/** How server ticks map to the client's clock: the server tick at client time `t` (ms), and how far the arrivals stray from that map (median, ticks). */
+export interface ClockFit { tickOf: (t: number) => number; residual: number; points: number }
+
+/** The clock fit's local window (ms each side) and knot spacing (ms). */
+const FIT_WINDOW = 2000, FIT_STEP = 500;
+
+/**
+ * Map client time to server ticks from the frames' arrival times (`t - tickAgeMs` of each new tick). The
+ * server does not tick at a steady 30 Hz (a busy tick runs late: 27–31 Hz over 10 s, dips near 20 Hz), so
+ * one straight line over a whole match strays by tens of ticks. Instead a line is fitted in a short window
+ * around every knot (slope by least squares, offset along the earliest arrivals, which come late by a
+ * varying delay) and the knots are joined. A tick that goes back (a new room) starts a new run. Null
+ * without enough points.
+ */
+export function clockFit(records: InputRecord[]): ClockFit | null {
+  const pts: { tick: number; t: number }[] = [];
+  let lastTick = -1;
+  for (const r of records) {
+    if (r.type !== In.Frame || r.tick <= 0 || r.tick === lastTick) continue;
+    lastTick = r.tick;
+    pts.push({ tick: r.tick, t: r.t - r.tickAgeMs });
+  }
   if (pts.length < 20) return null;
-  // Robust line: the slope from the server's 30 Hz (0.03 ticks/ms) refined by least squares, the offset by median.
-  const n = pts.length, mt = pts.reduce((s, p) => s + p.t, 0) / n, mk = pts.reduce((s, p) => s + p.tick, 0) / n;
-  let sxy = 0, sxx = 0;
-  for (const p of pts) { sxy += (p.t - mt) * (p.tick - mk); sxx += (p.t - mt) ** 2; }
-  const b = sxx > 0 ? sxy / sxx : 0.03;
-  // Arrivals come late by a varying delay: the line runs along the earliest arrivals (the largest tick for a time).
-  const a = quantile(pts.map(p => p.tick - b * p.t), 0.9);
-  const residual = median(pts.map(p => Math.abs(p.tick - (a + b * p.t))));
-  return { a, b, residual };
+  pts.sort((a, b) => a.t - b.t);
+  // Runs of rising ticks.
+  const runs: { tick: number; t: number }[][] = [];
+  let run: { tick: number; t: number }[] = [];
+  for (const p of pts) {
+    if (run.length && p.tick < run[run.length - 1].tick - 30) { runs.push(run); run = []; }
+    run.push(p);
+  }
+  runs.push(run);
+  const fits = runs.filter(r => r.length >= 20).map(fitRun);
+  if (!fits.length) return null;
+  const tickOf = (t: number) => {
+    // The run whose time span holds t, else the nearest one.
+    let best = fits[0], gap = Infinity;
+    for (const f of fits) { const g = t < f.from ? f.from - t : t > f.to ? t - f.to : 0; if (g < gap) { gap = g; best = f; } }
+    return best.at(t);
+  };
+  const residual = median(pts.map(p => Math.abs(p.tick - tickOf(p.t))));
+  return { tickOf, residual, points: pts.length };
+}
+
+/** One run's knots: a local line around each, evaluated at the knot; between knots, a straight join. */
+function fitRun(pts: { tick: number; t: number }[]) {
+  const from = pts[0].t, to = pts[pts.length - 1].t;
+  const knots: { t: number; tick: number; b: number }[] = [];
+  let lo = 0, hi = 0;
+  for (let kt = from; ; kt = Math.min(kt + FIT_STEP, to)) {
+    while (lo < pts.length && pts[lo].t < kt - FIT_WINDOW) lo++;
+    while (hi < pts.length && pts[hi].t <= kt + FIT_WINDOW) hi++;
+    const win = pts.slice(lo, hi);
+    if (win.length >= 5) {
+      const n = win.length, mt = win.reduce((s, p) => s + p.t, 0) / n, mk = win.reduce((s, p) => s + p.tick, 0) / n;
+      let sxy = 0, sxx = 0;
+      for (const p of win) { sxy += (p.t - mt) * (p.tick - mk); sxx += (p.t - mt) ** 2; }
+      // A short or flat window (a gap, a stall): the nominal 30 Hz.
+      const b = sxx > 0 && win[n - 1].t - win[0].t > 500 ? Math.max(0.01, Math.min(0.05, sxy / sxx)) : 0.03;
+      knots.push({ t: kt, tick: quantile(win.map(p => p.tick - b * (p.t - kt)), 0.9), b });
+    }
+    if (kt >= to) break;
+  }
+  if (!knots.length) { const b = 0.03; knots.push({ t: from, tick: quantile(pts.map(p => p.tick - b * (p.t - from)), 0.9), b }); }
+  const at = (t: number) => {
+    if (t <= knots[0].t) return knots[0].tick + knots[0].b * (t - knots[0].t);
+    const last = knots[knots.length - 1];
+    if (t >= last.t) return last.tick + last.b * (t - last.t);
+    let i = 0, j = knots.length - 1;
+    while (j - i > 1) { const m = (i + j) >> 1; if (knots[m].t <= t) i = m; else j = m; }
+    const k0 = knots[i], k1 = knots[j];
+    return k0.tick + (k1.tick - k0.tick) * (t - k0.t) / (k1.t - k0.t);
+  };
+  return { from, to, at };
 }
 
 /**
@@ -130,10 +189,15 @@ export function classify(d: Decoded, s: SegmentSoldier, inputs: InputSession[], 
   const mine = inputs.filter(i => i.header.db && i.header.soldierId === s.soldierId && i.header.room === h.room);
   const recs: InputRecord[] = [];
   let header: InputHeader | undefined;
-  for (const i of mine) for (const r of i.records) { header ??= i.header; recs.push(r); }
+  // Each page load has its own clock (performance.now() from its timeOrigin): put them all on the first one's.
+  const origin = mine[0]?.header.timeOrigin ?? 0;
+  for (const i of mine) {
+    const shift = (i.header.timeOrigin ?? origin) - origin;
+    for (const r of i.records) { header ??= i.header; recs.push(shift ? { ...r, t: r.t + shift } : r); }
+  }
   recs.sort((a, b) => a.t - b.t);
   const fit = clockFit(recs);
-  const tickOf = (t: number) => (fit ? fit.a + fit.b * t : NaN);
+  const tickOf = (t: number) => (fit ? fit.tickOf(t) : NaN);
   const inWindow = fit ? recs.filter(r => { const k = tickOf(r.t); return k >= first - 30 && k <= last + 30; }) : [];
   const frameRecs = inWindow.filter((r): r is Extract<InputRecord, { type: typeof In.Frame }> => r.type === In.Frame);
   const coveredTicks = new Set(frameRecs.map(r => Math.round(tickOf(r.t))));
@@ -172,7 +236,10 @@ export function classify(d: Decoded, s: SegmentSoldier, inputs: InputSession[], 
   // E9: integrity of aim (client aim against the server's, at the best lag) and of the clock.
   let aimErrorDeg: number | undefined;
   if (fit && frameRecs.length > 30) {
-    const server = new Map(poses.filter(p => p.alive).map(p => [p.tick, p]));
+    // In a vehicle the server's aim is the seat's (a driver faces the heading), not the camera the client logs.
+    const me = s.soldierId & 0x7fff;
+    const seated = new Set(d.frames.filter(f => f.vehicles.some(v => v.driver === me || v.passenger === me)).map(f => f.tick));
+    const server = new Map(poses.filter(p => p.alive && !seated.has(p.tick)).map(p => [p.tick, p]));
     let best = Infinity;
     for (let lag = 0; lag <= 15; lag++) {
       const errs: number[] = [];
