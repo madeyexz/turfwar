@@ -40,13 +40,16 @@ function recordRound(seconds: number) {
   return { seg, state };
 }
 
-/** A human-like input log for `id` that agrees with the server: each frame arrives 10 ms after its tick. */
-function inputsFor(seg: Segment, id: number, over: Partial<InputHeader> = {}): InputSession {
+/**
+ * A human-like input log for `id` that agrees with the server: each frame arrives 10 ms after its tick.
+ * `clock` gives the server's time of each tick (ms); by default a steady 30 Hz.
+ */
+function inputsFor(seg: Segment, id: number, over: Partial<InputHeader> = {}, clock = (tick: number) => tick * 1000 / 30): InputSession {
   const d = decodeFrames(seg);
   const w = new InputWriter(0);
   for (const f of d.frames) {
     const p = f.poses.find(q => q.id === id)!;
-    const t = f.tick * 1000 / 30 + 10;
+    const t = clock(f.tick) + 10;
     w.move(t - 5, 3, -1, true);
     w.rtt(t - 2, 60);
     w.frame(t, { lookX: 3, lookY: -1, scale: 0.002, assistYaw: 0, assistPitch: 0, assistScale: 1, yaw: p.yaw, pitch: p.pitch, alive: p.alive, tick: f.tick, tickAgeMs: 10 });
@@ -126,6 +129,28 @@ describe('clean rules', () => {
     expect(t.aimHours).toBeCloseTo(2 * mouse.clean / 3600, 9);
     expect(t.exportMovementHours).toBeCloseTo(2 * mouse.clean / 3600, 9);
     expect(t.byInput.touch).toBeCloseTo(phone.clean / 3600, 9);
+  });
+
+  it('follows a server whose tick rate drifts (27–31 Hz, a dip to 20 Hz), and a second page load\'s own clock', () => {
+    const { seg } = recordRound(40);
+    const d = decodeFrames(seg);
+    const id = seg.header.soldiers[0].soldierId;
+    const human = { ...seg.header.soldiers[0], bot: false, pid: 'p1', device: 'desktop' };
+    // Tick length (ms) wanders around 33.3 and stretches to 50 (20 Hz) for a few seconds: a straight line strays by many ticks.
+    const start = seg.header.startTick, at: number[] = [];
+    for (let k = 0, t = 0; k <= seg.header.endTick - start + 1; k++) { at.push(t); const s = k / 30; t += s > 15 && s < 22 ? 50 : 1000 / (29 + 2 * Math.sin(s / 3)); }
+    const drifting = inputsFor(seg, id, {}, tick => 5e5 + at[tick - start]);
+    const q = classify(d, human, [drifting], 'k');
+    expect(q.checks.clockResidual).toBeLessThan(1);
+    expect(q.checks.aimErrorDeg).toBeLessThan(0.5);
+    expect(q.dropped).not.toHaveProperty('E9');
+    expect(q.clean).toBeGreaterThan(20);
+    // The same log split over two page loads, each counting from its own timeOrigin.
+    const half = Math.floor(drifting.records.length / 2), mid = drifting.records[half].t;
+    const later = { header: { ...drifting.header, session: 's2', timeOrigin: drifting.header.timeOrigin + mid }, records: drifting.records.slice(half).map(r => ({ ...r, t: r.t - mid })) };
+    const split = classify(d, human, [{ ...drifting, records: drifting.records.slice(0, half) }, later], 'k');
+    expect(split.clean).toBeCloseTo(q.clean, 5);
+    expect(split.checks.aimErrorDeg).toBeLessThan(0.5);
   });
 
   it('drops a round with a bad round trip, a bad aim match, or no input log', () => {
