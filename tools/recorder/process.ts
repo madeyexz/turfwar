@@ -10,7 +10,7 @@
  */
 import { mkdirSync, existsSync, readFileSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
-import { TARGETS, totals, type Quality } from '../../shared/rec/clean';
+import { TARGETS, totals, type InputSession, type Quality } from '../../shared/rec/clean';
 import { CLEAN_RULES, KEEP_DAYS, UNUSABLE_KEEP_DAYS, recPrefix, type RecEnv } from '../../shared/rec/policy';
 import { qualityKey, qualityOf, loadSegment, type Manifest, type QualityFile } from './lib';
 import { getJson, listAll, putChecked, r2 } from './r2';
@@ -40,7 +40,18 @@ async function readQuality(qkey: string): Promise<QualityFile | undefined> {
 const stale = new Set<string>();
 for (const qkey of done) if ((await readQuality(qkey))?.rules !== CLEAN_RULES) stale.add(qkey);
 let processed = 0, failed = 0;
-const inputCache = new Map();
+/**
+ * Decoded input sessions, shared by neighbouring segments; only the latest few are kept (the service has
+ * 400 MB, and a reprocess of every segment after a rules change would otherwise hold every session).
+ */
+class RecentSessions<K, V> extends Map<K, V> {
+  override set(k: K, v: V) {
+    super.delete(k); super.set(k, v);
+    while (this.size > 24) this.delete(this.keys().next().value as K);
+    return this;
+  }
+}
+const inputCache = new RecentSessions<string, InputSession[]>();
 for (const { key, lastModified } of manifests) {
   const qkey = qualityKey(key);
   if (done.has(qkey) && !reprocess && !stale.has(qkey)) continue;
