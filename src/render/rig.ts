@@ -101,11 +101,12 @@ export function restorePose(bones: Bones, pose: Map<string, THREE.Quaternion>, f
 /**
  * How a keyframed segment moves into its key: `in` speeds up all the way (a strike, fastest at the
  * blow), `out` slows into it (a wind-up settling at its peak, a follow-through running out), `io`
- * eases both ends (recovering to guard), `hold` stays on the previous key until the segment ends.
+ * eases both ends (recovering to guard), `lin` keeps a steady speed (carrying a strike's speed on
+ * into the blow), `hold` stays on the previous key until the segment ends.
  */
-export type Ease = 'in' | 'out' | 'io' | 'hold';
+export type Ease = 'in' | 'out' | 'io' | 'lin' | 'hold';
 export function eased(ease: Ease, t: number) {
-  return ease === 'in' ? t * t : ease === 'out' ? 1 - (1 - t) * (1 - t) : ease === 'hold' ? (t < 1 ? 0 : 1) : t * t * (3 - 2 * t);
+  return ease === 'in' ? t * t : ease === 'out' ? 1 - (1 - t) * (1 - t) : ease === 'lin' ? t : ease === 'hold' ? (t < 1 ? 0 : 1) : t * t * (3 - 2 * t);
 }
 
 /** A keyframe: [time 0..1, values, ease into it (default io)]. */

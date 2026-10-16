@@ -246,10 +246,20 @@ const v5 = new THREE.Vector3(), v6 = new THREE.Vector3();
  */
 /** The knife: [thrust (0 guard, 1 full reach), torso turn]. */
 const STAB_KEYS: Keyframe[] = [[0, [0, 0]], [0.22, [-0.15, -0.15], 'out'], [0.28, [-0.18, -0.17]], [0.4, [1, 0.1], 'in'], [0.6, [0.7, 0.05], 'out'], [1, [0, 0]]];
-/** The 藍白拖: [out to the right (m), raised (m), sole's turn (rad), torso turn, reach forward (m)]: cocked back by the ear, then whipped across. */
+/**
+ * The 藍白拖, as an arm movement: [hand out to the right (m), raised (m), torso turn, reach forward
+ * (m), elbow lifted (0 down by the side, 1 out at shoulder height)]: the elbow comes up and the hand
+ * goes back by the ear, bent, then the arm unfolds across the chest and the elbow drops. The wrist is
+ * on its own track (SLAP_TURN): it trails the hand and snaps over at the blow.
+ */
 const SLAP_KEYS: Keyframe[] = [
-  [0, [0, 0, 0, 0, 0]], [0.2, [0.36, 0.3, -1.4, -0.4, -0.22], 'out'], [0.26, [0.38, 0.32, -1.5, -0.44, -0.25]],
-  [0.41, [0, 0.12, 0, 0.15, 0.14], 'in'], [0.64, [-0.3, -0.02, 1.25, 0.38, 0.02], 'out'], [1, [0, 0, 0, 0, 0]],
+  [0, [0, 0, 0, 0, 0]], [0.2, [0.16, 0.4, -0.4, -0.28, 1], 'out'], [0.27, [0.18, 0.42, -0.44, -0.3, 1.05]],
+  [0.34, [0.18, 0.2, -0.1, 0.06, 0.6], 'in'], [0.39, [0, 0.12, 0.15, 0.14, 0.3], 'lin'], [0.6, [-0.3, -0.02, 0.38, 0.02, 0], 'out'], [1, [0, 0, 0, 0, 0]],
+];
+/** The wrist through the slap: [the sole's turn about the forearm, the slipper cocked up and back (rad)]. */
+const SLAP_TURN: Keyframe[] = [
+  [0, [0, 0]], [0.2, [-1.4, 1.3], 'out'], [0.27, [-1.5, 1.4]], [0.34, [-1.1, 0.9], 'in'], [0.39, [0, 0], 'in'], [0.46, [0.5, -0.15], 'out'],
+  [0.6, [1.25, -0.25]], [1, [0, 0]],
 ];
 /** The 掃把: [chop (rad: -1.05 standing up, more lifted back, positive down in front), forward bend of the torso]. */
 const CHOP_KEYS: Keyframe[] = [
@@ -629,7 +639,10 @@ export class SoldierView {
     // whipped flat across the chest. The 掃把: lifted back over the head, then brought down flat in
     // front. Each swing turns (or bends) the torso behind it.
     const [thrust, kTorso] = skin === 'knife' && swinging ? sampleKeys(STAB_KEYS, u) : [0, 0];
-    const [side, slapLift, slapAngle, sTorso, reach] = slapping ? sampleKeys(SLAP_KEYS, u) : [0, 0, 0, 0, 0];
+    const [side, slapLift, sTorso, reach, elbowLift] = slapping ? sampleKeys(SLAP_KEYS, u) : [0, 0, 0, 0, 0];
+    const [slapAngle, cock] = slapping ? sampleKeys(SLAP_TURN, u) : [0, 0];
+    // The cocked wrist tips the slipper and the hand together about the grip.
+    const wrist = new THREE.Quaternion().setFromAxisAngle(right, cock);
     const [chop, stoop] = broom ? (swinging ? sampleKeys(CHOP_KEYS, u) : CHOP_KEYS[0][1]) : [0, 0];
     const lift = slapping ? slapLift : broom ? 0.06 + Math.max(0, -chop - 1.05) * 0.12 : 0;
     if (kTorso || sTorso) { rotateWorld(spine2, up, (kTorso + sTorso) * 0.5); rotateWorld(spine3, up, (kTorso + sTorso) * 0.5); }
@@ -648,7 +661,7 @@ export class SoldierView {
     const basis = new THREE.Matrix4().makeBasis(fwd.clone().negate(), gunUp, new THREE.Vector3().crossVectors(fwd.clone().negate(), gunUp));
     q1.setFromRotationMatrix(basis);
     if (broom) q1.multiply(q2.setFromEuler(new THREE.Euler(Math.PI / 2, 0, chop, 'ZYX')));
-    else if (knife) q1.multiply(q2.setFromEuler(new THREE.Euler(0, slapAngle, -0.35 + thrust * 0.3)));
+    else if (knife) q1.multiply(q2.setFromEuler(new THREE.Euler(0, slapAngle, -0.35 + thrust * 0.3))).premultiply(wrist);
     if (lowReady) q1.multiply(q2.setFromEuler(new THREE.Euler(0.5, 0.6, 0)));
     this.gun.quaternion.copy(q1);
     this.gun.position.copy(gripPos).sub(grip.clone().applyQuaternion(q1));
@@ -664,11 +677,13 @@ export class SoldierView {
       const t = Math.sin(Math.min(1, p.reloading) * Math.PI);
       foreWorld = foreWorld.lerp(chest.clone().addScaledVector(gunUp, -0.25).addScaledVector(right, -0.05), t * 0.8);
     }
-    const pole = (sign: number) => chest.clone().addScaledVector(right, sign * 0.7).addScaledVector(up, -0.9).addScaledVector(fwd, sign > 0 ? -0.3 : 0.1);
+    // The slap lifts the right elbow out to the side; otherwise elbows hang down and back.
+    const pole = (sign: number) => chest.clone().addScaledVector(right, sign * 0.7 + (sign > 0 ? elbowLift * 0.2 : 0))
+      .addScaledVector(up, -0.9 + (sign > 0 ? elbowLift * 1.5 : 0)).addScaledVector(fwd, sign > 0 ? -0.3 : 0.1);
     this.debug = { chest: chest.clone(), grip: gripWorld.clone(), fore: foreWorld.clone() };
     solveArm(this.bones, 'r', gripWorld, pole(1));
     solveArm(this.bones, 'l', foreWorld, pole(-1));
-    orientHand(this.bones, 'r', fwd.clone().addScaledVector(gunUp, -0.8).normalize(), right.clone().negate());
+    orientHand(this.bones, 'r', fwd.clone().addScaledVector(gunUp, -0.8).normalize().applyQuaternion(wrist), right.clone().negate().applyQuaternion(wrist));
     orientHand(this.bones, 'l', knife ? fwd.clone().addScaledVector(gunUp, 0.5).normalize() : fwd.clone().addScaledVector(right, 0.3).normalize(), knife ? right : gunUp);
     const curl = this.crew ? CREW_CURL : 1;
     curlFingers(this.bones, 'r', (knife ? 0.85 : 0.55) * curl, 0.5);
