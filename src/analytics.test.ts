@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { analyticsGuard, privateErrorProperties, screenBucket } from './analytics';
+import { analyticsGuard, privateErrorProperties, screenBucket, stayTimes, stayVisibility, type StayClock } from './analytics';
 
 const KEY = 'phc_test';
 const prod = { key: KEY, dev: false, search: '', webdriver: false };
@@ -53,4 +53,15 @@ describe('analytics guard', () => {
     expect(screenBucket(1920, 1080)).toBe('1900x1100');
     expect(screenBucket(390, 844)).toBe('400x800');
   });
+});
+
+it('a stay counts only the time its tab was in view as play time', () => {
+  // Joined at 10 s, hidden 70–3670 s (an hour in the background), back in view, hidden again at 3700 s for good.
+  const c: StayClock = { start: 10_000, hiddenMs: 0 };
+  stayVisibility(c, true, 70_000);
+  stayVisibility(c, true, 80_000); // a repeated "hidden" does not restart the stretch
+  stayVisibility(c, false, 3_670_000);
+  expect(stayTimes(c, 3_690_000)).toEqual({ seconds: 80, hidden: 3600 });
+  stayVisibility(c, true, 3_700_000);
+  expect(stayTimes(c, 3_760_000)).toEqual({ seconds: 90, hidden: 3660 });
 });
