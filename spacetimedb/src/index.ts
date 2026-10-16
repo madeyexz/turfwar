@@ -41,8 +41,8 @@ import { AdminError, bumpPeak, dailyNetRows, playerMilestoneRows, playerPerfRows
  */
 /** Highest room id (rooms are u8 keys of the match, clock and frame tables). */
 const MAX_ROOMS = 250;
-/** Soldier and body ids are global (frames carry them as u16): wrap well before that. */
-const MAX_ID = 60_000;
+/** Soldier and body ids are global. Frames carry vehicle seats and the bomb carrier as 15-bit ids (shared/match/frame.ts): wrap before 32767. */
+const MAX_ID = 32_000;
 /** Chat lines one player may send per 10 seconds. */
 const CHAT_BURST = 5;
 /** Queued commands one soldier may have applied per tick; anything beyond is spam. */
