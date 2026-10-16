@@ -3,10 +3,10 @@ import { RoundedBoxGeometry } from 'three/examples/jsm/geometries/RoundedBoxGeom
 import { mergeGeometries } from 'three/examples/jsm/utils/BufferGeometryUtils.js';
 import * as SkeletonUtils from 'three/examples/jsm/utils/SkeletonUtils.js';
 import { weaponModel, type Assets } from '../assets';
-import { DEFAULT_SKIN, isSlipper, MILITIA_LOOKS, type KnifeSkin, type Skin } from '../../shared/skins';
+import { DEFAULT_SKIN, isSlipper, MILITIA_LOOKS, SWING, type KnifeSkin, type Skin } from '../../shared/skins';
 import { dirFromAngles } from '../../shared/math';
 import { riderTwist } from '../../shared/vehicles';
-import { curlFingers, orientHand, restorePose, rotateWorld, snapshotPose, solveArm, solveLimb } from './rig';
+import { curlFingers, orientHand, restorePose, rotateWorld, sampleKeys, snapshotPose, solveArm, solveLimb, type Keyframe } from './rig';
 import { ATTACHMENT_SLOTS, WEAPONS, type Attachments, type WeaponId } from '../../shared/weapons';
 import { GUN_FIT, fitAttachments, vec, type Fitted } from './optics';
 import { BROOM_CHOKE } from './meme';
@@ -236,6 +236,41 @@ const LOD_INTERVAL = [1, 2, 4, 8] as const;
 
 const up = new THREE.Vector3(0, 1, 0);
 const v1 = new THREE.Vector3(), v2 = new THREE.Vector3(), v3 = new THREE.Vector3(), v4 = new THREE.Vector3(), q1 = new THREE.Quaternion(), q2 = new THREE.Quaternion();
+const v5 = new THREE.Vector3(), v6 = new THREE.Vector3();
+
+/**
+ * Third-person swings ([time 0..1 of SWING[skin].time, values, ease in]), on the same beats as the
+ * first-person ones: wind-up, a short creep further back, a strike speeding up into the blow (just
+ * after SWING contact), a follow-through running out, and back to guard. Torso turns are radians
+ * (positive turns left).
+ */
+/** The knife: [thrust (0 guard, 1 full reach), torso turn]. */
+const STAB_KEYS: Keyframe[] = [[0, [0, 0]], [0.22, [-0.15, -0.15], 'out'], [0.28, [-0.18, -0.17]], [0.4, [1, 0.1], 'in'], [0.6, [0.7, 0.05], 'out'], [1, [0, 0]]];
+/** The 藍白拖: [out to the right (m), raised (m), sole's turn (rad), torso turn, reach forward (m)]: cocked back by the ear, then whipped across. */
+const SLAP_KEYS: Keyframe[] = [
+  [0, [0, 0, 0, 0, 0]], [0.2, [0.36, 0.3, -1.4, -0.4, -0.22], 'out'], [0.26, [0.38, 0.32, -1.5, -0.44, -0.25]],
+  [0.41, [0, 0.12, 0, 0.15, 0.14], 'in'], [0.64, [-0.3, -0.02, 1.25, 0.38, 0.02], 'out'], [1, [0, 0, 0, 0, 0]],
+];
+/** The 掃把: [chop (rad: -1.05 standing up, more lifted back, positive down in front), forward bend of the torso]. */
+const CHOP_KEYS: Keyframe[] = [
+  [0, [-1.05, 0]], [0.26, [-1.9, 0.1], 'out'], [0.33, [-2.0, 0.12]], [0.55, [0.2, -0.22], 'in'], [0.74, [0.45, -0.25], 'out'], [1, [-1.05, 0]],
+];
+
+/** A damped spring a hit kicks: it swings past rest once and settles, the way a body gives and recovers. */
+class Give {
+  value = 0; velocity = 0;
+  constructor(private stiffness: number, private damping: number) {}
+  kick(velocity: number) { this.velocity += velocity; }
+  update(dt: number) {
+    // Small steps: reduced-rate (distant) soldiers update with long frames.
+    for (let left = Math.min(dt, 0.25); left > 0; left -= 1 / 120) {
+      const h = Math.min(left, 1 / 120);
+      this.velocity += (-this.stiffness * this.value - this.damping * this.velocity) * h;
+      this.value += this.velocity * h;
+    }
+    if (Math.abs(this.value) < 1e-4 && Math.abs(this.velocity) < 1e-3) this.value = this.velocity = 0;
+  }
+}
 const attachKey = (a: Attachments = {}) => ATTACHMENT_SLOTS.map(c => a[c] ?? '').join('|');
 
 /** A fully animated third-person soldier (remote players and bots). */
@@ -267,9 +302,14 @@ export class SoldierView {
   private currentGun?: WeaponId;
   private muzzle = new THREE.Object3D();
   private wasAlive = true;
-  private flinch = 0;
-  private flinchDir = 1;
-  private flinchStrength = 1;
+  /**
+   * How the body gives under hits: springs that swing past rest once and settle. The head is stiff
+   * and snaps; the torso is heavier and sways back slower; the shove settles slowest.
+   */
+  private give = { lean: new Give(90, 8.5), twist: new Give(120, 10), head: new Give(260, 15), stagger: new Give(70, 11) };
+  /** Which way the last blow pushed the body and snapped the head (world, horizontal). */
+  private pushDir = new THREE.Vector3(0, 0, 1);
+  private headDir = new THREE.Vector3(0, 0, 1);
   private legYaw = 0;
   private recoil = 0;
   private stab = 0;
@@ -381,10 +421,28 @@ export class SoldierView {
     for (const l of sides) solveLimb(l.thigh, l.calf, l.foot, l.target, l.thigh.getWorldPosition(v1).addScaledVector(forward, 1));
   }
 
-  /** Struck: the torso twists away (`strength` 1 for a bullet; a knife skin's blow also rocks it back and snaps the head). */
-  hit(fromLeft: boolean, strength = 1) {
-    if (this.flinch <= 0.3 || strength >= this.flinchStrength) { this.flinchStrength = strength; this.flinchDir = fromLeft ? 1 : -1; }
-    this.flinch = 1;
+  /** Shot: the torso twists away and springs back. */
+  hit(fromLeft: boolean) { this.give.twist.kick(fromLeft ? 2.8 : -2.8); }
+
+  /**
+   * Struck by a knife skin swung from `from` (world x, z), its blade or sole sweeping along `sweep`
+   * (world, horizontal; zero for a straight chop or thrust): the body is shoved away and rocks back
+   * from the waist, the chest turns with the sweep, and the head snaps along it, all springing back
+   * with a little overshoot. Visual only: the hit volume and the server's position do not move.
+   */
+  struck(from: { x: number; z: number }, sweep: { x: number; z: number }) {
+    const d = this.pushDir.set(this.root.position.x - from.x, 0, this.root.position.z - from.z);
+    if (d.lengthSq() < 1e-6) d.set(0, 0, 1);
+    d.normalize();
+    const s = v5.set(sweep.x, 0, sweep.z);
+    if (s.lengthSq() > 1e-6) s.normalize();
+    // Peaks: about 16° of lean, 17° of turn, 22° of head snap and 12 cm of shove.
+    this.give.lean.kick(4.4);
+    this.give.stagger.kick(2.2);
+    // The front of the chest is carried along the sweep: turning by φ moves it by -φ (up × d).
+    this.give.twist.kick(-s.dot(v6.crossVectors(up, d)) * 5.7);
+    this.headDir.copy(d).multiplyScalar(0.6).add(s).normalize();
+    this.give.head.kick(11);
   }
   /** A shot (no flash when suppressed), or a knife stab. */
   shoot() {
@@ -540,34 +598,42 @@ export class SoldierView {
     rotateWorld(this.bones.get('Head')!, up, -blade * 0.4);
     rotateWorld(spine2, bend, pitch * 0.35);
     rotateWorld(spine3, bend, pitch * 0.35);
-    this.flinch = Math.max(0, this.flinch - dt * 5);
-    if (this.flinch > 0) {
-      rotateWorld(spine3, up, this.flinch * 0.25 * this.flinchDir * Math.min(this.flinchStrength, 1.6));
-      const heavy = this.flinchStrength - 1;
-      if (heavy > 0) {
-        // Rocked back from the waist, the head snapped round with the blow.
-        rotateWorld(spine2, right, this.flinch * 0.22 * heavy);
-        rotateWorld(this.bones.get('Head')!, up, this.flinch * 0.35 * heavy * this.flinchDir);
-      }
+    // ---- Hit reactions: shoved and rocked back from the waist, chest turned, head snapped, then settling ----
+    const give = this.give;
+    for (const g of Object.values(give)) g.update(dt);
+    if (give.lean.value) {
+      const away = v5.crossVectors(up, this.pushDir).normalize();
+      rotateWorld(spine1, away, give.lean.value * 0.45);
+      rotateWorld(spine2, away, give.lean.value * 0.55);
     }
+    if (give.twist.value) rotateWorld(spine3, up, give.twist.value);
+    if (give.stagger.value) this.root.position.addScaledVector(this.pushDir, give.stagger.value);
     rotateWorld(this.bones.get('neck_01')!, bend, pitch * 0.3);
+    if (give.head.value) {
+      const head = this.bones.get('Head')!;
+      rotateWorld(head, v5.crossVectors(up, this.headDir).normalize(), give.head.value);
+      rotateWorld(head, up, give.twist.value * 0.8);
+    }
 
     // ---- Weapon placement ----
     this.showGun(p.weapon, p.attachments);
     this.gun.visible = true;
     const knife = fit.kind === 'knife';
     this.recoil = Math.max(0, this.recoil - dt * 12);
-    this.stab = Math.max(0, this.stab - dt * 3.2);
-    // Stab: a quick thrust out and back (peaks early).
-    const skin = knife ? this.knifeSkin : undefined, swinging = this.stab > 0;
+    // A swing runs over its skin's SWING time and lands at its contact, as the striker's own view does.
+    const skin = knife ? this.knifeSkin : undefined;
+    this.stab = Math.max(0, this.stab - dt / SWING[skin ?? 'knife'].time);
+    const swinging = this.stab > 0, u = swinging ? 1 - this.stab : 0;
     const slapping = !!skin && isSlipper(skin) && swinging, broom = skin === 'broom';
-    const thrust = swinging && skin === 'knife' ? Math.sin((1 - this.stab) * Math.PI) ** 0.7 : 0;
-    // The 藍白拖 slaps instead: raised out to the right, then swept flat across the chest.
-    const arc = slapping ? (1 - this.stab) * Math.PI : 0, side = slapping ? Math.cos(arc) * 0.24 : 0;
-    // The 掃把 stands up at guard; the swat lifts it back over the head and brings it down flat in front.
-    const u = broom && swinging ? 1 - this.stab : 0;
-    const chop = broom ? (u < 0.35 ? -1.05 - (u / 0.35) * 0.9 : u < 0.75 ? -1.95 + ((u - 0.35) / 0.4) * 2.4 : 0.45 - ((u - 0.75) / 0.25) * 1.5) : 0;
-    const lift = slapping ? Math.sin(arc) * 0.14 : broom ? 0.06 + Math.max(0, -chop - 1.05) * 0.12 : 0;
+    // The knife: drawn back, then thrust out and back. The 藍白拖: cocked out to the right, then
+    // whipped flat across the chest. The 掃把: lifted back over the head, then brought down flat in
+    // front. Each swing turns (or bends) the torso behind it.
+    const [thrust, kTorso] = skin === 'knife' && swinging ? sampleKeys(STAB_KEYS, u) : [0, 0];
+    const [side, slapLift, slapAngle, sTorso, reach] = slapping ? sampleKeys(SLAP_KEYS, u) : [0, 0, 0, 0, 0];
+    const [chop, stoop] = broom ? (swinging ? sampleKeys(CHOP_KEYS, u) : CHOP_KEYS[0][1]) : [0, 0];
+    const lift = slapping ? slapLift : broom ? 0.06 + Math.max(0, -chop - 1.05) * 0.12 : 0;
+    if (kTorso || sTorso) { rotateWorld(spine2, up, (kTorso + sTorso) * 0.5); rotateWorld(spine3, up, (kTorso + sTorso) * 0.5); }
+    if (stoop) { rotateWorld(spine2, right, stoop * 0.5); rotateWorld(spine3, right, stoop * 0.5); }
     const chest = spine3.getWorldPosition(v1);
     const aimDir = dirFromAngles(p.yaw, pitch);
     const fwd = v2.set(aimDir.x, aimDir.y, aimDir.z);
@@ -577,12 +643,12 @@ export class SoldierView {
     const gripPos = chest.clone()
       .addScaledVector(right, knife ? 0.16 + side : pistol ? 0.04 : 0.12)
       .addScaledVector(gunUp, knife ? -0.08 + thrust * 0.06 + lift : pistol ? 0.08 : 0.0 - lowReady * 0.12)
-      .addScaledVector(fwd, (knife ? 0.3 + thrust * 0.38 + lift * 1.2 : pistol ? 0.44 : 0.3) - this.recoil * 0.06 - lowReady * 0.1);
+      .addScaledVector(fwd, (knife ? 0.3 + thrust * 0.38 + (slapping ? reach : lift * 1.2) : pistol ? 0.44 : 0.3) - this.recoil * 0.06 - lowReady * 0.1);
     // Gun basis: barrel (-X model) along fwd, +Y up; the knife points a little upward.
     const basis = new THREE.Matrix4().makeBasis(fwd.clone().negate(), gunUp, new THREE.Vector3().crossVectors(fwd.clone().negate(), gunUp));
     q1.setFromRotationMatrix(basis);
     if (broom) q1.multiply(q2.setFromEuler(new THREE.Euler(Math.PI / 2, 0, chop, 'ZYX')));
-    else if (knife) q1.multiply(q2.setFromEuler(new THREE.Euler(0, slapping ? Math.cos(arc) * -1.1 : 0, -0.35 + thrust * 0.3)));
+    else if (knife) q1.multiply(q2.setFromEuler(new THREE.Euler(0, slapAngle, -0.35 + thrust * 0.3)));
     if (lowReady) q1.multiply(q2.setFromEuler(new THREE.Euler(0.5, 0.6, 0)));
     this.gun.quaternion.copy(q1);
     this.gun.position.copy(gripPos).sub(grip.clone().applyQuaternion(q1));

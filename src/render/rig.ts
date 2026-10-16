@@ -97,3 +97,27 @@ export function snapshotPose(bones: Bones) {
 export function restorePose(bones: Bones, pose: Map<string, THREE.Quaternion>, filter?: (name: string) => boolean) {
   for (const [name, q] of pose) if (!filter || filter(name)) bones.get(name)!.quaternion.copy(q);
 }
+
+/**
+ * How a keyframed segment moves into its key: `in` speeds up all the way (a strike, fastest at the
+ * blow), `out` slows into it (a wind-up settling at its peak, a follow-through running out), `io`
+ * eases both ends (recovering to guard), `hold` stays on the previous key until the segment ends.
+ */
+export type Ease = 'in' | 'out' | 'io' | 'hold';
+export function eased(ease: Ease, t: number) {
+  return ease === 'in' ? t * t : ease === 'out' ? 1 - (1 - t) * (1 - t) : ease === 'hold' ? (t < 1 ? 0 : 1) : t * t * (3 - 2 * t);
+}
+
+/** A keyframe: [time 0..1, values, ease into it (default io)]. */
+export type Keyframe = [number, number[], Ease?];
+
+/** The values of `keys` at time `t` (0..1), each segment eased as its end key says. */
+export function sampleKeys(keys: readonly Keyframe[], t: number, out: number[] = []) {
+  let i = 0;
+  while (i < keys.length - 2 && t > keys[i + 1][0]) i++;
+  const [t0, a] = keys[i], [t1, b, ease = 'io'] = keys[i + 1];
+  const k = eased(ease, Math.max(0, Math.min(1, (t - t0) / (t1 - t0))));
+  for (let j = 0; j < a.length; j++) out[j] = a[j] + (b[j] - a[j]) * k;
+  out.length = a.length;
+  return out;
+}

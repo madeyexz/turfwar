@@ -109,8 +109,6 @@ export class LocalPlayer {
   landDip = 0;
   stepOffset = 0;
   shake = 0;
-  /** Degrees the view zooms in for a moment when a blow lands (decays to 0). */
-  fovPunch = 0;
   bobPhase = 0;
   sensitivity = 0.0022;
   /** Scoped snipers: 0 = first magnification, 1 = second (wheel or Z while aiming). */
@@ -403,7 +401,6 @@ export class LocalPlayer {
     if (result.move.stepped > 0) this.stepOffset -= result.move.stepped;
     this.stepOffset *= Math.exp(-dt * 16);
     this.shake *= Math.exp(-dt * 6);
-    this.fovPunch *= Math.exp(-dt * 11);
     const speed = Math.hypot(this.m.vx, this.m.vz);
     if (this.m.grounded && this.m.slideTime <= 0) this.bobPhase += dt * speed * (this.sprinting ? 1.5 : 1.75);
     return result;

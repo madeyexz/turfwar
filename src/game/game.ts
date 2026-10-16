@@ -46,7 +46,7 @@ import { challengeUrl, inviteUrl, shareRef } from './challenge';
 import { MatchTally, type MatchSummary } from './matchstats';
 import { openSharePanel } from '../ui/sharepanel';
 import { mySkin } from './skins';
-import { SWING, skinOf } from '../../shared/skins';
+import { SWING, isSlipper, skinOf, type KnifeSkin } from '../../shared/skins';
 import { TouchControls, type TouchInfo } from '../ui/touchcontrols';
 import { holdAimMode } from './holdfire';
 import { onTouchLayout, touchActive, touchAimAssist, type TouchContext } from './touchlayout';
@@ -65,8 +65,8 @@ const LOD_NEAR = 30, LOD_MID = 70;
 const SHOT_FX_RANGE = 110, SHOT_AUDIO_RANGE = 85;
 /** Least time (ms) between hit markers for one opponent burning in this player's fire. */
 const BURN_MARK_EVERY = 500;
-/** How hard a soldier struck by a knife skin flinches, against 1 for a bullet. */
-const MELEE_FLINCH = 2.4;
+/** Which way (world x, z) a knife skin's swing sweeps when swung facing `yaw`: a slap whips right to left; a chop or thrust goes straight in. */
+const sweepOf = (skin: KnifeSkin, yaw: number) => isSlipper(skin) ? { x: -Math.cos(yaw), z: Math.sin(yaw) } : { x: 0, z: 0 };
 const frustum = new THREE.Frustum(), projScreen = new THREE.Matrix4(), lodSphere = new THREE.Sphere(new THREE.Vector3(), 1.3);
 
 /** `peek`: auto-peek lean as rendered (-1..1), easing toward `peekSide` (shared/peek.ts). */
@@ -131,8 +131,6 @@ export class Game {
   private predictedHits: { at: number; target: number }[] = [];
   /** When each opponent last showed a burn hit marker (performance.now()). */
   private burnMarked = new Map<number, number>();
-  /** The field-of-view punch (degrees) added to the camera last frame. */
-  private fovKick = 0;
   /** Presentation held back to a moment in game time (a swing's hit, shown when it lands on screen). */
   private later: { at: number; run: () => void }[] = [];
   /** Opponents this player's swing has hit but not yet landed on screen, and whether the hit killed them. */
@@ -633,15 +631,13 @@ export class Game {
       const bob = this.player.m.grounded ? Math.sin(this.player.bobPhase * 2) * 0.012 * Math.min(1, this.player.speed() / 6) * (1 - this.player.ads) : 0;
       cam.position.y += bob;
       const slideRoll = this.player.m.slideTime > 0 ? 0.06 : 0;
-      cam.rotation.set(this.player.pitch + this.player.punchPitch * 0.01, this.player.yaw + this.player.punchYaw, slideRoll - this.player.lean * PEEK.roll, 'YXZ');
+      // The view goes a little way with a knife skin's swing (ViewModel.swingLook).
+      const swing = this.viewmodel.swingLook;
+      cam.rotation.set(this.player.pitch + this.player.punchPitch * 0.01 + swing.pitch, this.player.yaw + this.player.punchYaw + swing.yaw, slideRoll - this.player.lean * PEEK.roll, 'YXZ');
       const w = this.player.weapon;
       const base = settings.fov;
       const targetFov = base + (this.player.aimFov - base) * this.player.ads + (this.player.sprinting ? 6 : 0) + (this.player.m.slideTime > 0 ? 4 : 0);
-      // A landed blow zooms the view in for a moment, on top of the eased field of view.
-      cam.fov += this.fovKick;
       cam.fov += (targetFov - cam.fov) * Math.min(1, dt * 14);
-      this.fovKick = -this.player.fovPunch;
-      cam.fov += this.fovKick;
       cam.updateProjectionMatrix();
       // Aiming: open sights keep the weapon small (more of the world visible); scopes bring the lens up large.
       this.renderer.viewCamera.fov = 58 - this.player.ads * (isMagnified(w) ? 12 : -4);
@@ -1178,7 +1174,7 @@ export class Game {
     this.link.fire({ weapon: this.player.slot, origin, dir, target: claimed.target, zone: claimed.zone, point: claimed.point });
     if (melee) {
       this.audio.knife(target !== -1);
-      if (target !== -1) this.meleeLanded(claimed, target, rider !== undefined);
+      if (target !== -1) { if (!rider) this.viewmodel.willLand(); this.meleeLanded(claimed, target, rider !== undefined); }
       return;
     }
     traces.forEach((t, i) => {
@@ -1199,27 +1195,27 @@ export class Game {
 
   /**
    * This player's swing connected: the server's damage event is absorbed, and when the swing lands
-   * on screen (SWING contact) the blow shows: hit-stop, a camera jolt and zoom, the skin's burst and
-   * sound word, the target's flinch and the hit marker. (The sound times itself: Audio.knife.)
+   * on screen (SWING contact) the blow shows: the swing stalls on the target and rebounds, the view
+   * jolts, the target is shoved and its head snaps, a little dust flies and the hit marker shows.
+   * (The sound times itself: Audio.knife.)
    */
   private meleeLanded(t: { point: Vec3; zone: HitZone | '' }, target: number, chase: boolean) {
     const skin = mySkin().knife, head = t.zone === 'head';
+    const from = { x: this.player.m.x, z: this.player.m.z }, sweep = sweepOf(skin, this.player.yaw);
     this.predictedHits.push({ at: performance.now() + SWING[skin].contact * 1000, target });
     this.meleePending.set(target, false);
     this.later.push({ at: this.time + SWING[skin].contact, run: () => {
       // The server's kill can beat the swing to the target: it is shown here, as the blow lands.
       const kill = !!this.meleePending.get(target);
       this.meleePending.delete(target);
-      const cam = this.renderer.camera.position;
-      this.effects.meleeHit(new THREE.Vector3(t.point.x, t.point.y, t.point.z), cam, skin, !chase, kill);
+      this.effects.meleeHit(new THREE.Vector3(t.point.x, t.point.y, t.point.z), this.renderer.camera.position, skin);
       if (!chase) {
-        this.viewmodel.impact(kill ? 1.4 : 1);
-        this.player.punchVel -= 45;
-        this.player.punchYaw += (skin === 'knife' ? Math.random() - 0.5 : 0.6) * 0.03;
-        this.player.shake = Math.min(3, this.player.shake + 0.5);
-        this.player.fovPunch = Math.max(this.player.fovPunch, skin === 'broom' ? 5 : 4);
+        // The jolt runs against the swing: down for the broom's chop, back to the right for a slap.
+        this.player.punchVel -= skin === 'broom' ? 40 : 25;
+        if (isSlipper(skin)) this.player.punchYaw -= 0.012;
+        this.player.shake = Math.min(3, this.player.shake + 0.25);
       }
-      this.remotes.get(target)?.view.hit(Math.random() < 0.5, MELEE_FLINCH);
+      this.remotes.get(target)?.view.struck(from, sweep);
       this.hud.hit(kill ? 'kill' : head ? 'head' : 'body', true);
       this.audio.hitmarker(head, kill);
     } });
@@ -1323,8 +1319,14 @@ export class Game {
           this.player.shake = Math.min(3, this.player.shake + e.amount * (e.zone === 'burn' ? 0.02 : 0.05));
           this.player.punchVel -= e.amount * 0.08;
           // Slapped: the head snaps aside, away from the blow.
-          if (melee) { this.player.punchYaw += Math.sign(Math.sin(angle - this.player.yaw) || 1) * 0.05; this.player.fovPunch = Math.max(this.player.fovPunch, 3); }
-        } else this.remotes.get(e.target)?.view.hit(Math.random() < 0.5, melee ? MELEE_FLINCH : 1);
+          if (melee) this.player.punchYaw += Math.sign(Math.sin(angle - this.player.yaw) || 1) * 0.05;
+        } else if (!melee) this.remotes.get(e.target)?.view.hit(Math.random() < 0.5);
+        else if (e.attacker !== myId) {
+          // Someone else's blow: the victim reacts when the striker's swing lands (this player's own blows react in meleeLanded).
+          const attacker = find(e.attacker)!, skin = skinOf(attacker).knife;
+          const from = { x: attacker.m.x, z: attacker.m.z }, sweep = sweepOf(skin, attacker.yaw), target = e.target;
+          this.later.push({ at: this.time + SWING[skin].contact, run: () => this.remotes.get(target)?.view.struck(from, sweep) });
+        }
         break;
       }
       case 'kill': {
@@ -1418,7 +1420,13 @@ export class Game {
         // A hit names its victim: the thrower is whoever threw the slipper that struck there.
         const owner = e.action === 'hit' ? this.bodies.throwerNear(e.x, e.z) : e.id;
         const thrower = owner === undefined ? undefined : find(owner), knife = thrower && skinOf(thrower).knife;
-        if (e.action === 'hit') { this.audio.slipper('hit', this.listener(), at, knife); this.effects.meleeHit(at, this.renderer.camera.position, knife || 'slipper', false, true); break; }
+        if (e.action === 'hit') {
+          this.audio.slipper('hit', this.listener(), at, knife);
+          this.effects.meleeHit(at, this.renderer.camera.position, knife || 'slipper');
+          // Shoved from where the slipper came: the thrower's side.
+          if (thrower) this.remotes.get(e.id)?.view.struck({ x: thrower.m.x, z: thrower.m.z }, { x: 0, z: 0 });
+          break;
+        }
         if (e.id !== myId) { this.remotes.get(e.id)?.view.shoot(); this.audio.slipper('throw', this.listener(), at, knife); }
         break;
       }

@@ -2,7 +2,7 @@ import * as THREE from 'three';
 import type { Assets } from '../assets';
 import { ATTACHMENT_SLOTS, BOBA, WEAPONS, WEAPON_IDS, type Attachments, type WeaponId } from '../../shared/weapons';
 import type { LocalPlayer } from '../game/player';
-import { curlFingers, orientHand, restorePose, solveArm, type Bones } from './rig';
+import { curlFingers, orientHand, restorePose, sampleKeys, solveArm, type Bones, type Ease, type Keyframe } from './rig';
 import { GUN_FIT, fitAttachments, overlayFor, vec, type Fitted, type Overlay } from './optics';
 import { opticFov, settings } from '../game/settings';
 import { requestScope } from './sights';
@@ -28,15 +28,22 @@ const ease = (t: number) => t * t * (3 - 2 * t);
 /** How long a landed swing stalls on its target (s): long enough to feel, short enough not to drag. */
 const HIT_STOP = 0.07;
 
-/** Knife slash keyframes: [time, position, rotation (pitch, yaw, roll)] from the guard pose and back. */
-type Key = [number, number[], number[]];
+/**
+ * Swing keyframes: [time 0..1 of SWING[skin].time, position + rotation (pitch, yaw, roll), ease into the
+ * key]. Every swing has the same beats: a wind-up that slows into its peak, a short creep further
+ * back (anticipation), a strike that speeds up all the way into the blow (SWING contact falls just
+ * before the strike key), a follow-through that runs out, and an eased return to guard.
+ */
+type Key = Keyframe;
+const key = (t: number, pos: number[], rot: number[], ease?: Ease): Key => [t, [...pos, ...rot], ease];
+const KNIFE_GUARD: [number[], number[]] = [[0.16, -0.18, -0.34], [0.35, 0.25, -0.35]];
 const SLASH: Key[] = [
-  [0, [0.16, -0.18, -0.34], [0.35, 0.25, -0.35]], [0.18, [0.24, -0.08, -0.42], [0.5, -0.5, -0.6]], [0.42, [0.02, -0.13, -0.5], [0.15, 0.4, -0.7]],
-  [0.6, [-0.12, -0.22, -0.46], [-0.15, 0.85, -0.8]], [1, [0.16, -0.18, -0.34], [0.35, 0.25, -0.35]],
+  key(0, ...KNIFE_GUARD), key(0.2, [0.24, -0.08, -0.42], [0.5, -0.5, -0.6], 'out'), key(0.26, [0.26, -0.06, -0.41], [0.55, -0.6, -0.62]),
+  key(0.4, [0.02, -0.13, -0.5], [0.15, 0.4, -0.7], 'in'), key(0.6, [-0.12, -0.22, -0.46], [-0.15, 0.85, -0.8], 'out'), key(1, ...KNIFE_GUARD),
 ];
 const BACKHAND: Key[] = [
-  [0, [0.16, -0.18, -0.34], [0.35, 0.25, -0.35]], [0.18, [-0.06, -0.22, -0.42], [-0.1, 0.8, 0.5]], [0.42, [0.1, -0.11, -0.5], [0.25, 0.0, 0.6]],
-  [0.6, [0.24, -0.06, -0.44], [0.45, -0.6, 0.7]], [1, [0.16, -0.18, -0.34], [0.35, 0.25, -0.35]],
+  key(0, ...KNIFE_GUARD), key(0.2, [-0.06, -0.22, -0.42], [-0.1, 0.8, 0.5], 'out'), key(0.26, [-0.08, -0.23, -0.41], [-0.15, 0.9, 0.52]),
+  key(0.4, [0.1, -0.11, -0.5], [0.25, 0.0, 0.6], 'in'), key(0.6, [0.24, -0.06, -0.44], [0.45, -0.6, 0.7], 'out'), key(1, ...KNIFE_GUARD),
 ];
 
 /**
@@ -46,8 +53,8 @@ const BACKHAND: Key[] = [
  */
 const SLIPPER_GUARD: [number[], number[]] = [[0.2, -0.2, -0.36], [1.15, 0.75, 0]];
 const SLAP: Key[] = [
-  [0, ...SLIPPER_GUARD], [0.22, [0.26, -0.04, -0.3], [1.5, -0.9, 0]], [0.42, [-0.02, -0.08, -0.48], [0.15, 1.45, 0]],
-  [0.62, [-0.2, -0.2, -0.42], [-0.3, 1.9, 0]], [1, ...SLIPPER_GUARD],
+  key(0, ...SLIPPER_GUARD), key(0.2, [0.26, -0.04, -0.3], [1.5, -0.9, 0], 'out'), key(0.26, [0.28, -0.03, -0.29], [1.56, -1.02, 0]),
+  key(0.41, [-0.02, -0.08, -0.48], [0.15, 1.45, 0], 'in'), key(0.64, [-0.2, -0.2, -0.42], [-0.3, 1.9, 0], 'out'), key(1, ...SLIPPER_GUARD),
 ];
 
 /**
@@ -57,8 +64,8 @@ const SLAP: Key[] = [
  */
 const BROOM_GUARD: [number[], number[]] = [[0.3, -0.36, -0.42], [0.82, -0.18, 1.35]];
 const SWAT: Key[] = [
-  [0, ...BROOM_GUARD], [0.3, [0.24, -0.22, -0.34], [1.75, 0.1, 1.5]], [0.55, [0.04, -0.3, -0.38], [0.5, 0.2, 1.55]],
-  [0.75, [0.02, -0.4, -0.36], [-0.1, 0.3, 1.6]], [1, ...BROOM_GUARD],
+  key(0, ...BROOM_GUARD), key(0.26, [0.24, -0.22, -0.34], [1.75, 0.1, 1.5], 'out'), key(0.33, [0.25, -0.2, -0.33], [1.86, 0.1, 1.5]),
+  key(0.55, [0.04, -0.3, -0.38], [0.5, 0.2, 1.55], 'in'), key(0.74, [0.02, -0.4, -0.36], [-0.1, 0.3, 1.6], 'out'), key(1, ...BROOM_GUARD),
 ];
 /** Each knife skin's guard pose and swing (how long it takes and when it lands: SWING in shared/skins.ts). */
 const KNIFE_MOTION: Record<KnifeSkin, { guard?: [number[], number[]]; swing?: Key[] }> = {
@@ -67,6 +74,8 @@ const KNIFE_MOTION: Record<KnifeSkin, { guard?: [number[], number[]]; swing?: Ke
   gold: { guard: SLIPPER_GUARD, swing: SLAP },
   broom: { guard: BROOM_GUARD, swing: SWAT },
 };
+/** A swing that lands springs back off the target this far toward its wind-up, instead of sweeping through. */
+const REBOUND = 0.22;
 
 /** Spring-damped scalar for weapon motion. */
 class Spring {
@@ -126,8 +135,14 @@ export class ViewModel {
   /** Knife slash progress (1 = done) and alternating direction. */
   private slashT = 1;
   private slashDir = 1;
-  /** Seconds the swing in hand stays stalled on what it hit (impact()). */
+  /** Seconds the swing in hand stays stalled on what it hit (land()). */
   private hitStop = 0;
+  /** The swing in hand will land on someone (willLand()). */
+  private lands = false;
+  /** The swing in hand landed: when (slash time), the pose it landed in and the pose it rebounds to. */
+  private struck?: { t: number; from: number[]; back: number[] };
+  /** How far (radians) the swing in hand carries the view with it: the game adds it to the camera. */
+  readonly swingLook = { yaw: 0, pitch: 0 };
   scopeVisible = false;
   /** Eyepiece overlay of the fitted optic (x6 sniper scope, ACOG/x4 prism); the 3D model hides behind it. */
   overlay: Overlay;
@@ -223,8 +238,11 @@ export class ViewModel {
     return camera.localToWorld(out);
   }
 
+  /** The swing the knife slot plays next or now: its skin's, or the knife's forehand and backhand by turns. */
+  private swingKeys() { return KNIFE_MOTION[this.knifeSkin].swing ?? (this.slashDir > 0 ? SLASH : BACKHAND); }
+
   fire() {
-    if (this.current === 'knife') { this.slashT = 0; this.slashDir = -this.slashDir; this.hitStop = 0; return; }
+    if (this.current === 'knife') { this.slashT = 0; this.slashDir = -this.slashDir; this.hitStop = 0; this.struck = undefined; this.lands = false; return; }
     const w = WEAPONS[this.current];
     const strength = w.class === 'sniper' ? 1.8 : w.class === 'shotgun' ? 1.6 : w.class === 'pistol' ? 0.9 : 0.55 + w.recoil.viewPunch * 0.3;
     this.kickBack.velocity += 2.6 * strength;
@@ -237,15 +255,22 @@ export class ViewModel {
   }
 
   /**
-   * The swing in hand just landed on someone: hit-stop (it stalls mid-swing for a few frames, as if
-   * the blow met weight), then it shudders back off the target. `strength` 1 for a slap; more for a kill.
+   * The swing just started will land on someone: when it reaches its contact (SWING) it stalls there
+   * (hit-stop, as if the blow met weight), shudders, and springs back off the target instead of
+   * sweeping through.
    */
-  impact(strength = 1) {
-    if (this.current !== 'knife') return;
-    this.hitStop = HIT_STOP * strength;
-    this.kickBack.velocity -= 2.2 * strength;
-    this.kickPitch.velocity -= 2.5 * strength;
-    this.kickRoll.velocity += 5 * strength * (this.knifeSkin === 'knife' ? this.slashDir : 1);
+  willLand() { if (this.current === 'knife' && this.slashT < 1) this.lands = true; }
+
+  /** The swing reached its target: stall, kick the hand back, and rebound from here. */
+  private land() {
+    this.hitStop = HIT_STOP;
+    this.kickBack.velocity -= 2.2;
+    this.kickPitch.velocity -= 2.5;
+    this.kickRoll.velocity += 5 * (this.knifeSkin === 'knife' ? this.slashDir : 1);
+    // From here the swing rebounds: back a little toward where the strike began, then home to guard.
+    const keys = this.swingKeys(), strike = keys.findIndex(k => k[2] === 'in');
+    const from = sampleKeys(keys, this.slashT), back = keys[Math.max(0, strike - 1)][1];
+    this.struck = { t: this.slashT, from, back: from.map((v, j) => v + (back[j] - v) * REBOUND) };
   }
 
   update(dt: number, p: LocalPlayer, look: { x: number; y: number }) {
@@ -284,16 +309,30 @@ export class ViewModel {
     pos.y -= p.landDip * 0.25;
     // ---- Knife slash: wind up, a fast diagonal cut across the screen, follow through; forehand and backhand alternate ----
     if (knife && this.slashT < 1) {
-      if (this.hitStop > 0) { this.hitStop -= dt; pos.x += Math.sin(this.time * 95) * 0.005; }
-      else this.slashT = Math.min(1, this.slashT + dt / SWING[this.knifeSkin].time);
-      const keys = motion.swing ?? (this.slashDir > 0 ? SLASH : BACKHAND), t = this.slashT;
-      let i = 0;
-      while (i < keys.length - 2 && t > keys[i + 1][0]) i++;
-      const [t0, p0, r0] = keys[i], [t1, p1, r1] = keys[i + 1], k = ease(Math.min(1, (t - t0) / (t1 - t0)));
-      const at = (a: number[], b: number[], j: number) => a[j] + (b[j] - a[j]) * k;
-      pos.set(at(p0, p1, 0), at(p0, p1, 1), at(p0, p1, 2));
-      rx = at(r0, r1, 0); ry = at(r0, r1, 1); rz = at(r0, r1, 2);
-    }
+      const stalled = this.hitStop > 0, swing = SWING[this.knifeSkin], contact = swing.contact / swing.time;
+      if (stalled) this.hitStop -= dt;
+      else {
+        const next = Math.min(1, this.slashT + dt / swing.time);
+        // A swing that lands stops exactly on its contact, never a frame past it.
+        if (this.lands && !this.struck && next >= contact) { this.slashT = contact; this.land(); }
+        else this.slashT = next;
+      }
+      const keys = this.swingKeys(), struck = this.struck;
+      let v: number[];
+      if (struck) {
+        // Landed: stalled on the target, kicked back off it (fast, then slowing), then eased home to guard.
+        const u = (this.slashT - struck.t) / (1 - struck.t), home = keys[keys.length - 1][1];
+        v = sampleKeys([[0, struck.from], [0.3, struck.back, 'out'], [1, home, 'io']], u);
+      } else v = sampleKeys(keys, this.slashT);
+      pos.set(v[0], v[1], v[2]);
+      [rx, ry, rz] = [v[3], v[4], v[5]];
+      // The blow shudders through the hand while the swing is stalled.
+      if (stalled) { pos.x += Math.sin(this.time * 95) * 0.004; pos.y += Math.cos(this.time * 80) * 0.003; }
+      // The head goes with the swing a little: drawn up and back on the wind-up, carried across on the strike.
+      const guard = motion.guard ?? KNIFE_GUARD;
+      this.swingLook.yaw = (guard[0][0] - pos.x) * 0.06;
+      this.swingLook.pitch = (pos.y - guard[0][1]) * 0.05;
+    } else { this.swingLook.yaw = 0; this.swingLook.pitch = 0; }
     // ---- 飛拖: winding up pulls the slipper back high over the shoulder (trembling when full); letting go whips it forward and it is gone ----
     if (knife && p.slipperFollow > 0) {
       const f = ease(1 - p.slipperFollow / 0.22);
