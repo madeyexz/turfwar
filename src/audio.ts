@@ -1,6 +1,6 @@
 import type { WeaponId } from '../shared/weapons';
 import { Voice, VoicePool, unit } from './voices';
-import { isSlipper, type KnifeSkin } from '../shared/skins';
+import { SWING, isSlipper, type KnifeSkin } from '../shared/skins';
 import { assetUrl } from './assetUrl';
 
 type V3 = { x: number; y: number; z: number };
@@ -623,19 +623,31 @@ export class Audio {
   /** The knife skin in this player's hand (shared/skins.ts): their own swings and equips sound like it. */
   knifeSkin: KnifeSkin = 'slipper';
 
-  /** Knife: the swing, and on a hit a blunt stab into the target (a slap for the 藍白拖, a THWUMP for the 掃把). */
+  /**
+   * Knife: the swing, and on a hit a blunt stab into the target (a slap for the 藍白拖, a THWUMP for
+   * the 掃把), timed to when the swing lands on screen (SWING contact). The striker's own blow also
+   * gets a body thud under it: the weight a speaker can't show any other way.
+   */
   knife(hit: boolean, listener?: Listener, at?: V3, skin: KnifeSkin = this.knifeSkin) {
     if (!this.ready) return;
-    const t = this.now();
-    if (skin === 'broom') { this.broomSwish(t, listener, at); if (hit) this.broomHit(t + 0.1, listener, at); return; }
-    this.swish(t, listener, at);
+    const t = this.now(), contact = t + SWING[skin].contact;
+    if (skin === 'broom') this.broomSwish(t, listener, at); else this.swish(t, listener, at);
     if (!hit) return;
-    if (isSlipper(skin)) return this.slap(t + 0.05, listener, at);
+    if (!listener) this.thud(contact, skin === 'broom' ? 1.2 : 1);
+    if (skin === 'broom') return this.broomHit(contact, listener, at);
+    if (isSlipper(skin)) return this.slap(contact, listener, at);
     const out = this.out(listener ? 0.55 : 0.45, listener, at, 0.06);
-    this.tone(out, t + 0.06, 'sine', 140, 55, 0.12, 0.8);
-    this.noiseBurst(out, t + 0.06, 0.07, 'lowpass', 900, 1, 0.7);
-    this.noiseBurst(out, t + 0.07, 0.05, 'bandpass', 2600, 4, 0.25);
-    if (this.live) this.noiseBurst(out, t + 0.075, 0.12, 'bandpass', 420, 1.5, 0.35, 0.01);
+    this.tone(out, contact, 'sine', 140, 55, 0.12, 0.8);
+    this.noiseBurst(out, contact, 0.07, 'lowpass', 900, 1, 0.7);
+    this.noiseBurst(out, contact + 0.01, 0.05, 'bandpass', 2600, 4, 0.25);
+    if (this.live) this.noiseBurst(out, contact + 0.015, 0.12, 'bandpass', 420, 1.5, 0.35, 0.01);
+  }
+
+  /** A deep, short body thud under a blow that landed: felt more than heard. */
+  private thud(t: number, weight: number) {
+    const out = this.out(0.6 * weight, undefined, undefined, 0.04);
+    this.tone(out, t, 'sine', 120, 42, 0.16, 0.9);
+    this.noiseBurst(out, t, 0.05, 'lowpass', 380, 0.8, 0.8);
   }
 
   /** A thrown knife skin: the whoosh as it leaves the hand, or the THWACK as it strikes someone. */
@@ -649,7 +661,9 @@ export class Audio {
 
   /** The 藍白拖 landing: a bright rubber THWACK with a little cartoon boing after it. */
   private slap(t: number, listener?: Listener, at?: V3) {
-    const out = this.out(listener ? 0.7 : 0.6, listener, at, 0.12);
+    const out = this.out(listener ? 0.75 : 0.7, listener, at, 0.12);
+    // The crack of rubber on skin first, then the flat body of the slap.
+    this.noiseBurst(out, t, 0.012, 'highpass', 4200, 0.7, 1.2);
     this.noiseBurst(out, t, 0.045, 'highpass', 1800, 0.7, 1.1);
     this.noiseBurst(out, t, 0.07, 'bandpass', 1100, 1.4, 0.9);
     this.tone(out, t, 'sine', 260, 120, 0.06, 0.5);
@@ -733,9 +747,11 @@ export class Audio {
     this.noiseBurst(out, t + 0.18, 0.04, 'bandpass', 1500, 3, 0.5);
   }
 
-  hitmarker(head: boolean, kill: boolean) {
+  /** The hit-marker tick: brighter for a headshot, a chime for a kill, softer and lower for a burn. */
+  hitmarker(head: boolean, kill: boolean, burn = false) {
     if (!this.ready) return;
-    const t = this.now(), out = this.out(0.35, undefined, undefined, 0.05);
+    const t = this.now(), out = this.out(burn ? 0.2 : 0.35, undefined, undefined, 0.05);
+    if (burn) { this.tone(out, t, 'triangle', 1100, 950, 0.07, 0.35); return; }
     this.tone(out, t, 'triangle', head ? 2200 : 1500, head ? 2000 : 1400, 0.06, 0.4);
     if (head) this.tone(out, t + 0.02, 'sine', 3300, 3100, 0.12, 0.25);
     if (kill) { this.tone(out, t + 0.05, 'sine', 880, 870, 0.18, 0.3); this.tone(out, t + 0.12, 'sine', 1320, 1310, 0.22, 0.25); }

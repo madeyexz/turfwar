@@ -1,4 +1,5 @@
 import * as THREE from 'three';
+import type { KnifeSkin } from '../../shared/skins';
 
 interface Particle { mesh: THREE.Mesh | THREE.Sprite; velocity: THREE.Vector3; life: number; maxLife: number; gravity: number; grow: number; fade: boolean; alpha: number }
 interface Tracer { mesh: THREE.Mesh; from: THREE.Vector3; dir: THREE.Vector3; total: number; head: number; speed: number; length: number }
@@ -13,6 +14,14 @@ function radialTexture(inner: string, outer: string) {
   ctx.fillStyle = g; ctx.fillRect(0, 0, 64, 64);
   return new THREE.CanvasTexture(canvas);
 }
+
+/** What flies off where each knife skin's blow lands: a puff of dust from the clothes; broom straw; the knife's sparks. */
+const MELEE_DEBRIS: Record<KnifeSkin, { bits: number; bit: number; straw: boolean; dust: number }> = {
+  slipper: { bits: 0, bit: 0, straw: false, dust: 3 },
+  gold: { bits: 4, bit: 0xffc83a, straw: false, dust: 3 },
+  broom: { bits: 10, bit: 0xd8b058, straw: true, dust: 4 },
+  knife: { bits: 6, bit: 0xff7a4a, straw: false, dust: 0 },
+};
 
 /** Pooled combat effects: tracers, sparks, dust, energy hits, explosions and bullet marks. */
 export class Effects {
@@ -121,6 +130,29 @@ export class Effects {
     const g = new THREE.Sprite(new THREE.SpriteMaterial({ map: this.glow, color, transparent: true, blending: THREE.AdditiveBlending, depthWrite: false }));
     g.position.copy(at); g.scale.setScalar(0.5);
     this.add(g, new THREE.Vector3(), 0.08, 0, 2, true);
+  }
+
+  /**
+   * A knife skin's blow landing at `at`, seen from `eye`: a soft puff of dust knocked out of the
+   * clothes, broom straw breaking off, a glint of gold, the knife's sparks. Small and physical: the
+   * blow itself reads through the swing, the hit-stop and the target's reaction.
+   */
+  meleeHit(at: THREE.Vector3, eye: THREE.Vector3, skin: KnifeSkin) {
+    const look = MELEE_DEBRIS[skin];
+    const toEye = eye.clone().sub(at).normalize();
+    for (let i = 0; i < look.bits; i++) {
+      const mat = new THREE.MeshBasicMaterial({ color: new THREE.Color(look.bit).multiplyScalar(look.straw ? 1 : 1.6), transparent: true, depthWrite: false, blending: look.straw ? THREE.NormalBlending : THREE.AdditiveBlending });
+      const m = new THREE.Mesh(this.sparkGeo, mat);
+      const v = new THREE.Vector3().randomDirection().multiplyScalar(1.5 + Math.random() * 2.5).addScaledVector(toEye, 1.2);
+      m.position.copy(at); m.lookAt(at.clone().add(v));
+      m.scale.set(0.35, 0.35, look.straw ? 1.1 : 0.6);
+      this.add(m, v, 0.25 + Math.random() * (look.straw ? 0.35 : 0.12), look.straw ? 9 : 4, 0, true);
+    }
+    for (let i = 0; i < look.dust; i++) {
+      const d = new THREE.Sprite(new THREE.SpriteMaterial({ map: this.smoke, color: look.straw ? 0xc9b48a : 0xd8d2c8, transparent: true, depthWrite: false, opacity: 0.5 }));
+      d.position.copy(at).addScaledVector(toEye, 0.08); d.scale.setScalar(0.12);
+      this.add(d, new THREE.Vector3().randomDirection().multiplyScalar(0.5).addScaledVector(toEye, 0.4), 0.45 + Math.random() * 0.25, -0.2, 2.6, true, 0.45);
+    }
   }
 
   explosion(at: THREE.Vector3, scale = 1) {
