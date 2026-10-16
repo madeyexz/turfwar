@@ -1317,9 +1317,16 @@ export class Game {
           if (e.zone !== 'fall' && e.zone !== 'burn') this.hud.damage(angle);
           this.audio.damage(false);
           this.player.shake = Math.min(3, this.player.shake + e.amount * (e.zone === 'burn' ? 0.02 : 0.05));
-          this.player.punchVel -= e.amount * 0.08;
-          // Slapped: the head snaps aside, away from the blow.
-          if (melee) this.player.punchYaw += Math.sign(Math.sin(angle - this.player.yaw) || 1) * 0.05;
+          const facing = angle - this.player.yaw;
+          // Shot, the view dips. Struck, the head goes with the blow: knocked back from the front (the view
+          // tips up), nodded forward from behind (down), and aside along the sole's sweep, or for a chop
+          // or thrust away from the striker.
+          this.player.punchVel -= e.amount * 0.08 * (melee ? -Math.cos(facing) : 1);
+          if (melee) {
+            const striker = find(e.attacker), sweep = striker ? sweepOf(skinOf(striker).knife, striker.yaw) : { x: 0, z: 0 };
+            const across = sweep.x * Math.cos(this.player.yaw) - sweep.z * Math.sin(this.player.yaw);
+            this.player.punchYaw -= (Math.abs(across) > 0.3 ? Math.sign(across) : Math.sign(Math.sin(facing) || 1)) * 0.05;
+          }
         } else if (!melee) this.remotes.get(e.target)?.view.hit(Math.random() < 0.5);
         else if (e.attacker !== myId) {
           // Someone else's blow: the victim reacts when the striker's swing lands (this player's own blows react in meleeLanded).
