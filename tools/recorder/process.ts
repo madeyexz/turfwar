@@ -10,7 +10,7 @@
  */
 import { mkdirSync, existsSync, readFileSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
-import { TARGETS, totals, type Quality } from '../../shared/rec/clean';
+import { TARGETS, totals, type InputSession, type Quality } from '../../shared/rec/clean';
 import { CLEAN_RULES, KEEP_DAYS, UNUSABLE_KEEP_DAYS, recPrefix, type RecEnv } from '../../shared/rec/policy';
 import { qualityKey, qualityOf, loadSegment, type Manifest, type QualityFile } from './lib';
 import { getJson, listAll, putChecked, r2 } from './r2';
@@ -28,12 +28,34 @@ const SETTLE_MS = Number(process.env.REC_SETTLE_MS ?? 10 * 60_000);
 
 const manifests = await listAll(c, `${PREFIX}/manifest/`);
 const done = new Set((await listAll(c, `${PREFIX}/quality/`)).map(x => x.key));
+/** A quality file from the local cache, else from R2 (then cached). */
+async function readQuality(qkey: string): Promise<QualityFile | undefined> {
+  const local = join(CACHE, qkey.replace(/\//g, '_'));
+  if (existsSync(local)) return JSON.parse(readFileSync(local, 'utf8'));
+  const q = await getJson<QualityFile>(c, qkey);
+  if (q) writeFileSync(local, JSON.stringify(q));
+  return q;
+}
+// Quality files of an older version of the clean rules are classified again (once, after an update).
+const stale = new Set<string>();
+for (const qkey of done) if ((await readQuality(qkey))?.rules !== CLEAN_RULES) stale.add(qkey);
 let processed = 0, failed = 0;
-const inputCache = new Map();
+/**
+ * Decoded input sessions, shared by neighbouring segments; only the latest few are kept (the service has
+ * 400 MB, and a reprocess of every segment after a rules change would otherwise hold every session).
+ */
+class RecentSessions<K, V> extends Map<K, V> {
+  override set(k: K, v: V) {
+    super.delete(k); super.set(k, v);
+    while (this.size > 24) this.delete(this.keys().next().value as K);
+    return this;
+  }
+}
+const inputCache = new RecentSessions<string, InputSession[]>();
 for (const { key, lastModified } of manifests) {
   const qkey = qualityKey(key);
-  if (done.has(qkey) && !reprocess) continue;
-  if (lastModified && Date.now() - Date.parse(lastModified) < SETTLE_MS) continue;
+  if (done.has(qkey) && !reprocess && !stale.has(qkey)) continue;
+  if (!done.has(qkey) && lastModified && Date.now() - Date.parse(lastModified) < SETTLE_MS) continue;
   try {
     const m = await getJson<Manifest>(c, key);
     if (!m) continue;
@@ -48,13 +70,7 @@ for (const { key, lastModified } of manifests) {
 
 // ---- The summary --------------------------------------------------------------------------------
 const files: QualityFile[] = [];
-for (const qkey of done) {
-  const local = join(CACHE, qkey.replace(/\//g, '_'));
-  let q: QualityFile | undefined;
-  if (existsSync(local)) q = JSON.parse(readFileSync(local, 'utf8'));
-  else { q = await getJson<QualityFile>(c, qkey); if (q) writeFileSync(local, JSON.stringify(q)); }
-  if (q) files.push(q);
-}
+for (const qkey of done) { const q = await readQuality(qkey); if (q) files.push(q); }
 const optouts = new Set((await listAll(c, `${PREFIX}/optout/`)).map(x => x.key.match(/pid=([0-9a-f]+)/)?.[1] ?? ''));
 const qualities: Quality[] = files.flatMap(f => f.qualities);
 /** The export takes public, non-EU/UK subjects who did not opt out, from matches with no other human left out (approximated per segment here). */
@@ -75,7 +91,7 @@ const stats = {
   recount: recount ?? null,
 };
 await putChecked(c, `${PREFIX}/stats/clean-hours.json`, JSON.stringify(stats), 'application/json');
-log('processed', { processed, failed, segments: files.length, movementHours: +t.movementHours.toFixed(3), aimHours: +t.aimHours.toFixed(3) });
+log('processed', { processed, stale: stale.size, failed, segments: files.length, movementHours: +t.movementHours.toFixed(3), aimHours: +t.aimHours.toFixed(3) });
 
 /** Share of movement-clean hours from the top `q` of subjects (concentration, for the bias check). */
 function topShare(qs: Quality[], q: number) {

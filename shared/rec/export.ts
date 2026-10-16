@@ -132,7 +132,9 @@ export function exportMatch(segments: Segment[], inputs: ExportInput[], date: st
   const meta = new Map<number, { input: 'touch' | 'mouse'; aimAssist: boolean; device: string }>();
   const lastTick = segs[segs.length - 1].header.endTick;
   for (const sub of inputs) {
-    const recs = sub.sessions.flatMap(x => x.records.map(r => ({ r, h: x.header }))).sort((a, b) => a.r.t - b.r.t);
+    // Each page load has its own clock: put every session on the first one's (as the clean rules do).
+    const base = sub.sessions[0]?.header.timeOrigin ?? 0;
+    const recs = sub.sessions.flatMap(x => { const shift = (x.header.timeOrigin ?? base) - base; return x.records.map(r => ({ r: shift ? { ...r, t: r.t + shift } : r, h: x.header })); }).sort((a, b) => a.r.t - b.r.t);
     if (!recs.length) continue;
     const fit = clockFit(recs.map(x => x.r));
     const newId = soldiers.get(sub.soldierId);
@@ -143,7 +145,7 @@ export function exportMatch(segments: Segment[], inputs: ExportInput[], date: st
     const rows: number[] = [];
     const row = (kind: number, tick: number, ...vals: number[]) => { rows.push(kind, tick - tickBase, ...vals, ...new Array(ROW_FLOATS - 2 - vals.length).fill(0)); };
     for (const { r, h } of recs) {
-      const tick = fit.a + fit.b * r.t;
+      const tick = fit.tickOf(r.t);
       if (tick < tickBase - 30 || tick > lastTick + 30) continue;
       switch (r.type) {
         case In.Sens: sens = r.sens; break;

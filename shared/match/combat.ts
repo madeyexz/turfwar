@@ -105,6 +105,11 @@ export function applyDamage(state: MatchState, ctx: SimContext, target: Soldier,
       const paid = attacker.round.headshots[target.id] ?? 0;
       if (paid < CASH.headshotCap) { attacker.round.headshots[target.id] = paid + 1; award(state, attacker, CASH.headshot, 'Headshot', ctx.emit); }
     }
+    // A molotov's first lick of each opponent pays (once a round), so a fire that only wounds still earns.
+    if (zone === 'burn') {
+      const burned = attacker.round.burned ??= [];
+      if (!burned.includes(target.id)) { burned.push(target.id); award(state, attacker, CASH.burn, 'Burned', ctx.emit); }
+    }
   }
   ctx.emit({ type: 'damage', target: target.id, attacker: attackerId, amount: Math.round(amount), zone, x: from.x, y: from.y, z: from.z });
   if (target.health <= 0) killSoldier(state, ctx, target, attacker === target ? undefined : attacker, weapon, zone === 'head');

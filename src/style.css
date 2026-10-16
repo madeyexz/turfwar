@@ -150,6 +150,10 @@ body.menu-open #hud, body.menu-open #hud * { visibility: hidden; }
 .hitmarker.on { opacity: 1; transition: none; }
 .hitmarker.head i { background: var(--amber); }
 .hitmarker.kill i { background: var(--crimson); height: 3px; }
+.hitmarker.burn i { background: #ff9a3c; }
+.hitmarker.melee { animation: melee-hit 0.22s ease-out; }
+.hitmarker.melee i { height: 3px; width: 15px; }
+@keyframes melee-hit { 0% { transform: scale(1.9) rotate(-8deg); } 60% { transform: scale(0.92); } 100% { transform: scale(1); } }
 .target-tag { position: absolute; left: 50%; top: calc(50% + 26px); transform: translateX(-50%); display: flex; align-items: center; gap: 5px; font-size: 14px; font-weight: 700; color: var(--crimson); text-transform: none; white-space: nowrap; text-shadow: 0 1px 2px #000; }
 .target-tag i { width: 9px; height: 9px; border: 2px solid currentColor; border-radius: 50%; }
 .damage-ring { position: absolute; left: 50%; top: 50%; width: 0; height: 0; }

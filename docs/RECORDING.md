@@ -84,15 +84,26 @@ trips, focus/visibility/pointer-lock changes and sensitivity changes.
 
 ## Clean
 
-`shared/rec/clean.ts`, rules `clean-v1`. The unit is one second of one subject alive in a live round.
+`shared/rec/clean.ts`, rules `clean-v2`. The unit is one second of one subject alive in a live round.
 A subject-round is dropped whole for: leaving or changing team (E5); report round trip p95 > 250 ms,
 > 3 corrections per minute, frame gap ratio > 2 % or an input gap > 1 s while alive (E6); > 2 shots the
-server did not take (E8); median client-vs-server yaw error > 2° or a clock-fit residual > 3 ticks
-(E9); input-log coverage < 90 % of alive live ticks (E10, "server-only"). AFK stretches (no input, no
+server did not take (E8); median client-vs-server yaw error > 2° (ticks in a vehicle seat left out:
+the server's aim there is the seat's) or a clock-fit residual > 3 ticks (E9); input-log coverage < 90 %
+of alive live ticks (E10, "server-only"). AFK stretches (no input, no
 movement, no turning for 10 s, plus 2 s each side) are cut; a round more than half AFK goes (E4).
 A subject the server removes for being away (the 90 s AFK kick, docs/ARCHITECTURE.md) leaves before
 the round's end, so E5 drops that round; the AFK seconds of earlier rounds are already cut by E4. The
 `leave` event keeps its `reason: 'afk'` in the segment, and the `afk` warning event is not recorded.
+
+**Clock fit.** Every rule that compares the input log with the frames needs the server tick at each
+client time. The points are the frames' arrival times (`t − tickAgeMs` of each new tick). The server does
+not tick at a steady 30 Hz: a busy tick runs late, so the rate wanders between about 27 and 31 Hz over
+10 s and dips near 20 Hz. `clean-v1` fitted one straight line over a whole match; it strayed by tens to
+hundreds of ticks (median residual 6.5 ticks, p90 1,750), so E8 matched shots and E9 matched aim against
+the wrong frames and dropped most rounds. `clean-v2` fits a line in a ±2 s window every 0.5 s and joins
+them (median residual 0.2 ticks), puts every page load's records on one clock (`timeOrigin`), and starts
+a new run when the tick goes back. The processor classifies again every quality file of an older rules
+version on its next run.
 
 Two measures:
 

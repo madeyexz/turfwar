@@ -8,7 +8,7 @@ import { AFK, ATTACKERS, turned, vehicleTarget, type MatchEvent, type MatchState
 import { VEHICLES, obstaclesOf, raycastVehicle, seatPosition, speedOf, type Vehicle } from '../../shared/vehicles';
 import { seatFor } from '../../shared/match/vehicles';
 import { BOBA, WEAPONS, pelletCone, pelletDirs, weaponStats, type HitZone, type WeaponId } from '../../shared/weapons';
-import { CASH, CRATE_REACH, canBuyWeapons, inBase } from '../../shared/match/economy';
+import { CASH, CRATE_REACH, betweenRounds, canBuyWeapons, inBase } from '../../shared/match/economy';
 import { seatOf, shieldedIds, sideOf } from '../../shared/match/combat';
 import { BOMB_REACH, canSwitchTeam, modeOf, onSite } from '../../shared/match/sim';
 import type { Assets } from '../assets';
@@ -46,7 +46,7 @@ import { challengeUrl, inviteUrl, shareRef } from './challenge';
 import { MatchTally, type MatchSummary } from './matchstats';
 import { openSharePanel } from '../ui/sharepanel';
 import { mySkin } from './skins';
-import { skinOf } from '../../shared/skins';
+import { SWING, isSlipper, skinOf, type KnifeSkin } from '../../shared/skins';
 import { TouchControls, type TouchInfo } from '../ui/touchcontrols';
 import { holdAimMode } from './holdfire';
 import { onTouchLayout, touchActive, touchAimAssist, type TouchContext } from './touchlayout';
@@ -63,6 +63,10 @@ type Sample = { x: number; y: number; z: number; vx: number; vy: number; vz: num
 const LOD_NEAR = 30, LOD_MID = 70;
 /** Remote gunfire farther than this is not drawn or heard. */
 const SHOT_FX_RANGE = 110, SHOT_AUDIO_RANGE = 85;
+/** Least time (ms) between hit markers for one opponent burning in this player's fire. */
+const BURN_MARK_EVERY = 500;
+/** Which way (world x, z) a knife skin's swing sweeps when swung facing `yaw`: a slap whips right to left; a chop or thrust goes straight in. */
+const sweepOf = (skin: KnifeSkin, yaw: number) => isSlipper(skin) ? { x: -Math.cos(yaw), z: Math.sin(yaw) } : { x: 0, z: 0 };
 const frustum = new THREE.Frustum(), projScreen = new THREE.Matrix4(), lodSphere = new THREE.Sphere(new THREE.Vector3(), 1.3);
 
 /** `peek`: auto-peek lean as rendered (-1..1), easing toward `peekSide` (shared/peek.ts). */
@@ -127,6 +131,12 @@ export class Game {
   private lastReport = new Map<number, number>();
   /** Online: hit markers already shown for predicted hits, so the server's confirmations don't repeat them. */
   private predictedHits: { at: number; target: number }[] = [];
+  /** When each opponent last showed a burn hit marker (performance.now()). */
+  private burnMarked = new Map<number, number>();
+  /** Presentation held back to a moment in game time (a swing's hit, shown when it lands on screen). */
+  private later: { at: number; run: () => void }[] = [];
+  /** Opponents this player's swing has hit but not yet landed on screen, and whether the hit killed them. */
+  private meleePending = new Map<number, boolean>();
   private deathCam = new THREE.Vector3();
   /** Dead: the soldier whose eyes we watch (the killer first; right click cycles). */
   private spectating = -1;
@@ -594,6 +604,11 @@ export class Game {
     this.bodies.update(dt, renderTime, this.time);
     this.crates.update(this.time);
     this.sites.update(this.time, state.bomb, sabotage);
+    if (this.later.length) {
+      const due = this.later.filter(l => l.at <= this.time);
+      this.later = this.later.filter(l => l.at > this.time);
+      for (const l of due) l.run();
+    }
     this.effects.update(dt);
     this.level.update(this.time);
 
@@ -619,7 +634,9 @@ export class Game {
       const bob = this.player.m.grounded ? Math.sin(this.player.bobPhase * 2) * 0.012 * Math.min(1, this.player.speed() / 6) * (1 - this.player.ads) : 0;
       cam.position.y += bob;
       const slideRoll = this.player.m.slideTime > 0 ? 0.06 : 0;
-      cam.rotation.set(this.player.pitch + this.player.punchPitch * 0.01, this.player.yaw + this.player.punchYaw, slideRoll - this.player.lean * PEEK.roll, 'YXZ');
+      // The view goes a little way with a knife skin's swing (ViewModel.swingLook).
+      const swing = this.viewmodel.swingLook;
+      cam.rotation.set(this.player.pitch + this.player.punchPitch * 0.01 + swing.pitch, this.player.yaw + this.player.punchYaw + swing.yaw, slideRoll - this.player.lean * PEEK.roll, 'YXZ');
       const w = this.player.weapon;
       const base = settings.fov;
       const targetFov = base + (this.player.aimFov - base) * this.player.ads + (this.player.sprinting ? 6 : 0) + (this.player.m.slideTime > 0 ? 4 : 0);
@@ -670,13 +687,14 @@ export class Game {
       this.hudTimer = 0.1;
       // Dead: the HUD shows the watched soldier's gun and magazine.
       this.hud.tick(!this.player.alive && this.watched.alive ? this.watched : this.player, state, me);
-      const free = !!state.config.freeBuy;
-      const buyLeft = free ? -1 : Math.max(0, state.config.buyTime - state.roundClock);
+      const free = !!state.config.freeBuy, between = betweenRounds(state);
+      // Between rounds the store has no countdown: it stays open anywhere until the next round begins.
+      const buyLeft = free ? -1 : between ? 0 : Math.max(0, state.config.buyTime - state.roundClock);
       this.buymenu.update(me, buyWindow, buyLeft, free);
-      const showBuy = !!me && buyWindow && (free || !me.alive || inBase(me, this.map.def, side)) && !this.buymenu.open;
+      const showBuy = !!me && buyWindow && (free || between || !me.alive || inBase(me, this.map.def, side)) && !this.buymenu.open;
       // On a phone there is no key to press: the cart button pulses and the hint says to tap it.
       const touch = this.input.touch;
-      this.hud.buyHint(showBuy ? (free ? (touch ? t('hud.storeTap') : t('hud.store', { key: kbd('store') })) : (touch ? t('hud.storeTapLeft', { n: Math.ceil(buyLeft) }) : t('hud.storeLeft', { key: kbd('store'), n: Math.ceil(buyLeft) }))) : undefined);
+      this.hud.buyHint(showBuy ? (free || between ? (touch ? t('hud.storeTap') : t('hud.store', { key: kbd('store') })) : (touch ? t('hud.storeTapLeft', { n: Math.ceil(buyLeft) }) : t('hud.storeLeft', { key: kbd('store'), n: Math.ceil(buyLeft) }))) : undefined);
       this.hud.prompt(this.promptText(state, me, site, myJob));
       this.hud.vehicle(this.vehicleInfo(state));
       const bomb = state.bomb;
@@ -1157,10 +1175,13 @@ export class Game {
     const target = [...counts.entries()].sort((a, b) => b[1] - a[1])[0]?.[0] ?? -1;
     const claimed = traces.find(t => t.target === target) ?? traces[0];
     this.link.fire({ weapon: this.player.slot, origin, dir, target: claimed.target, zone: claimed.zone, point: claimed.point });
-    if (melee) this.audio.knife(target !== -1);
+    if (melee) {
+      this.audio.knife(target !== -1);
+      if (target !== -1) { if (!rider) this.viewmodel.willLand(); this.meleeLanded(claimed, target, rider !== undefined); }
+      return;
+    }
     traces.forEach((t, i) => {
       const end = new THREE.Vector3(t.point.x, t.point.y, t.point.z);
-      if (melee) { if (t.target !== -1) this.effects.hitSpark(end, false); return; }
       const tracer = !w.suppressed && (w.pellets > 1 ? i % 3 === 0 : Math.random() < (w.auto ? 0.5 : 1));
       if (tracer) this.effects.tracer(muzzle, end, 0xffe2a0, w.class === 'sniper' ? 1.8 : 1, w.velocity);
       if (t.target !== -1) this.effects.hitSpark(end, false);
@@ -1173,6 +1194,34 @@ export class Game {
       this.audio.hitmarker(head, false);
       this.predictedHits.push({ at: performance.now(), target });
     }
+  }
+
+  /**
+   * This player's swing connected: the server's damage event is absorbed, and when the swing lands
+   * on screen (SWING contact) the blow shows: the swing stalls on the target and rebounds, the view
+   * jolts, the target is shoved and its head snaps, a little dust flies and the hit marker shows.
+   * (The sound times itself: Audio.knife.)
+   */
+  private meleeLanded(t: { point: Vec3; zone: HitZone | '' }, target: number, chase: boolean) {
+    const skin = mySkin().knife, head = t.zone === 'head';
+    const from = { x: this.player.m.x, z: this.player.m.z }, sweep = sweepOf(skin, this.player.yaw);
+    this.predictedHits.push({ at: performance.now() + SWING[skin].contact * 1000, target });
+    this.meleePending.set(target, false);
+    this.later.push({ at: this.time + SWING[skin].contact, run: () => {
+      // The server's kill can beat the swing to the target: it is shown here, as the blow lands.
+      const kill = !!this.meleePending.get(target);
+      this.meleePending.delete(target);
+      this.effects.meleeHit(new THREE.Vector3(t.point.x, t.point.y, t.point.z), this.renderer.camera.position, skin);
+      if (!chase) {
+        // The jolt runs against the swing: down for the broom's chop, back to the right for a slap.
+        this.player.punchVel -= skin === 'broom' ? 40 : 25;
+        if (isSlipper(skin)) this.player.punchYaw -= 0.012;
+        this.player.shake = Math.min(3, this.player.shake + 0.25);
+      }
+      this.remotes.get(target)?.view.struck(from, sweep);
+      this.hud.hit(kill ? 'kill' : head ? 'head' : 'body', true);
+      this.audio.hitmarker(head, kill);
+    } });
   }
 
   /** One ray against the world and enemy soldiers as rendered. */
@@ -1227,7 +1276,17 @@ export class Game {
           const vm = this.viewmodelFor(this.watched.team), now = performance.now();
           if (now - (this.lastReport.get(e.shooter) ?? -1e9) >= 40) vm.fire();
         }
-        if (e.weapon === 'knife') { r?.view.shoot(); if (shooterDistance < 12) this.audio.knife(e.hit > 0, undefined, undefined, shooter && skinOf(shooter).knife); break; }
+        if (e.weapon === 'knife') {
+          r?.view.shoot();
+          const skin = shooter ? skinOf(shooter).knife : 'slipper';
+          if (shooterDistance < 12) this.audio.knife(e.hit > 0, undefined, undefined, skin);
+          // Watching someone else's blow land: its burst where it struck, as their swing meets it.
+          if (e.hit > 0 && shooterDistance < SHOT_FX_RANGE / 3) {
+            const at = new THREE.Vector3(e.to.x, e.to.y, e.to.z);
+            this.later.push({ at: this.time + SWING[skin].contact, run: () => this.effects.meleeHit(at, this.renderer.camera.position, skin) });
+          }
+          break;
+        }
         const suppressed = !!shooter && weaponStats(e.weapon, shooter.attachments[e.weapon]).suppressed;
         // A shotgun blast arrives as one event per pellet: one report and muzzle flash per trigger pull.
         const now = performance.now(), pellet = now - (this.lastReport.get(e.shooter) ?? -1e9) < 40;
@@ -1249,16 +1308,35 @@ export class Game {
           this.predictedHits = this.predictedHits.filter(h => now - h.at < 1000);
           const shown = e.zone === 'blast' || e.zone === 'burn' ? -1 : this.predictedHits.findIndex(h => h.target === e.target);
           if (shown >= 0) this.predictedHits.splice(shown, 1);
-          // Burning goes on four times a second: no hit marker for each lick of the flames.
-          else if (e.zone !== 'burn') { this.hud.hit(e.zone === 'head' ? 'head' : 'body'); this.audio.hitmarker(e.zone === 'head', false); }
+          else if (e.zone === 'burn') {
+            // Burning goes on four times a second: an orange marker and a soft tick on the first lick, then at most every half second.
+            if (now - (this.burnMarked.get(e.target) ?? -1e9) >= BURN_MARK_EVERY) { this.burnMarked.set(e.target, now); this.hud.hit('burn'); this.audio.hitmarker(false, false, true); }
+          } else { this.hud.hit(e.zone === 'head' ? 'head' : 'body'); this.audio.hitmarker(e.zone === 'head', false); }
         }
+        // A knife skin's strike (the attacker holds the knife slot) lands harder than a bullet.
+        const melee = (e.zone === 'head' || e.zone === 'body' || e.zone === 'limb') && find(e.attacker)?.weapon === 2;
         if (e.target === myId) {
           const angle = Math.atan2(-(e.x - this.player.m.x), -(e.z - this.player.m.z));
           if (e.zone !== 'fall' && e.zone !== 'burn') this.hud.damage(angle);
           this.audio.damage(false);
           this.player.shake = Math.min(3, this.player.shake + e.amount * (e.zone === 'burn' ? 0.02 : 0.05));
-          this.player.punchVel -= e.amount * 0.08;
-        } else this.remotes.get(e.target)?.view.hit(Math.random() < 0.5);
+          const facing = angle - this.player.yaw;
+          // Shot, the view dips. Struck, the head goes with the blow: knocked back from the front (the view
+          // tips up), nodded forward from behind (down), and aside along the sole's sweep, or for a chop
+          // or thrust away from the striker.
+          this.player.punchVel -= e.amount * 0.08 * (melee ? -Math.cos(facing) : 1);
+          if (melee) {
+            const striker = find(e.attacker), sweep = striker ? sweepOf(skinOf(striker).knife, striker.yaw) : { x: 0, z: 0 };
+            const across = sweep.x * Math.cos(this.player.yaw) - sweep.z * Math.sin(this.player.yaw);
+            this.player.punchYaw -= (Math.abs(across) > 0.3 ? Math.sign(across) : Math.sign(Math.sin(facing) || 1)) * 0.05;
+          }
+        } else if (!melee) this.remotes.get(e.target)?.view.hit(Math.random() < 0.5);
+        else if (e.attacker !== myId) {
+          // Someone else's blow: the victim reacts when the striker's swing lands (this player's own blows react in meleeLanded).
+          const attacker = find(e.attacker)!, skin = skinOf(attacker).knife;
+          const from = { x: attacker.m.x, z: attacker.m.z }, sweep = sweepOf(skin, attacker.yaw), target = e.target;
+          this.later.push({ at: this.time + SWING[skin].contact, run: () => this.remotes.get(target)?.view.struck(from, sweep) });
+        }
         break;
       }
       case 'kill': {
@@ -1268,7 +1346,13 @@ export class Game {
         if (e.killer === myId && e.victim !== myId) matchNote('kill');
         if (e.victim === myId) matchNote('death');
         if (e.killer === myId && e.victim !== myId && e.weapon === 'knife') matchNote('knife_kill');
-        if (e.killer === myId && e.victim !== myId) { noteKill(this.link.mode === 'online'); this.hud.hit('kill'); this.audio.hitmarker(e.head, true); this.progress({ type: 'kill', head: e.head }); }
+        if (e.killer === myId && e.victim !== myId) {
+          noteKill(this.link.mode === 'online');
+          // A swing still on its way to the victim shows the kill marker itself, when it lands.
+          if (e.weapon === 'knife' && this.meleePending.has(e.victim)) this.meleePending.set(e.victim, true);
+          else { this.hud.hit('kill'); this.audio.hitmarker(e.head, true); }
+          this.progress({ type: 'kill', head: e.head });
+        }
         if (e.victim === myId) this.hud.announce(t('hud.youDied'), killer && killer.id !== myId ? `${killer.name} · ${weaponLabel(e.weapon, e.weapon === 'knife' ? skinOf(killer).knife : undefined)}` : '', 'var(--crimson)');
         break;
       }
@@ -1348,7 +1432,13 @@ export class Game {
         // A hit names its victim: the thrower is whoever threw the slipper that struck there.
         const owner = e.action === 'hit' ? this.bodies.throwerNear(e.x, e.z) : e.id;
         const thrower = owner === undefined ? undefined : find(owner), knife = thrower && skinOf(thrower).knife;
-        if (e.action === 'hit') { this.audio.slipper('hit', this.listener(), at, knife); this.effects.hitSpark(at, false); break; }
+        if (e.action === 'hit') {
+          this.audio.slipper('hit', this.listener(), at, knife);
+          this.effects.meleeHit(at, this.renderer.camera.position, knife || 'slipper');
+          // Shoved from where the slipper came: the thrower's side.
+          if (thrower) this.remotes.get(e.id)?.view.struck({ x: thrower.m.x, z: thrower.m.z }, { x: 0, z: 0 });
+          break;
+        }
         if (e.id !== myId) { this.remotes.get(e.id)?.view.shoot(); this.audio.slipper('throw', this.listener(), at, knife); }
         break;
       }

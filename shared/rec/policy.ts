@@ -12,8 +12,12 @@ export const REC_TERMS_VERSION = 1;
 export const TERMS_VERSION = 1;
 /** Version of the segment (`.tfr`) and input-log (`.til`) containers. */
 export const REC_FORMAT = 1;
-/** Version of the clean rules (`clean.ts`); quality records carry it, so a later version can recount. */
-export const CLEAN_RULES = 'clean-v1' as const;
+/**
+ * Version of the clean rules (`clean.ts`); quality records carry it, and the processor classifies again
+ * every segment whose quality record has another version. v2: the clock fit follows the server's varying
+ * tick rate (v1 fitted one straight line and dropped most rounds as E8/E9); seated ticks leave the aim check.
+ */
+export const CLEAN_RULES = 'clean-v2' as const;
 /** Version of the export rules (`export.ts`). */
 export const EXPORT_RULES = 'export-v1' as const;
 
