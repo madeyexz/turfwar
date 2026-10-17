@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { defaultQuality, deviceKind, inAppBrowserName, installHint, isInAppBrowser, isIOS, openInBrowserUrl, TABLET_MIN_SIDE, touchEnabled, touchPrimary, type DeviceEnv } from './device';
+import { defaultQuality, graphicsHelp, isWebglFailure, deviceKind, inAppBrowserName, installHint, isInAppBrowser, isIOS, openInBrowserUrl, TABLET_MIN_SIDE, touchEnabled, touchPrimary, type DeviceEnv } from './device';
 
 const env = (o: Partial<DeviceEnv>): DeviceEnv => ({ coarse: false, fine: true, maxTouchPoints: 0, userAgent: '', platform: '', standalone: false, ...o });
 const IPHONE = env({ coarse: true, fine: false, maxTouchPoints: 5, platform: 'iPhone', userAgent: 'Mozilla/5.0 (iPhone; CPU iPhone OS 17_5 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.5 Mobile/15E148 Safari/604.1' });
@@ -176,5 +176,23 @@ describe('in-app browsers', () => {
     expect(openInBrowserUrl(THREADS_ANDROID, url)).toBe(`intent://turfwar.ianhsiao.me/?utm_source=threads#Intent;scheme=https;package=com.android.chrome;S.browser_fallback_url=${encodeURIComponent(url)};end`);
     expect(openInBrowserUrl(THREADS_IOS, url)).toBeUndefined();
     expect(openInBrowserUrl(ANDROID, url)).toBeUndefined();
+  });
+});
+
+describe('graphics help when WebGL cannot start', () => {
+  it('names the browser whose settings to change', () => {
+    const win = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko)';
+    expect(graphicsHelp(`${win} Chrome/141.0.0.0 Safari/537.36`)).toBe('chrome');
+    expect(graphicsHelp(`${win} Chrome/141.0.0.0 Safari/537.36 Edg/141.0.0.0`)).toBe('edge');
+    expect(graphicsHelp('Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:131.0) Gecko/20100101 Firefox/131.0')).toBe('firefox');
+    expect(graphicsHelp('Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/18.0 Safari/605.1.15')).toBe('apple');
+    expect(graphicsHelp('Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/141.0.0.0 Safari/537.36')).toBe('chrome');
+    expect(graphicsHelp('Mozilla/5.0 (iPhone; CPU iPhone OS 18_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) CriOS/141.0 Mobile/15E148 Safari/604.1')).toBe('apple');
+    expect(graphicsHelp('Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/141.0.0.0 Safari/537.36')).toBe('chrome');
+    expect(graphicsHelp('SomethingElse/1.0')).toBe('other');
+  });
+  it('recognises the WebGL start failure and nothing else', () => {
+    expect(isWebglFailure('Error creating WebGL context.')).toBe(true);
+    expect(isWebglFailure('Failed to fetch')).toBe(false);
   });
 });
