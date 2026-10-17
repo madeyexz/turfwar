@@ -108,8 +108,10 @@ ship as KTX2 copies that the game transcodes to the GPU's own format (ASTC, ETC2
 (`src/render/textures.ts`, three's `KTX2Loader`); the `.webp` files are the source and the fallback
 (no WebAssembly, a file that fails, or `?ktx2=0`). Medium and High load `tex/<set>_<kind>.ktx2`
 (1024², ETC1S; normals ETC1S tuned for normals); Low, the
-phones' default, loads the `low/` copies (512², the same codecs), shrinks
-the models' own textures to 512 px, caps the sign atlas at 2048×1024 and anisotropic filtering at 4×.
+phones' default, loads the `low/` copies (512², the same codecs), caps the sign atlas at 2048×1024 and anisotropic filtering at 4×. The models' own textures (soldier.glb,
+weapons.glb, props.glb) work the same way since 2026-10-17: each GLB keeps a 1×1 stand-in under the
+texture's name and `loadModelTextures` loads `modeltex/<name>.ktx2` (1024²), `modeltex/low/<name>.ktx2`
+(512² on Low) or, without KTX2, `modeltex/<name>.webp` (shrunk to 512 px on Low).
 After changing a source `.webp`, or updating three, rebuild them (about three minutes) with
 [Basis Universal](https://github.com/BinomialLLC/basis_universal) installed
 (`brew install basis_universal`; tested with basisu 2.50, and 2.00 built from the v2_0_2 tag):
@@ -117,6 +119,7 @@ After changing a source `.webp`, or updating three, rebuild them (about three mi
 ```sh
 bun install --cwd tools --frozen-lockfile
 bun tools/make-ktx2.ts            # everything; or name sets: bun tools/make-ktx2.ts brick
+bun tools/make-model-textures.ts  # the GLBs' textures; re-run after import-assets / import-guns write new GLBs
 ```
 
 It also copies three's Basis transcoder into `public/assets/basis/`, so it is versioned like any asset.

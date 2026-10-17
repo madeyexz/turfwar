@@ -46,6 +46,45 @@ export function fitModelTextures(root: THREE.Object3D) {
   });
 }
 
+/** A model texture's stand-in in its GLB: tools/make-model-textures.ts leaves a 1×1 image there, the real one is in assets/modeltex/. */
+const isStandIn = (t: THREE.Texture) => {
+  const image = t.image as { width?: number } | undefined;
+  return !!t.name && !!image?.width && image.width <= 4 && !(t as THREE.CompressedTexture).isCompressedTexture;
+};
+/** The model textures by name, each loaded once for every model that uses it (weapons.glb and props.glb share a set). */
+const modelTextures = new Map<string, { texture: THREE.Texture; ready: Promise<THREE.Texture> }>();
+
+/**
+ * Put the real textures into models whose GLB holds stand-ins (soldier, weapons, props): from
+ * assets/modeltex/<name>.ktx2 (512 px under low/ on Low) transcoded to the GPU's own format, or
+ * the .webp original when KTX2 is off (then fitModelTextures shrinks it to the budget). Each keeps
+ * the stand-in's name, sampler, colour space and UV channel. Resolves once all have arrived.
+ */
+export async function loadModelTextures(roots: THREE.Object3D[], manager?: THREE.LoadingManager) {
+  const waits: Promise<unknown>[] = [];
+  for (const root of roots) root.traverse(o => {
+    const material = (o as THREE.Mesh).material;
+    if (!material) return;
+    for (const m of Array.isArray(material) ? material : [material]) for (const [slot, value] of Object.entries(m)) {
+      const standIn = value as THREE.Texture | null;
+      if (!standIn?.isTexture || !isStandIn(standIn)) continue;
+      let entry = modelTextures.get(standIn.name);
+      if (!entry) {
+        entry = loadTexture(`assets/modeltex/${standIn.name}.webp`, { srgb: standIn.colorSpace === THREE.SRGBColorSpace, anisotropy: standIn.anisotropy, manager, flipY: false });
+        const t = entry.texture;
+        t.name = standIn.name;
+        t.wrapS = standIn.wrapS; t.wrapT = standIn.wrapT; t.channel = standIn.channel;
+        modelTextures.set(standIn.name, entry);
+      }
+      (m as unknown as Record<string, THREE.Texture>)[slot] = entry.texture;
+      standIn.dispose();
+      waits.push(entry.ready.catch(() => undefined));
+    }
+  });
+  await Promise.all(waits);
+  for (const root of roots) fitModelTextures(root);
+}
+
 /**
  * Set up texture loading for this renderer and quality preset (once, before the first texture
  * loads; the preset's textures stay until the page reloads). Without a renderer (tools, tests)
@@ -74,10 +113,13 @@ const ktx2Path = (webp: string) => {
  * when it arrives: `ready` resolves then (and rejects if neither the KTX2 copy nor the .webp loads).
  * `manager` sees the load start and end (the loading bar).
  */
-export function loadTexture(path: string, opts: { srgb?: boolean; repeat?: boolean; anisotropy?: number; manager?: THREE.LoadingManager } = {}) {
+export function loadTexture(path: string, opts: { srgb?: boolean; repeat?: boolean; anisotropy?: number; manager?: THREE.LoadingManager; flipY?: boolean } = {}) {
   const loader = ktx2;
+  // `flipY: false` (glTF's convention, the model textures): the image's top row is v = 0, and its KTX2 copy is stored as is.
+  const flip = opts.flipY ?? true;
   // A compressed texture cannot later become an image one (or back), so the kind is chosen now.
   const texture: THREE.Texture = loader ? new THREE.CompressedTexture([], 0, 0) : new THREE.Texture();
+  if (!loader) texture.flipY = flip;
   if (opts.repeat) texture.wrapS = texture.wrapT = THREE.RepeatWrapping;
   texture.anisotropy = Math.min(opts.anisotropy ?? 8, textureBudget().anisotropy);
   if (opts.srgb) texture.colorSpace = THREE.SRGBColorSpace;
@@ -87,7 +129,7 @@ export function loadTexture(path: string, opts: { srgb?: boolean; repeat?: boole
   const ready = (async () => {
     if (loader) {
       try { fillCompressed(texture, await (await loader).loadAsync(assetUrl(ktx2Path(path)))); return; } catch (error) { console.warn('KTX2 texture failed, using', path, error); }
-      fillPixels(texture, await new THREE.ImageLoader().loadAsync(url));
+      fillPixels(texture, await new THREE.ImageLoader().loadAsync(url), flip);
     } else {
       texture.image = await new THREE.ImageLoader().loadAsync(url);
       texture.needsUpdate = true;
@@ -109,12 +151,13 @@ function fillCompressed(target: THREE.Texture, loaded: THREE.Texture) {
 }
 
 /** The .webp fallback for a texture that is already compressed-kind: its pixels as uncompressed RGBA, mipmapped by the GPU. */
-function fillPixels(target: THREE.Texture, image: HTMLImageElement) {
+function fillPixels(target: THREE.Texture, image: HTMLImageElement, flip: boolean) {
   const { width, height } = image, canvas = document.createElement('canvas');
   canvas.width = width; canvas.height = height;
   const c = canvas.getContext('2d', { willReadFrequently: true })!;
-  // Compressed textures are not flipped on upload: flip here, as the KTX2 files are.
-  c.translate(0, height); c.scale(1, -1); c.drawImage(image, 0, 0);
+  // Compressed textures are not flipped on upload: flip here, as the KTX2 files are (all but the models').
+  if (flip) { c.translate(0, height); c.scale(1, -1); }
+  c.drawImage(image, 0, 0);
   const out = target as THREE.CompressedTexture;
   out.image = { width, height } as never;
   out.mipmaps = [{ data: new Uint8Array(c.getImageData(0, 0, width, height).data.buffer), width, height }] as never;

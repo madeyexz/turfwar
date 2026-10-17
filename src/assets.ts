@@ -7,7 +7,7 @@ import type { KnifeSkin } from '../shared/skins';
 import { broomModel, slipperModel } from './render/meme';
 import { applyOptics } from './render/optics';
 import { addProceduralGuns } from './render/procguns';
-import { fitModelTextures, initTextures, loadTexture } from './render/textures';
+import { initTextures, loadModelTextures, loadTexture } from './render/textures';
 
 /** Runtime asset registry. All models are CC0 (see public/assets/LICENSE.txt). */
 export interface Assets {
@@ -78,7 +78,8 @@ export async function loadAssets(onProgress: (fraction: number) => void, gpu?: {
   const [weapons, props, soldier, anims, imported, crew] = await Promise.all([
     gltf('weapons.glb'), gltf('props.glb'), gltf('soldier.glb'), gltf(CREW ? 'soldier-anims.glb' : 'anims.glb'), gltf('guns.glb'), CREW ? gltf('soldiers.glb') : undefined, textures.load(SHARED_SETS),
   ]) as GLTF[];
-  for (const g of [weapons, props, soldier, imported]) fitModelTextures(g.scene);
+  // The GLBs hold 1×1 stand-ins for their textures (the real ones load here, GPU-compressed where the browser can).
+  await loadModelTextures([weapons, props, soldier, imported].map(g => g.scene), manager);
   if (crew) restoreBoneNames(crew.scene);
   const named = (g: GLTF) => {
     const map = new Map<string, THREE.Object3D>();

@@ -152,7 +152,11 @@ after death adds none. Once the map's
 dressing loads, `Renderer.warm` compiles every shader in the background and uploads every texture two a
 frame, so a camera that jumps (death, a new round) does not stall on first sight. Image textures are
 GPU-compressed KTX2 (`src/render/textures.ts`, built by `tools/make-ktx2.ts`), half size on Low: the
-surface textures take about 50 MB of video memory on Low and 180 MB on Medium, against 350 MB as raw RGBA. Remote soldiers
+surface textures take about 50 MB of video memory on Low and 180 MB on Medium, against 350 MB as raw RGBA.
+The models' own textures (trim sheets, prop and gun batches, the arms) are KTX2 too (`tools/make-model-textures.ts`):
+with every one of them uploaded, Low's textures took 90 MB of video memory before and 55 MB after, Medium's 357 MB
+and 217 MB (measured 2026-10-17 in Chrome at an iPhone's 1266×585 drawing buffer, which transcodes to BC7 at 8 bits
+a pixel; an iPhone transcodes opaque ones to ETC2 at 4). Remote soldiers
 use a crowd level of detail: off-screen soldiers are hidden and not animated; on screen, full
 animation and shadows within 30 m, half-rate animation to 70 m, quarter rate beyond. Remote gunfire
 beyond 110 m is not drawn and gunshot audio is limited to 85 m, six voices per frame and 14 ringing at
