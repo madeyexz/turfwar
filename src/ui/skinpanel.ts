@@ -79,7 +79,8 @@ export class SkinPanel {
     this.refresh();
     this.attach();
     this.last = performance.now();
-    const loop = () => { if (this.open) { this.render(); this.frame = requestAnimationFrame(loop); } };
+    // The next frame first: one that throws (the context lost mid-frame) must not stop the preview.
+    const loop = () => { if (this.open) { this.frame = requestAnimationFrame(loop); this.render(); } };
     this.frame = requestAnimationFrame(loop);
     this.root.querySelector<HTMLElement>('[aria-pressed="true"]')?.focus({ preventScroll: true });
   }
@@ -102,7 +103,18 @@ export class SkinPanel {
     this.renderer = new THREE.WebGLRenderer({ canvas, antialias: true, alpha: true });
     this.renderer.toneMapping = THREE.ACESFilmicToneMapping;
     this.renderer.outputColorSpace = THREE.SRGBColorSpace;
-    this.scene.environment = new THREE.PMREMGenerator(this.renderer).fromScene(new RoomEnvironment(), 0.04).texture;
+    this.environment();
+    // A lost context loses the environment light (drawn into a render target); three.js rebuilds the rest.
+    canvas.addEventListener('webglcontextrestored', () => this.environment());
+  }
+
+  /** The preview's environment light, made on its renderer. */
+  private environment() {
+    if (!this.renderer) return;
+    const pmrem = new THREE.PMREMGenerator(this.renderer);
+    this.scene.environment?.dispose();
+    this.scene.environment = pmrem.fromScene(new RoomEnvironment(), 0.04).texture;
+    pmrem.dispose();
   }
 
   /**
