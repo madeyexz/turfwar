@@ -37,7 +37,7 @@ import { L, applyI18n, escapeHtml as esc, isZh, lang, mapName as localMapName, m
 import './style.css';
 import './menu.css';
 import './ui/lang-zh.css';
-import { currentDeviceKind, defaultQuality, gpuRenderer, inAppBrowserName, readEnv } from './game/device';
+import { currentDeviceKind, defaultQuality, gpuRenderer, graphicsHelp, inAppBrowserName, isWebglFailure, readEnv } from './game/device';
 import { onTouchLayout, touchActive, touchAimAssist } from './game/touchlayout';
 import { InstallBanner } from './ui/installhint';
 import { isSideways, onSideways, watchSideways } from './ui/viewport';
@@ -1713,5 +1713,27 @@ async function boot() {
 void boot().catch(error => {
   console.error(error);
   reportBootFailure(error);
-  status.textContent = t('lobby.unableToStart', { error: (error as Error).message });
+  const message = (error as Error)?.message ?? String(error);
+  if (isWebglFailure(message)) showGraphicsHelp(); else status.textContent = t('lobby.unableToStart', { error: message });
 });
+
+/** WebGL could not start (usually graphics acceleration turned off): how to turn it back on in this browser, and Reload. */
+function showGraphicsHelp() {
+  const kind = graphicsHelp(navigator.userAgent);
+  const box = document.createElement('div');
+  box.className = 'graphics-help';
+  const title = document.createElement('strong');
+  title.textContent = t('boot.noGraphics');
+  const steps = document.createElement('p');
+  steps.textContent = t(`boot.graphics.${kind}`);
+  const more = document.createElement('p');
+  more.className = 'more';
+  more.textContent = t('boot.graphicsMore');
+  const reload = document.createElement('button');
+  reload.type = 'button';
+  reload.textContent = t('boot.reload');
+  reload.addEventListener('click', () => location.reload());
+  box.append(title, steps, more, reload);
+  status.replaceChildren(box);
+  track('error_shown', { where: 'boot', message: `no webgl (${kind})` });
+}

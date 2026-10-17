@@ -168,3 +168,16 @@ export function installHint(env: DeviceEnv, opts: { touch: boolean; dismissed: b
   if (isAndroid(env)) return 'android';
   return 'other';
 }
+
+/** Which browser's steps turn its hardware acceleration back on (the boot help when WebGL cannot start). */
+export type GraphicsHelp = 'chrome' | 'edge' | 'firefox' | 'apple' | 'other';
+export function graphicsHelp(userAgent: string): GraphicsHelp {
+  if (/Edg(e|A|iOS)?\//.test(userAgent)) return 'edge';
+  if (/Firefox\/|FxiOS\//.test(userAgent)) return 'firefox';
+  if (/iPhone|iPad|iPod/.test(userAgent) || (/Macintosh/.test(userAgent) && /Safari\//.test(userAgent) && !/Chrome\/|Chromium\//.test(userAgent))) return 'apple';
+  if (/Chrome\/|Chromium\/|CriOS\//.test(userAgent)) return 'chrome';
+  return 'other';
+}
+
+/** The page could not get a WebGL context (graphics acceleration off, a blocked driver, out of memory). */
+export const isWebglFailure = (message: string) => /WebGL/i.test(message);
