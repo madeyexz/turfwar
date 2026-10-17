@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { PLAYABLE_MAP_IDS, RETIRED_MAPS, loadMap } from '../maps/index';
-import { filterError, hasSites, listOrder, mapsFor, newRoomRules, nextRoomRules, pickAnyRoom, pickRoom, QUICK_PLAY_NEW, roomMatches, ROOM_SIZES, startRoomConfig, startRoomError, type RoomFilter, type RoomView } from './rooms';
+import { closedCodeFate, notCodeLetters, filterError, hasSites, listOrder, mapsFor, newRoomRules, nextRoomRules, pickAnyRoom, pickRoom, QUICK_PLAY_NEW, roomMatches, ROOM_SIZES, startRoomConfig, startRoomError, type RoomFilter, type RoomView } from './rooms';
 
 const room = (r: Partial<RoomView> & { room: number }): RoomView => ({ mapId: 'crane', mode: 'elimination', size: 6, humans: 1, phase: 'live', ...r });
 const any = (size = 6): RoomFilter => ({ size, mode: '', map: '' });
@@ -214,5 +214,22 @@ describe('the room list', () => {
     expect(listOrder(rooms).map(r => r.room)).toEqual([2, 1, 4, 3, 0]);
     const ping = new Map([[1, 190], [4, 30]]);
     expect(listOrder(rooms, r => ping.get(r.room)).map(r => r.room)).toEqual([2, 4, 1, 3, 0]);
+  });
+});
+
+describe('closed private room codes', () => {
+  const min = (m: number) => BigInt(m) * 60_000_000n;
+  it('reopen for 10 minutes, then say the room closed until an hour, then are gone', () => {
+    const closed = min(1000);
+    expect(closedCodeFate(closed, closed)).toBe('reopen');
+    expect(closedCodeFate(closed, closed + min(10) - 1n)).toBe('reopen');
+    expect(closedCodeFate(closed, closed + min(10))).toBe('closed');
+    expect(closedCodeFate(closed, closed + min(60) - 1n)).toBe('closed');
+    expect(closedCodeFate(closed, closed + min(60))).toBe('gone');
+  });
+  it('names the letters a code never has', () => {
+    expect(notCodeLetters('abcd')).toBe('');
+    expect(notCodeLetters('ab1o')).toBe('1O');
+    expect(notCodeLetters('IL k')).toBe('IL');
   });
 });

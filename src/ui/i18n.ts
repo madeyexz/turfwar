@@ -341,6 +341,8 @@ const en = {
   'err.That room is full': 'That room is full', 'err.Unknown room size': 'Unknown room size', 'err.Unknown mode': 'Unknown mode',
   'err.That map does not host this room': 'That map does not host this room', 'err.No room with that code': 'No room with that code',
   'err.That room is gone; try Quick Play': 'That room is gone; press Quick play',
+  'err.That room closed when everyone left; ask for the new code': 'That room closed when everyone left; ask for the new code',
+  'join.noLookalikes': 'Room codes never use I, L, O or digits',
   // Share card and 發起單挑 (src/ui/sharecard.ts, src/ui/sharepanel.ts, src/game/challenge.ts)
   'share.button': 'Share', 'share.challenge': 'Challenge a friend', 'share.title': 'Share your match', 'share.native': 'Share',
   'share.download': 'Save image', 'share.copy': 'Copy link', 'share.copied': 'Link copied', 'share.close': 'Close',
@@ -692,6 +694,8 @@ const zhTW: Record<Key, string> = {
   'err.That room is full': '該房間已滿', 'err.Unknown room size': '未知的房間人數', 'err.Unknown mode': '未知的模式',
   'err.That map does not host this room': '該地圖不支援此房間設定', 'err.No room with that code': '沒有使用此代碼的房間',
   'err.That room is gone; try Quick Play': '該房間已關閉，請改按「快速遊戲」',
+  'err.That room closed when everyone left; ask for the new code': '大家都離開後房間已關閉，請向朋友要新的代碼',
+  'join.noLookalikes': '房間代碼不會有 I、L、O 或數字',
   'share.button': '分享戰績', 'share.challenge': '約朋友單挑', 'share.title': '分享戰績', 'share.native': '分享',
   'share.download': '存圖', 'share.copy': '複製連結', 'share.copied': '已複製連結', 'share.close': '關閉',
   'share.making': '戰績卡製作中…', 'share.hold': '也可以長按圖片儲存。',
