@@ -1,7 +1,7 @@
 import { describe, expect, it, vi } from 'vitest';
 import { readFileSync } from 'node:fs';
 import { runInNewContext } from 'node:vm';
-import { MAX_CLIENT_ERRORS, errorReporter, errorSource, isOpaque } from './errors';
+import { MAX_CLIENT_ERRORS, errorReporter, errorSource, graphicsLossClock, isOpaque } from './errors';
 
 it('drains early failures once and keeps boot, uncaught and rejected failures in one budget', async () => {
   vi.resetModules();
@@ -75,4 +75,73 @@ describe('client error reports', () => {
     expect(report('error', 'load https://turfwar.ianhsiao.me/p.glb?room=WXYZ failed')).toBe(false);
     expect(sent).toEqual([['error', 'load https://turfwar.ianhsiao.me/p.glb failed', failure]]);
   });
+});
+
+describe('graphics loss clock', () => {
+  it('tells a loss on coming back from the background from one in plain view, and times the return', () => {
+    let now = 0, visible = true;
+    const clock = graphicsLossClock(() => now, () => visible);
+    // In view since the page opened: lost 95.25 s in, back 1.2 s later.
+    now = 95_250;
+    expect(clock.lost()).toEqual({ uptime_s: 95, visible: true, visible_s: 95.3 });
+    now = 96_450;
+    expect(clock.restored()).toEqual({ lost_ms: 1200, visible: true, visible_s: 96.5, losses: 1 });
+    // Hidden at 120 s, shown again at 300 s: a loss 0.4 s after coming back is the background's.
+    now = 120_000; visible = false; clock.visibility();
+    now = 300_000; visible = true; clock.visibility();
+    now = 300_400;
+    expect(clock.lost()).toMatchObject({ uptime_s: 300, visible: true, visible_s: 0.4 });
+    now = 300_406;
+    expect(clock.restored()).toEqual({ lost_ms: 6, visible: true, visible_s: 0.4, losses: 2 });
+    // Lost while hidden: no time in view to give.
+    visible = false; clock.visibility();
+    expect(clock.lost()).toEqual({ uptime_s: 300, visible: false });
+  });
+
+  it('starts uncounted on a page opened in the background', () => {
+    let now = 5_000, visible = false;
+    const clock = graphicsLossClock(() => now, () => visible);
+    visible = true;
+    // Visible now, but the clock never saw it come into view: no made-up time in view.
+    expect(clock.lost()).toEqual({ uptime_s: 5, visible: true });
+    now = 7_000; clock.visibility(); now = 9_000;
+    expect(clock.restored()).toEqual({ lost_ms: 4000, visible: true, visible_s: 2, losses: 1 });
+  });
+});
+
+it('reports a lost graphics context with when and on what, and its return after the first frame drawn again', async () => {
+  vi.resetModules();
+  const sent: Record<string, unknown>[] = [];
+  vi.doMock('./analytics', () => ({ track: (_event: string, props: Record<string, unknown>) => sent.push(props), captureException: () => undefined }));
+  const frames: FrameRequestCallback[] = [];
+  let now = 42_000;
+  vi.stubGlobal('window', {});
+  vi.stubGlobal('addEventListener', () => undefined);
+  vi.stubGlobal('document', Object.assign(new EventTarget(), { visibilityState: 'visible' }));
+  vi.stubGlobal('navigator', {});
+  vi.stubGlobal('matchMedia', () => ({ matches: false }));
+  vi.stubGlobal('performance', { now: () => now });
+  vi.stubGlobal('requestAnimationFrame', (f: FrameRequestCallback) => frames.push(f));
+  try {
+    const { watchClientErrors } = await import('./errors');
+    const canvas = new EventTarget() as HTMLCanvasElement;
+    const lost = vi.fn(), restored = vi.fn();
+    watchClientErrors(canvas, () => true, lost, restored, () => ({ quality: 'low', canvas: '970x448', map: 'ochre' }));
+    const event = new Event('webglcontextlost', { cancelable: true });
+    canvas.dispatchEvent(event);
+    expect(event.defaultPrevented).toBe(true);
+    expect(lost).toHaveBeenCalled();
+    expect(sent).toEqual([{ kind: 'webgl_lost', message: 'WebGL context lost', in_match: true, uptime_s: 42, visible: true, visible_s: 42, standalone: false, quality: 'low', canvas: '970x448', map: 'ochre' }]);
+    now += 900;
+    canvas.dispatchEvent(new Event('webglcontextrestored'));
+    expect(restored).toHaveBeenCalled();
+    // Sent once two frames have gone by: the first one after the restore re-uploads everything.
+    expect(sent).toHaveLength(1);
+    now += 2500; frames.shift()!(now);
+    expect(sent).toHaveLength(1);
+    frames.shift()!(now);
+    expect(sent[1]).toEqual({ kind: 'webgl_restored', message: 'WebGL context restored', in_match: true, lost_ms: 900, visible: true, visible_s: 42.9, losses: 1, frame_ms: 2500, quality: 'low', canvas: '970x448', map: 'ochre' });
+  } finally {
+    vi.unstubAllGlobals(); vi.doUnmock('./analytics'); vi.resetModules();
+  }
 });

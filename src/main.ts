@@ -2,7 +2,7 @@
 import './visit';
 import { inject } from '@vercel/analytics';
 import { RETIRED_MAPS, loadMap, mapSummaries } from '../shared/maps/index';
-import { cleanCode, hasSites, listOrder, mapsFor, pickAnyRoom, ROOM_SIZES, roomFull, sizeLabel } from '../shared/match/rooms';
+import { cleanCode, notCodeLetters, hasSites, listOrder, mapsFor, pickAnyRoom, ROOM_SIZES, roomFull, sizeLabel } from '../shared/match/rooms';
 import { ELIMINATION, SABOTAGE, type Mode, type Team } from '../shared/match/state';
 import { assetUrl } from './assetUrl';
 import { groundSets, loadAssets, type Assets } from './assets';
@@ -787,7 +787,15 @@ onClick('joinroom', v => run('room', Number(v)));
 onClick('coderoom', v => askRoomCode(Number(v)));
 onClick('unreachable-retry', () => lobbyConn.retry());
 $('#unreachable-retry').addEventListener('click', () => { audio.ui(); lobbyConn.retry(); });
-roomCode.addEventListener('input', () => { roomCode.value = cleanCode(roomCode.value); renderJoin(); });
+roomCode.addEventListener('input', () => {
+  const typed = roomCode.value;
+  roomCode.value = cleanCode(typed).replace(/[ILO]/g, '');
+  // Codes never have I, L, O or digits: say so rather than drop the key silently.
+  if (notCodeLetters(typed)) status.textContent = t('join.noLookalikes');
+  renderJoin();
+});
+// A code already in the box (an earlier room's) is replaced by typing, not kept by the 4-letter limit.
+roomCode.addEventListener('focus', () => roomCode.select());
 callsign.addEventListener('input', renderProfile);
 $('#quick-go').addEventListener('click', () => { audio.ui(); quickPressed(); });
 /** The big white button: the link the page was opened with if one waits, else Quick Play. */
@@ -1340,7 +1348,10 @@ async function start(action: Action, retried = false) {
       return;
     }
     playFailed();
-    status.textContent = t('lobby.couldNotJoin', { error: serverError((error as Error).message) });
+    const tried = action === 'code' && !duel ? cleanCode(roomCode.value) : '';
+    status.textContent = t('lobby.couldNotJoin', { error: serverError((error as Error).message) }) + (tried ? ` (${tried})` : '');
+    // Typing replaces the code that failed.
+    if (tried) { roomCode.focus({ preventScroll: true }); roomCode.select(); }
     track('error_shown', { where: 'join', message: String((error as Error)?.message ?? error).slice(0, 120) });
     watchLobbyRooms(); refresh();
     return;
@@ -1542,11 +1553,11 @@ function graphicsLost() {
     el.querySelector('button')!.addEventListener('click', () => location.reload());
   }, GFX_RESTORE_MS);
 }
-/** The graphics are back (three.js rebuilds its GPU state by itself): carry on. */
+/** The graphics are back (three.js rebuilds its GPU state; the renderer makes the environment light again): carry on. */
 function graphicsRestored() {
   clearTimeout(gfxTimer);
   document.querySelector('.gfx-lost')?.remove();
-  renderer.resize();
+  renderer.restored();
 }
 
 const typing = (e: KeyboardEvent) => { const t = e.target as HTMLElement | null; return !!t && (t.tagName === 'INPUT' || t.tagName === 'TEXTAREA' || t.isContentEditable); };
@@ -1637,7 +1648,10 @@ function crazyReady() {
 async function boot() {
   renderer = new Renderer(app, QUALITY[quality]);
   // The page's own failures go to PostHog; a lost graphics context also asks the player to reload.
-  watchClientErrors(renderer.renderer.domElement, () => !!game, graphicsLost, graphicsRestored);
+  watchClientErrors(renderer.renderer.domElement, () => !!game, graphicsLost, graphicsRestored, () => {
+    const canvas = renderer.renderer.domElement;
+    return { quality, pixel_ratio: renderer.pixelRatio(), canvas: `${canvas.width}x${canvas.height}`, ...(game ? { map: game.mapId } : {}) };
+  });
   // Chinese UI: fetch the CJK face with the assets, so the first screens never show a fallback font.
   const fonts = isZh() ? cjkFontReady('繁體中文') : Promise.resolve();
   showChallenge();
@@ -1671,6 +1685,9 @@ async function boot() {
   };
   let benchLeft = -1;
   const loop = (now: number) => {
+    // The next frame is asked for first: a frame that throws (a graphics context lost in the middle of
+    // drawing, any bug) must not end the loop, or the game stays frozen on its last picture for good.
+    requestAnimationFrame(loop);
     const interval = now - previous;
     const dt = fixed ? 1 / 30 : Math.max(0, Math.min(0.05, interval / 1000)); previous = now;
     const t0 = performance.now();
@@ -1682,7 +1699,6 @@ async function boot() {
       const left = Math.ceil(bench.remaining);
       if (left !== benchLeft && benchBanner) { benchLeft = left; benchBanner.textContent = bench.warming ? t('bench.warming') : t('bench.left', { n: left }); }
     }
-    requestAnimationFrame(loop);
   };
   if (!params.has('capture')) requestAnimationFrame(loop);
   let simNow = 0;

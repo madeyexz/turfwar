@@ -32,6 +32,20 @@ export function roomCode(random: () => number) {
   return code;
 }
 export const cleanCode = (code: string) => code.toUpperCase().replace(/[^A-Z]/g, '').slice(0, 4);
+/** Letters a room code can never contain (cleanCode keeps them, so the box can say so). */
+export const notCodeLetters = (code: string) => code.toUpperCase().replace(/[^ILO0-9]/g, '');
+
+/**
+ * A private room closes when its last human leaves or drops (its tick stops), but its code lives on:
+ * the friend it was sent to often tries it a minute later, after the host switched apps to share it
+ * and lost the connection. For `CODE_REOPEN_MICROS` after closing, the code reopens the room (same map
+ * and rules, a fresh match) for whoever comes first, and the host making a new private room gets the
+ * same code back; until `CODE_KEEP_MICROS` a join says the room closed instead of "No room".
+ */
+export const CODE_REOPEN_MICROS = 10n * 60_000_000n;
+export const CODE_KEEP_MICROS = 60n * 60_000_000n;
+export const closedCodeFate = (closedAt: bigint, now: bigint): 'reopen' | 'closed' | 'gone' =>
+  now - closedAt < CODE_REOPEN_MICROS ? 'reopen' : now - closedAt < CODE_KEEP_MICROS ? 'closed' : 'gone';
 
 // ---- Play Online: filtered matchmaking ------------------------------------------------------
 

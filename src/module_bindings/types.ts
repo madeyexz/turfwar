@@ -383,6 +383,15 @@ export const Clock = __t.object("Clock", {
 });
 export type Clock = __Infer<typeof Clock>;
 
+export const ClosedRoom = __t.object("ClosedRoom", {
+  code: __t.string(),
+  mapId: __t.string(),
+  configJson: __t.string(),
+  host: __t.identity(),
+  closedAt: __t.u64(),
+});
+export type ClosedRoom = __Infer<typeof ClosedRoom>;
+
 export const Command = __t.object("Command", {
   id: __t.u64(),
   soldierId: __t.u32(),
@@ -686,6 +695,13 @@ export const RoomCode = __t.object("RoomCode", {
   code: __t.string(),
 });
 export type RoomCode = __Infer<typeof RoomCode>;
+
+export const RoomHost = __t.object("RoomHost", {
+  room: __t.u8(),
+  host: __t.identity(),
+  reopenedAt: __t.u64(),
+});
+export type RoomHost = __Infer<typeof RoomHost>;
 
 export const RoomHour = __t.object("RoomHour", {
   hour: __t.u32(),

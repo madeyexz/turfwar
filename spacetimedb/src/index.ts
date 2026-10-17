@@ -2,7 +2,7 @@ import { Identity, ScheduleAt, Timestamp } from 'spacetimedb';
 import { schema, table, t, SenderError, type ReducerCtx, type InferSchema } from 'spacetimedb/server';
 import { expiredErrorIds, serverErrorSummary } from './servererrors';
 import { loadMap, loadNav } from '../../shared/maps/index';
-import { cleanCode, filterError, isRoomSize, mapsFor, newRoomRules, nextRoomRules, pickAnyRoom, pickRoom, QUICK_PLAY_NEW, roomCode, startRoomConfig, startRoomError, type RoomFilter, type RoomView } from '../../shared/match/rooms';
+import { cleanCode, closedCodeFate, CODE_KEEP_MICROS, filterError, isRoomSize, mapsFor, newRoomRules, nextRoomRules, pickAnyRoom, pickRoom, QUICK_PLAY_NEW, roomCode, startRoomConfig, startRoomError, type RoomFilter, type RoomView } from '../../shared/match/rooms';
 import type { SimContext } from '../../shared/match/combat';
 import { encodeFrame } from '../../shared/match/frame';
 import {
@@ -319,6 +319,17 @@ const deviceTable = table({ name: 'player_device' }, {
  * it here, and new rooms leave it ''. Private.
  */
 const roomCodeTable = table({ name: 'room_code' }, { room: t.u8().primaryKey(), code: t.string().unique() });
+/**
+ * Who hosts each private room, so a closed room's code can go back to them, and when a closed room's code
+ * reopened it (0 = opened by its host). Private.
+ */
+const roomHostTable = table({ name: 'room_host' }, { room: t.u8().primaryKey(), host: t.identity(), reopenedAt: t.u64() });
+/**
+ * Private rooms closed in the last hour (shared/match/rooms.ts closedCodeFate): the code, the room's map
+ * and rules, its host and when it closed. A join with the code reopens it for a while, then says it
+ * closed; the host's next private room takes the code back. Private.
+ */
+const closedRoomTable = table({ name: 'closed_room' }, { code: t.string().primaryKey(), mapId: t.string(), configJson: t.string(), host: t.identity(), closedAt: t.u64() });
 /** Which rooms are private, without their codes: the lobby lists them as private and asks for the code. Public. */
 const privateRoomTable = table({ name: 'private_room', public: true }, { room: t.u8().primaryKey() });
 
@@ -347,7 +358,7 @@ const spacetimedb = schema({
   matchEvent: eventTable, tickSchedule: tickTable, profile: profileTable, counter: counterTable,
   vehicle: vehicleTable, vehicleInbox: vehicleInboxTable, playerSeen: seenTable,
   playerDay: dayTable, admin: adminTable, serverError: serverErrorTable, adminAttempt: adminAttemptTable, playerTime: timeTable, playerDayTime: dayTimeTable,
-  playerNet: netTable, playerDayNet: dayNetTable, playerHour: hourTable, peakHour: peakTable, playerPerf: perfTable, playerSource: sourceTable, playerMilestone: milestoneTable, roomHour: roomHourTable, playerDevice: deviceTable, roomCode: roomCodeTable, privateRoom: privateRoomTable,
+  playerNet: netTable, playerDayNet: dayNetTable, playerHour: hourTable, peakHour: peakTable, playerPerf: perfTable, playerSource: sourceTable, playerMilestone: milestoneTable, roomHour: roomHourTable, playerDevice: deviceTable, roomCode: roomCodeTable, privateRoom: privateRoomTable, roomHost: roomHostTable, closedRoom: closedRoomTable,
   taipeiPlayerDay: taipeiDayTable, taipeiPlayerDayTime: taipeiDayTimeTable, taipeiPlayerDayNet: taipeiDayNetTable, taipeiCoverage: taipeiCoverageTable, taipeiRebuild: taipeiRebuildTable,
   playerConsent: consentTable, afkKick: afkKickTable, afkHour: afkHourTable,
 });
@@ -689,8 +700,8 @@ const micros = (ctx: Ctx) => ctx.timestamp.microsSinceUnixEpoch;
 
 const TICK_EVERY = () => ScheduleAt.interval(BigInt(Math.round(1_000_000 / TICK_RATE)));
 
-/** Open a room (lowest free id) with its match, clock and tick schedule. */
-function openRoom(ctx: Ctx, mapId: string, config: MatchConfig, code: string) {
+/** Open a room (lowest free id) with its match, clock and tick schedule; a private one (`code`) records its host. */
+function openRoom(ctx: Ctx, mapId: string, config: MatchConfig, code: string, host: Identity = ctx.sender, reopenedAt = 0n) {
   let room = -1;
   for (let id = 0; id <= MAX_ROOMS && room < 0; id++) if (!ctx.db.match.id.find(id)) room = id;
   if (room < 0) throw new SenderError('Every room is busy, try again shortly');
@@ -703,8 +714,8 @@ function openRoom(ctx: Ctx, mapId: string, config: MatchConfig, code: string) {
     lastTickMicros: micros(ctx), humans: 0, code: '',
   });
   // A reused room id: no code from its last life.
-  ctx.db.roomCode.room.delete(room); ctx.db.privateRoom.room.delete(room);
-  if (code) { ctx.db.roomCode.insert({ room, code }); ctx.db.privateRoom.insert({ room }); }
+  ctx.db.roomCode.room.delete(room); ctx.db.privateRoom.room.delete(room); ctx.db.roomHost.room.delete(room);
+  if (code) { ctx.db.roomCode.insert({ room, code }); ctx.db.privateRoom.insert({ room }); ctx.db.roomHost.insert({ room, host, reopenedAt }); ctx.db.closedRoom.code.delete(code); }
   for (const t of [...ctx.db.tickSchedule.iter()]) if (t.room === room) ctx.db.tickSchedule.scheduledId.delete(t.scheduledId);
   ctx.db.tickSchedule.insert({ scheduledId: 0n, scheduledAt: TICK_EVERY(), room });
   return room;
@@ -713,6 +724,13 @@ function openRoom(ctx: Ctx, mapId: string, config: MatchConfig, code: string) {
 /** Close a room: its match, soldiers, bodies, frame and tick all go; anyone still placed in it stops accruing play time. */
 function closeRoom(ctx: Ctx, room: number) {
   const time = playStore(ctx), now = micros(ctx);
+  // A private room's code outlives it for a while (closedCodeFate).
+  const row = ctx.db.match.id.find(room), code = row ? codeOf(ctx, row) : '', host = ctx.db.roomHost.room.find(room)?.host;
+  if (row && code && host) {
+    ctx.db.closedRoom.code.delete(code);
+    ctx.db.closedRoom.insert({ code, mapId: row.mapId, configJson: row.configJson, host, closedAt: now });
+  }
+  pruneClosedRooms(ctx, now);
   for (const p of ctx.db.player.iter()) if (p.room === room) endPlay(time, p.identity, now);
   for (const t of [...ctx.db.tickSchedule.iter()]) if (t.room === room) ctx.db.tickSchedule.scheduledId.delete(t.scheduledId);
   for (const r of [...ctx.db.soldier.iter()]) {
@@ -723,7 +741,31 @@ function closeRoom(ctx: Ctx, room: number) {
   for (const r of [...ctx.db.roster.room.filter(room)]) ctx.db.roster.id.delete(r.id);
   for (const r of [...ctx.db.body.iter()]) if (r.room === room) ctx.db.body.id.delete(r.id);
   ctx.db.frame.id.delete(room); ctx.db.clock.id.delete(room); ctx.db.match.id.delete(room);
-  ctx.db.roomCode.room.delete(room); ctx.db.privateRoom.room.delete(room);
+  ctx.db.roomCode.room.delete(room); ctx.db.privateRoom.room.delete(room); ctx.db.roomHost.room.delete(room);
+}
+
+function pruneClosedRooms(ctx: Ctx, now: bigint) {
+  for (const old of [...ctx.db.closedRoom.iter()]) if (now - old.closedAt >= CODE_KEEP_MICROS) ctx.db.closedRoom.code.delete(old.code);
+}
+
+/**
+ * The caller's new private room: when a friend has just reopened the caller's closed room with its code,
+ * that room (`room`); else the caller's own room closed a moment ago gives its code back (the friend
+ * they sent it to may be typing it now); else a fresh code.
+ */
+function hostCode(ctx: Ctx): { code: string; room?: number } {
+  const now = micros(ctx);
+  for (const h of ctx.db.roomHost.iter()) {
+    if (!h.host.isEqual(ctx.sender) || h.reopenedAt === 0n || closedCodeFate(h.reopenedAt, now) !== 'reopen') continue;
+    const code = ctx.db.roomCode.room.find(h.room)?.code;
+    if (code && ctx.db.match.id.find(h.room) && humansIn(ctx, h.room) > 0) return { code, room: h.room };
+  }
+  let mine: { code: string; closedAt: bigint } | undefined;
+  for (const c of ctx.db.closedRoom.iter()) {
+    if (c.host.isEqual(ctx.sender) && closedCodeFate(c.closedAt, now) === 'reopen' && (!mine || c.closedAt > mine.closedAt)) mine = c;
+  }
+  if (mine && !ctx.db.roomCode.code.find(mine.code)) return { code: mine.code };
+  return { code: freshCode(ctx) };
 }
 
 /** A room's private code ('' = public): `room_code`, or `match.code` for a room opened before it. */
@@ -952,10 +994,10 @@ function openFor(ctx: Ctx, filter: RoomFilter) {
   return openRoom(ctx, rules.mapId, config, '');
 }
 
-/** A fresh private room code (not in use). */
+/** A fresh private room code (not in use, and not a recently closed room's). */
 function freshCode(ctx: Ctx) {
   let code = '';
-  for (let i = 0; i < 20 && (!code || ctx.db.roomCode.code.find(code) || [...ctx.db.match.iter()].some(r => r.code === code)); i++) code = roomCode(() => ctx.random());
+  for (let i = 0; i < 20 && (!code || ctx.db.roomCode.code.find(code) || ctx.db.closedRoom.code.find(code) || [...ctx.db.match.iter()].some(r => r.code === code)); i++) code = roomCode(() => ctx.random());
   return code;
 }
 
@@ -1124,7 +1166,8 @@ export const createRoom = spacetimedb.reducer({ name: t.string(), size: t.u8(), 
     if (!isRoomSize(size)) throw new SenderError('Unknown room size');
     if (mode !== 'elimination' && mode !== 'sabotage') throw new SenderError('Unknown mode');
     if (!mapsFor(size, mode).includes(mapId)) throw new SenderError('That map does not host this room');
-    const room = openRoom(ctx, mapId, { ...ONLINE_CONFIG, mode, teamSize: size, noBots: !bots }, freshCode(ctx));
+    const mine = hostCode(ctx);
+    const room = mine.room ?? openRoom(ctx, mapId, { ...ONLINE_CONFIG, mode, teamSize: size, noBots: !bots }, mine.code);
     enterRoom(ctx, room, name, team);
   });
 
@@ -1147,18 +1190,28 @@ export const startRoom = spacetimedb.reducer({ name: t.string(), size: t.u8(), m
   (ctx, { name, size, mode, mapId, bots, isPublic, team }) => {
     const error = startRoomError({ size, mode, map: mapId });
     if (error) throw new SenderError(error);
-    const room = openRoom(ctx, mapId, { ...ONLINE_CONFIG, ...startRoomConfig({ size, mode, map: mapId, bots, isPublic }), ...(isPublic ? { roundsToWin: PUBLIC_ROUNDS_TO_WIN } : {}) }, isPublic ? '' : freshCode(ctx));
+    const mine = isPublic ? { code: '' } : hostCode(ctx);
+    const room = mine.room ?? openRoom(ctx, mapId, { ...ONLINE_CONFIG, ...startRoomConfig({ size, mode, map: mapId, bots, isPublic }), ...(isPublic ? { roundsToWin: PUBLIC_ROUNDS_TO_WIN } : {}) }, mine.code);
     enterRoom(ctx, room, name, team);
   });
 
-/** Join a private room by its code. */
+/** Join a private room by its code; a room that closed a moment ago reopens with it (closedCodeFate). */
 export const joinRoom = spacetimedb.reducer({ name: t.string(), code: t.string(), team: t.i8() }, (ctx, { name, code, team }) => {
   const clean = cleanCode(code);
   const byCode = clean ? ctx.db.roomCode.code.find(clean) : undefined;
   const row = byCode ? ctx.db.match.id.find(byCode.room) : clean ? [...ctx.db.match.iter()].find(r => r.code === clean) : undefined;
-  if (!row) throw new SenderError('No room with that code');
-  refuseAfterAfk(ctx, row.id);
-  enterRoom(ctx, row.id, name, team);
+  if (row) {
+    refuseAfterAfk(ctx, row.id);
+    enterRoom(ctx, row.id, name, team);
+    return;
+  }
+  const closed = clean ? ctx.db.closedRoom.code.find(clean) : undefined;
+  const now = micros(ctx), fate = closed ? closedCodeFate(closed.closedAt, now) : 'gone';
+  if (!closed || fate === 'gone') throw new SenderError('No room with that code');
+  if (fate === 'closed') throw new SenderError('That room closed when everyone left; ask for the new code');
+  // Same map and rules, a fresh match; the host keeps it (their next private room comes back here).
+  const room = openRoom(ctx, closed.mapId, { ...ONLINE_CONFIG, ...JSON.parse(closed.configJson) } as MatchConfig, closed.code, closed.host, now);
+  enterRoom(ctx, room, name, team);
 });
 
 /** Join a public room picked from the lobby's room list (private rooms need their code). */

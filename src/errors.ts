@@ -1,4 +1,4 @@
-import { captureException, track, type ClientErrorKind } from './analytics';
+import { captureException, track, type ClientErrorKind, type Events } from './analytics';
 import { asFailure, chunkIdsByFile, exceptionList, scrub, type Failure } from './exceptions';
 
 /** At most this many failures are reported from one page load (a broken frame loop would repeat forever). */
@@ -9,17 +9,19 @@ export const MAX_CLIENT_ERRORS = 5;
  * trimming and cleaning the message and its source. `failure` (the error and its stack, when there is one)
  * goes along. Returns whether it reported.
  */
-export function errorReporter(send: (kind: ClientErrorKind, message: string, source?: string, failure?: Failure) => void, max = MAX_CLIENT_ERRORS) {
+export function errorReporter(send: (kind: ClientErrorKind, message: string, source?: string, failure?: Failure, extra?: Extra) => void, max = MAX_CLIENT_ERRORS) {
   const seen = new Set<string>();
-  return (kind: ClientErrorKind, message: string, source?: string, failure?: Failure) => {
+  return (kind: ClientErrorKind, message: string, source?: string, failure?: Failure, extra?: Extra) => {
     const text = scrub(message || 'unknown').slice(0, 200);
     const key = text;
     if (seen.size >= max || seen.has(key)) return false;
     seen.add(key);
-    send(kind, text, source?.slice(0, 120), failure);
+    send(kind, text, source?.slice(0, 120), failure, extra);
     return true;
   };
 }
+/** More properties for one `client_error` (numbers, flags and fixed names only: never what a player typed). */
+type Extra = Partial<Omit<Events['client_error'], 'kind' | 'message' | 'source' | 'in_match'>>;
 
 /** `file.js:12:34` from an error event's location (the file name only: no host or query). */
 export function errorSource(filename: string | undefined, line?: number, column?: number) {
@@ -51,8 +53,8 @@ const MECHANISM: Partial<Record<ClientErrorKind, string>> = { error: 'onerror', 
  * PostHog's error tracking groups them into issues and shows the original source lines.
  */
 export function failureReporter(inMatch: () => boolean) {
-  return errorReporter((kind, message, source, failure) => {
-    track('client_error', { kind, message, ...(source ? { source } : {}), in_match: inMatch() });
+  return errorReporter((kind, message, source, failure, extra) => {
+    track('client_error', { ...extra, kind, message, ...(source ? { source } : {}), in_match: inMatch() });
     const mechanism = MECHANISM[kind];
     if (mechanism && failure) captureException(exceptionList({ ...failure, message }, mechanism, chunks(), appOrigin()), { kind, in_match: inMatch() });
   });
@@ -112,13 +114,61 @@ export function watchEarlyErrors() {
   delete (window as Window & { __earlyErrors?: unknown }).__earlyErrors;
 }
 
-export function watchClientErrors(canvas: HTMLCanvasElement, isInMatch: () => boolean, onGraphicsLost: () => void, onGraphicsRestored: () => void = () => undefined) {
+/** At most this many `webgl_restored` reports from one page (an older iPhone lost the context 9 times on one page). */
+export const MAX_RESTORED_REPORTS = 10;
+
+/**
+ * When and how the page lost its graphics context, to tell the causes apart: a phone app sent to the
+ * background loses it while hidden (`visible_s` near 0: it had only just come back), a phone short of
+ * memory loses it in plain view (`visible_s` large), at load (`uptime_s` small) or mid-match.
+ * `now` and `visible` are the page's clock and visibility (passed in for tests).
+ */
+export function graphicsLossClock(now: () => number, visible: () => boolean) {
+  let shownAt = visible() ? 0 : undefined;
+  let lostAt: number | undefined;
+  let losses = 0;
+  /** Seconds since the page last came into view (absent while hidden). */
+  const shown = () => (!visible() ? { visible: false } : shownAt === undefined ? { visible: true } : { visible: true, visible_s: Math.round((now() - shownAt) / 100) / 10 });
+  return {
+    /** The page was hidden or shown (`visibilitychange`). */
+    visibility() { shownAt = visible() ? now() : undefined; },
+    /** The context was lost: the properties for `webgl_lost`. */
+    lost() {
+      lostAt = now(); losses++;
+      return { uptime_s: Math.round(now() / 1000), ...shown() };
+    },
+    /** It came back: the properties for `webgl_restored` (`lost_ms`: how long it was gone). */
+    restored() {
+      const lost_ms = lostAt === undefined ? -1 : Math.round(now() - lostAt);
+      lostAt = undefined;
+      return { lost_ms, ...shown(), losses };
+    },
+  };
+}
+
+/**
+ * `graphics`: what the game draws with at that moment (preset, resolution, map), added to both reports.
+ * `webgl_restored` waits two frames to say how long the first one after the restore took (`frame_ms`: three.js
+ * uploads every texture and compiles every shader again; the player sees the last picture until then).
+ */
+export function watchClientErrors(canvas: HTMLCanvasElement, isInMatch: () => boolean, onGraphicsLost: () => void, onGraphicsRestored: () => void = () => undefined, graphics: () => Extra = () => ({})) {
   inMatch = isInMatch;
   watchEarlyErrors();
+  const clock = graphicsLossClock(() => performance.now(), () => document.visibilityState === 'visible');
+  document.addEventListener('visibilitychange', () => clock.visibility());
+  let restoredReports = 0;
   canvas.addEventListener('webglcontextlost', e => {
     e.preventDefault();
-    report('webgl_lost', 'WebGL context lost');
+    const standalone = (navigator as Navigator & { standalone?: boolean }).standalone === true || matchMedia('(display-mode: standalone)').matches;
+    report('webgl_lost', 'WebGL context lost', undefined, undefined, { ...clock.lost(), standalone, ...graphics() });
     onGraphicsLost();
   });
-  canvas.addEventListener('webglcontextrestored', () => { track('client_error', { kind: 'webgl_restored', message: 'WebGL context restored', in_match: inMatch() }); onGraphicsRestored(); });
+  canvas.addEventListener('webglcontextrestored', () => {
+    const props = clock.restored(), start = performance.now(), match = inMatch();
+    onGraphicsRestored();
+    if (++restoredReports > MAX_RESTORED_REPORTS) return;
+    requestAnimationFrame(() => requestAnimationFrame(() => {
+      track('client_error', { kind: 'webgl_restored', message: 'WebGL context restored', in_match: match, ...props, frame_ms: Math.round(performance.now() - start), ...graphics() });
+    }));
+  });
 }

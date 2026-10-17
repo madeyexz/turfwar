@@ -36,4 +36,20 @@ describe('Renderer warm-up and lost graphics', () => {
     draw.call(self, 2);
     expect(render).toHaveBeenCalledTimes(2);
   });
+
+  it('lets a frame that loses the context midway end quietly, but not a failure with the context still there', () => {
+    let lost = false;
+    // Safari mid-frame: createShader gives null once the context is gone, and three.js throws.
+    const composer = { render: vi.fn(() => { lost = true; throw new TypeError("Argument 1 ('shader') to WebGL2RenderingContext.shaderSource must be an instance of WebGLShader"); }) };
+    const self = {
+      lastTime: 0, frames: 0, quality: {}, sky: undefined, scope: { render: vi.fn() }, composer,
+      renderer: { getContext: () => ({ isContextLost: () => lost }), info: { reset: vi.fn() }, shadowMap: {} },
+      placeShadow: vi.fn(), camera: {}, scene: {}, viewCamera: {},
+    };
+    const draw = (Renderer.prototype as unknown as { draw(t: number): void }).draw;
+    expect(() => draw.call(self, 1)).not.toThrow();
+    lost = false;
+    composer.render.mockImplementation(() => { throw new Error('a real bug'); });
+    expect(() => draw.call(self, 2)).toThrow('a real bug');
+  });
 });
