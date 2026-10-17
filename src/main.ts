@@ -2,7 +2,7 @@
 import './visit';
 import { inject } from '@vercel/analytics';
 import { RETIRED_MAPS, loadMap, mapSummaries } from '../shared/maps/index';
-import { cleanCode, hasSites, listOrder, mapsFor, pickAnyRoom, ROOM_SIZES, roomFull, sizeLabel } from '../shared/match/rooms';
+import { cleanCode, notCodeLetters, hasSites, listOrder, mapsFor, pickAnyRoom, ROOM_SIZES, roomFull, sizeLabel } from '../shared/match/rooms';
 import { ELIMINATION, SABOTAGE, type Mode, type Team } from '../shared/match/state';
 import { assetUrl } from './assetUrl';
 import { groundSets, loadAssets, type Assets } from './assets';
@@ -787,7 +787,15 @@ onClick('joinroom', v => run('room', Number(v)));
 onClick('coderoom', v => askRoomCode(Number(v)));
 onClick('unreachable-retry', () => lobbyConn.retry());
 $('#unreachable-retry').addEventListener('click', () => { audio.ui(); lobbyConn.retry(); });
-roomCode.addEventListener('input', () => { roomCode.value = cleanCode(roomCode.value); renderJoin(); });
+roomCode.addEventListener('input', () => {
+  const typed = roomCode.value;
+  roomCode.value = cleanCode(typed).replace(/[ILO]/g, '');
+  // Codes never have I, L, O or digits: say so rather than drop the key silently.
+  if (notCodeLetters(typed)) status.textContent = t('join.noLookalikes');
+  renderJoin();
+});
+// A code already in the box (an earlier room's) is replaced by typing, not kept by the 4-letter limit.
+roomCode.addEventListener('focus', () => roomCode.select());
 callsign.addEventListener('input', renderProfile);
 $('#quick-go').addEventListener('click', () => { audio.ui(); quickPressed(); });
 /** The big white button: the link the page was opened with if one waits, else Quick Play. */
@@ -1340,7 +1348,10 @@ async function start(action: Action, retried = false) {
       return;
     }
     playFailed();
-    status.textContent = t('lobby.couldNotJoin', { error: serverError((error as Error).message) });
+    const tried = action === 'code' && !duel ? cleanCode(roomCode.value) : '';
+    status.textContent = t('lobby.couldNotJoin', { error: serverError((error as Error).message) }) + (tried ? ` (${tried})` : '');
+    // Typing replaces the code that failed.
+    if (tried) { roomCode.focus({ preventScroll: true }); roomCode.select(); }
     track('error_shown', { where: 'join', message: String((error as Error)?.message ?? error).slice(0, 120) });
     watchLobbyRooms(); refresh();
     return;

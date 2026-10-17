@@ -27,6 +27,12 @@ Back to the [README](../README.md) · [Gameplay](GAMEPLAY.md) · [Development](D
   its players);
   `join_public(room)` joins a listed public room. Each room has its own `tick_schedule` row while humans
   are in it and closes (rows and schedule deleted) when the last one leaves, so idle rooms cost nothing.
+  A private room's code outlives it (`closed_room`, private, with the host from `room_host`; rules in
+  `closedCodeFate`): for 10 minutes `join_room` with the code reopens the room (same map and rules, a fresh
+  match) and the host's next private room takes the code back, or goes into the room a friend reopened;
+  until an hour it answers "That room closed when everyone left". The friend a code was sent to often
+  tries it after the host switched apps to share it and dropped (about half of the failed code joins in
+  October 2026).
   After each match a public room keeps a map or a mode it was opened for (`fixedMap` / `fixedMode` in
   its config JSON); what was "any" rotates: the next map its size (and a fixed mode) plays, and
   Elimination and Sabotage alternate where the map has bomb sites (`nextRoomRules`). A room on its end
