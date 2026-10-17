@@ -1542,11 +1542,11 @@ function graphicsLost() {
     el.querySelector('button')!.addEventListener('click', () => location.reload());
   }, GFX_RESTORE_MS);
 }
-/** The graphics are back (three.js rebuilds its GPU state by itself): carry on. */
+/** The graphics are back (three.js rebuilds its GPU state; the renderer makes the environment light again): carry on. */
 function graphicsRestored() {
   clearTimeout(gfxTimer);
   document.querySelector('.gfx-lost')?.remove();
-  renderer.resize();
+  renderer.restored();
 }
 
 const typing = (e: KeyboardEvent) => { const t = e.target as HTMLElement | null; return !!t && (t.tagName === 'INPUT' || t.tagName === 'TEXTAREA' || t.isContentEditable); };
@@ -1637,7 +1637,10 @@ function crazyReady() {
 async function boot() {
   renderer = new Renderer(app, QUALITY[quality]);
   // The page's own failures go to PostHog; a lost graphics context also asks the player to reload.
-  watchClientErrors(renderer.renderer.domElement, () => !!game, graphicsLost, graphicsRestored);
+  watchClientErrors(renderer.renderer.domElement, () => !!game, graphicsLost, graphicsRestored, () => {
+    const canvas = renderer.renderer.domElement;
+    return { quality, pixel_ratio: renderer.pixelRatio(), canvas: `${canvas.width}x${canvas.height}`, ...(game ? { map: game.mapId } : {}) };
+  });
   // Chinese UI: fetch the CJK face with the assets, so the first screens never show a fallback font.
   const fonts = isZh() ? cjkFontReady('繁體中文') : Promise.resolve();
   showChallenge();
@@ -1671,6 +1674,9 @@ async function boot() {
   };
   let benchLeft = -1;
   const loop = (now: number) => {
+    // The next frame is asked for first: a frame that throws (a graphics context lost in the middle of
+    // drawing, any bug) must not end the loop, or the game stays frozen on its last picture for good.
+    requestAnimationFrame(loop);
     const interval = now - previous;
     const dt = fixed ? 1 / 30 : Math.max(0, Math.min(0.05, interval / 1000)); previous = now;
     const t0 = performance.now();
@@ -1682,7 +1688,6 @@ async function boot() {
       const left = Math.ceil(bench.remaining);
       if (left !== benchLeft && benchBanner) { benchLeft = left; benchBanner.textContent = bench.warming ? t('bench.warming') : t('bench.left', { n: left }); }
     }
-    requestAnimationFrame(loop);
   };
   if (!params.has('capture')) requestAnimationFrame(loop);
   let simNow = 0;

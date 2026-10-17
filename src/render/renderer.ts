@@ -47,6 +47,9 @@ export const QUALITY: Record<'low' | 'medium' | 'high' | 'test', Quality> = {
   test: { ...SHARP, pixelRatio: 0.5, adaptive: false, shadows: 0, bloom: false, dynamicLights: false },
 };
 
+/** The environment light's cube face size (px) on preset `q`: 128 on phones' Low (`pixelRatio: 'phone'`), else three's 256. */
+export const envSize = (q: Pick<Quality, 'pixelRatio'>) => (q.pixelRatio === 'phone' ? 128 : 256);
+
 /** Merged clutter that casts no shadow on lean presets (mesh names from level.ts and dressing.ts). */
 const LEAN_CASTERS = /^(level:hedge)/;
 const sphere = new THREE.Sphere();
@@ -150,7 +153,9 @@ export class Renderer {
 
   applyQuality(q: Quality) {
     if (q !== this.quality) this.adaptive = new AdaptiveDpr(adaptiveOptions(q));
+    const envChanged = envSize(q) !== envSize(this.quality);
     this.quality = q;
+    if (envChanged) this.buildEnvironment();
     setMaterialQuality(q.cheapMaterials);
     this.sun.castShadow = q.shadows > 0;
     this.sun.shadow.mapSize.set(Math.max(256, q.shadows), Math.max(256, q.shadows));
@@ -201,20 +206,45 @@ export class Renderer {
     if (this.sky) this.scene.remove(this.sky.mesh);
     this.sky = new SkyView(theme, dir);
     this.scene.add(this.sky.mesh);
-    // Image-based lighting from the sky so metals and armor read correctly.
-    const envScene = new THREE.Scene();
-    envScene.add(new SkyView(theme, dir).mesh);
-    const pmrem = new THREE.PMREMGenerator(this.renderer);
-    this.scene.environment?.dispose();
-    this.scene.environment = pmrem.fromScene(envScene, 0.02).texture;
-    this.scene.environmentIntensity = 0.55;
-    this.viewScene.environment = this.scene.environment;
-    this.viewScene.environmentIntensity = 0.7;
-    pmrem.dispose();
+    this.envSky = { theme, dir };
+    this.buildEnvironment();
     const vmSun = this.viewScene.getObjectByName('vmSun') as THREE.DirectionalLight;
     vmSun.color.copy(theme.sunColor); vmSun.intensity = theme.sunIntensity * 0.7; vmSun.position.copy(dir);
     const vmHemi = this.viewScene.getObjectByName('vmHemi') as THREE.HemisphereLight;
     vmHemi.color.copy(theme.hemiSky); vmHemi.groundColor.copy(theme.hemiGround); vmHemi.intensity = theme.hemiIntensity;
+  }
+
+  /** The sky the environment light was made from (setTheme), to make it again after a lost context. */
+  private envSky?: { theme: Theme; dir: THREE.Vector3 };
+
+  /**
+   * Image-based lighting from the sky so metals and armor read correctly. It is drawn into a render
+   * target, so a lost context loses it for good (three.js rebuilds only what it can upload again).
+   * Phones' Low preset makes it at 128 px a face (384×512, 1.6 MB of video memory) instead of 256 (6.3 MB):
+   * the sky is smooth, and older iPhones lose the context when video memory runs short.
+   */
+  private buildEnvironment() {
+    if (!this.envSky) return;
+    const envScene = new THREE.Scene();
+    envScene.add(new SkyView(this.envSky.theme, this.envSky.dir).mesh);
+    const pmrem = new THREE.PMREMGenerator(this.renderer);
+    this.scene.environment?.dispose();
+    this.scene.environment = pmrem.fromScene(envScene, 0.02, 0.1, 100, { size: envSize(this.quality) }).texture;
+    this.scene.environmentIntensity = 0.55;
+    this.viewScene.environment = this.scene.environment;
+    this.viewScene.environmentIntensity = 0.7;
+    pmrem.dispose();
+  }
+
+  /**
+   * The browser gave the graphics context back (main.ts, on `webglcontextrestored`, after three.js has
+   * made its own state again): make what three.js cannot, the environment light, size the buffers, and
+   * warm every shader and texture again (all were lost), so a camera jump later does not stall.
+   */
+  restored() {
+    this.buildEnvironment();
+    this.resize();
+    this.warm();
   }
 
   /** The graphics card as WebGL names it (the unmasked renderer where the browser allows), at most 160 characters. */
@@ -320,8 +350,15 @@ export class Renderer {
     const sm = this.renderer.shadowMap;
     if (this.quality.halfRateShadows) { sm.autoUpdate = false; sm.needsUpdate = this.frames % 2 === 0; }
     this.sky?.update(time, this.camera);
-    this.scope.render(this.renderer, this.scene, this.camera, this.viewCamera);
-    this.composer.render();
+    try {
+      this.scope.render(this.renderer, this.scene, this.camera, this.viewCamera);
+      this.composer.render();
+    } catch (error) {
+      // The context can also go in the middle of a frame (an iPhone's graphics process ending): Safari's
+      // createShader then gives null and three.js throws "shaderSource ... must be an instance of
+      // WebGLShader". The loss itself is reported (webgl_lost) and three.js rebuilds on restore.
+      if (!this.renderer.getContext().isContextLost()) throw error;
+    }
   }
 
   /**

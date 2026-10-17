@@ -199,12 +199,21 @@ export class StorePreview {
     r.toneMapping = THREE.ACESFilmicToneMapping;
     r.toneMappingExposure = 1.3;
     r.setClearColor(0x000000, 0);
-    const pmrem = new THREE.PMREMGenerator(r);
+    this.renderer = r;
+    this.environment();
+    // A lost context loses the studio light (drawn into a render target); three.js rebuilds the rest.
+    this.canvas.addEventListener('webglcontextrestored', () => this.environment());
+  }
+
+  /** The studio's environment light, made on this preview's renderer. */
+  private environment() {
+    if (!this.renderer) return;
+    const pmrem = new THREE.PMREMGenerator(this.renderer);
+    this.env?.dispose();
     this.env = pmrem.fromScene(new RoomEnvironment(), 0.04).texture;
     pmrem.dispose();
     this.scene.environment = this.env;
     this.scene.environmentIntensity = 1.1;
-    this.renderer = r;
   }
 
   /** Language changed: the hint text (the callout follows the next `show`). */
