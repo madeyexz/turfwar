@@ -312,6 +312,11 @@
 /* Status line (connecting, errors) under the panel, only when there is something to say. */
 #menu .status { margin: -4px 0 0; padding: 8px 12px; border: 1px solid var(--line); border-radius: 3px; background: rgba(4, 9, 12, 0.85); font-size: 13px; color: var(--ink); letter-spacing: 0.06em; font-weight: 600; }
 #menu .status:empty { display: none; }
+#menu .status .graphics-help { display: grid; gap: 6px; letter-spacing: 0.02em; }
+#menu .status .graphics-help strong { color: var(--amber); }
+#menu .status .graphics-help p { margin: 0; font-weight: 500; line-height: 1.45; }
+#menu .status .graphics-help .more { color: var(--muted); }
+#menu .status .graphics-help button { justify-self: start; margin-top: 4px; padding: 6px 14px; border: 1px solid var(--line); border-radius: 3px; background: transparent; color: var(--ink); font: inherit; cursor: pointer; }
 
 /* ---- Server unreachable (src/net/connect.ts): after 30 s of trying, a calm card under the tabs, never a red
    error: "Can't reach the server" with Retry. ---- */
