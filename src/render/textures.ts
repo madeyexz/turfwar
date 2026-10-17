@@ -13,6 +13,12 @@ import { assetUrl } from '../assetUrl';
  */
 
 let low = false;
+/**
+ * `?signs=1024` on Low: the sign atlas at 1024×512 instead of 2048×1024, 2.8 MB of video memory instead
+ * of 10.4 MB; every sign gets a quarter of the pixels, so small signs' text no longer reads. Off by default:
+ * an option for the owner to judge on phones.
+ */
+let smallSigns = false;
 /** The KTX2 loader (its code loads on demand, beside the first textures), while KTX2 is on. */
 let ktx2: Promise<KTX2Loader> | undefined;
 
@@ -20,7 +26,7 @@ let ktx2: Promise<KTX2Loader> | undefined;
  * How much texture this device gets: the largest generated atlas (the signs' canvas), the longest
  * side of a model's own textures and the anisotropy cap.
  */
-export const textureBudget = () => ({ low, atlas: low ? { width: 2048, height: 1024 } : { width: 4096, height: 4096 }, modelSize: low ? 512 : 4096, anisotropy: low ? 4 : 8 });
+export const textureBudget = () => ({ low, atlas: !low ? { width: 4096, height: 4096 } : smallSigns ? { width: 1024, height: 512 } : { width: 2048, height: 1024 }, modelSize: low ? 512 : 4096, anisotropy: low ? 4 : 8 });
 
 /**
  * Shrink the textures models bring in their GLB (soldier, guns, the trim sheets) to the budget's
@@ -92,6 +98,7 @@ export async function loadModelTextures(roots: THREE.Object3D[], manager?: THREE
  */
 export function initTextures(renderer: THREE.WebGLRenderer | undefined, quality: string) {
   low = quality === 'low' || quality === 'test';
+  smallSigns = typeof location !== 'undefined' && new URLSearchParams(location.search).get('signs') === '1024';
   void ktx2?.then(l => l.dispose(), () => undefined); ktx2 = undefined;
   const off = typeof location !== 'undefined' && new URLSearchParams(location.search).get('ktx2') === '0';
   if (!renderer || off || typeof WebAssembly === 'undefined' || typeof Worker === 'undefined') return;

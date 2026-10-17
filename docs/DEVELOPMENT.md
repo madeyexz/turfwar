@@ -108,7 +108,9 @@ ship as KTX2 copies that the game transcodes to the GPU's own format (ASTC, ETC2
 (`src/render/textures.ts`, three's `KTX2Loader`); the `.webp` files are the source and the fallback
 (no WebAssembly, a file that fails, or `?ktx2=0`). Medium and High load `tex/<set>_<kind>.ktx2`
 (1024², ETC1S; normals ETC1S tuned for normals); Low, the
-phones' default, loads the `low/` copies (512², the same codecs), caps the sign atlas at 2048×1024 and anisotropic filtering at 4×. The models' own textures (soldier.glb,
+phones' default, loads the `low/` copies (512², the same codecs), caps the sign atlas at 2048×1024
+(1024×512 with `?signs=1024`, an option under evaluation: about 7.5 MB less video memory, but small signs'
+text becomes unreadable) and anisotropic filtering at 4×. The models' own textures (soldier.glb,
 weapons.glb, props.glb) work the same way since 2026-10-17: each GLB keeps a 1×1 stand-in under the
 texture's name and `loadModelTextures` loads `modeltex/<name>.ktx2` (1024²), `modeltex/low/<name>.ktx2`
 (512² on Low) or, without KTX2, `modeltex/<name>.webp` (shrunk to 512 px on Low).

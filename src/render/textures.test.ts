@@ -1,6 +1,6 @@
 import * as THREE from 'three';
-import { expect, it } from 'vitest';
-import { loadModelTextures } from './textures';
+import { expect, it, vi } from 'vitest';
+import { initTextures, loadModelTextures, textureBudget } from './textures';
 
 it('puts one real texture in for every stand-in of a name, keeping its sampler, colour space and glTF orientation', async () => {
   const standIn = (name: string, srgb = false) => {
@@ -28,4 +28,17 @@ it('puts one real texture in for every stand-in of a name, keeping its sampler, 
   expect(map.colorSpace).toBe(THREE.SRGBColorSpace);
   expect(a.normalMap!.colorSpace).not.toBe(THREE.SRGBColorSpace);
   expect([map.flipY, map.wrapS, map.wrapT]).toEqual([false, THREE.RepeatWrapping, THREE.MirroredRepeatWrapping]);
+});
+
+it('halves the sign atlas only on Low with ?signs=1024', () => {
+  vi.stubGlobal('location', { search: '?signs=1024' });
+  try {
+    initTextures(undefined, 'low');
+    expect(textureBudget().atlas).toEqual({ width: 1024, height: 512 });
+    initTextures(undefined, 'medium');
+    expect(textureBudget().atlas).toEqual({ width: 4096, height: 4096 });
+    vi.stubGlobal('location', { search: '' });
+    initTextures(undefined, 'low');
+    expect(textureBudget().atlas).toEqual({ width: 2048, height: 1024 });
+  } finally { vi.unstubAllGlobals(); }
 });

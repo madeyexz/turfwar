@@ -1153,7 +1153,7 @@ function signMesh(signs: SignDecor[]) {
     if (s.style === 'billboard' || s.style === 'gate') faces.push({ s, facing: s.rotY + Math.PI, out: 0.04, back: true });
   }
   // One cell per sign, packed on shelves of a 2048-wide atlas (wider, then coarser, until it fits the
-  // device's texture budget: 4096² px, 2048×1024 on Low); a small dark cell for the backs.
+  // device's texture budget: 4096² px, 2048×1024 on Low, 1024×512 with `?signs=1024`: textures.ts); a small dark cell for the backs.
   const { width: maxW, height: maxH } = textureBudget().atlas;
   const dark = { x: 0, y: 0, w: 8, h: 8 };
   let W = Math.min(2048, maxW), scale = 1, cells = new Map<SignDecor, { x: number; y: number; w: number; h: number }>(), used = 0;
