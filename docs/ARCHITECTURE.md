@@ -49,7 +49,8 @@ Back to the [README](../README.md) · [Gameplay](GAMEPLAY.md) · [Development](D
   rotation, and saves. With no humans connected the tick idles.
 - What clients subscribe to: `match` (slow fields only: phase, scores, map, configuration; rewritten
   only when they change), `roster` (name, team, weapons, owned guns and attachments, reserves, cash,
-  score line; rewritten only on events), `player` (identity → soldier), `profile` (career stats), the
+  score line; rewritten only on events), `player` (identity → soldier), `profile` (career stats: only
+  while a match-end screen shows the leaderboard, so a join never waits for the whole table), the
   event table `match_event` (damage, kills, rounds, bomb, cash awards, chat) and one `frame` row
   rewritten every tick: a packed binary snapshot (`shared/match/frame.ts`) of every soldier's pose and
   vitals, grenades, vehicles (pose, body health, crew, wrecks), the round clock and bomb, and that
