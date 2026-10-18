@@ -2,7 +2,8 @@
  * The match recorder (docs/RECORDING.md), a long-running Bun service on the game server's machine.
  * It connects to SpacetimeDB on localhost as an ordinary SDK client, signs in with the admin key (for
  * the admin-only `recorder_subjects` view: who plays where, with their consent), subscribes to every
- * room's frames, events and roster, cuts one segment per round (shared/rec/segmenter.ts), compresses it
+ * room's roster, takes the frames and events of rooms with a recording subject (frames.ts, a second and
+ * lighter connection), cuts one segment per round (shared/rec/segmenter.ts), compresses it
  * with zstd, spools it to disk and uploads it to R2 with a checked ETag and a sha256 manifest. Players who
  * turn datasets off get an opt-out marker (their pid only), which the export reads.
  *
@@ -17,6 +18,7 @@ import { mapDef } from '../../shared/maps/index';
 import { encodeSegment, type Segment } from '../../shared/rec/segment';
 import { Segmenter, type RosterRow, type Subject } from '../../shared/rec/segmenter';
 import { REC_TERMS_VERSION, pidOf, recPrefix, utcDate, type RecEnv } from '../../shared/rec/policy';
+import { FrameFeed, checkRowTypes } from './frames';
 import { putChecked, r2, sha256Hex } from './r2';
 
 declare const RECORDER_SHA: string;
@@ -145,6 +147,7 @@ const segmenter = new Segmenter({
 });
 const TOKEN_FILE = join(DIR, 'token');
 let conn: DbConnection | undefined;
+let feed: FrameFeed | undefined;
 /** Rooms whose frames the recorder takes now (rooms with a recording subject in them). */
 let watching = 0;
 let backoff = 1000;
@@ -177,23 +180,19 @@ function connect() {
       const subjectIn = (room: number) => (id: number) => subjects.get(room)?.get(id);
       // Frames and events only from rooms with a recording subject in them: a round without one is not
       // kept, and every frame costs this small VM CPU (30 a second per room). A subject who joins mid-round
-      // starts the segment there.
-      const roomSubs = new Map<number, { unsubscribe(): void }>();
+      // starts the segment there. Its own connection (frames.ts): the SDK's decoder costs more than the rest.
+      feed?.close();
+      const thisFeed = feed = new FrameFeed({
+        uri: URI, db: DB, token: next, log,
+        sink: { frame: f => onFrame(f), event: e => segmenter.event(e.room, e.json) },
+        onClose: () => { log('frame connection closed'); watching = 0; try { ctx.disconnect(); } catch { /* already closed */ } },
+      });
+      thisFeed.start().catch(e => { log('frame connection failed', { error: String(e) }); thisFeed.close(); });
       const syncRooms = () => {
         const want = new Set<number>();
         for (const [room, m] of subjects) for (const s of m.values()) if (s.subject && s.pid) want.add(room);
-        for (const [room, sub] of roomSubs) {
-          if (want.has(room)) continue;
-          try { sub.unsubscribe(); } catch { /* not applied yet, or the connection closed */ }
-          roomSubs.delete(room);
-        }
-        for (const room of want) {
-          if (roomSubs.has(room)) continue;
-          roomSubs.set(room, ctx.subscriptionBuilder()
-            .onError(ec => log('room subscription error', { room, error: String((ec as { event?: unknown }).event ?? 'unknown') }))
-            .subscribe([`SELECT * FROM frame WHERE id = ${room}`, `SELECT * FROM match_event WHERE room = ${room}`]));
-        }
-        watching = roomSubs.size;
+        thisFeed.watch(want);
+        watching = want.size;
       };
       // One rebuild at a time, always from the newest rows (rows arrive one callback each).
       let rebuilding = false, again = false;
@@ -216,9 +215,6 @@ function connect() {
       const onFrame = (f: { id: number; mapId: string; data: Uint8Array }) => {
         segmenter.frame(f.id, f.mapId, f.data, info(f.id), id => roster.get(id), subjectIn(f.id));
       };
-      db.frame.onInsert((_c, f) => onFrame(f));
-      db.frame.onUpdate((_c, _o, f) => onFrame(f));
-      db.matchEvent.onInsert((_c, e) => segmenter.event(e.room, e.json));
       ctx.subscriptionBuilder()
         .onApplied(() => { refresh(); log('subscribed', { rooms: rooms.size }); })
         .onError(ec => {
@@ -229,7 +225,7 @@ function connect() {
         .subscribe(['SELECT * FROM match', 'SELECT * FROM private_room', 'SELECT * FROM roster', 'SELECT * FROM recorder_subjects']);
     })
     .onConnectError((_c, e) => { log('connect failed', { error: String(e) }); retry(); })
-    .onDisconnect(() => { log('disconnected'); watching = 0; segmenter.closeAll(true); retry(); })
+    .onDisconnect(() => { log('disconnected'); feed?.close(); watching = 0; segmenter.closeAll(true); retry(); })
     .build();
   conn = c;
 }
@@ -253,6 +249,7 @@ const stop = () => { log('stopping'); segmenter.closeAll(true); void drain().fin
 process.on('SIGTERM', stop);
 process.on('SIGINT', stop);
 
+checkRowTypes();
 await refreshModuleHash();
 void drain();
 connect();
