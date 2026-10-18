@@ -68,6 +68,34 @@ const fontPreload: Plugin = {
 };
 
 /**
+ * `<!--preload:game-->` in the game page's head becomes early fetches for what the lobby waits for before
+ * Play can start a match: the models (src/assets.ts) and the KTX2 transcoder, and in a build the game's
+ * own script chunks (modulepreload: fetched and parsed, not run). Without them the downloads start only
+ * after the scripts have run (on CrazyGames, after their SDK has started). Low priority, so the page's
+ * scripts and fonts still come first. The surface textures depend on the quality preset and are not here.
+ */
+const GAME_PRELOADS = ['assets/weapons.glb', 'assets/props.glb', 'assets/soldier.glb', 'assets/guns.glb', 'assets/soldiers.glb', 'assets/soldier-anims.glb',
+  'assets/basis/basis_transcoder.js', 'assets/basis/basis_transcoder.wasm'];
+const gamePreload: Plugin = {
+  name: 'game-preload',
+  transformIndexHtml: {
+    order: 'post',
+    handler(html, ctx) {
+      if (!html.includes('<!--preload:game-->')) return html;
+      const files = GAME_PRELOADS.map(f => `<link rel="preload" as="fetch" crossorigin fetchpriority="low" href="${versioned(f)}" />`);
+      // The game's chunk (bootstrap.ts imports it on its own), the SDK's (the lobby's connection) and the KTX2
+      // loader's, each with the chunks it imports.
+      const chunks = Object.values(ctx.bundle ?? {}).flatMap(c => (c.type === 'chunk' ? [c] : []));
+      const wanted = ['/src/main.ts', '/src/module_bindings/index.ts', '/three/examples/jsm/loaders/KTX2Loader.js'];
+      const scripts = [...new Set(chunks.filter(c => c.moduleIds.some(id => wanted.some(w => id.endsWith(w)))).flatMap(c => [c.fileName, ...c.imports]))]
+        .filter(f => !html.includes(f));
+      const base = crazygames ? './' : '/';
+      return html.replace('<!--preload:game-->', [...scripts.map(f => `<link rel="modulepreload" crossorigin href="${base}${f}" />`), ...files].join('\n    '));
+    },
+  },
+};
+
+/**
  * The public/ files the service worker caches as static assets (models, textures, sounds, fonts, the
  * map pictures), each with its content hash. The game asks for `<file>?v=<hash>` (src/assetUrl.ts, and
  * the stylesheets' url()s below), so one URL always means the same bytes: browsers keep it for good
@@ -169,7 +197,7 @@ export default defineConfig(({ command, mode }) => {
   if (crazygames && command === 'build') requireCrazygamesEnv(mode);
   return {
     base: crazygames ? './' : '/',
-    plugins: [pageRoutes, versionedCssUrls, fontPreload, crazygamesPage, crazygamesPrune, pwa, sourcemaps(appVersion())],
+    plugins: [pageRoutes, versionedCssUrls, fontPreload, gamePreload, crazygamesPage, crazygamesPrune, pwa, sourcemaps(appVersion())],
     define: { __APP_VERSION__: JSON.stringify(appVersion()), __ASSET_VERSIONS__: JSON.stringify(VERSIONS), __RELEASES__: JSON.stringify(releases()) },
     server: {
       allowedHosts: true,

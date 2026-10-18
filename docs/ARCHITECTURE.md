@@ -47,6 +47,14 @@ Back to the [README](../README.md) · [Gameplay](GAMEPLAY.md) · [Development](D
   and command in arrival order through the shared validation (buy window and base for weapons, cash,
   attachment fit, crate reach), runs bots, grenades, the round clock, the bomb, cash awards and map
   rotation, and saves. With no humans connected the tick idles.
+- One connection from lobby to match: the lobby lists rooms over a connection made with the player's
+  saved identity (or the new one the server gives, kept in memory until Play accepts the Terms), and an
+  online Play on that server joins over it (`watchRooms` → `connectOnline`), so a join costs no second
+  secure handshake; the room is asked for without waiting for the join's subscriptions. Play works while
+  the models load: the connection comes up meanwhile, and the soldier enters a room only once they are
+  in. After a match the lobby connects again. (A server that refuses the saved identity is listed
+  anonymously and the join connects as before.) Since the lobby connects as a known player, the server's
+  `player_seen` sessions and days also count lobby visits by players who have played before.
 - What clients subscribe to: `match` (slow fields only: phase, scores, map, configuration; rewritten
   only when they change), `roster` (name, team, weapons, owned guns and attachments, reserves, cash,
   score line; rewritten only on events), `player` (identity → soldier), `profile` (career stats: only

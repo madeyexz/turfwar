@@ -500,21 +500,53 @@ async function enter(conn: DbConnection, e: { name: string; team: number; how: O
  */
 export interface PublicRoom extends RoomView { phase: string; round: number; server: string }
 
+/** Where the identity for a server is saved (the career lives with it). */
+const tokenKeyOf = (uri: string, database: string) => `lawbreaker.token:${serverIdentityKey(uri)}:${database}`;
+function savedToken(uri: string, database: string) {
+  try { return localStorage.getItem(tokenKeyOf(uri, database)) ?? undefined; } catch { return undefined; /* storage disabled */ }
+}
+/** Servers that refused the saved identity on this page: the lobby lists their rooms without it (and hands nothing over). */
+const tokenRefused = new Set<string>();
+
+/**
+ * The lobby's live connection, handed to the join so the player does not connect a second time: the
+ * secure socket and its handshake cost several round trips, most of a join for a player far from the
+ * server. Always the player's own identity (the saved one, or the new one the server gave when none is saved).
+ */
+export interface LobbyConnection {
+  conn: DbConnection; identity: Identity; token: string; uri: string; database: string;
+  /** Who hears of the connection dropping from now on (the lobby no longer does). */
+  onDisconnect(f: () => void): void;
+}
+/** The lobby's connection as the driver holds it; `handOver` gives it to a join (once, while live). */
+export interface RoomsLink extends ConnectLink { handOver(): LobbyConnection | undefined }
+
 /**
  * Live list of rooms for the lobby: a light connection that only subscribes to the room rows (no
- * joining). Private rooms are listed too, marked `private`; their code never leaves this function,
+ * joining), with the player's saved identity (if any), so a join can use it. Private rooms are listed too, marked `private`; their code never leaves this function,
  * so joining one still takes the code. `onChange` fires whenever a room opens, fills or closes. One attempt: `live`
  * resolves once the rooms have arrived and rejects if the connection fails first; `lost` is called
  * (once) if it drops after that. Retrying is the
  * caller's (src/net/connect.ts).
  */
-export function watchRooms(onChange: (rooms: PublicRoom[]) => void, lost: () => void): ConnectLink {
+export function watchRooms(onChange: (rooms: PublicRoom[]) => void, lost: () => void): RoomsLink {
   const { uri, database } = onlineConfig();
   let conn: DbConnection | undefined, stopped = false, isLive = false, ended = false;
+  /** Given to a join: the lobby no longer lists rooms from it, closes it or hears it drop. */
+  let handed = false, dropped: (() => void) | undefined;
+  let me: { identity: Identity; token: string } | undefined;
+  const saved = uri && database ? savedToken(uri, database) : undefined;
+  const token = tokenRefused.has(`${uri}|${database}`) ? undefined : saved;
   let settle: { resolve(): void; reject(error: Error): void } = { resolve() {}, reject() {} };
   const live = new Promise<void>((resolve, reject) => { settle = { resolve, reject }; });
   live.catch(() => undefined);
-  const stop = () => { stopped = true; try { conn?.disconnect(); } catch { /* already closed */ } };
+  const stop = () => { stopped = true; if (!handed) try { conn?.disconnect(); } catch { /* already closed */ } };
+  const handOver = (): LobbyConnection | undefined => {
+    // Only as the player's own identity, and only if no other tab saved another one meanwhile.
+    if (!conn || !isLive || stopped || ended || !me || token !== saved || savedToken(uri!, database!) !== saved) return undefined;
+    handed = true; stopped = true;
+    return { conn, identity: me.identity, token: me.token, uri: uri!, database: database!, onDisconnect: f => { dropped = f; } };
+  };
   /** How long the lazy SDK chunk took to load (for `connect_slow`: code or network?). */
   let importMs: number | undefined;
   const importMsOf = () => importMs;
@@ -525,9 +557,9 @@ export function watchRooms(onChange: (rooms: PublicRoom[]) => void, lost: () => 
     stop();
     if (isLive) lost(); else settle.reject(error);
   };
-  if (!uri || !database) { settle.reject(new Error('No SpacetimeDB server configured.')); return { live, stop, importMs: importMsOf }; }
+  if (!uri || !database) { settle.reject(new Error('No SpacetimeDB server configured.')); return { live, stop, importMs: importMsOf, handOver }; }
   const emit = () => {
-    if (!conn || stopped) return;
+    if (!conn || stopped || handed) return;
     const rooms: PublicRoom[] = [];
     for (const r of conn.db.match.iter()) {
       let config: { mode?: Mode; teamSize?: number; fixedMap?: boolean; fixedMode?: boolean; noBots?: boolean } = {};
@@ -544,9 +576,10 @@ export function watchRooms(onChange: (rooms: PublicRoom[]) => void, lost: () => 
   void import('../module_bindings').then(({ DbConnection }) => {
     importMs = performance.now() - importStart;
     if (stopped) return;
-    conn = DbConnection.builder().withUri(uri).withDatabaseName(database)
-      .onConnect(c => {
+    conn = DbConnection.builder().withUri(uri).withDatabaseName(database).withToken(token)
+      .onConnect((c, identity, next) => {
         if (stopped) { c.disconnect(); return; }
+        me = { identity, token: next };
         c.db.match.onInsert(emit); c.db.match.onUpdate(emit); c.db.match.onDelete(emit);
         c.db.privateRoom.onInsert(emit); c.db.privateRoom.onDelete(emit);
         c.subscriptionBuilder()
@@ -557,11 +590,15 @@ export function watchRooms(onChange: (rooms: PublicRoom[]) => void, lost: () => 
         c.subscriptionBuilder().onApplied(emit).onError(() => undefined).subscribe(['SELECT * FROM private_room']);
       })
       // A socket that fails before the handshake reports an error and then a close: `end` keeps the first.
-      .onConnectError((_ctx, error) => end(error ?? new Error('Connection failed.')))
-      .onDisconnect(() => end(new Error('Disconnected.')))
+      .onConnectError((_ctx, error) => {
+        // The server does not accept the saved identity: list its rooms without one (the join reports it as before).
+        if (token && /token/i.test(String(error?.message ?? ''))) tokenRefused.add(`${uri}|${database}`);
+        end(error ?? new Error('Connection failed.'));
+      })
+      .onDisconnect(() => { if (dropped) dropped(); else end(new Error('Disconnected.')); })
       .build();
   }, (error: unknown) => end(error instanceof Error ? error : new Error(String(error))));
-  return { live, stop, importMs: importMsOf };
+  return { live, stop, importMs: importMsOf, handOver };
 }
 
 /**
@@ -570,19 +607,30 @@ export function watchRooms(onChange: (rooms: PublicRoom[]) => void, lost: () => 
  */
 export class ConnectError extends Error {}
 
-/** Connect, subscribe, enter a room and wait until our soldier exists. */
-export async function connectOnline(name: string, team: Team | undefined, how: OnlineEntry, status: (s: string) => void): Promise<OnlineLink> {
+/**
+ * What a join may bring: the lobby's live connection to use instead of a new one (`watchRooms`), and
+ * what must be ready before the player enters a room (the models): the connection and its subscriptions
+ * come up meanwhile, but the soldier is not put in a room before the game can draw it.
+ */
+export interface JoinOptions { reuse?: LobbyConnection; before?: Promise<unknown> }
+
+/** Connect (or take the lobby's connection), subscribe, enter a room and wait until our soldier exists. */
+export async function connectOnline(name: string, team: Team | undefined, how: OnlineEntry, status: (s: string) => void, opts: JoinOptions = {}): Promise<OnlineLink> {
   const { uri, database } = onlineConfig();
+  const given = opts.reuse;
+  const reuse = given && given.uri === uri && given.database === database && given.conn.isActive ? given : undefined;
+  if (given && !reuse) try { given.conn.disconnect(); } catch { /* already closed */ }
   if (!uri || !database) throw new Error('No SpacetimeDB server configured.');
   status(t('net.connecting'));
   const { DbConnection } = await import('../module_bindings');
-  const tokenKey = `lawbreaker.token:${serverIdentityKey(uri)}:${database}`;
-  let token: string | undefined;
-  try { token = localStorage.getItem(tokenKey) ?? undefined; } catch { /* storage disabled */ }
+  const tokenKey = tokenKeyOf(uri, database);
+  const token = savedToken(uri, database);
   return new Promise<OnlineLink>((resolve, reject) => {
     let link: OnlineLink | undefined;
+    let conn: DbConnection;
     /** Settled (in a room, or given up): a connection that opens after a timeout must not put a soldier in a room. */
     let done = false;
+    let timer: ReturnType<typeof setTimeout> | undefined;
     const fail = (error: Error) => {
       if (done) return;
       done = true;
@@ -591,54 +639,72 @@ export async function connectOnline(name: string, team: Team | undefined, how: O
       reject(error);
     };
     // No handshake by then: the server is unreachable (restarting, out of reach); after it, the join itself stalled.
-    const timer = setTimeout(() => fail(link ? new Error(t('net.timeout')) : new ConnectError(t('net.timeout'))), 20_000);
-    const conn: DbConnection = DbConnection.builder().withUri(uri).withDatabaseName(database).withToken(token)
-      .onConnect((connection, identity, nextToken) => {
-        if (done) { connection.disconnect(); return; }
-        try { localStorage.setItem(tokenKey, nextToken); } catch { /* anonymous identity still works */ }
-        status(t('net.joining'));
-        // Rough "where from" for the owner's player counts (the private player_seen table): time zone and language, no IP;
-        // and phone, tablet or computer (player_device).
-        sayHello(connection);
-        // PostHog people can be matched to SpacetimeDB profiles by this property (never identify()).
-        setPerson({ stdb_identity: identity.toHexString() });
-        link = new OnlineLink(connection, identity);
-        link.token = nextToken; link.database = database;
-        // The dataset switch changed in Settings: tell the server at once (the recorder stops at its next frame).
-        const stopConsent = onConsent(() => sendConsent(connection));
-        link.onDispose = stopConsent;
-        connection.subscriptionBuilder()
-          .onApplied(async () => {
-            if (done) return;
-            try {
-              link!.entry = { name, team: team ?? -1, how };
-              await enter(connection, link!.entry);
-              // Our soldier exists once the room's frame (with us in it) has arrived.
-              const wait = () => {
-                if (done) return;
-                if (link!.myId() >= 0 && link!.state()) { done = true; clearTimeout(timer); resolve(link!); } else setTimeout(wait, 50);
-              };
-              wait();
-            } catch (error) { fail(error as Error); }
-          })
-          .onError(() => fail(new Error(t('net.subscription'))))
-          // Rooms (match rows) and players; the room's own roster, frame and events follow once we
-          // know our room, career stats at the match's end (`leaderboard`). `soldier` and `body` are server-side detail.
-          .subscribe(['SELECT * FROM match', 'SELECT * FROM player']);
-        // Our own private room's code (the server keeps codes off the public room rows); none from an older server.
-        connection.subscriptionBuilder().onError(() => undefined).subscribe(['SELECT * FROM my_room_code']);
-        // How many friends our share code brought (the 金拖 unlock, src/game/skins.ts); none from an older server.
-        const invites = () => { for (const r of connection.db.myInvites.iter()) setInvitedFriends(r.played); };
-        connection.db.myInvites.onInsert(invites);
-        connection.subscriptionBuilder().onApplied(invites).onError(() => undefined).subscribe(['SELECT * FROM my_invites']);
-      })
+    const arm = () => { clearTimeout(timer); timer = setTimeout(() => fail(link ? new Error(t('net.timeout')) : new ConnectError(t('net.timeout'))), 20_000); };
+    arm();
+    const begin = (connection: DbConnection, identity: Identity, nextToken: string) => {
+      if (done) { connection.disconnect(); return; }
+      // While the models load the clock waits; it runs again for the join itself.
+      clearTimeout(timer);
+      try { localStorage.setItem(tokenKey, nextToken); } catch { /* anonymous identity still works */ }
+      // Rough "where from" for the owner's player counts (the private player_seen table): time zone and language, no IP;
+      // and phone, tablet or computer (player_device).
+      sayHello(connection);
+      // PostHog people can be matched to SpacetimeDB profiles by this property (never identify()).
+      setPerson({ stdb_identity: identity.toHexString() });
+      const me = link = new OnlineLink(connection, identity);
+      me.token = nextToken; me.database = database;
+      // The dataset switch changed in Settings: tell the server at once (the recorder stops at its next frame).
+      const stopConsent = onConsent(() => sendConsent(connection));
+      me.onDispose = stopConsent;
+      let applied = false, entered = false;
+      // Our soldier exists once the room's frame (with us in it) has arrived.
+      const wait = () => {
+        if (done || !applied || !entered) return;
+        if (me.myId() >= 0 && me.state()) { done = true; clearTimeout(timer); resolve(me); } else setTimeout(wait, 50);
+      };
+      connection.subscriptionBuilder()
+        .onApplied(() => { applied = true; wait(); })
+        .onError(() => fail(new Error(t('net.subscription'))))
+        // Rooms (match rows) and players; the room's own roster, frame and events follow once we
+        // know our room, career stats at the match's end (`leaderboard`). `soldier` and `body` are server-side detail.
+        .subscribe(['SELECT * FROM match', 'SELECT * FROM player']);
+      // Our own private room's code (the server keeps codes off the public room rows); none from an older server.
+      connection.subscriptionBuilder().onError(() => undefined).subscribe(['SELECT * FROM my_room_code']);
+      // How many friends our share code brought (the 金拖 unlock, src/game/skins.ts); none from an older server.
+      const invites = () => { for (const r of connection.db.myInvites.iter()) setInvitedFriends(r.played); };
+      connection.db.myInvites.onInsert(invites);
+      connection.subscriptionBuilder().onApplied(invites).onError(() => undefined).subscribe(['SELECT * FROM my_invites']);
+      // The room is asked for without waiting for the subscriptions (one round trip less): our player row
+      // reaches us either way, in their first rows or as an update after them.
+      void (async () => {
+        try {
+          if (opts.before) await opts.before;
+          if (done) return;
+          arm();
+          status(t('net.joining'));
+          me.entry = { name, team: team ?? -1, how };
+          await enter(connection, me.entry);
+          entered = true;
+          wait();
+        } catch (error) { fail(error as Error); }
+      })();
+    };
+    const dropped = () => {
+      // Dropped before we were in a room: as unreachable as a refused connection.
+      if (!done) fail(new ConnectError(t('net.unreachable', { error: t('net.refused') })));
+      if (link && !link.dropReason) link.dropReason = 'lost';
+      link?.markDisconnected();
+    };
+    if (reuse) {
+      conn = reuse.conn;
+      reuse.onDisconnect(dropped);
+      begin(conn, reuse.identity, reuse.token);
+      return;
+    }
+    conn = DbConnection.builder().withUri(uri).withDatabaseName(database).withToken(token)
+      .onConnect(begin)
       .onConnectError((_ctx, error) => fail(new ConnectError(t('net.unreachable', { error: error?.message ?? t('net.refused') }))))
-      .onDisconnect(() => {
-        // Dropped before we were in a room: as unreachable as a refused connection.
-        if (!done) fail(new ConnectError(t('net.unreachable', { error: t('net.refused') })));
-        if (link && !link.dropReason) link.dropReason = 'lost';
-        link?.markDisconnected();
-      })
+      .onDisconnect(dropped)
       .build();
   });
 }
