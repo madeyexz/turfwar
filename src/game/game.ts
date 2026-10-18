@@ -705,7 +705,8 @@ export class Game {
       const bomb = state.bomb;
       const mine = bomb.by === myId && bomb.progress > 0;
       if (this.player.windup <= 0) this.hud.progress(mine ? t(bomb.armed ? 'hud.disarming2' : 'hud.arming2') : undefined, bomb.progress);
-      this.hud.matchEnd(state, this.myTeam, state.phase === 'ended' ? link.leaderboard?.() : undefined);
+      const ended = state.phase === 'ended', career = link.leaderboard?.(ended);
+      this.hud.matchEnd(state, this.myTeam, ended ? career : undefined);
       this.hud.net(link.status());
     }
     if (this.mapTimer <= 0) { this.mapTimer = 0.1; this.hud.minimap(state, me, this.player.yaw, positions, new THREE.Vector3(this.player.m.x, 0, this.player.m.z)); }

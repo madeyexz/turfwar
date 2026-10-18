@@ -52,8 +52,8 @@ export interface GameLink {
   /** Change sides; the host applies the shared rule (`canSwitchTeam`). Hosts without it leave it out. */
   switchTeam?(): void;
   status(): string;
-  /** Online: career stats of the players who have played on this server, best first. */
-  leaderboard?(): CareerStats[];
+  /** Online: career stats of the players who have played on this server, best first, while `ended` (fetched then, dropped once the next match starts). */
+  leaderboard?(ended: boolean): CareerStats[];
   /** Online: our room's private code ('' = Quick Play), size label and room id. */
   roomInfo?(): { code: string; size: string; room: number } | undefined;
   /** Online: what the match-recording input logger needs to upload (src/game/inputlog.ts), and the hook that feeds it ticks, sends and round trips. */
