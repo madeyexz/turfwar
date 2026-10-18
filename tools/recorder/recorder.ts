@@ -173,12 +173,31 @@ function connect() {
         return { configJson: m?.configJson ?? '', mode: m?.mode ?? '', teamSize: m?.teamSize ?? 0, private: priv.has(room) };
       };
       const subjectIn = (room: number) => (id: number) => subjects.get(room)?.get(id);
+      // Frames and events only from rooms with a recording subject in them: a round without one is not
+      // kept, and every frame costs this small VM CPU (30 a second per room). A subject who joins mid-round
+      // starts the segment there.
+      const roomSubs = new Map<number, { unsubscribe(): void }>();
+      const syncRooms = () => {
+        const want = new Set<number>();
+        for (const [room, m] of subjects) for (const s of m.values()) if (s.subject && s.pid) want.add(room);
+        for (const [room, sub] of roomSubs) {
+          if (want.has(room)) continue;
+          try { sub.unsubscribe(); } catch { /* not applied yet, or the connection closed */ }
+          roomSubs.delete(room);
+        }
+        for (const room of want) {
+          if (roomSubs.has(room)) continue;
+          roomSubs.set(room, ctx.subscriptionBuilder()
+            .onError(ec => log('room subscription error', { room, error: String((ec as { event?: unknown }).event ?? 'unknown') }))
+            .subscribe([`SELECT * FROM frame WHERE id = ${room}`, `SELECT * FROM match_event WHERE room = ${room}`]));
+        }
+      };
       // One rebuild at a time, always from the newest rows (rows arrive one callback each).
       let rebuilding = false, again = false;
       const refresh = () => {
         if (rebuilding) { again = true; return; }
         rebuilding = true;
-        void rebuildSubjects([...db.recorderSubjects.iter()] as SubjectRow[]).finally(() => { rebuilding = false; if (again) { again = false; refresh(); } });
+        void rebuildSubjects([...db.recorderSubjects.iter()] as SubjectRow[]).then(syncRooms).finally(() => { rebuilding = false; if (again) { again = false; refresh(); } });
       };
       db.match.onInsert((_c, m) => setRoom(m));
       db.match.onUpdate((_c, _o, m) => setRoom(m));
@@ -204,7 +223,7 @@ function connect() {
           log('subscription error; reconnecting in 60 s', { error: String((ec as { event?: unknown }).event ?? 'unknown') });
           setTimeout(() => { try { ctx.disconnect(); } catch { /* already closed */ } }, 60_000);
         })
-        .subscribe(['SELECT * FROM match', 'SELECT * FROM private_room', 'SELECT * FROM roster', 'SELECT * FROM frame', 'SELECT * FROM match_event', 'SELECT * FROM recorder_subjects']);
+        .subscribe(['SELECT * FROM match', 'SELECT * FROM private_room', 'SELECT * FROM roster', 'SELECT * FROM recorder_subjects']);
     })
     .onConnectError((_c, e) => { log('connect failed', { error: String(e) }); retry(); })
     .onDisconnect(() => { log('disconnected'); segmenter.closeAll(true); retry(); })
