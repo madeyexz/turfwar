@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { challengeMap, challengeUrl, cleanName, inviteUrl, parseChallenge, parseInvite, shareRef } from './challenge';
+import { challengeMap, challengeUrl, cleanName, inviteUrl, linkServer, parseChallenge, parseInvite, shareRef } from './challenge';
 import { withUtm } from '../utm';
 import { bragLine, MatchTally, nationalDay, type MatchSummary } from './matchstats';
 
@@ -60,6 +60,20 @@ describe('發起單挑 links', () => {
     expect(parseInvite('/r/KXP', '')).toBeUndefined();
     expect(parseInvite('/r/KXPBX', '')).toBeUndefined();
     expect(parseInvite('/', '?room=KXPB')).toBeUndefined();
+  });
+
+  it("sends a room link to the room's server, and leaves other links to the player's own choice", () => {
+    const url = new URL(inviteUrl('https://turfwar.ianhsiao.me', 'abcd', 'k3x9q2ab', 'us'));
+    expect(url.search).toBe('?ref=k3x9q2ab&s=us');
+    expect(linkServer(url)).toBe('us');
+    expect(linkServer(new URL('https://turfwar.ianhsiao.me/r/ABCD'))).toBe('tw');
+    expect(linkServer(new URL(inviteUrl('https://turfwar.ianhsiao.me', 'abcd', '', 'us')))).toBe('us');
+    // A challenge without a room is played wherever the player plays; `s` without a room means nothing.
+    expect(linkServer(new URL(challengeUrl('https://turfwar.ianhsiao.me', { name: 'Raven', server: 'us' })))).toBeUndefined();
+    expect(challengeUrl('https://turfwar.ianhsiao.me', { name: 'Raven', server: 'us' })).not.toContain('s=us');
+    expect(linkServer(new URL(challengeUrl('https://turfwar.ianhsiao.me', { name: 'Raven', room: 'ABCD' })))).toBe('tw');
+    expect(linkServer(new URL('https://turfwar.ianhsiao.me/?server=us'))).toBeUndefined();
+    expect(linkServer(new URL('https://turfwar.ianhsiao.me/r/ABCD?s=eu'))).toBe('tw');
   });
 
   it('plays on the challenge map only where a 1v1 fits', () => {

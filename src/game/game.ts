@@ -35,6 +35,7 @@ import { kbd, keyOf } from '../ui/keys';
 import { mapName, roundReason, t, teamName } from '../ui/i18n';
 import { Input } from './input';
 import type { GameLink } from './link';
+import type { ServerId } from '../net/servers';
 import { Driving } from './driving';
 import { LocalPlayer } from './player';
 import { chatDisabled, isMagnified, settings } from './settings';
@@ -226,6 +227,8 @@ export class Game {
   onExit?: (how: 'menu_button' | 'end_screen' | 'leave_key') => void;
   /** Online servers rotate battlefields; the host page rebuilds the scene for the new map. */
   onMapChange?: (mapId: string) => void;
+  /** The server an online match runs on (main.ts), so invite and challenge links name it. */
+  server?: ServerId;
   /** The player's own tally this match, and the finished match's summary (the share card's numbers). */
   private tally = new MatchTally();
   private summary?: MatchSummary;
@@ -791,7 +794,7 @@ export class Game {
     if (!summary) return;
     const ref = this.shareCode();
     const source = o.room ? 'duel' : o.source ?? 'share';
-    const url = shareableLink(challengeUrl(location.origin, { name: summary.name, room: o.room, map: summary.mapId, beat: summary.kills, ref }, { source, medium: 'share_card' }));
+    const url = shareableLink(challengeUrl(location.origin, { name: summary.name, room: o.room, map: summary.mapId, beat: summary.kills, ref, server: o.room ? this.server : undefined }, { source, medium: 'share_card' }));
     this.input.release();
     track('share_card_opened', { ref, solo: summary.solo, result: summary.result, room: !!o.room });
     await openSharePanel({
@@ -834,7 +837,7 @@ export class Game {
     this.input.release();
     track('invite_opened', { ref });
     openInvitePanel({
-      code, where, url: shareableLink(inviteUrl(location.origin, code, ref)), seats: this.link.state()?.config.teamSize ?? 6,
+      code, where, url: shareableLink(inviteUrl(location.origin, code, ref, this.server)), seats: this.link.state()?.config.teamSize ?? 6,
       people: () => (this.link.state()?.soldiers ?? []).filter(s => !s.bot)
         .map(s => ({ name: s.name, me: s.id === this.link.myId() })).sort((a, b) => Number(b.me) - Number(a.me)),
       onSent: method => { noteShare(); track('invite_sent', { ref, method }); },
