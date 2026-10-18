@@ -145,6 +145,8 @@ const segmenter = new Segmenter({
 });
 const TOKEN_FILE = join(DIR, 'token');
 let conn: DbConnection | undefined;
+/** Rooms whose frames the recorder takes now (rooms with a recording subject in them). */
+let watching = 0;
 let backoff = 1000;
 
 function connect() {
@@ -191,6 +193,7 @@ function connect() {
             .onError(ec => log('room subscription error', { room, error: String((ec as { event?: unknown }).event ?? 'unknown') }))
             .subscribe([`SELECT * FROM frame WHERE id = ${room}`, `SELECT * FROM match_event WHERE room = ${room}`]));
         }
+        watching = roomSubs.size;
       };
       // One rebuild at a time, always from the newest rows (rows arrive one callback each).
       let rebuilding = false, again = false;
@@ -226,7 +229,7 @@ function connect() {
         .subscribe(['SELECT * FROM match', 'SELECT * FROM private_room', 'SELECT * FROM roster', 'SELECT * FROM recorder_subjects']);
     })
     .onConnectError((_c, e) => { log('connect failed', { error: String(e) }); retry(); })
-    .onDisconnect(() => { log('disconnected'); segmenter.closeAll(true); retry(); })
+    .onDisconnect(() => { log('disconnected'); watching = 0; segmenter.closeAll(true); retry(); })
     .build();
   conn = c;
 }
@@ -243,7 +246,7 @@ function retry() {
 setInterval(() => segmenter.closeIdle(30_000), 10_000);
 setInterval(() => {
   void refreshModuleHash();
-  log('health', { ...stats, open: segmenter.openRooms.length, skippedVersion: segmenter.skippedVersion, droppedNoSubject: segmenter.droppedNoSubject, spoolBytes: spoolSize(), connected: !!conn });
+  log('health', { ...stats, rooms: subjects.size, watching, open: segmenter.openRooms.length, skippedVersion: segmenter.skippedVersion, droppedNoSubject: segmenter.droppedNoSubject, spoolBytes: spoolSize(), connected: !!conn });
 }, 60_000);
 
 const stop = () => { log('stopping'); segmenter.closeAll(true); void drain().finally(() => process.exit(0)); setTimeout(() => process.exit(0), 20_000); };
