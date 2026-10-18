@@ -124,13 +124,17 @@ mouse) and `aimAssist`.
 - **Recorder** (`tools/recorder/recorder.ts`, systemd `turfwar-recorder` on the VM): SDK client of the
   local server, admin login, subscribes to every room's `roster`, `match`, `private_room` and
   `recorder_subjects`, and to `frame` and `match_event` only of rooms with a recording subject in them
-  (a round without one is not kept); cuts a segment per round (`shared/rec/segmenter.ts`; rounds
+  (a round without one is not kept), on a second connection with its own wire reader
+  (`tools/recorder/frames.ts`, tested against the SDK's serializers); cuts a segment per round (`shared/rec/segmenter.ts`; rounds
   over 10 minutes are split; a room whose frames stop closes after 30 s), spools it to
   `/var/lib/turfwar-rec/spool` (2 GB cap) and uploads it with an ETag (MD5) check, then the manifest and
   the index. Health line every minute in `journalctl -u turfwar-recorder`. It shares the game server's
   small CPU allowance, so it connects without compression (localhost) and runs with one garbage-collector
-  marker (`BUN_JSC_numberOfGCMarkers=1` in the unit): with Bun's default the idle markers spin and it took
-  ~12% of a vCPU per open room, about as much as the game server; now ~1%.
+  marker (`BUN_JSC_numberOfGCMarkers=1` in the unit; with Bun's default the idle markers spin). On that VM
+  the SDK costs ~2.2 ms of CPU per frame message (6.7% of a vCPU for each room, about as much as the game
+  server's work for it) and the own reader ~1.4 ms (4.1%, most of it the WebSocket); hence also frames
+  only from rooms with a subject. The health line's `rooms` and `watching` count rooms with players and
+  rooms it takes frames from.
 - **Processor** (`tools/recorder/process.ts`, `turfwar-rec-process.timer`, hourly): classifies new
   segments (10 minutes after upload, so the input batches are in), rewrites `stats/clean-hours.json`, and
   at 19:00 UTC applies retention: input never used by a segment after 30 days, everything after 3 years.

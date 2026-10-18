@@ -18,7 +18,7 @@ import { loadLayout, matches } from './game/keybinds';
 import type { GameLink } from './game/link';
 import { OfflineLink } from './game/offline';
 import { Bench, BENCH_SECONDS, benchReport, type BenchResult } from './game/bench';
-import { onlineAvailable, connectOnline, watchRooms, ConnectError, OnlineLink, type OnlineEntry, type PublicRoom } from './net/online';
+import { onlineAvailable, connectOnline, watchRooms, ConnectError, OnlineLink, type OnlineEntry, type PublicRoom, type RoomsLink } from './net/online';
 import { PING_WINDOW, PingMonitor, hostAnswers, pingAllowed, pingTone, pingUrl, serverHost, serverRegion } from './net/ping';
 import { currentServer, followLink, gameServerList, onServer, type GameServer, type ServerId } from './net/servers';
 import { ConnectDriver, connectSeconds, type ConnectState } from './net/connect';
@@ -353,7 +353,7 @@ if (!mapOk(map)) map = firstMap();
 interface Queued { action: Action; room: number; retried: boolean }
 let rooms: PublicRoom[] = [];
 /** Pings and connects reach the chosen server (choosing another stops the driver and starts it again). */
-const lobbyConn = new ConnectDriver<Queued>({
+const lobbyConn = new ConnectDriver<Queued, RoomsLink>({
   ping: signal => { const url = server && pingUrl(server.uri); return url ? hostAnswers(url, signal) : Promise.resolve(false); },
   connect: lost => watchRooms(list => { rooms = list; refresh(); }, lost),
 }, s => onLobbyConn(s), q => run(q.action, q.room, q.retried));
@@ -1041,6 +1041,8 @@ function syncOptions() {
 }
 
 let assets: Assets;
+/** The models and textures on their way (from boot): Play works meanwhile, and the match waits for them. */
+let assetsLoad: Promise<Assets> | undefined;
 let renderer: Renderer;
 let game: Game | undefined;
 let backdrop: LevelView | undefined;
@@ -1069,7 +1071,8 @@ for (const type of ['pointerdown', 'keydown'] as const) document.addEventListene
 
 function showBackdrop() {
   const id = shownMap();
-  if (!assets || game || backdropMap === id) return;
+  // (Not while a match is starting: it would be built only to be thrown away.)
+  if (!assets || game || starting || backdropMap === id) return;
   if (backdrop) renderer.scene.remove(backdrop.group);
   const def = loadMap(id).def;
   renderer.setTheme(THEMES[def.theme], def.sun);
@@ -1326,6 +1329,8 @@ async function start(action: Action, retried = false) {
   options.hide();
   choicePings.setActive(false);
   status.textContent = '';
+  // An online match on the lobby's server joins over the lobby's connection (no second handshake).
+  const lobbyLink = via === 'online' ? lobbyConn.take()?.handOver() : undefined;
   unwatchRooms();
   inMenu = false;
   audio.start();
@@ -1344,7 +1349,7 @@ async function start(action: Action, retried = false) {
   let link: GameLink;
   try {
     link = via === 'online'
-      ? await connectOnline(name, teamChoice, how, s => { status.textContent = s; })
+      ? await connectOnline(name, teamChoice, how, s => { status.textContent = s; }, { reuse: lobbyLink, before: assetsLoad })
       : duel?.kind === 'fallback'
         ? new OfflineLink(duel.mapId, name, undefined, { ...ELIMINATION, teamSize: 1, botSkill }, false, duel.c.name)
       : via === 'lab'
@@ -1379,6 +1384,11 @@ async function start(action: Action, retried = false) {
     track('error_shown', { where: 'join', message: String((error as Error)?.message ?? error).slice(0, 120) });
     watchLobbyRooms(); refresh();
     return;
+  }
+  // Solo and Practice (and an online start that got here first) wait for the models.
+  if (!assets) {
+    status.textContent = loadingText();
+    try { assets = await assetsLoad!; } catch (error) { link.dispose(); starting = undefined; status.textContent = t('lobby.unableToStart', { error: (error as Error)?.message ?? String(error) }); return; }
   }
   const linkMap = link.state()?.mapId ?? (duel?.kind === 'fallback' ? duel.mapId : rules.mapId);
   // The map's ground textures (the shared ones came with the lobby): from the cache after the first time.
@@ -1681,12 +1691,23 @@ async function boot() {
   // Chinese UI: fetch the CJK face with the assets, so the first screens never show a fallback font.
   const fonts = isZh() ? cjkFontReady('繁體中文') : Promise.resolve();
   showChallenge();
-  assets = await loadAssets(f => { loadFraction = f; renderQuick(); renderStart(); renderOthers(); renderChallenge(); }, { renderer: renderer.renderer, quality });
+  const loading = assetsLoad = loadAssets(f => {
+    // The total grows as the models name their textures: never shown going back, and 100% only when done.
+    loadFraction = Math.min(0.99, Math.max(loadFraction, f));
+    // Play pressed before the models are in: the start waits for them and says how far they are.
+    if (starting && !assets) status.textContent = loadingText();
+    renderQuick(); renderStart(); renderOthers(); renderChallenge();
+  }, { renderer: renderer.renderer, quality });
+  loading.catch(() => undefined);
+  // The lobby works while they load: a Play pressed now connects and joins as they arrive.
   await fonts;
   ready = true;
+  refresh(); renderChallenge();
+  assets = await loading;
   if (!benchMode) lobbyReady();
   if (CRAZYGAMES) crazyReady();
-  warmServiceWorker();
+  // A match starting now caches its files 15 s after it begins instead (start), not while it loads its map.
+  if (!starting) warmServiceWorker();
   refresh();
   renderChallenge();
   if (params.get('room') && !params.get('autostart') && !challenge) roomCode.focus({ preventScroll: true });

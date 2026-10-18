@@ -113,11 +113,11 @@ export interface ConnectTimings {
   connectMs?: number; importMs?: number;
 }
 
-export interface ConnectDeps {
+export interface ConnectDeps<L extends ConnectLink = ConnectLink> {
   /** One `/v1/ping`: true when the host answered 200 (false or a rejection: not up). */
   ping(signal: AbortSignal): Promise<boolean>;
   /** Open the real connection; `lost` is called if it drops after being live. */
-  connect(lost: () => void): ConnectLink;
+  connect(lost: () => void): L;
   now?: () => number;
 }
 
@@ -129,7 +129,7 @@ type Timer = ReturnType<typeof setTimeout>;
  * queued action when the server is up. Both are called after the driver's own bookkeeping, so they
  * may call back into it (a queued Quick Play stops the lobby's connection to open the game's).
  */
-export class ConnectDriver<A> {
+export class ConnectDriver<A, L extends ConnectLink = ConnectLink> {
   private s: ConnectState<A> = idleConnect<A>();
   /** Bumped on every new attempt and on stop: answers from an older attempt are ignored. */
   private gen = 0;
@@ -137,14 +137,14 @@ export class ConnectDriver<A> {
   private pingTimer?: Timer;
   private tickTimer?: ReturnType<typeof setInterval>;
   /** The connection: in flight, or live. Never more than one. */
-  private link?: ConnectLink;
+  private link?: L;
   private linkLive = false;
   private connectStarted = -Infinity;
   /** Timings of this attempt (reset when a new one begins). */
   timings: ConnectTimings = {};
 
   constructor(
-    private deps: ConnectDeps,
+    private deps: ConnectDeps<L>,
     private onChange: (s: ConnectState<A>) => void,
     private onRun: (action: A) => void,
     private limits: ConnectLimits = CONNECT,
@@ -159,6 +159,14 @@ export class ConnectDriver<A> {
   queue(action: A) { this.dispatch({ type: 'queue', action }); }
   /** Stop trying and close the connection. */
   stop() { this.dispatch({ type: 'stop' }); }
+  /** The live connection, given away (a join uses it): the driver forgets it and stops, without closing it. */
+  take(): L | undefined {
+    if (this.s.phase !== 'ready' || !this.link || !this.linkLive) return undefined;
+    const link = this.link;
+    this.link = undefined; this.linkLive = false;
+    this.stop();
+    return link;
+  }
 
   private now() { return this.deps.now ? this.deps.now() : performance.now(); }
   private trying() { return this.s.phase === 'probing'; }
@@ -224,7 +232,7 @@ export class ConnectDriver<A> {
     const now = this.now();
     if (!hostAnswered && now - this.connectStarted < this.limits.connectEveryMs) return;
     this.connectStarted = now;
-    const link: ConnectLink = this.deps.connect(() => this.lost(link));
+    const link: L = this.deps.connect(() => this.lost(link));
     this.link = link; this.linkLive = false;
     const timeout = setTimeout(() => this.failed(link), this.limits.connectTimeoutMs);
     link.live.then(() => {
@@ -238,14 +246,14 @@ export class ConnectDriver<A> {
     }, () => { clearTimeout(timeout); this.failed(link); });
   }
 
-  private failed(link: ConnectLink) {
+  private failed(link: L) {
     if (this.link !== link || this.linkLive) return;
     this.link = undefined;
     try { link.stop(); } catch { /* already closed */ }
     this.dispatch({ type: 'cold', from: 'connect' });
   }
 
-  private lost(link: ConnectLink) {
+  private lost(link: L) {
     // Before it was live, a drop is a failed connect (`live` rejects).
     if (this.link !== link || !this.linkLive) return;
     this.link = undefined; this.linkLive = false;

@@ -285,4 +285,28 @@ describe('ConnectDriver', () => {
     expect(d.state.phase).toBe('idle');
     expect(server.open).toBe(0);
   });
+
+  it('hands its live connection to the queued action without closing it (the join uses the lobby\'s)', async () => {
+    vi.useFakeTimers();
+    const { server, deps } = fakeServer();
+    let d: ConnectDriver<string> | undefined;
+    const taken: (ConnectLink | undefined)[] = [];
+    d = new ConnectDriver<string>(deps, () => undefined, () => { taken.push(d!.take(), d!.take()); });
+    d.start();
+    expect(d.take()).toBeUndefined(); // not live yet
+    d.queue('quick');
+    server.up = true;
+    await vi.advanceTimersByTimeAsync(3000);
+    expect(taken[0]?.live).toBeInstanceOf(Promise);
+    expect(server.links.at(-1)!.stopped).toBe(false);
+    expect(taken[1]).toBeUndefined();
+    expect(d.state.phase).toBe('idle');
+    expect(server.open).toBe(1);
+    // Its drop is the join's business now: the driver stays idle and opens nothing.
+    const connects = server.connects;
+    server.links.at(-1)!.lost();
+    await vi.advanceTimersByTimeAsync(10_000);
+    expect(d.state.phase).toBe('idle');
+    expect(server.connects).toBe(connects);
+  });
 });

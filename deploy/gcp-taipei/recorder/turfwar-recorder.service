@@ -13,8 +13,9 @@ Restart=always
 RestartSec=5
 Nice=10
 CPUWeight=20
-# One garbage-collector marker thread: with the default (one per core) the idle markers spin, and the
-# recorder used ~12% of a vCPU per open room on the 2-vCPU VM; with one it uses ~1% (docs/RECORDING.md).
+# One garbage-collector marker thread: with the default (one per core) the idle markers spin (on the orb
+# 16-20% of a core went to 0-1%). Frames cost the Taipei VM ~4% of a vCPU per room even with the own
+# reader, so the recorder takes them only from rooms with a subject (docs/RECORDING.md).
 Environment=BUN_JSC_numberOfGCMarkers=1
 MemoryMax=350M
 NoNewPrivileges=true

@@ -10,5 +10,6 @@
     "allowImportingTsExtensions": true,
     "types": ["bun"]
   },
-  "include": ["*.ts", "../../scripts/rec-*.ts"]
+  "include": ["*.ts", "../../scripts/rec-*.ts"],
+  "exclude": ["*.test.ts"]
 }
