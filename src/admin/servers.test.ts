@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { MAINCLOUD, SERVER_KEY, adminServers, chosenServer, regionName, rememberServer, type KeyValue } from './servers';
+import { MAINCLOUD, SERVER_KEY, adminServers, adminSources, chosenServer, regionName, rememberServer, type KeyValue } from './servers';
 
 const TAIPEI = { uri: 'wss://tw.turfwar.ianhsiao.me', database: 'turfwar' };
 
@@ -10,11 +10,11 @@ function memory(initial: Record<string, string> = {}): KeyValue & { data: Record
 const blocked: KeyValue = { getItem() { throw new Error('SecurityError'); }, setItem() { throw new Error('SecurityError'); } };
 
 describe('admin servers', () => {
-  it('lists the build server first, then Maincloud legacy and dev (Singapore is retired and no longer listed)', () => {
+  it('lists the build server first, then US East and Maincloud dev (Singapore is retired and no longer listed)', () => {
     const list = adminServers(TAIPEI);
     expect(list.map(s => [s.id, s.name, s.database])).toEqual([
       ['build', 'Taipei production', 'turfwar'],
-      ['legacy', 'Maincloud (legacy)', '3d-game-c4lhd'],
+      ['legacy', 'US East production', '3d-game-c4lhd'],
       ['dev', 'Maincloud dev', 'lawbreaker-dev'],
     ]);
     expect(list[1].uri).toBe(MAINCLOUD);
@@ -46,6 +46,20 @@ describe('admin servers', () => {
     expect(chosenServer(list, memory({ [SERVER_KEY]: 'gone' })).id).toBe('build');
     // So does 'sg', remembered from when Singapore was listed.
     expect(chosenServer(list, memory({ [SERVER_KEY]: 'sg' })).id).toBe('build');
+  });
+
+  it('offers All production (Taipei and US East together) first on a Taipei build, then each server', () => {
+    const sources = adminSources(adminServers(TAIPEI));
+    expect(sources.map(s => s.id)).toEqual(['all', 'build', 'legacy', 'dev']);
+    expect(sources[0].servers.map(s => s.database)).toEqual(['turfwar', '3d-game-c4lhd']);
+    expect(sources.slice(1).every(s => s.servers.length === 1)).toBe(true);
+    expect(chosenServer(sources, memory()).id).toBe('all');
+    expect(chosenServer(sources, memory({ [SERVER_KEY]: 'build' })).id).toBe('build');
+  });
+
+  it('offers no All production when the build is not Taipei', () => {
+    expect(adminSources(adminServers({ uri: 'ws://127.0.0.1:3261', database: 'turfwar' })).map(s => s.id)).toEqual(['build', 'legacy', 'dev']);
+    expect(adminSources(adminServers({ uri: 'wss://maincloud.spacetimedb.com/', database: 'lawbreaker-dev' })).map(s => s.id)).toEqual(['dev', 'legacy']);
   });
 
   it('survives blocked or missing storage', () => {
