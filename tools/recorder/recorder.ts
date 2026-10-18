@@ -150,6 +150,8 @@ let backoff = 1000;
 function connect() {
   const token = existsSync(TOKEN_FILE) ? readFileSync(TOKEN_FILE, 'utf8').trim() : undefined;
   const c = DbConnection.builder().withUri(URI).withDatabaseName(DB).withToken(token)
+    // Localhost: compression only costs CPU here (per-message gzip on the server, a decompression stream per message here).
+    .withCompression('none')
     .onConnect((ctx, identity, next) => {
       writeFileSync(TOKEN_FILE, next, { mode: 0o600 });
       log('connected', { identity: identity.toHexString().slice(0, 8) });
