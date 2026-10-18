@@ -133,6 +133,7 @@ root.innerHTML = `
       <div class="side-foot links"><a href="${POSTHOG}" target="_blank" rel="noopener noreferrer">PostHog ↗</a><button type="button" class="btn" id="logout" hidden>Log out</button></div>
     </aside>
     <div class="content">
+      <div class="pause-bar" id="paused" role="status" hidden><span>Live updates paused while this tab is hidden or idle, so the game servers do no admin work. They resume when you come back.</span><button type="button" class="btn" id="resume">Resume now</button></div>
       <div class="chart-controls" id="chart-controls" hidden></div>
       <main id="body"></main>
     </div>
@@ -246,7 +247,7 @@ let charts: { range: Range; combined: boolean; active: ActiveMinutes } = (() => 
   } catch { return { range: '30d', combined: false, active: DEFAULT_ACTIVE }; }
 })();
 const saveCharts = () => { try { localStorage.setItem(CHART_KEY, JSON.stringify(charts)); } catch { /* storage disabled */ } };
-const setConn = (s: 'wait' | 'live' | 'off', title: string) => { connDot.className = `dot ${s}`; connDot.title = title; };
+const setConn = (s: 'wait' | 'live' | 'off' | 'paused', title: string) => { connDot.className = `dot ${s}`; connDot.title = title; };
 
 /** The header: which server (or servers), where, which database. */
 function renderServer() {
@@ -1538,7 +1539,11 @@ function render() {
   frame = requestAnimationFrame(() => {
     syncViews();
     renderConn();
-    if (isAdmin()) { logoutBtn.hidden = false; dashboard(); return; }
+    if (paused) return;
+    if (isAdmin()) { resuming = false; logoutBtn.hidden = false; dashboard(); return; }
+    // Back from a pause: the last dashboard stays on screen until the servers answer again.
+    if (resuming && links.some(l => !l.conn) && !links.some(l => l.driver.state.phase === 'unreachable')) return;
+    resuming = false;
     logoutBtn.hidden = true;
     sideNav.hidden = true; chartControls.hidden = true;
     if (links.some(l => l.driver.state.phase === 'unreachable')) { unreachableCard(); return; }
@@ -1552,6 +1557,7 @@ function render() {
 
 /** The header's dot: connected (every server on show), connecting (amber), or not reachable. */
 function renderConn() {
+  if (paused) { setConn('paused', 'Paused: live updates resume when you come back to this tab'); return; }
   const phases = links.map(l => l.driver.state.phase);
   if (phases.every(p => p === 'ready')) setConn(connected() ? 'live' : 'off', connected() ? 'Connected' : `Connected, but ${which(links.filter(l => !l.conn))} has no admin views`);
   else if (phases.some(p => p === 'unreachable')) setConn('off', `Can't reach ${which(links.filter(l => l.driver.state.phase === 'unreachable'))}`);
@@ -1651,6 +1657,8 @@ function makeLinks(src: AdminSource): Link[] {
 /** Show another entry: drop these connections, remember the choice, connect to its servers. */
 function switchServer(next: AdminSource) {
   if (next.id === source.id) return;
+  if (paused) { paused = false; pausedBar.hidden = true; }
+  armIdle();
   for (const l of links) l.driver.stop();
   loggingIn = false; message = ''; messageError = true; playerLimit = 100;
   source = next;
@@ -1663,10 +1671,49 @@ function switchServer(next: AdminSource) {
 }
 serverSelect.addEventListener('change', () => { const next = SOURCES.find(s => s.id === serverSelect.value); if (next) switchServer(next); });
 
+// ---- Pausing ----------------------------------------------------------------------------
+/*
+ * The server recomputes every admin view whenever the rows it reads change (a kill, a join, each minute
+ * of play), so an open dashboard costs a busy game server real CPU, also from a forgotten tab. A tab
+ * hidden for a minute, or left without input for 10 minutes, lets go of the servers and keeps what it
+ * shows; coming back (or any input) reconnects.
+ */
+const HIDDEN_PAUSE_MS = 60_000, IDLE_PAUSE_MS = 10 * 60_000;
+const pausedBar = root.querySelector<HTMLElement>('#paused')!;
+let paused = false, resuming = false, pauseTimer = 0, idleTimer = 0, armedAt = 0;
+function pause() {
+  if (paused) return;
+  clearTimeout(pauseTimer); clearTimeout(idleTimer);
+  paused = true; resuming = false;
+  for (const l of links) l.driver.stop();
+  pausedBar.hidden = false;
+  renderConn();
+}
+function resume() {
+  clearTimeout(pauseTimer);
+  armIdle();
+  if (!paused) return;
+  paused = false; resuming = true;
+  pausedBar.hidden = true;
+  for (const l of links) l.driver.start();
+  render();
+}
+function armIdle() { armedAt = performance.now(); clearTimeout(idleTimer); idleTimer = window.setTimeout(pause, IDLE_PAUSE_MS); }
+document.addEventListener('visibilitychange', () => {
+  clearTimeout(pauseTimer);
+  if (document.hidden) pauseTimer = window.setTimeout(pause, HIDDEN_PAUSE_MS); else resume();
+});
+// Any input counts (pointer moves at most once every 5 s re-arm the idle timer).
+for (const type of ['pointerdown', 'keydown', 'wheel', 'pointermove'] as const) {
+  addEventListener(type, () => { if (!document.hidden && (paused || type !== 'pointermove' || performance.now() - armedAt > 5000)) resume(); }, { passive: true });
+}
+pausedBar.querySelector('#resume')!.addEventListener('click', resume);
+
 renderServer();
 attachTooltips(body);
 links = makeLinks(source);
 for (const l of links) l.driver.start();
+armIdle();
 render();
 // Relative times ("3 min ago") and today's counts move on without new data.
 setInterval(() => { if (isAdmin() && !document.hidden && !body.contains(document.activeElement)) render(); }, 30_000);
