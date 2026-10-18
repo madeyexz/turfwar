@@ -2,7 +2,7 @@ import { execSync } from 'node:child_process';
 import { createHash } from 'node:crypto';
 import { readFileSync, readdirSync, rmSync, statSync, writeFileSync } from 'node:fs';
 import { join, resolve } from 'node:path';
-import { defineConfig, type Plugin } from 'vite';
+import { defineConfig, loadEnv, type Plugin } from 'vite';
 import { mergeReleases, parseReleaseLog, type Release } from './src/admin/releases';
 import { sourcemaps } from './src/buildtools/sourcemaps';
 
@@ -148,8 +148,25 @@ const crazygamesPrune: Plugin = {
   },
 };
 
-export default defineConfig(({ mode }) => {
+/**
+ * The CrazyGames zip is built on a Mac, not on Vercel, so nothing else supplies the production values: without them
+ * the upload connects to no server and sends no analytics (src/analytics.ts is a silent no-op without a key).
+ * Stop that build instead. Read from the environment, `.env.crazygames.local` or the other files Vite loads for the mode.
+ */
+function requireCrazygamesEnv(mode: string) {
+  const env = loadEnv(mode, __dirname, 'VITE_');
+  const problems = [
+    !env.VITE_POSTHOG_KEY?.startsWith('phc_') && 'VITE_POSTHOG_KEY (the public phc_… project key)',
+    !env.VITE_POSTHOG_HOST && 'VITE_POSTHOG_HOST (https://us.i.posthog.com)',
+    !env.VITE_SPACETIMEDB_URI?.startsWith('wss://') && 'VITE_SPACETIMEDB_URI (a wss:// URI; CrazyGames has no same-origin proxy)',
+    !env.VITE_SPACETIMEDB_DATABASE && 'VITE_SPACETIMEDB_DATABASE',
+  ].filter(Boolean);
+  if (problems.length) throw new Error(`The CrazyGames build needs the production values. Missing or wrong: ${problems.join(', ')}. Put them in .env.crazygames.local (docs/DEVELOPMENT.md, "CrazyGames build").`);
+}
+
+export default defineConfig(({ command, mode }) => {
   crazygames = mode === 'crazygames';
+  if (crazygames && command === 'build') requireCrazygamesEnv(mode);
   return {
     base: crazygames ? './' : '/',
     plugins: [pageRoutes, versionedCssUrls, fontPreload, crazygamesPage, crazygamesPrune, pwa, sourcemaps(appVersion())],
