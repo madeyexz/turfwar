@@ -122,8 +122,9 @@ mouse) and `aimAssist`.
   (4 MB inflated), checks the batch header, stores it under the pid. `GET /v1/stats` returns the summary
   (and the newest recount) to the admin key (the Worker holds only its sha256).
 - **Recorder** (`tools/recorder/recorder.ts`, systemd `turfwar-recorder` on the VM): SDK client of the
-  local server, admin login, subscribes to every room's `frame`, `match_event`, `roster`, `match`,
-  `private_room` and `recorder_subjects`; cuts a segment per round (`shared/rec/segmenter.ts`; rounds
+  local server, admin login, subscribes to every room's `roster`, `match`, `private_room` and
+  `recorder_subjects`, and to `frame` and `match_event` only of rooms with a recording subject in them
+  (a round without one is not kept); cuts a segment per round (`shared/rec/segmenter.ts`; rounds
   over 10 minutes are split; a room whose frames stop closes after 30 s), spools it to
   `/var/lib/turfwar-rec/spool` (2 GB cap) and uploads it with an ETag (MD5) check, then the manifest and
   the index. Health line every minute in `journalctl -u turfwar-recorder`. It shares the game server's
