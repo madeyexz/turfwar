@@ -1375,7 +1375,7 @@ async function start(action: Action, retried = false) {
   document.body.classList.remove('menu-open');
   // Our own 1v1 room opens with the share dialog, our invite room with the invite dialog (the pointer stays free for them).
   if (duel?.kind === 'host' || duel?.kind === 'invite') return;
-  await game?.input.lock()?.catch?.(() => undefined);
+  game?.capture();
 }
 
 function launch(link: GameLink, map: string) {
