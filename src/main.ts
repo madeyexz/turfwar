@@ -6,7 +6,7 @@ import { cleanCode, notCodeLetters, hasSites, listOrder, mapsFor, pickAnyRoom, R
 import { ELIMINATION, SABOTAGE, type Mode, type Team } from '../shared/match/state';
 import { assetUrl } from './assetUrl';
 import { groundSets, loadAssets, type Assets } from './assets';
-import { challengeMap, parseChallenge, parseInvite, type Challenge } from './game/challenge';
+import { challengeMap, linkServer, parseChallenge, parseInvite, type Challenge } from './game/challenge';
 import { invitedFriends, onSkinChange } from './game/skins';
 import { GOLD_INVITES } from '../shared/skins';
 import type { MatchSummary } from './game/matchstats';
@@ -20,7 +20,7 @@ import { OfflineLink } from './game/offline';
 import { Bench, BENCH_SECONDS, benchReport, type BenchResult } from './game/bench';
 import { onlineAvailable, connectOnline, watchRooms, ConnectError, OnlineLink, type OnlineEntry, type PublicRoom } from './net/online';
 import { PING_WINDOW, PingMonitor, hostAnswers, pingAllowed, pingTone, pingUrl, serverHost, serverRegion } from './net/ping';
-import { currentServer, gameServerList, onServer, type GameServer, type ServerId } from './net/servers';
+import { currentServer, followLink, gameServerList, onServer, type GameServer, type ServerId } from './net/servers';
 import { ConnectDriver, connectSeconds, type ConnectState } from './net/connect';
 import { benchFinished, matchJoined, matchLeft, matchNote, setSuper, startAnalytics, track, type PlayKind, type Exit, type Reason } from './analytics';
 import { frameTook, lobbyReady, matchFrameStats, matchStarted, noteArrival, playFailed, playPressed } from './growth';
@@ -87,6 +87,8 @@ const mapName = (id: string) => localMapName(id, maps.find(m => m.id === id)?.na
  * The game server the lobby shows: the one chosen in Settings (src/net/servers.ts). A choice made in
  * the lobby applies at once; one made in a match waits until the lobby is back (`followServer`).
  */
+// A link to a friend's room plays on that room's server this visit, whatever the player's own default.
+followLink(linkServer(crazyLinkPlace() ?? location));
 let server: GameServer | undefined = currentServer();
 /** More than one server to choose from: the server chips open Settings on the choice. */
 const choosable = gameServerList().length > 1;
@@ -1378,6 +1380,7 @@ async function start(action: Action, retried = false) {
 
 function launch(link: GameLink, map: string) {
   game = new Game(assets, renderer, link, map, audio, app);
+  if (link.mode === 'online') game.server = matchServer;
   // 約朋友單挑: our own 1v1 room where online play is available, else a challenge link the bot double answers.
   if (!benchMode) game.onDuel(online.ok ? openDuelRoom : undefined);
   if (benchMode && !bench) startBench(game);
@@ -1413,7 +1416,7 @@ function reportRoom(link: GameLink, server: ServerId | undefined) {
     if (game !== playing) return;
     const info = link.roomInfo?.();
     // The room's index is reused once it closes, so its code is part of the id.
-    if (info?.code) crazyRoom(`${server ?? 'tw'}-${info.room}-${info.code}`, true, { r: info.code });
+    if (info?.code) crazyRoom(`${server ?? 'tw'}-${info.room}-${info.code}`, true, { r: info.code, ...(server === 'us' ? { s: 'us' } : {}) });
     else if (info && ++tries >= 8) crazyRoom(`${server ?? 'tw'}-${info.room}`, false, {});
     else setTimeout(report, 250);
   };
@@ -1637,6 +1640,7 @@ function crazyReady() {
     const where = linkPlace(params), room = where && parseInvite(where.pathname, where.search);
     if (!room) return;
     if (game) backToLobby('menu', '', 'menu_button');
+    followLink(room.server ?? 'tw');
     roomCode.value = room.room;
     special = { kind: 'joinInvite', ref: room.ref ?? '' };
     run('code');

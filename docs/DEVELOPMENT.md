@@ -141,8 +141,15 @@ preview wired to the development database `lawbreaker-dev`. Releases are maintai
 | Development (`dev` previews) | Maincloud, US East | `lawbreaker-dev` |
 
 Players pick their server in **Settings → Server** (`src/net/servers.ts`; `?server=tw|us` for one
-visit): Taipei, the build's own server and the default; or US East, where players from before
-Singapore keep their saved identity and career. A `sg` saved in a browser (from when Singapore was a
+visit): Taipei, the build's own server; or US East, where players from before
+Singapore keep their saved identity and career. Without a choice, production picks by the browser time
+zone (`regionServer`, since 2026-10-18): `America/`, `Europe/` (Istanbul and Moscow included), `Africa/`
+and `Atlantic/` zones start on US East (CrazyGames players there measured 300–400 ms to Taipei), all
+others on Taipei. A browser that already holds a Taipei identity stays on Taipei, the pick is not saved,
+and a `dev` preview or local build keeps its own server. A link to a friend's room (`/r/<code>`, or a
+challenge naming a room; also CrazyGames invite and "join friend" parameters) carries `s=us` when the
+room is on US East and opens on the room's server for that visit (no `s` = Taipei; `linkServer` in
+`src/game/challenge.ts`, `followLink`). A `sg` saved in a browser (from when Singapore was a
 choice) silently falls back to the default and is rewritten, and `?server=sg` is ignored (`?stdb=` /
 `?db=` can still point a build at any server, for development). Taipei began on 2026-10-07 as a copy
 of Singapore, signing keys included, so a player's identity is the same on Taipei; each server keeps
@@ -209,12 +216,23 @@ Then run `bun run seo:ping` (sitemap to Google and Bing, the public pages to Ind
 
 ### CrazyGames build
 
-The game is also uploaded to CrazyGames (developer.crazygames.com) as a zip of static files. Build it with
-the production server variables, as Vercel's production build has them:
+The game is also uploaded to CrazyGames (developer.crazygames.com) as a zip of static files. It is built on the
+Mac, not on Vercel, so give it the production server and PostHog variables, as Vercel's production build has
+them. `vite build --mode crazygames` reads `.env`, `.env.local`, `.env.crazygames` and `.env.crazygames.local`
+(not `.env.production*`). Keep the values in `.env.crazygames.local` (gitignored by `.env*`; the key is the
+public `phc_…` project token in Vercel's `VITE_POSTHOG_KEY`, also visible in the production bundle):
 
 ```sh
-VITE_SPACETIMEDB_URI=wss://tw.turfwar.ianhsiao.me VITE_SPACETIMEDB_DATABASE=turfwar bun run build:crazygames
+VITE_SPACETIMEDB_URI=wss://tw.turfwar.ianhsiao.me
+VITE_SPACETIMEDB_DATABASE=turfwar
+VITE_POSTHOG_KEY=phc_…
+VITE_POSTHOG_HOST=https://us.i.posthog.com
 ```
+
+Then run `bun run build:crazygames` (or pass the four variables on its command line). The build stops with an
+error when one is missing, when the key is not a `phc_…` key or when the URI is not `wss://`: without them the
+upload connects to no server and sends no PostHog events (CrazyGames players were missing from PostHog until
+2026-10-18 for this reason). The website build and the dev servers do not check them.
 
 This writes `dist-crazygames/` and `turfwar-crazygames.zip` (`vite build --mode crazygames`, vite.config.ts):
 the game page only, every URL relative (`base: './'`; CrazyGames serves it from its CDN under an unknown
