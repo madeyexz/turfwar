@@ -7,6 +7,7 @@
 import { cleanCode } from '../../shared/match/rooms';
 import { maskProfanity } from '../../shared/profanity';
 import { withUtm } from '../utm';
+import type { ServerId } from '../net/servers';
 
 export interface Challenge {
   /** The challenger's callsign, cleaned like the server cleans callsigns. */
@@ -19,6 +20,8 @@ export interface Challenge {
   beat?: number;
   /** The sharer's random code. */
   ref?: string;
+  /** The room's server when it is not Taipei (`s=us`); a room link without it means Taipei. */
+  server?: ServerId;
 }
 
 /** Callsigns: letters, digits, space, _ - . (as `enter_room` keeps them), at most 16 characters, bad words masked (＊ kept). */
@@ -45,6 +48,7 @@ export function parseChallenge(search: string, pathname = '/'): Challenge | unde
   if (p.has('beat') && Number.isInteger(beat) && beat >= 0 && beat <= 999) c.beat = beat;
   const ref = (p.get('ref') ?? '').toLowerCase();
   if (REF.test(ref)) c.ref = ref;
+  if (c.room && p.get('s') === 'us') c.server = 'us';
   return c;
 }
 
@@ -69,6 +73,7 @@ export function challengeUrl(origin: string, c: Challenge, from?: LinkOrigin) {
   if (c.map && MAP.test(c.map)) p.set('map', c.map);
   if (c.beat !== undefined) p.set('beat', String(Math.max(0, Math.min(999, Math.round(c.beat)))));
   if (c.ref && REF.test(c.ref)) p.set('ref', c.ref);
+  if (c.room && c.server === 'us') p.set('s', 'us');
   const url = `${origin}/c?${p}`;
   return from ? withUtm(url, from) : url;
 }
@@ -93,17 +98,33 @@ export function shareRef(storage: Pick<Storage, 'getItem' | 'setItem'> | undefin
  * that room (the lobby's invite banner); the share code counts them toward the 金拖 (shared/skins.ts).
  * Short on purpose: it is pasted into chats as text. `vercel.json` sends `/r/…` to the link-preview page.
  */
-export function inviteUrl(origin: string, room: string, ref: string) {
+export function inviteUrl(origin: string, room: string, ref: string, server?: ServerId) {
   const code = cleanCode(room);
-  return `${origin}/r/${code}${REF.test(ref) ? `?ref=${ref}` : ''}`;
+  const p = new URLSearchParams();
+  if (REF.test(ref)) p.set('ref', ref);
+  if (server === 'us') p.set('s', 'us');
+  const q = `${p}`;
+  return `${origin}/r/${code}${q ? `?${q}` : ''}`;
 }
 
 /** The private room an invite link names (`/r/<code>`, with the sharer's `ref`), or undefined. */
-export function parseInvite(pathname: string, search: string): { room: string; ref?: string } | undefined {
+export function parseInvite(pathname: string, search: string): { room: string; ref?: string; server?: ServerId } | undefined {
   const m = /^\/r\/([A-Za-z]{4})\/?$/.exec(pathname);
   if (!m) return undefined;
   const room = cleanCode(m[1]);
   if (room.length !== 4) return undefined;
-  const ref = (new URLSearchParams(search).get('ref') ?? '').toLowerCase();
-  return REF.test(ref) ? { room, ref } : { room };
+  const p = new URLSearchParams(search);
+  const ref = (p.get('ref') ?? '').toLowerCase();
+  return { room, ...(REF.test(ref) ? { ref } : {}), ...(p.get('s') === 'us' ? { server: 'us' as const } : {}) };
+}
+
+/**
+ * The server a link to a friend's room (an invite, or a challenge naming a room) plays on: its `s`, else
+ * Taipei, where every room link was made before `s` existed. Undefined for any other address: the
+ * player's own choice then stands.
+ */
+export function linkServer(place: { pathname: string; search: string }): ServerId | undefined {
+  const c = parseChallenge(place.search, place.pathname);
+  const room = c ? c.room && c : parseInvite(place.pathname, place.search);
+  return room ? room.server ?? 'tw' : undefined;
 }

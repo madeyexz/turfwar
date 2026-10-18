@@ -1,7 +1,7 @@
 import { afterEach, describe, expect, it } from 'vitest';
 import { setLang, t } from '../ui/i18n';
 import { serverIdentityKey } from './ping';
-import { MAINCLOUD, SERVER_KEY, US_EAST, buildServer, chooseServer, gameServers, rememberServer, type KeyValue } from './servers';
+import { MAINCLOUD, SERVER_KEY, US_EAST, buildServer, chooseServer, gameServers, regionServer, rememberServer, type KeyValue } from './servers';
 
 const TAIPEI = { uri: 'wss://tw.turfwar.ianhsiao.me', database: 'turfwar' };
 const page = (search = '', host = 'turfwar.ianhsiao.me', protocol = 'https:') => ({ search, host, protocol });
@@ -84,6 +84,43 @@ describe('choosing a server', () => {
     expect(chooseServer(list, '?lang=zh-TW&server=TW', storage)?.id).toBe('tw');
     expect(storage.data[SERVER_KEY]).toBe('us');
     expect(chooseServer(list, '?server=us', memory({ [SERVER_KEY]: 'tw' }))?.id).toBe('us');
+  });
+
+  it('starts a new player in the Americas, Europe or Africa on US East, without saving it', () => {
+    const storage = memory();
+    for (const tz of ['Europe/London', 'Europe/Istanbul', 'America/Sao_Paulo', 'America/New_York', 'Africa/Johannesburg', 'US/Pacific'])
+      expect([tz, chooseServer(list, '', storage, tz)?.id]).toEqual([tz, 'us']);
+    for (const tz of ['Asia/Taipei', 'Asia/Tokyo', 'Asia/Kolkata', 'Asia/Dubai', 'Australia/Sydney', 'Pacific/Honolulu', 'Etc/UTC', ''])
+      expect([tz, chooseServer(list, '', storage, tz)?.id]).toEqual([tz, 'tw']);
+    expect(storage.data).toEqual({});
+    expect([regionServer('Europe/Moscow'), regionServer('Asia/Singapore')]).toEqual(['us', 'tw']);
+  });
+
+  it('keeps a player who has a Taipei identity, a saved choice or ?server= where they asked', () => {
+    const [tw] = list;
+    const known = memory({ [`lawbreaker.token:${serverIdentityKey(tw.uri)}:${tw.database}`]: 'token' });
+    expect(chooseServer(list, '', known, 'Europe/Berlin')?.id).toBe('tw');
+    // Only a Taipei identity holds a player there: one on US East alone leaves the time zone in charge.
+    const usOnly = memory({ [`lawbreaker.token:${MAINCLOUD}:${US_EAST.database}`]: 'token' });
+    expect(chooseServer(list, '', usOnly, 'Asia/Taipei')?.id).toBe('tw');
+    expect(chooseServer(list, '', usOnly, 'America/Chicago')?.id).toBe('us');
+    expect(chooseServer(list, '', memory({ [SERVER_KEY]: 'tw' }), 'America/Chicago')?.id).toBe('tw');
+    expect(chooseServer(list, '?server=tw', memory(), 'Europe/Paris')?.id).toBe('tw');
+    expect(chooseServer(list, '', memory({ [SERVER_KEY]: 'us' }), 'Asia/Tokyo')?.id).toBe('us');
+    expect(chooseServer(list, '', blocked, 'Europe/Paris')?.id).toBe('us');
+  });
+
+  it("plays a friend's room link on the room's server this visit, under ?server= and over the saved choice", () => {
+    expect(chooseServer(list, '', memory({ [SERVER_KEY]: 'us' }), 'Europe/London', 'tw')?.id).toBe('tw');
+    const storage = memory();
+    expect(chooseServer(list, '', storage, 'Asia/Taipei', 'us')?.id).toBe('us');
+    expect(storage.data).toEqual({});
+    expect(chooseServer(list, '?server=tw', memory(), '', 'us')?.id).toBe('tw');
+  });
+
+  it("leaves a dev build on its own server whatever the time zone", () => {
+    expect(chooseServer(gameServers({ uri: MAINCLOUD, database: 'lawbreaker-dev' }), '', memory(), 'Europe/London')?.database).toBe('lawbreaker-dev');
+    expect(chooseServer(gameServers({ uri: 'ws://localhost:5217/stdb/', database: 'lawbreaker' }), '', memory(), 'America/New_York')?.id).toBe('tw');
   });
 
   it('Singapore is gone: ?server=sg is ignored, and a saved sg falls back to Taipei and is rewritten', () => {

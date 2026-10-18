@@ -141,8 +141,15 @@ preview wired to the development database `lawbreaker-dev`. Releases are maintai
 | Development (`dev` previews) | Maincloud, US East | `lawbreaker-dev` |
 
 Players pick their server in **Settings → Server** (`src/net/servers.ts`; `?server=tw|us` for one
-visit): Taipei, the build's own server and the default; or US East, where players from before
-Singapore keep their saved identity and career. A `sg` saved in a browser (from when Singapore was a
+visit): Taipei, the build's own server; or US East, where players from before
+Singapore keep their saved identity and career. Without a choice, production picks by the browser time
+zone (`regionServer`, since 2026-10-18): `America/`, `Europe/` (Istanbul and Moscow included), `Africa/`
+and `Atlantic/` zones start on US East (CrazyGames players there measured 300–400 ms to Taipei), all
+others on Taipei. A browser that already holds a Taipei identity stays on Taipei, the pick is not saved,
+and a `dev` preview or local build keeps its own server. A link to a friend's room (`/r/<code>`, or a
+challenge naming a room; also CrazyGames invite and "join friend" parameters) carries `s=us` when the
+room is on US East and opens on the room's server for that visit (no `s` = Taipei; `linkServer` in
+`src/game/challenge.ts`, `followLink`). A `sg` saved in a browser (from when Singapore was a
 choice) silently falls back to the default and is rewritten, and `?server=sg` is ignored (`?stdb=` /
 `?db=` can still point a build at any server, for development). Taipei began on 2026-10-07 as a copy
 of Singapore, signing keys included, so a player's identity is the same on Taipei; each server keeps
