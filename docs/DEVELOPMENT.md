@@ -137,7 +137,7 @@ preview wired to the development database `lawbreaker-dev`. Releases are maintai
 | Use | Server | Database |
 | --- | --- | --- |
 | Production, the default | SpacetimeDB 2.10.2 self-hosted on **GCP, Taiwan** (`asia-east1-b`, `wss://tw.turfwar.ianhsiao.me`) | `turfwar` |
-| US East (the previous production; still published, a choice in Settings → Server, read by `/admin`) | Maincloud, US East | `3d-game-c4lhd` |
+| US East (the previous production; still published, the default for new players far from Taipei, a choice in Settings → Server, read by `/admin` alone or with Taipei) | Maincloud, US East | `3d-game-c4lhd` |
 | Development (`dev` previews) | Maincloud, US East | `lawbreaker-dev` |
 
 Players pick their server in **Settings → Server** (`src/net/servers.ts`; `?server=tw|us` for one
@@ -449,6 +449,12 @@ whenever what is collected changes. These answer "how many players, and from whe
 **Admin page** (`/admin`, `admin/index.html`, not linked from the game, `noindex`): one section per
 question, shown one at a time from a sidebar on the left (grouped Overview, Growth, Operations, Reference; the URL's
 `#section` keeps the choice across reloads and Back; on narrow screens the sidebar folds into a bar on top).
+The sidebar's server switcher (`src/admin/servers.ts`) opens on **All production** on a Taipei build: Taipei and
+US East added together (`src/admin/merge.ts`), with one connection, identity and login per server (one admin key
+logs in to both). Each server can also be picked on its own (and Maincloud dev). Together, counts and room-hours add
+up; identities are per server, so a person who played on both counts once on each; each hour's peak is the two
+servers' peaks added, an upper bound; a window is covered only from the later server's first recorded day; a view
+either module lacks shows as missing. The Live rooms, Errors and Players tables gain a Server column.
 All calendar days and timestamp labels use **Taipei (UTC+8)**, independent of the viewer's browser time zone.
 A day begins at **00:00 Taipei, exactly 16:00 UTC on the preceding date**; epoch-hour keys remain unchanged.
 Elapsed-time windows (24 hours, activation's first 24 hours, play durations and cooldowns) are not calendar days.

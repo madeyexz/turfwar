@@ -1,4 +1,4 @@
-import { bindRecording, forgetRecKey, recordingContent, rememberRecKey } from './recording';
+import { bindRecording, forgetRecKey, recEnvOf, recordingContent, rememberRecKey } from './recording';
 import type { Infer } from 'spacetimedb';
 import { DbConnection } from '../module_bindings';
 import type AdminPlayersRow from '../module_bindings/admin_players_table';
@@ -31,7 +31,8 @@ import {
 } from './growth';
 import { hostAnswers, pingUrl, serverIdentityKey } from '../net/ping';
 import { ConnectDriver, type ConnectLink } from '../net/connect';
-import { adminServers, chosenServer, regionName, rememberServer, type AdminServer } from './servers';
+import { adminServers, adminSources, chosenServer, regionName, rememberServer, type AdminServer, type AdminSource } from './servers';
+import { latestStart, mergeViews, sumFields, sumPeakHours, sumRoomHours, type ViewState } from './merge';
 import './admin.css';
 
 /**
@@ -40,9 +41,10 @@ import './admin.css';
  * browser's SpacetimeDB identity as an admin, and the `admin_*` views then stream the data (they
  * return nothing to anyone else). Only "this browser is logged in" is remembered, never the key.
  *
- * A switcher picks the server (src/admin/servers.ts): the build's own (production: the Taipei
- * server) or the others that stay published (legacy Maincloud production, dev). Each has its own
- * admin table, so the login, the identity and the "logged in" flag are per server.
+ * A switcher picks the server (src/admin/servers.ts): All production (Taipei and US East added
+ * together, src/admin/merge.ts; the default on a Taipei build), the build's own server, or the others
+ * that stay published (US East, dev). Each server has its own admin table, so the login, the identity
+ * and the "logged in" flag are per server; All production holds one connection to each.
  * (Singapore's server was retired on 2026-10-11 and is no longer listed.)
  */
 type Room = Infer<typeof AdminRoomsRow>;
@@ -75,6 +77,8 @@ type Player = Infer<typeof AdminPlayersRow> & {
   firstSeenMs: number; firsts?: FirstsOf; src?: SourceOf; perf?: PerfOf;
   /** For the table: the channel they came through and their typical frame rate. */
   channel?: string; fps?: number;
+  /** The region of the server they played on (each server has its own identities). */
+  server: string;
 };
 /** A player's hour: play time, mean p50 and p95 (with `netSeconds` measured), corrections. */
 interface HourOf { seconds: number; p50: number; p95: number; netSeconds: number; corrections: number }
@@ -88,12 +92,11 @@ const env = import.meta.env as Record<string, string | undefined>;
 let buildUri = env.VITE_SPACETIMEDB_URI;
 if (buildUri === 'same-origin') buildUri = `${location.protocol === 'https:' ? 'wss' : 'ws'}://${location.host}/stdb/`;
 const SERVERS = adminServers({ uri: buildUri, database: env.VITE_SPACETIMEDB_DATABASE });
+const SOURCES = adminSources(SERVERS);
 const storage = (() => { try { return localStorage; } catch { return undefined; } })();
-let server: AdminServer = chosenServer(SERVERS, storage);
-// Its own identity, not the game's: closing this tab must never drop the owner's soldier from a match.
-// Per server (as before the switcher, so an existing login carries over).
-const tokenKey = () => `lawbreaker.admin.token:${serverIdentityKey(server.uri)}:${server.database}`;
-const flagKey = () => `lawbreaker.admin.loggedIn:${serverIdentityKey(server.uri)}:${server.database}`;
+let source: AdminSource = chosenServer(SOURCES, storage);
+// Each server's "logged in" flag (as before the switcher, so an existing login carries over).
+const flagKey = (s: AdminServer) => `lawbreaker.admin.loggedIn:${serverIdentityKey(s.uri)}:${s.database}`;
 const store = {
   get: (k: string) => { try { return localStorage.getItem(k); } catch { return null; } },
   set: (k: string, v: string) => { try { localStorage.setItem(k, v); } catch { /* storage disabled */ } },
@@ -112,15 +115,18 @@ const shortDate = (d: Date) => taipeiTimestamp(d.getTime()).slice(0, 10);
 const titleCase = (id: string) => id.replace(/(^|[-_ ])(\w)/g, (_m, sep: string, c: string) => `${sep ? ' ' : ''}${c.toUpperCase()}`);
 
 const root = document.querySelector<HTMLDivElement>('#admin')!;
-const serverLabel = (s: AdminServer) => `${s.name} · ${regionName(s.uri)} · ${s.database}`;
+const regions = (src: AdminSource) => src.servers.map(s => regionName(s.uri)).join(' + ');
+const databases = (src: AdminSource) => src.servers.map(s => s.database).join(' + ');
+// Short enough for the sidebar: the merged entry names its regions only.
+const sourceLabel = (src: AdminSource) => (src.servers.length > 1 ? `All · ${regions(src)}` : `${src.name} · ${regions(src)} · ${databases(src)}`);
 // A sidebar on the left (which server, the sections) and one section at a time on the right, under the charts' range.
 root.innerHTML = `
   <div class="shell">
     <aside class="side">
       <h1 class="brand"><img src="/icons/icon-192.png" width="28" height="28" alt=""> Turf War <em>Admin</em></h1>
-      <label class="server-pick" title="Which game server to show; each has its own login">
+      <label class="server-pick" title="Which game server to show (All production adds Taipei and US East); each server has its own login">
         <span>Server</span>
-        <select id="server">${SERVERS.map(s => `<option value="${esc(s.id)}">${esc(serverLabel(s))}</option>`).join('')}</select>
+        <select id="server">${SOURCES.map(s => `<option value="${esc(s.id)}">${esc(sourceLabel(s))}</option>`).join('')}</select>
       </label>
       <span class="db" id="db" title="SpacetimeDB server and database"><i class="dot wait" id="conn"></i><b id="srv-name"></b><span id="srv-region"></span><span class="db-name">db <b id="srv-db"></b></span></span>
       <nav class="side-nav" id="side-nav" aria-label="Sections" hidden></nav>
@@ -138,7 +144,15 @@ const connDot = root.querySelector<HTMLElement>('#conn')!;
 const logoutBtn = root.querySelector<HTMLButtonElement>('#logout')!;
 const serverSelect = root.querySelector<HTMLSelectElement>('#server')!;
 
-let conn: DbConnection | undefined;
+/** One server's connection: its admin views, each optional view's state, and the driver that keeps it connected. */
+interface Link { server: AdminServer; conn?: DbConnection; views: Record<keyof typeof OPTIONAL, ViewState>; driver: ConnectDriver<never> }
+/** The connections on show: one per server of the chosen entry (two for All production). */
+let links: Link[] = [];
+const several = () => links.length > 1;
+/** Every server on show is connected with its admin views. */
+const connected = () => links.length > 0 && links.every(l => l.conn);
+/** Names the servers in a sentence: "this server" when only one is on show. */
+const which = (ls: Link[]) => (several() ? ls.map(l => l.server.name).join(' and ') : 'this server');
 let loggingIn = false;
 /** The line under the login form: an error, or a plain note. */
 let message = '';
@@ -167,29 +181,30 @@ const OPTIONAL = {
   roomHours: ['SELECT * FROM admin_room_hour'],
   afkHours: ['SELECT * FROM admin_afk_hour'],
 };
-type ViewState = 'wait' | 'on' | 'missing';
 const freshViews = (): Record<keyof typeof OPTIONAL, ViewState> => ({ errors: 'wait', net: 'wait', device: 'wait', days: 'wait', dayTime: 'wait', dayNet: 'wait', coverage: 'wait', rebuild: 'wait', hours: 'wait', peak: 'wait', perf: 'wait', source: 'wait', firsts: 'wait', roomHours: 'wait', afkHours: 'wait' });
+/** The views of every server on show as one (src/admin/merge.ts): on only when every server has the view. */
 let views = freshViews();
-/** Persisted collection boundary, never inferred from whichever player happens to have a row. */
-function recordingStart() {
-  if (!conn || views.coverage !== 'on') return undefined;
-  return [...conn.db.adminTaipeiCoverage.iter()][0]?.startedAt.toDate().getTime();
+const syncViews = () => { views = links.length ? mergeViews(links.map(l => l.views)) : freshViews(); };
+/** A server's persisted collection boundary, never inferred from whichever player happens to have a row. */
+function linkStart(l: Link) {
+  if (!l.conn || l.views.coverage !== 'on') return undefined;
+  return [...l.conn.db.adminTaipeiCoverage.iter()][0]?.startedAt.toDate().getTime();
 }
-/** The one-time rebuild of Taipei days from older records (`admin_taipei_rebuild`), if it ran. */
-function rebuilt() {
-  if (!conn || views.rebuild !== 'on') return undefined;
-  return [...conn.db.adminTaipeiRebuild.iter()][0];
+/** A server's one-time rebuild of Taipei days from older records (`admin_taipei_rebuild`), if it ran. */
+function linkRebuilt(l: Link) {
+  if (!l.conn || l.views.rebuild !== 'on') return undefined;
+  return [...l.conn.db.adminTaipeiRebuild.iter()][0];
 }
+const linkExact = (l: Link) => { const start = linkStart(l); return start === undefined ? undefined : firstTaipeiDay(start); };
+const linkDaily = (l: Link) => { const exact = linkExact(l), r = linkRebuilt(l); return r && exact !== undefined ? Math.min(r.estimatedFrom, exact) : exact; };
+/** The collection boundary; with several servers the latest, so a covered window is covered on every one. */
+const recordingStart = () => latestStart(links.map(linkStart));
+/** Every server on show has rebuilt its Taipei days. */
+const rebuilt = () => links.length > 0 && links.every(l => linkRebuilt(l));
 /** First Taipei day recorded exactly (every hour of it). */
-function exactStart() {
-  const start = recordingStart();
-  return start === undefined ? undefined : firstTaipeiDay(start);
-}
+const exactStart = () => latestStart(links.map(linkExact));
 /** First Taipei day with records: the launch once rebuilt (the first days estimated), else the first exact day. */
-function dailyStart() {
-  const exact = exactStart(), r = rebuilt();
-  return r && exact !== undefined ? Math.min(r.estimatedFrom, exact) : exact;
-}
+const dailyStart = () => latestStart(links.map(linkDaily));
 /** Launch days estimated from UTC-day records, before hourly records began. */
 const estimated = (day: number) => { const s = dailyStart(), e = exactStart(); return s !== undefined && e !== undefined && day >= s && day < e; };
 const covered = (from: number, to = from) => {
@@ -204,9 +219,9 @@ const estimatedRange = () => { const s = dailyStart(), e = exactStart(); return 
 /** Said once, above everything, only when something is missing; estimated launch days are noted on the charts. */
 function coverageNote() {
   const start = recordingStart();
-  if (start === undefined) return 'Taipei daily records are not available on this server yet.';
+  if (start === undefined) return `Taipei daily records are not available on ${which(links.filter(l => linkStart(l) === undefined))} yet.`;
   if (rebuilt() || views.rebuild === 'wait') return undefined;
-  return `Taipei days are recorded from ${dateOf(exactStart()!)}; earlier days show as gaps until this server's history is rebuilt (admin_rebuild_taipei_days).`;
+  return `Taipei days are recorded from ${dateOf(exactStart()!)}; earlier days show as gaps until ${which(links.filter(l => !linkRebuilt(l)))}'s history is rebuilt (admin_rebuild_taipei_days).`;
 }
 /** Which players the list shows. */
 let playerGroup: GroupId = 'all';
@@ -233,34 +248,44 @@ let charts: { range: Range; combined: boolean; active: ActiveMinutes } = (() => 
 const saveCharts = () => { try { localStorage.setItem(CHART_KEY, JSON.stringify(charts)); } catch { /* storage disabled */ } };
 const setConn = (s: 'wait' | 'live' | 'off', title: string) => { connDot.className = `dot ${s}`; connDot.title = title; };
 
-/** The header: which server, where, which database. */
+/** The header: which server (or servers), where, which database. */
 function renderServer() {
-  serverSelect.value = server.id;
-  root.querySelector('#srv-name')!.textContent = server.name;
-  root.querySelector('#srv-region')!.textContent = `· ${regionName(server.uri)} ·`;
-  root.querySelector('#srv-db')!.textContent = server.database;
-  root.querySelector<HTMLElement>('#db')!.title = `${server.uri} · database ${server.database}`;
-  document.title = `Turf War Admin · ${server.name}`;
+  serverSelect.value = source.id;
+  root.querySelector('#srv-name')!.textContent = source.name;
+  root.querySelector('#srv-region')!.textContent = `· ${regions(source)} ·`;
+  root.querySelector('#srv-db')!.textContent = databases(source);
+  root.querySelector<HTMLElement>('#db')!.title = source.servers.map(s => `${s.uri} · database ${s.database}`).join('\n');
+  document.title = `Turf War Admin · ${source.name}`;
 }
 
-function status() { return conn ? [...conn.db.adminStatus.iter()][0] : undefined; }
-const isAdmin = () => !!status()?.admin;
+const statusOf = (l: Link) => (l.conn ? [...l.conn.db.adminStatus.iter()][0] : undefined);
+/** Logged in to every server on show. */
+const isAdmin = () => connected() && links.every(l => !!statusOf(l)?.admin);
 
 // ---- Login -------------------------------------------------------------------------------
 
 function renderLogin() {
   logoutBtn.hidden = true;
-  const s = status();
+  const ready = connected();
+  // The servers still to log in to (All production: one key logs in to each; the module is the same).
+  const todo = links.filter(l => !statusOf(l)?.admin);
+  const done = links.filter(l => statusOf(l)?.admin);
   const now = BigInt(Date.now()) * 1000n;
-  const lockedUntil = s && s.failures >= 5 ? Number((s.windowStart.microsSinceUnixEpoch + 600_000_000n - now) / 60_000_000n) + 1 : 0;
+  const lockedUntil = Math.max(0, ...todo.map(l => {
+    const s = statusOf(l);
+    return s && s.failures >= 5 ? Number((s.windowStart.microsSinceUnixEpoch + 600_000_000n - now) / 60_000_000n) + 1 : 0;
+  }));
+  const what = several()
+    ? `<b>${esc(source.name)}</b>: it logs this browser in to ${esc(todo.map(l => `${l.server.name} (${l.server.database})`).join(' and '))}.${done.length ? ` Already logged in to ${esc(done.map(l => l.server.name).join(' and '))}.` : ''}`
+    : `<b>${esc(source.name)}</b> (${esc(databases(source))}).`;
   body.innerHTML = `
     <form class="login" id="login" autocomplete="off">
       <h2>Admin login</h2>
-      <p>Enter the admin key for <b>${esc(server.name)}</b> (${esc(server.database)}). Each server keeps its own login; this browser stays logged in, and the key itself is never stored.</p>
+      <p>Enter the admin key for ${what} Each server keeps its own login; this browser stays logged in, and the key itself is never stored.</p>
       <label for="key">Admin key</label>
-      <div class="row"><input id="key" type="password" autocomplete="current-password" spellcheck="false" required ${conn ? '' : 'disabled'}>
-      <button class="btn primary" type="submit" ${conn && !loggingIn ? '' : 'disabled'}>${loggingIn ? '…' : 'Log in'}</button></div>
-      <p class="msg${(message ? messageError : lockedUntil > 0) ? '' : ' ok'}" role="status">${esc(message || (!conn ? 'Connecting…' : lockedUntil > 0 ? `Too many attempts; try again in ${lockedUntil} min.` : ''))}</p>
+      <div class="row"><input id="key" type="password" autocomplete="current-password" spellcheck="false" required ${ready ? '' : 'disabled'}>
+      <button class="btn primary" type="submit" ${ready && !loggingIn ? '' : 'disabled'}>${loggingIn ? '…' : 'Log in'}</button></div>
+      <p class="msg${(message ? messageError : lockedUntil > 0) ? '' : ' ok'}" role="status">${esc(message || (!ready ? 'Connecting…' : lockedUntil > 0 ? `Too many attempts; try again in ${lockedUntil} min.` : ''))}</p>
     </form>`;
   const form = body.querySelector<HTMLFormElement>('#login')!;
   const input = form.querySelector<HTMLInputElement>('#key')!;
@@ -269,31 +294,40 @@ function renderLogin() {
     e.preventDefault();
     const key = input.value;
     input.value = '';
-    if (!conn || !key || loggingIn) return;
+    if (!connected() || !key || loggingIn || !todo.length) return;
     loggingIn = true; message = ''; messageError = true; renderLogin();
-    conn.reducers.adminLogin({ key }).then(() => {
+    const named = (l: Link, text: string) => (several() ? `${l.server.name}: ${text}` : text);
+    void Promise.all(todo.map(l => l.conn!.reducers.adminLogin({ key }).then(() => undefined, (error: unknown) =>
+      named(l, String((error as Error)?.message ?? error).replace(/^.*?:\s*/, '') || 'Login failed.')))).then(errors => {
       // The admin_status view says how it went (a wrong key returns normally so its failure is counted).
       setTimeout(() => {
         loggingIn = false;
-        const s = status();
-        if (s?.admin) { store.set(flagKey(), '1'); message = ''; rememberRecKey(key); render(); return; }
-        const left = Math.max(0, 5 - (s?.failures ?? 0));
-        message = left > 0 ? `Wrong key. ${left} attempt${left === 1 ? '' : 's'} left in this 10-minute window.` : 'Wrong key. Too many attempts; try again in 10 minutes.';
+        const ok = todo.filter(l => statusOf(l)?.admin);
+        for (const l of ok) store.set(flagKey(l.server), '1');
+        if (ok.length) rememberRecKey(key);
+        const failed = errors.find(Boolean);
+        const wrong = todo.filter(l => !statusOf(l)?.admin);
+        if (!wrong.length) message = '';
+        else if (failed) message = failed;
+        else {
+          const left = Math.max(0, Math.min(...wrong.map(l => 5 - (statusOf(l)?.failures ?? 0))));
+          const on = several() ? ` for ${wrong.map(l => l.server.name).join(' and ')}` : '';
+          message = left > 0 ? `Wrong key${on}. ${left} attempt${left === 1 ? '' : 's'} left in this 10-minute window.` : `Wrong key${on}. Too many attempts; try again in 10 minutes.`;
+        }
         render();
       }, 400);
-    }, (error: unknown) => {
-      loggingIn = false;
-      message = String((error as Error)?.message ?? error).replace(/^.*?:\s*/, '') || 'Login failed.';
-      render();
     });
   });
 }
 
 // ---- Dashboard ---------------------------------------------------------------------------
 
-/** Players with their play time (credited seconds plus the open stretch of anyone in a room right now) and every optional view's data. */
-function joinedPlayers(): Player[] {
-  const db = conn!.db;
+/**
+ * A server's players with their play time (credited seconds plus the open stretch of anyone in a room right now) and every
+ * optional view's data. The merged view states gate the reads: a view on for all servers is on for this one.
+ */
+function joinedPlayers(l: Link): Player[] {
+  const db = l.conn!.db;
   const times = new Map<string, PlayerTime>();
   for (const t of db.adminPlayerTime.iter()) times.set(t.id, t);
   const nets = new Map<string, PlayerNet>();
@@ -342,7 +376,7 @@ function joinedPlayers(): Player[] {
     const active = days.get(p.id);
     // The shared splitter accepts shifted microseconds: its midnight is Taipei midnight here.
     const seconds = new Map(dayTime.get(p.id) ?? []);
-    const start = recordingStart();
+    const start = linkStart(l);
     if (views.dayTime === 'on' && start !== undefined && since > 0n && live > Number(credited)) {
       const clipped = since > BigInt(start) * 1000n ? since : BigInt(start) * 1000n;
       const end = since + BigInt(live - Number(credited)) * 1_000_000n;
@@ -355,7 +389,7 @@ function joinedPlayers(): Player[] {
       daySeconds: views.dayTime === 'on' ? seconds : undefined, dayNet: dayNet.get(p.id),
       firstHour: Math.floor(p.firstSeen.toDate().getTime() / HOUR_MS), hours: hours.get(p.id),
       firstSeenMs: p.firstSeen.toDate().getTime(), firsts: f && { room: ms(f.room), round: ms(f.round), kill: ms(f.kill), match: ms(f.match) }, src, perf,
-      channel: src ? channelOf(src) : undefined, fps: perf && perf.seconds > 0 ? perf.fps : undefined,
+      channel: src ? channelOf(src) : undefined, fps: perf && perf.seconds > 0 ? perf.fps : undefined, server: regionName(l.server.uri),
     };
   });
 }
@@ -452,13 +486,21 @@ const SIDE_LABEL: Record<Side, string> = { phone: 'Phone', computer: 'Computer' 
 const dateOf = (day: number) => new Date(day * DAY_MS).toISOString().slice(0, 10);
 
 function dashboard() {
-  const db = conn!.db;
-  const o: Overview | undefined = [...db.adminOverview.iter()][0];
-  const players = joinedPlayers();
+  // All production: every server's rows together; each row keeps the region of its server.
+  const region = (l: Link) => regionName(l.server.uri);
+  const overviews = links.map(l => [...l.conn!.db.adminOverview.iter()][0] as Overview | undefined);
+  const o = sumFields(overviews);
+  const players = links.flatMap(joinedPlayers);
   const G = splitBySide(players);
   /** A figure per group, in GROUPS order. */
   const per = (f: (ps: Player[], g: GroupId) => Fig) => GROUPS.map(g => f(G[g.id], g.id));
-  const rooms = [...db.adminRooms.iter()].sort((a, b) => b.humans - a.humans || a.room - b.room);
+  const rooms = links.flatMap(l => [...l.conn!.db.adminRooms.iter()].map(r => ({ ...r, server: region(l) })))
+    .sort((a, b) => b.humans - a.humans || a.server.localeCompare(b.server) || a.room - b.room);
+  const errors = views.errors === 'on' ? links.flatMap(l => [...l.conn!.db.adminErrors.iter()].map(e => ({ ...e, server: region(l) })))
+    .sort((a, b) => (a.at.microsSinceUnixEpoch > b.at.microsSinceUnixEpoch ? -1 : 1)) : [];
+  /** With several servers, a note naming each one's figure. */
+  const byServer = (v: (o: Overview | undefined) => number) => (several() ? ` · ${links.map((l, i) => `${region(l)} ${num(v(overviews[i]))}`).join(' · ')}` : '');
+  const sumNote = several() ? ' · each server\'s peak added (an upper bound)' : '';
   const now = Date.now();
   const today = taipeiDay(now);
   const last = (p: Player) => p.lastSeen.toDate().getTime();
@@ -468,15 +510,17 @@ function dashboard() {
 
   // Now: who is playing at this moment.
   const nowTiles = [
-    tile('Online now', per((ps, g) => ({ v: num(g === 'all' ? o?.onlineNow ?? 0 : ps.filter(p => p.playing).length) })), 'players in rooms', true),
+    tile('Online now', per((ps, g) => ({ v: num(g === 'all' ? o?.onlineNow ?? 0 : ps.filter(p => p.playing).length) })), `players in rooms${byServer(v => v?.onlineNow ?? 0)}`, true),
     tile('Active 24 h', per(ps => ({ v: num(ps.filter(p => last(p) >= now - DAY_MS).length) })), 'seen in the last 24 hours'),
-    tile('Peak today', per((_ps, g) => peakFig(peakBetween(peaks, today * 24 - 8, today * 24 + 15), g, 'time')), 'most in rooms at once, Taipei day'),
-    tile('Peak ever', per((_ps, g) => peakFig(peakBetween(peaks, 0, Infinity), g, 'date')), 'since peaks were recorded'),
+    tile('Peak today', per((_ps, g) => peakFig(peakBetween(peaks, today * 24 - 8, today * 24 + 15), g, 'time')), `most in rooms at once, Taipei day${sumNote}`),
+    tile('Peak ever', per((_ps, g) => peakFig(peakBetween(peaks, 0, Infinity), g, 'date')), `since peaks were recorded${sumNote}`),
   ];
-  const roomRows = rooms.map(r => `<tr><td>${r.code ? `<span class="tag">#${esc(r.code)}</span>` : '<span class="tag">public</span>'}</td><td>${esc(titleCase(r.mapId))}</td><td>${esc(titleCase(r.mode))}</td>
+  const serverCell = (s: string) => (several() ? `<td>${esc(s)}</td>` : '');
+  const roomRows = rooms.map(r => `<tr>${serverCell(r.server)}<td>${r.code ? `<span class="tag">#${esc(r.code)}</span>` : '<span class="tag">public</span>'}</td><td>${esc(titleCase(r.mapId))}</td><td>${esc(titleCase(r.mode))}</td>
     <td>${r.size}v${r.size}</td><td class="num">${r.humans}</td><td class="num">${r.bots}</td><td class="num">${r.round}</td><td><span class="tag${r.phase === 'live' ? ' live' : ''}">${esc(r.phase)}</span></td></tr>`).join('');
-  const roomCard = card('Live rooms', rooms.length ? `${num(o?.humansInRooms ?? 0)} human${o?.humansInRooms === 1 ? '' : 's'} in ${rooms.length} room${rooms.length === 1 ? '' : 's'}` : 'none open',
-    rooms.length ? `<div class="scroll"><table><thead><tr><th>Room</th><th>Map</th><th>Mode</th><th>Size</th><th class="num">Humans</th><th class="num">Bots</th><th class="num">Round</th><th>Phase</th></tr></thead><tbody>${roomRows}</tbody></table></div>` : '<div class="empty">No rooms open: nobody is playing online right now.</div>');
+  const serverHead = several() ? '<th>Server</th>' : '';
+  const roomCard = card('Live rooms', rooms.length ? `${num(o?.humansInRooms ?? 0)} human${o?.humansInRooms === 1 ? '' : 's'} in ${rooms.length} room${rooms.length === 1 ? '' : 's'}${byServer(v => v?.humansInRooms ?? 0)}` : 'none open',
+    rooms.length ? `<div class="scroll"><table><thead><tr>${serverHead}<th>Room</th><th>Map</th><th>Mode</th><th>Size</th><th class="num">Humans</th><th class="num">Bots</th><th class="num">Round</th><th>Phase</th></tr></thead><tbody>${roomRows}</tbody></table></div>` : '<div class="empty">No rooms open: nobody is playing online right now.</div>');
 
   // Acquisition stays valid before daily coverage: firstSeen is an actual timestamp.
   const growthTiles = [
@@ -539,7 +583,7 @@ function dashboard() {
   const shown = playerGroup === 'all' ? players : G[playerGroup];
   const chips = `<div class="chips" role="group" aria-label="Show players">${GROUPS.map(g => `<button type="button" class="chip${g.id === playerGroup ? ' on' : ''}" data-group="${g.id}" aria-pressed="${g.id === playerGroup}">${g.label} <span>${num(G[g.id].length)}</span></button>`).join('')}</div>`;
 
-  const errorCount = views.errors === 'on' ? [...db.adminErrors.iter()].length : 0;
+  const errorCount = errors.length;
   renderSideNav({ players: num(players.length), ...(errorCount ? { errors: num(errorCount) } : {}) });
   chartControls.innerHTML = `<span>Charts</span>
     <div class="seg" role="group" aria-label="Chart range">${RANGES.map(r => `<button type="button" data-range="${r.id}" aria-pressed="${charts.range === r.id}">${r.label}</button>`).join('')}</div>
@@ -557,15 +601,15 @@ function dashboard() {
     ${group('play', 'Engagement', 'how much they play, and how big the core is', [...playTiles, ...g.engagementTiles], `<div class="grid2">${card('Over time', `online play time ${rangeText()}`, playChart(G))}${card('Players by rounds played', `career rounds; ${CORE_ROUNDS}+ is the core`, roundsPanel(G.all))}</div>`)}
     ${group('virality', 'Virality', 'do players bring players?', g.viralityTiles, viralityCard(G.all))}
     ${group('health', 'Server health', 'do rooms feel alive, and do connections hold?', g.healthTiles, card('Rooms', `human share of seats (bars) and drops per join (tick) ${rangeText()}`, healthChart()))}
-    ${group('errors', 'Errors', 'latest 200 host reports; raw logs stay on the VM', [], card('Server errors', 'requires the optional host watcher · Taipei time', views.errors !== 'on' ? '<p>Error view unavailable on this module.</p>' : [...db.adminErrors.iter()].length === 0 ? '<p>No reports. This does not confirm that the watcher is active.</p>' : `<table><thead><tr><th>Time</th><th>Source</th><th>Message</th></tr></thead><tbody>${[...db.adminErrors.iter()].sort((a, b) => a.id > b.id ? -1 : 1).map(e => `<tr><td>${esc(taipeiTimestamp(e.at.toDate().getTime()))}</td><td>${esc(e.reducer)}</td><td>${esc(e.message)}</td></tr>`).join('')}</tbody></table>`))}
+    ${group('errors', 'Errors', 'latest 200 host reports; raw logs stay on the VM', [], card('Server errors', 'requires the optional host watcher · Taipei time', views.errors !== 'on' ? '<p>Error view unavailable on this module.</p>' : errors.length === 0 ? '<p>No reports. This does not confirm that the watcher is active.</p>' : `<table><thead><tr><th>Time</th>${serverHead}<th>Source</th><th>Message</th></tr></thead><tbody>${errors.map(e => `<tr><td>${esc(taipeiTimestamp(e.at.toDate().getTime()))}</td>${serverCell(e.server)}<td>${esc(e.reducer)}</td><td>${esc(e.message)}</td></tr>`).join('')}</tbody></table>`))}
     ${group('connection', 'Quality', 'frame rate, load times, ping, what players play on', [...g.qualityTiles, ...netTiles], `
       <div class="grid2 even">${card('Frame rate', 'players by their typical fps, last 7 days', fpsPanel(G, now))}${card('By browser', 'in-app browsers against plain browsers, last 7 days, slowest first', browserTable(G.all, now))}</div>
       <div class="grid2">${card('Ping', `median of players' p50 (tick: p95) ${rangeText()}`, pingChart(G))}${card('Ping by country', 'median typical p50, time zone → country', countryPing(G))}</div>
       ${card('Devices', 'players by the device they last played on online, last 7 days', devicePanel(players, now))}`)}
-    ${group('recording', 'Recording', 'clean human hours for bot training and the dataset, counted from R2', [], recordingContent(server.database, card))}
+    ${group('recording', 'Recording', 'clean human hours for bot training and the dataset, counted from R2', [], recordingContent(recDatabase(), card))}
     ${group('benchmarks', 'Benchmarks', 'BeGone (nplay) in Taiwan at its peak, estimated', [], benchmarks(G.all, peaks, today))}
     ${group('players', 'Players', `${num(shown.length)} · sorted by ${sortLabel()}`, [], `<section class="card">${chips}${playerTable(shown)}</section>`)}
-    <footer><p>Updates live. Players are identities that said hello or joined a room; ids are anonymous. <b>Phone</b> and <b>Computer</b> group players by
+    <footer><p>Updates live. Players are identities that said hello or joined a room; ids are anonymous.${several() ? ` <b>${esc(source.name)}</b> adds ${esc(links.map(l => l.server.name).join(' and '))}: each server has its own identities, so a person who played on both counts once on each, and each hour's peak is the servers' peaks added (an upper bound: they may have peaked at different minutes).` : ''} <b>Phone</b> and <b>Computer</b> group players by
       the device they last played on online (phones and tablets are Phone); players who never reported a device count only in All, and per-day figures
       use that latest device for every day. Days are Taipei days; "the days before" compares only covered windows (today counts in
       the 7 and 30 days, so early in a Taipei day they read low). Career numbers come from <code>profile</code>:
@@ -579,10 +623,10 @@ function dashboard() {
       the K-factor counts players who arrived through a share code and entered a room; drops are connections that closed in a room.
       Purple flags on the charts are releases to production (hover for what shipped).</p>
       <button type="button" class="btn revoke" id="revoke">Sign out all admins</button></footer>`;
-  bindRecording(body, server.database, render);
+  bindRecording(body, recDatabase(), render);
   body.querySelectorAll<HTMLButtonElement>('th button[data-sort]').forEach(b => b.addEventListener('click', () => {
     const k = b.dataset.sort as typeof sortKey;
-    if (sortKey === k) sortDir = sortDir === 1 ? -1 : 1; else { sortKey = k; sortDir = k === 'name' || k === 'country' || k === 'tz' || k === 'deviceName' || k === 'channel' ? 1 : -1; }
+    if (sortKey === k) sortDir = sortDir === 1 ? -1 : 1; else { sortKey = k; sortDir = k === 'name' || k === 'country' || k === 'tz' || k === 'deviceName' || k === 'channel' || k === 'server' ? 1 : -1; }
     render();
     body.querySelector<HTMLButtonElement>(`th button[data-sort="${k}"]`)?.focus();
   }));
@@ -609,10 +653,9 @@ function dashboard() {
   body.querySelector('#more')?.addEventListener('click', () => { playerLimit += 200; render(); });
   body.querySelector('#revoke')?.addEventListener('click', () => {
     // After rotating the key, or when a device is lost: every browser (this one too) must log in again.
-    if (!confirm(`Sign every admin browser out of ${server.name} (${server.database})? Each one will need the admin key again.`)) return;
-    store.del(flagKey());
+    if (!confirm(`Sign every admin browser out of ${source.name} (${databases(source)})? Each one will need the admin key again.`)) return;
     message = 'Every admin session was signed out.'; messageError = false;
-    void conn?.reducers.adminRevokeAll({}).catch(() => undefined);
+    for (const l of links) { store.del(flagKey(l.server)); void l.conn?.reducers.adminRevokeAll({}).catch(() => undefined); }
   });
 }
 
@@ -834,12 +877,15 @@ function viralityCard(players: Player[]) {
     <p class="table-note">K-factor = players who arrived through a share and entered a room ÷ players. Above 1 the game spreads by itself; 0.3 makes sharing a real channel. ${num(v.referred)} player${v.referred === 1 ? '' : 's'} arrived through a share.</p>`);
 }
 
-/** This server's `admin_room_hour` rows (none until the view is there), with `admin_afk_hour`'s AFK kicks where it has them. */
+/** The `admin_room_hour` rows (none until the view is there), with `admin_afk_hour`'s AFK kicks where it has them; several servers' added per hour. */
 function roomHourRows(): RoomHourOf[] {
-  if (views.roomHours !== 'on' || !conn) return [];
-  const afk = new Map<number, number>();
-  if (views.afkHours === 'on') for (const r of conn.db.adminAfkHour.iter()) afk.set(r.hour, r.afk);
-  return [...conn.db.adminRoomHour.iter()].map((r: RoomHour) => ({ ...r, afk: afk.get(r.hour) ?? 0 }));
+  if (views.roomHours !== 'on' || !connected()) return [];
+  const rows = links.flatMap(l => {
+    const afk = new Map<number, number>();
+    if (views.afkHours === 'on') for (const r of l.conn!.db.adminAfkHour.iter()) afk.set(r.hour, r.afk);
+    return [...l.conn!.db.adminRoomHour.iter()].map((r: RoomHour) => ({ ...r, afk: afk.get(r.hour) ?? 0 }));
+  });
+  return several() ? sumRoomHours(rows) : rows;
 }
 
 /** Human share of seats per bucket (bars) with drops per join (tick). */
@@ -916,7 +962,9 @@ const COLUMNS: { key: keyof Player | 'country'; label: string; num?: boolean }[]
   { key: 'channel', label: 'Channel' },
   { key: 'country', label: 'Country' }, { key: 'tz', label: 'Time zone' }, { key: 'lang', label: 'Lang' }, { key: 'id', label: 'Id' },
 ];
-const sortLabel = () => `${COLUMNS.find(c => c.key === sortKey)?.label.toLowerCase()}, ${sortDir === 1 ? 'ascending' : 'descending'}`;
+/** The table's columns: with several servers, which server after the name. */
+const columns = () => (several() ? [COLUMNS[0], { key: 'server' as const, label: 'Server' }, ...COLUMNS.slice(1)] : COLUMNS);
+const sortLabel = () => `${(columns().find(c => c.key === sortKey) ?? COLUMNS.find(c => c.key === 'lastSeen'))?.label.toLowerCase()}, ${sortDir === 1 ? 'ascending' : 'descending'}`;
 
 function playerTable(players: Player[]) {
   if (!players.length) return '<div class="empty">No players yet.</div>';
@@ -928,13 +976,13 @@ function playerTable(players: Player[]) {
     if (x === undefined || y === undefined) return x === y ? 0 : x === undefined ? 1 : -1;
     return (typeof x === 'number' && typeof y === 'number' ? x - y : String(x).localeCompare(String(y))) * sortDir;
   });
-  const head = COLUMNS.map(c => {
+  const head = columns().map(c => {
     const on = c.key === sortKey;
     return `<th class="${c.num ? 'num' : ''}"${on ? ` aria-sort="${sortDir === 1 ? 'ascending' : 'descending'}"` : ''}><button type="button" data-sort="${c.key}" class="${on ? `sorted ${sortDir === 1 ? 'asc' : 'desc'}` : ''}">${c.label}</button></th>`;
   }).join('');
   const rows = sorted.slice(0, playerLimit).map(p => {
     const lastSeen = p.lastSeen.toDate(), firstSeen = p.firstSeen.toDate();
-    return `<tr><td>${esc(p.name || '—')}</td><td title="${taipeiTimestamp(lastSeen.getTime())} Taipei">${ago(lastSeen)}</td><td title="${taipeiTimestamp(firstSeen.getTime())} Taipei">${shortDate(firstSeen)}</td>
+    return `<tr><td>${esc(p.name || '—')}</td>${several() ? `<td>${esc(p.server)}</td>` : ''}<td title="${taipeiTimestamp(lastSeen.getTime())} Taipei">${ago(lastSeen)}</td><td title="${taipeiTimestamp(firstSeen.getTime())} Taipei">${shortDate(firstSeen)}</td>
       <td class="num"${p.playing ? ' title="In an online room now"' : ''}>${p.playing ? '<i class="dot live" aria-label="In a room now"></i>' : ''}${formatPlayTime(p.playTime)}</td>
       <td class="num">${num(p.sessions)}</td><td class="num" title="Covered Taipei days active, not lifetime days">${p.activeDays === undefined ? '—' : num(p.activeDays)}</td><td class="num">${num(p.rounds)}</td><td class="num">${num(p.matches)}</td><td class="num">${num(p.kills)}</td>
       ${pingCell(p)}<td class="num">${fmtRate(p.corrPerMin)}</td>${fpsCell(p)}${deviceCell(p)}<td>${esc(p.channel ?? '—')}</td>
@@ -978,8 +1026,10 @@ function devicePanel(players: Player[], now: number) {
     <p class="devices-note">${num(week.total)} of ${num(active)} player${active === 1 ? '' : 's'} active in the last 7 days reported a device (${num(ever.total)} ever); each counts once, by their latest report.</p>`;
 }
 
+/** A view the module of a server on show lacks. */
+const lacking = () => `— ${several() ? "A server's" : "This server's"} module has no view for this yet.`;
 /** What a connection-quality panel says without data: loading, an older module (—), or nothing reported yet. */
-const netEmpty = (none: string, view: 'net' | 'dayNet' = 'net') => `<div class="empty">${views[view] === 'missing' ? "— This server's module has no view for this yet." : views[view] === 'wait' ? 'Loading…' : none}</div>`;
+const netEmpty = (none: string, view: 'net' | 'dayNet' = 'net') => `<div class="empty">${views[view] === 'missing' ? lacking() : views[view] === 'wait' ? 'Loading…' : none}</div>`;
 
 /** The top countries (time zone → country) by players: everyone's count, and the bar split into Phone and Computer. */
 function countryList(G: Record<GroupId, Player[]>) {
@@ -1129,7 +1179,7 @@ function groupedChart(o: { aria: string; value: (key: number, g: GroupId) => Bar
 /** What a chart says when the view it needs is missing or still loading; undefined when it is there. */
 function needs(view: keyof typeof OPTIONAL): string | undefined {
   if (views[view] === 'on') return undefined;
-  return `<div class="empty">${views[view] === 'missing' ? "— This server's module has no view for this yet." : 'Loading…'}</div>`;
+  return `<div class="empty">${views[view] === 'missing' ? lacking() : 'Loading…'}</div>`;
 }
 /** Under an hourly chart: when hourly records begin, if inside the range. */
 function hourlyNote(players: Player[], b: Buckets): string | undefined {
@@ -1245,7 +1295,7 @@ const fmtAvg = (v: number) => (v >= 10 ? v.toFixed(0) : v.toFixed(1));
  * (daily charts show at least a week; the CCU chart is always hourly) and what each figure rests on.
  */
 function keyMetrics(players: Player[], o: Overview | undefined, today: number, now: number) {
-  const intro = 'online players on this server · Taipei time (UTC+8)';
+  const intro = `online players on ${several() ? 'Taipei and US East together' : 'this server'} · Taipei time (UTC+8)`;
   const peaks = peakRows(), rooms = roomHourRows();
   const cov = coverage(players, peaks, rooms);
   const narrow = innerWidth < 600;
@@ -1424,16 +1474,20 @@ function coverageCard(cov: ReturnType<typeof coverage>) {
   ];
   return card('How these are measured', 'Taipei days and hours', `<div class="scroll"><table class="coverage"><thead><tr><th>Metric</th><th>Source</th><th>From</th><th>Notes</th></tr></thead><tbody>
     ${rows.map(r => `<tr><td><b>${r[0]}</b></td><td>${esc(r[1])}</td><td class="from">${r[2]}</td><td class="muted">${esc(r[3])}</td></tr>`).join('')}</tbody></table></div>
-    <p class="table-note">Concurrent users are humans in Online rooms; the lobby is not counted, so CCU can be lower than "online". Every figure is this server only (Taipei and the legacy US East database are separate; nobody is de-duplicated across them). Launch-week peaks before peak_hour existed are rebuilt from PostHog joins and leaves (Taipei days, Oct 7–11).</p>`, 'coverage-card');
+    <p class="table-note">Concurrent users are humans in Online rooms; the lobby is not counted, so CCU can be lower than "online". ${several() ? 'Every figure adds the servers together; each has its own identities, so a person who played on both counts once on each. CCU peaks add each server\'s hourly peak: an upper bound, since they may have peaked at different minutes.' : 'Every figure is this server only (Taipei and US East are separate databases; All production adds them, and nobody is de-duplicated across them).'} Launch-week peaks before peak_hour existed are rebuilt from PostHog joins and leaves (Taipei days, Oct 7–11).</p>`, 'coverage-card');
 }
 
 // ---- Peak online and benchmarks -----------------------------------------------------------
 
-/** This server's `admin_peak_hour` rows (none until the view is there). */
+/** The `admin_peak_hour` rows (none until the view is there); several servers' added per hour (src/admin/merge.ts: an upper bound). */
 function peakRows(): PeakOf[] {
-  if (views.peak !== 'on' || !conn) return [];
-  return [...conn.db.adminPeakHour.iter()].map((r: PeakHour) => ({ hour: r.hour, peak: r.peak, phone: r.phone, computer: r.computer, atMs: r.at.toDate().getTime() }));
+  if (views.peak !== 'on' || !connected()) return [];
+  const rows = links.flatMap(l => [...l.conn!.db.adminPeakHour.iter()].map((r: PeakHour) => ({ hour: r.hour, peak: r.peak, phone: r.phone, computer: r.computer, atMs: r.at.toDate().getTime() })));
+  return several() ? sumPeakHours(rows) : rows;
 }
+
+/** The database whose recording stats the Recording section shows (only Taipei's is recorded). */
+const recDatabase = () => (source.servers.find(s => recEnvOf(s.database)) ?? source.servers[0]).database;
 
 /** A group's peak as a tile figure, with when the all-player peak was reached (local time or date); "—" without the view, 0 without records. */
 function peakFig(p: ReturnType<typeof peakBetween>, g: GroupId, when: 'time' | 'date'): Fig {
@@ -1467,7 +1521,7 @@ function benchmarks(players: Player[], peaks: PeakOf[], today: number) {
       <td class="num">${b.begone}<br><small class="muted">${num(b.low)}–${num(b.high)}</small></td><td>${where ? `<span class="tag vs ${where}">${mark[where]}</span>` : '—'}</td></tr>`;
   }).join('');
   const table = `<div class="scroll"><table class="bench"><thead><tr><th>Metric</th><th class="num">Turf War</th><th class="num">Taiwan only</th><th class="num">BeGone, Taiwan</th><th>Turf War is</th></tr></thead><tbody>${rows}</tbody></table></div>
-    <p class="table-note">Turf War: this server, all players and those on a Taiwan time zone (the comparison uses Taiwan where there is one; peak CCU counts everyone in rooms). Days are Taipei days; — means Unavailable when the full window is not covered.
+    <p class="table-note">Turf War: ${several() ? 'Taipei and US East together' : 'this server'}, all players and those on a Taiwan time zone (the comparison uses Taiwan where there is one; peak CCU counts everyone in rooms). Days are Taipei days; — means Unavailable when the full window is not covered.
     BeGone: estimated Taiwan figures at its peak (2012–14); each is good to about 2× either way.</p>`;
   const launch = `<ul class="launch">${LAUNCH_PEAKS.map(d => `<li><span>${d.day}${d.partial ? ' <small class="muted">to 13:00</small>' : ''}</span><b>${d.peak}</b><small class="muted">at ${d.at}</small></li>`).join('')}</ul>
     <p class="table-note">The most players in Online rooms at once per Taipei day, rebuilt from PostHog joins and leaves before the server recorded peaks (sessions without a leave event end at their last event, so these may read up to ~3 low).</p>`;
@@ -1482,44 +1536,47 @@ let frame = 0;
 function render() {
   cancelAnimationFrame(frame);
   frame = requestAnimationFrame(() => {
-    const p = driver.state.phase;
+    syncViews();
     renderConn();
-    if (conn && isAdmin()) { logoutBtn.hidden = false; dashboard(); return; }
+    if (isAdmin()) { logoutBtn.hidden = false; dashboard(); return; }
     logoutBtn.hidden = true;
     sideNav.hidden = true; chartControls.hidden = true;
-    if (p === 'unreachable') { unreachableCard(); return; }
+    if (links.some(l => l.driver.state.phase === 'unreachable')) { unreachableCard(); return; }
     // Remembered as logged in, but the server says no (revoked, or a new key): back to the login.
-    if (conn && status() && store.get(flagKey())) store.del(flagKey());
-    if (!conn && p !== 'ready') { body.innerHTML = `<div class="empty">Connecting to ${esc(server.name)}…</div>`; return; }
+    for (const l of links) { const s = statusOf(l); if (s && !s.admin && store.get(flagKey(l.server))) store.del(flagKey(l.server)); }
+    const waiting = links.filter(l => !l.conn && l.driver.state.phase !== 'ready');
+    if (waiting.length) { body.innerHTML = `<div class="empty">Connecting to ${esc(waiting.map(l => l.server.name).join(' and '))}…</div>`; return; }
     renderLogin();
   });
 }
 
-/** The header's dot: connected, connecting (amber), or not reachable. */
+/** The header's dot: connected (every server on show), connecting (amber), or not reachable. */
 function renderConn() {
-  const p = driver.state.phase;
-  if (p === 'ready') setConn(conn ? 'live' : 'off', conn ? 'Connected' : 'Connected, but this database has no admin views');
-  else if (p === 'probing') setConn('wait', 'Connecting');
-  else setConn('off', p === 'unreachable' ? "Can't reach the server" : 'Not connected');
+  const phases = links.map(l => l.driver.state.phase);
+  if (phases.every(p => p === 'ready')) setConn(connected() ? 'live' : 'off', connected() ? 'Connected' : `Connected, but ${which(links.filter(l => !l.conn))} has no admin views`);
+  else if (phases.some(p => p === 'unreachable')) setConn('off', `Can't reach ${which(links.filter(l => l.driver.state.phase === 'unreachable'))}`);
+  else if (phases.some(p => p === 'probing')) setConn('wait', 'Connecting');
+  else setConn('off', 'Not connected');
 }
 
-/** "Can't reach the server" with Retry, after 30 s of trying. Redrawn whole only when the server changes. */
+/** "Can't reach the server" with Retry, after 30 s of trying. Redrawn whole only when the servers out of reach change. */
 let unreachableShown = '';
 function unreachableCard() {
-  const key = server.id;
+  const lost = links.filter(l => l.driver.state.phase === 'unreachable');
+  const key = `${source.id}:${lost.map(l => l.server.id).join(',')}`;
   if (unreachableShown === key && body.querySelector('.unreachable')) return;
   unreachableShown = key;
-  body.innerHTML = `<section class="unreachable"><h2><i class="dot off"></i>Can't reach the server</h2>
-      <p role="status">It did not answer within 30 seconds. Check that the server is running, or try again.</p>
+  body.innerHTML = `<section class="unreachable"><h2><i class="dot off"></i>Can't reach ${several() ? esc(which(lost)) : 'the server'}</h2>
+      <p role="status">It did not answer within 30 seconds. Check that the server is running, or try again.${several() ? ' To see the other server meanwhile, pick it on its own.' : ''}</p>
       <button type="button" class="btn primary" id="unreachable-retry">Retry</button></section>`;
-  body.querySelector('#unreachable-retry')?.addEventListener('click', () => driver.retry());
+  body.querySelector('#unreachable-retry')?.addEventListener('click', () => { for (const l of lost) l.driver.retry(); });
 }
 
 logoutBtn.addEventListener('click', () => {
-  store.del(flagKey());
   forgetRecKey();
   message = 'Logged out.'; messageError = false;
-  void conn?.reducers.adminLogout({}).catch(() => undefined).finally(render);
+  for (const l of links) store.del(flagKey(l.server));
+  void Promise.all(links.map(l => l.conn?.reducers.adminLogout({}).catch(() => undefined))).finally(render);
 });
 
 /**
@@ -1527,13 +1584,15 @@ logoutBtn.addEventListener('click', () => {
  * `live` once the views have arrived, or once the server answered but has no admin views (an older
  * module: there is nothing to retry, the login form says so).
  */
-function adminLink(s: AdminServer, lost: () => void): ConnectLink {
+function adminLink(l: Link, lost: () => void): ConnectLink {
+  const s = l.server;
+  // Its own identity, not the game's: closing this tab must never drop the owner's soldier from a match. Per server.
   const key = `lawbreaker.admin.token:${s.uri}:${s.database}`;
   let c: DbConnection | undefined, stopped = false, isLive = false, ended = false;
   let settle: { resolve(): void; reject(error: Error): void } = { resolve() {}, reject() {} };
   const live = new Promise<void>((resolve, reject) => { settle = { resolve, reject }; });
   live.catch(() => undefined);
-  const stop = () => { stopped = true; if (c && conn === c) conn = undefined; try { c?.disconnect(); } catch { /* already closed */ } };
+  const stop = () => { stopped = true; if (c && l.conn === c) l.conn = undefined; try { c?.disconnect(); } catch { /* already closed */ } };
   const end = (error: Error) => {
     if (ended || stopped) return;
     ended = true;
@@ -1552,18 +1611,18 @@ function adminLink(s: AdminServer, lost: () => void): ConnectLink {
         t.onInsert(render); t.onDelete(render);
       }
       // The newer views on their own subscriptions (see OPTIONAL).
-      views = freshViews();
+      l.views = freshViews();
       for (const [name, queries] of Object.entries(OPTIONAL) as [keyof typeof OPTIONAL, string[]][]) {
         cc.subscriptionBuilder()
-          .onApplied(() => { if (!stopped) { views[name] = 'on'; render(); } })
-          .onError(() => { if (!stopped) { views[name] = 'missing'; render(); } })
+          .onApplied(() => { if (!stopped) { l.views[name] = 'on'; render(); } })
+          .onError(() => { if (!stopped) { l.views[name] = 'missing'; render(); } })
           .subscribe(queries);
       }
       cc.subscriptionBuilder()
-        .onApplied(() => { if (stopped) return; isLive = true; conn = cc; message = ''; settle.resolve(); render(); })
+        .onApplied(() => { if (stopped) return; isLive = true; l.conn = cc; message = ''; settle.resolve(); render(); })
         .onError(() => {
           if (stopped) return;
-          isLive = true; messageError = true; message = 'This database has no admin views yet (publish the module first).';
+          isLive = true; messageError = true; message = `${several() ? `${s.name}: this` : 'This'} database has no admin views yet (publish the module first).`;
           settle.resolve(); render();
         })
         .subscribe(['SELECT * FROM admin_status', 'SELECT * FROM admin_overview', 'SELECT * FROM admin_rooms', 'SELECT * FROM admin_players',
@@ -1576,35 +1635,39 @@ function adminLink(s: AdminServer, lost: () => void): ConnectLink {
   return { live, stop };
 }
 
-function makeDriver() {
-  const ping = pingUrl(server.uri);
-  const s = server;
-  return new ConnectDriver<never>({
-    ping: signal => ping ? hostAnswers(ping, signal) : Promise.resolve(false),
-    connect: lost => adminLink(s, lost),
-  }, () => render(), () => undefined);
+/** One link per server of the entry, each with its own driver (not started). */
+function makeLinks(src: AdminSource): Link[] {
+  return src.servers.map(s => {
+    const ping = pingUrl(s.uri);
+    const l = { server: s, views: freshViews() } as Link;
+    l.driver = new ConnectDriver<never>({
+      ping: signal => ping ? hostAnswers(ping, signal) : Promise.resolve(false),
+      connect: lost => adminLink(l, lost),
+    }, () => render(), () => undefined);
+    return l;
+  });
 }
-let driver = makeDriver();
 
-/** Show another server: drop this connection, remember the choice, connect to the other. */
-function switchServer(next: AdminServer) {
-  if (next.id === server.id) return;
-  driver.stop();
-  conn = undefined; loggingIn = false; message = ''; messageError = true; playerLimit = 100; views = freshViews();
-  server = next;
+/** Show another entry: drop these connections, remember the choice, connect to its servers. */
+function switchServer(next: AdminSource) {
+  if (next.id === source.id) return;
+  for (const l of links) l.driver.stop();
+  loggingIn = false; message = ''; messageError = true; playerLimit = 100;
+  source = next;
   forgetRecKey();
-  rememberServer(server, storage);
+  rememberServer(source, storage);
   renderServer();
-  driver = makeDriver();
-  driver.start();
+  links = makeLinks(source);
+  for (const l of links) l.driver.start();
   render();
 }
-serverSelect.addEventListener('change', () => { const next = SERVERS.find(s => s.id === serverSelect.value); if (next) switchServer(next); });
+serverSelect.addEventListener('change', () => { const next = SOURCES.find(s => s.id === serverSelect.value); if (next) switchServer(next); });
 
 renderServer();
 attachTooltips(body);
-driver.start();
+links = makeLinks(source);
+for (const l of links) l.driver.start();
 render();
 // Relative times ("3 min ago") and today's counts move on without new data.
-setInterval(() => { if (conn && isAdmin() && !document.hidden && !body.contains(document.activeElement)) render(); }, 30_000);
-addEventListener('resize', () => { if (conn && isAdmin()) render(); });
+setInterval(() => { if (isAdmin() && !document.hidden && !body.contains(document.activeElement)) render(); }, 30_000);
+addEventListener('resize', () => { if (isAdmin()) render(); });
