@@ -150,20 +150,27 @@ let backoff = 1000;
 function connect() {
   const token = existsSync(TOKEN_FILE) ? readFileSync(TOKEN_FILE, 'utf8').trim() : undefined;
   const c = DbConnection.builder().withUri(URI).withDatabaseName(DB).withToken(token)
+    // Localhost: compression only costs CPU here (per-message gzip on the server, a decompression stream per message here).
+    // Light mode: no reducer details with each update (the callbacks only read rows).
+    .withCompression('none').withLightMode(true)
     .onConnect((ctx, identity, next) => {
       writeFileSync(TOKEN_FILE, next, { mode: 0o600 });
       log('connected', { identity: identity.toHexString().slice(0, 8) });
       backoff = 1000;
       ctx.reducers.adminLogin({ key: ADMIN_KEY }).catch(e => log('admin login failed', { error: String(e) }));
       const db = ctx.db;
-      const rooms = new Map<number, { mapId: string; configJson: string }>();
+      // Each room's info, parsed when its match row changes (frames arrive 30 times a second).
+      const rooms = new Map<number, { configJson: string; mode: string; teamSize: number }>();
+      const setRoom = (m: { id: number; configJson: string }) => {
+        let cfg: { mode?: string; teamSize?: number } = {};
+        try { cfg = JSON.parse(m.configJson); } catch { /* old row */ }
+        rooms.set(m.id, { configJson: m.configJson, mode: cfg.mode ?? '', teamSize: cfg.teamSize ?? 0 });
+      };
       const priv = new Set<number>();
       const roster = new Map<number, RosterRow & { room: number }>();
       const info = (room: number) => {
         const m = rooms.get(room);
-        let cfg: { mode?: string; teamSize?: number } = {};
-        try { cfg = JSON.parse(m?.configJson ?? '{}'); } catch { /* old row */ }
-        return { configJson: m?.configJson ?? '', mode: cfg.mode ?? '', teamSize: cfg.teamSize ?? 0, private: priv.has(room) };
+        return { configJson: m?.configJson ?? '', mode: m?.mode ?? '', teamSize: m?.teamSize ?? 0, private: priv.has(room) };
       };
       const subjectIn = (room: number) => (id: number) => subjects.get(room)?.get(id);
       // One rebuild at a time, always from the newest rows (rows arrive one callback each).
@@ -173,8 +180,8 @@ function connect() {
         rebuilding = true;
         void rebuildSubjects([...db.recorderSubjects.iter()] as SubjectRow[]).finally(() => { rebuilding = false; if (again) { again = false; refresh(); } });
       };
-      db.match.onInsert((_c, m) => rooms.set(m.id, m));
-      db.match.onUpdate((_c, _o, m) => rooms.set(m.id, m));
+      db.match.onInsert((_c, m) => setRoom(m));
+      db.match.onUpdate((_c, _o, m) => setRoom(m));
       db.match.onDelete((_c, m) => { rooms.delete(m.id); segmenter.close(m.id, false); });
       db.privateRoom.onInsert((_c, r) => priv.add(r.room));
       db.privateRoom.onDelete((_c, r) => priv.delete(r.room));
