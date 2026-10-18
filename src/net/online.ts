@@ -318,10 +318,36 @@ export class OnlineLink implements GameLink {
   drainEvents() { const e = this.events; this.events = []; return e; }
   update() { /* the server ticks the match */ }
 
-  leaderboard(): CareerStats[] {
-    const rows: CareerStats[] = [];
-    for (const p of this.conn.db.profile.iter()) rows.push({ ...p, mine: p.identity.isEqual(this.identity) });
-    return rows.sort((a, b) => b.matchesWon - a.matchesWon || b.kills - a.kills);
+  /**
+   * The server leaderboard, for the match-end screen only: every career row is fetched when a match
+   * ends and dropped when the next one starts (it is the whole player base, so joining does not wait
+   * for it and no kill elsewhere is sent here mid-match). Empty until it arrives.
+   */
+  private careers?: { sub: { unsubscribe(): void }; rows?: CareerStats[]; changed: boolean };
+  private careersWatched = false;
+  leaderboard(ended: boolean): CareerStats[] {
+    if (!ended) {
+      if (this.careers) { try { this.careers.sub.unsubscribe(); } catch { /* connection closed */ } this.careers = undefined; }
+      return [];
+    }
+    if (!this.careers) {
+      if (!this.careersWatched) {
+        this.careersWatched = true;
+        const mark = () => { if (this.careers) this.careers.changed = true; };
+        this.conn.db.profile.onInsert(mark); this.conn.db.profile.onUpdate(mark);
+      }
+      const c: NonNullable<OnlineLink['careers']> = { changed: false, sub: { unsubscribe() {} } };
+      c.sub = this.conn.subscriptionBuilder().onApplied(() => { c.changed = true; }).onError(() => undefined).subscribe(['SELECT * FROM profile']);
+      this.careers = c;
+    }
+    const c = this.careers;
+    if (c.changed) {
+      c.changed = false;
+      const rows: CareerStats[] = [];
+      for (const p of this.conn.db.profile.iter()) rows.push({ ...p, mine: p.identity.isEqual(this.identity) });
+      c.rows = rows.sort((a, b) => b.matchesWon - a.matchesWon || b.kills - a.kills);
+    }
+    return c.rows ?? [];
   }
 
   status() {
@@ -596,9 +622,9 @@ export async function connectOnline(name: string, team: Team | undefined, how: O
             } catch (error) { fail(error as Error); }
           })
           .onError(() => fail(new Error(t('net.subscription'))))
-          // Rooms (match rows), players and career stats; the room's own roster, frame and events
-          // follow once we know our room. `soldier` and `body` are server-side detail.
-          .subscribe(['SELECT * FROM match', 'SELECT * FROM player', 'SELECT * FROM profile']);
+          // Rooms (match rows) and players; the room's own roster, frame and events follow once we
+          // know our room, career stats at the match's end (`leaderboard`). `soldier` and `body` are server-side detail.
+          .subscribe(['SELECT * FROM match', 'SELECT * FROM player']);
         // Our own private room's code (the server keeps codes off the public room rows); none from an older server.
         connection.subscriptionBuilder().onError(() => undefined).subscribe(['SELECT * FROM my_room_code']);
         // How many friends our share code brought (the 金拖 unlock, src/game/skins.ts); none from an older server.
