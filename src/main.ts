@@ -382,6 +382,8 @@ function onLobbyConn(s: ConnectState<Queued>) {
     });
   }
   if (s.phase === 'ready') wasReady = true;
+  // A queued Play (it captured the mouse) waits on a server that did not answer: Retry needs the mouse.
+  if (s.phase === 'unreachable' && !game) freeMouse();
   if (s.phase === 'unreachable' && !unreachableReported) { unreachableReported = true; track('error_shown', { where: 'rooms', message: 'server unreachable' }); }
   refresh();
 }
@@ -1248,6 +1250,7 @@ function run(action: Action, room = -1, retried = false) {
     playPressed();
     // Still inside the tap: full screen now, as starting would (a queued start runs without a gesture).
     fullscreenForTouch();
+    captureForPlay();
     // (A lobby that let go of the server in a background tab reconnects first.)
     if (phase() === 'idle') watchLobbyRooms();
     lobbyConn.queue({ action, room, retried });
@@ -1280,6 +1283,21 @@ function fullscreenForTouch() {
   }).catch(() => undefined);
 }
 
+/**
+ * Desktop: capture the mouse now, inside the Play click, so the match opens with it captured. Browsers
+ * allow a capture only a few seconds after a click and a join can take longer: one asked when the match
+ * opens is then refused (the game shows Click to play). Esc during the join frees it as usual.
+ */
+function captureForPlay() {
+  const canvas = renderer.renderer.domElement;
+  if (benchMode || touchActive() || document.pointerLockElement === canvas) return;
+  void (canvas.requestPointerLock?.() as Promise<void> | undefined)?.catch?.(() => undefined);
+}
+/** Give the mouse back to the lobby (a join captured it and then failed). */
+function freeMouse() {
+  if (renderer && document.pointerLockElement === renderer.renderer.domElement) document.exitPointerLock?.();
+}
+
 async function start(action: Action, retried = false) {
   // Before the first await: still inside the player's tap.
   if (!benchMode) fullscreenForTouch();
@@ -1291,6 +1309,9 @@ async function start(action: Action, retried = false) {
   const duel = special;
   special = undefined;
   inviteStarting = duel?.kind === 'invite';
+  // Our own 1v1 room and our invite room open with a dialog: the mouse stays free for it.
+  if (duel?.kind === 'host' || duel?.kind === 'invite') freeMouse();
+  else captureForPlay();
   if (!benchMode) {
     store.set('name', name);
     if (!duel) { store.set('mode', via); store.set('team', team); store.set('skill', skill); saveForm(); }
@@ -1349,6 +1370,7 @@ async function start(action: Action, retried = false) {
       lobbyConn.queue({ action, room, retried: true });
       return;
     }
+    freeMouse();
     playFailed();
     const tried = action === 'code' && !duel ? cleanCode(roomCode.value) : '';
     status.textContent = t('lobby.couldNotJoin', { error: serverError((error as Error).message) }) + (tried ? ` (${tried})` : '');
@@ -1375,7 +1397,7 @@ async function start(action: Action, retried = false) {
   document.body.classList.remove('menu-open');
   // Our own 1v1 room opens with the share dialog, our invite room with the invite dialog (the pointer stays free for them).
   if (duel?.kind === 'host' || duel?.kind === 'invite') return;
-  await game?.input.lock()?.catch?.(() => undefined);
+  game?.capture();
 }
 
 function launch(link: GameLink, map: string) {

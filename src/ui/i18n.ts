@@ -234,7 +234,7 @@ const en = {
 
   // ---- HUD ----
   'hud.hp': 'HP', 'hud.sta': 'STA', 'hud.kmh': 'KM/H', 'hud.alt': 'M ALT',
-  'hud.released': 'Mouse released — the match continues', 'hud.clickResume': 'Click to resume', 'hud.leave': 'leave match',
+  'hud.released': 'Mouse released — the match continues', 'hud.clickResume': 'Click to resume', 'hud.clickPlay': 'Click to play', 'hud.leave': 'leave match',
   'hud.practice': 'PRACTICE', 'hud.warmup': 'WARMUP', 'hud.matchOver': 'MATCH OVER', 'hud.roundBuy': 'ROUND {n} · BUY',
   'hud.roundOver': 'ROUND OVER', 'hud.round': 'ROUND {n}',
   'hud.practiceSub': 'PRACTICE RANGE · FREE STORE', 'hud.modeSub': '{mode} · FIRST TO {n}',
@@ -598,7 +598,7 @@ const zhTW: Record<Key, string> = {
   'inst.tip': '提示：橫握手機遊玩 · 在「設定 → 操作 → 編輯觸控配置」移動與縮放按鈕。',
 
   'hud.hp': '生命', 'hud.sta': '體力', 'hud.kmh': 'KM/H', 'hud.alt': '高度 M',
-  'hud.released': '滑鼠已釋放 — 對戰仍在進行', 'hud.clickResume': '點擊繼續', 'hud.leave': '離開對戰',
+  'hud.released': '滑鼠已釋放 — 對戰仍在進行', 'hud.clickResume': '點擊繼續', 'hud.clickPlay': '點擊開始', 'hud.leave': '離開對戰',
   'hud.practice': '練習', 'hud.warmup': '暖身', 'hud.matchOver': '對戰結束', 'hud.roundBuy': '第 {n} 回合 · 購買',
   'hud.roundOver': '回合結束', 'hud.round': '第 {n} 回合',
   'hud.practiceSub': '練習場 · 免費商店', 'hud.modeSub': '{mode} · 先贏 {n} 回合',

@@ -33,6 +33,7 @@ import { SettingsMenu } from '../ui/settingsmenu';
 import { Hud, weaponLabel } from '../ui/hud';
 import { kbd, keyOf } from '../ui/keys';
 import { mapName, roundReason, t, teamName } from '../ui/i18n';
+import type { Key } from '../ui/i18n';
 import { Input } from './input';
 import type { GameLink } from './link';
 import type { ServerId } from '../net/servers';
@@ -387,8 +388,9 @@ export class Game {
     this.wearSkin(me);
     if (state.phase === 'ended' && !this.endShown) { this.endShown = true; this.buymenu.close(); this.input.release(); }
     if (state.phase !== 'ended') {
-      // Touch: a new match starts playing again by itself (there is no click to recapture the mouse).
-      if (this.endShown && this.input.touch) void this.input.lock();
+      // A new match starts playing again by itself on touch; with a mouse, "Click to play" (not the menu) asks for the click
+      // the browser wants before it captures the mouse.
+      if (this.endShown) { if (this.input.touch) void this.input.lock(); else this.capture(); }
       this.endShown = false;
     }
     const sabotage = modeOf(state, this.map.def) === 'sabotage';
@@ -401,8 +403,8 @@ export class Game {
     if (this.menu.open && performance.now() - this.menuAt > 250 && (this.input.takeCode('Escape') || this.input.take('menu'))) {
       this.menu.hide(); this.input.clear(); this.resume();
     }
-    // CrazyGames counts play time from these: playing, unless the match is over or the menu is open.
-    crazyGameplay(state.phase !== 'ended' && !this.menu.open);
+    // CrazyGames counts play time from these: playing, unless the match is over, the menu is open or we wait for "Click to play".
+    crazyGameplay(state.phase !== 'ended' && !this.menu.open && !this.awaitingClick);
     const side = me ? sideOf(state, this.map.def, me.team) : 0;
     const buyWindow = !!me && state.phase === 'live' && canBuyWeapons(state, this.map.def, me, side);
     const site = sabotage && me?.alive ? this.siteHere(state) : -1;
@@ -749,22 +751,28 @@ export class Game {
   private resuming = false;
 
   /** Back to playing: capture the mouse, or, if the browser refuses for now, show "click to resume". */
-  private resume() {
+  private resume(label: Key = 'hud.clickResume') {
     this.resuming = true;
     void this.input.lock().then(ok => {
       this.resuming = false;
-      if (!ok && !this.input.locked && this.running) this.clickToResume(true);
+      if (!ok && !this.input.locked && this.running) this.clickToResume(true, label);
     });
   }
 
-  private clickToResume(on: boolean) {
+  /**
+   * Into the match (main.ts, once it has joined): capture the mouse. Browsers capture only a few seconds after a
+   * click, and joining can take longer than that, so a refusal shows "Click to play" over the match, not the menu.
+   */
+  capture() { if (!this.input.locked && !this.resuming && !this.awaitingClick) this.resume('hud.clickPlay'); }
+
+  private clickToResume(on: boolean, label: Key = 'hud.clickResume') {
     if (on === this.awaitingClick) return;
     this.awaitingClick = on;
     if (on) {
       const el = this.resumeLayer ??= document.createElement('button');
       el.type = 'button';
       el.className = 'click-resume';
-      el.innerHTML = `<b>${t('hud.clickResume')}</b>`;
+      el.innerHTML = `<b>${t(label)}</b>`;
       // The click is the gesture the browser wants: capture now.
       el.onclick = () => { void this.input.lock().then(ok => { if (ok) this.clickToResume(false); }); };
       this.hud.root.appendChild(el);
