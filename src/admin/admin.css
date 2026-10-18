@@ -127,6 +127,9 @@ a { color: var(--accent); }
 .dot.live { background: var(--cash); box-shadow: 0 0 0 3px rgba(143, 224, 126, 0.18); }
 .dot.wait { background: var(--amber); }
 .dot.off { background: var(--crimson); }
+.pause-bar { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin: 0 0 12px; padding: 10px 14px; border: 1px solid var(--line-strong); border-radius: 10px; background: var(--panel); color: var(--muted); }
+.pause-bar[hidden] { display: none; }
+.pause-bar .btn { white-space: nowrap; }
 .spacer { flex: 1; }
 .links { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; }
 .links a { font-weight: 600; font-size: 14px; text-decoration: none; }

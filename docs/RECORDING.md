@@ -126,10 +126,14 @@ mouse) and `aimAssist`.
   `private_room` and `recorder_subjects`; cuts a segment per round (`shared/rec/segmenter.ts`; rounds
   over 10 minutes are split; a room whose frames stop closes after 30 s), spools it to
   `/var/lib/turfwar-rec/spool` (2 GB cap) and uploads it with an ETag (MD5) check, then the manifest and
-  the index. Health line every minute in `journalctl -u turfwar-recorder`.
+  the index. Health line every minute in `journalctl -u turfwar-recorder`. It shares the game server's
+  small CPU allowance, so it connects without compression (localhost) and runs with one garbage-collector
+  marker (`BUN_JSC_numberOfGCMarkers=1` in the unit): with Bun's default the idle markers spin and it took
+  ~12% of a vCPU per open room, about as much as the game server; now ~1%.
 - **Processor** (`tools/recorder/process.ts`, `turfwar-rec-process.timer`, hourly): classifies new
   segments (10 minutes after upload, so the input batches are in), rewrites `stats/clean-hours.json`, and
   at 19:00 UTC applies retention: input never used by a segment after 30 days, everything after 3 years.
+  Capped at a quarter of a vCPU (`CPUQuota=25%`), so a long run is slower rather than taking the game's CPU.
 - **Admin**: `/admin` → Recording shows movement-clean vs 200 h, aim-clean vs 50 h, export-set hours vs
   1,000 h, per day, by device and input, the checks and the recount. It asks for the admin key once per
   visit (memory only).

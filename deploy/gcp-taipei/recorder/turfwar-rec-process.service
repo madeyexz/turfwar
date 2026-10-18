@@ -11,10 +11,14 @@ EnvironmentFile=/etc/turfwar-rec/env
 ExecStart=/opt/turfwar-rec/bin/bun /opt/turfwar-rec/process.js
 Nice=15
 CPUWeight=10
+# The game server's CPU allowance is small (e2-small: half a vCPU): the processor takes at most a
+# quarter of one vCPU (a run takes longer instead), and one GC marker (see turfwar-recorder.service).
+CPUQuota=25%
+Environment=BUN_JSC_numberOfGCMarkers=1
 MemoryMax=400M
 NoNewPrivileges=true
 ProtectSystem=strict
 ProtectHome=true
 ReadWritePaths=/var/lib/turfwar-rec
 PrivateTmp=true
-TimeoutStartSec=50min
+TimeoutStartSec=3h
