@@ -1,5 +1,5 @@
 import type { Key } from '../ui/i18n';
-import { serverRegionKey } from './ping';
+import { serverIdentityKey, serverRegionKey } from './ping';
 
 /**
  * The game servers a player can choose (Settings → Server, or `?server=tw|us` for one visit). Each
@@ -10,6 +10,9 @@ import { serverRegionKey } from './ping';
  *   the Maincloud development database, a local build's the dev server's proxy ("Dev server").
  * - `us`: US East, the Maincloud database that was production before Singapore (which was itself retired as a choice for players). It stays published,
  *   and players from that time find their saved identity and career there.
+ *
+ * A new player in the Americas, Europe or Africa starts on US East (`regionServer`): Taipei is 300–400 ms
+ * away from there, US East about 40–160 ms.
  *
  * Each server keeps its own stats: the saved identity is keyed by server (`serverIdentityKey`; Taipei
  * keeps the one Singapore had) and the career stats live in that server's database. The choice is saved (`lawbreaker.server`); the
@@ -72,18 +75,40 @@ export const SERVER_KEY = 'lawbreaker.server';
 export interface KeyValue { getItem(key: string): string | null; setItem(key: string, value: string): void }
 
 /**
- * The server to use: `?server=tw|us` (this visit only, never saved), else the saved choice, else the
- * first (the build's own: Taipei in production). An id that is not on the list (a typo, or `sg` saved
- * when Singapore was a choice) is skipped, and a saved one is rewritten to the default so it is not
- * looked up again.
+ * The default server for a browser time zone, before any choice: US East for the Americas, Europe
+ * (Istanbul and Moscow included) and Africa, whose players reach Taipei at 300–400 ms; Taipei for
+ * Asia, Oceania and anything unknown. Legacy zone names (US/…, Brazil/…) count with their region.
  */
-export function chooseServer(list: readonly GameServer[], search: string, storage: KeyValue | undefined): GameServer | undefined {
+export function regionServer(tz: string): ServerId {
+  return /^(America|Europe|Africa|Atlantic|US|Canada|Brazil|Mexico|Chile)\//.test(tz) || tz === 'Cuba' || tz === 'Jamaica' ? 'us' : 'tw';
+}
+
+/**
+ * The server to use: `?server=tw|us` (this visit only, never saved), else the server of the friend's room
+ * the page was opened for (`link`, this visit only), else the saved choice, else (on
+ * the production list, Taipei first) the server for the time zone (`regionServer`) unless the player
+ * already has a Taipei identity, which keeps their career where it is; else the first (the build's own).
+ * The default is not saved (only written over an unknown saved id), so a choice in Settings is what pins
+ * a server. An id that is not on the list (a typo, or `sg` saved when Singapore was a choice) is skipped, and a saved
+ * one is rewritten to the default so it is not looked up again.
+ */
+export function chooseServer(list: readonly GameServer[], search: string, storage: KeyValue | undefined, tz = '', link?: ServerId): GameServer | undefined {
   const asked = new URLSearchParams(search).get('server')?.trim().toLowerCase();
   let saved: string | null = null;
   try { saved = storage?.getItem(SERVER_KEY) ?? null; } catch { /* storage blocked: the default */ }
   const savedServer = list.find(s => s.id === saved);
-  if (saved !== null && !savedServer && list[0]) rememberServer(list[0].id, storage);
-  return list.find(s => s.id === asked) ?? savedServer ?? list[0];
+  const fallback = defaultServer(list, storage, tz);
+  if (saved !== null && !savedServer && fallback) rememberServer(fallback.id, storage);
+  return list.find(s => s.id === asked) ?? list.find(s => s.id === link) ?? savedServer ?? fallback;
+}
+
+function defaultServer(list: readonly GameServer[], storage: KeyValue | undefined, tz: string) {
+  const own = list[0];
+  // Only production's list: a dev build's own server stays its default.
+  if (!own || own.region !== 'server.region.taipei') return own;
+  let known = false;
+  try { known = !!storage?.getItem(`lawbreaker.token:${serverIdentityKey(own.uri)}:${own.database}`); } catch { /* storage blocked */ }
+  return known ? own : list.find(s => s.id === regionServer(tz)) ?? own;
 }
 
 export function rememberServer(id: ServerId, storage: KeyValue | undefined) {
@@ -94,13 +119,15 @@ export function rememberServer(id: ServerId, storage: KeyValue | undefined) {
 
 const browser = typeof location !== 'undefined';
 const storage = (): KeyValue | undefined => { try { return typeof localStorage === 'undefined' ? undefined : localStorage; } catch { return undefined; } };
+const timeZone = () => { try { return Intl.DateTimeFormat().resolvedOptions().timeZone ?? ''; } catch { return ''; } };
 let state: { list: GameServer[]; current?: GameServer } | undefined;
+let linked: ServerId | undefined;
 const listeners = new Set<(server: GameServer) => void>();
 
 function init() {
   if (!state) {
     const list = browser ? gameServers(buildServer(import.meta.env as Env, location)) : [];
-    state = { list, current: chooseServer(list, browser ? location.search : '', storage()) };
+    state = { list, current: chooseServer(list, browser ? location.search : '', storage(), timeZone(), linked) };
   }
   return state;
 }
@@ -109,6 +136,20 @@ function init() {
 export const gameServerList = (): readonly GameServer[] => init().list;
 /** The chosen server, or undefined when online play is off. */
 export const currentServer = () => init().current;
+
+/**
+ * The page was opened for a friend's room on `id` (src/game/challenge.ts `linkServer`): play there this
+ * visit, without saving it. Before the first `currentServer()` it only sets the start; later (a CrazyGames
+ * invite accepted while the game is open) it switches like a choice in Settings.
+ */
+export function followLink(id: ServerId | undefined) {
+  if (!id) return;
+  if (!state) { linked = id; return; }
+  const next = state.list.find(x => x.id === id);
+  if (!next || next === state.current) return;
+  state.current = next;
+  for (const fn of [...listeners]) fn(next);
+}
 
 /** Choose a server (saved for next time) and tell every screen that follows it. */
 export function selectServer(id: ServerId) {
