@@ -1,9 +1,9 @@
 import { execSync } from 'node:child_process';
-import { createHash } from 'node:crypto';
-import { readFileSync, readdirSync, rmSync, statSync, writeFileSync } from 'node:fs';
+import { readFileSync, readdirSync, rmSync, writeFileSync } from 'node:fs';
 import { join, resolve } from 'node:path';
-import { defineConfig, loadEnv, type Plugin } from 'vite';
+import { defineConfig, loadEnv, type Plugin, type UserConfig } from 'vite';
 import { mergeReleases, parseReleaseLog, type Release } from './src/admin/releases';
+import { assetVersions, cdnKey, cdnOrigin, fetchCdnIndex, filesIn, hash } from './src/buildtools/assetcdn';
 import { sourcemaps } from './src/buildtools/sourcemaps';
 
 /** The build's git short SHA (Vercel provides it; locally ask git), sent with analytics events. */
@@ -48,13 +48,6 @@ const pageRoutes: Plugin = {
     });
   },
 };
-
-/** Every file under `dir`, as paths relative to it with forward slashes. */
-const filesIn = (dir: string): string[] => readdirSync(dir).flatMap(name => {
-  const full = join(dir, name);
-  return statSync(full).isDirectory() ? filesIn(full).map(f => `${name}/${f}`) : [name];
-});
-const hash = (data: string | Buffer) => createHash('sha256').update(data).digest('hex').slice(0, 12);
 
 /**
  * `<!--preload:rajdhani-600,rajdhani-700-->` in a page's head becomes preload links for those fonts with the
@@ -102,16 +95,21 @@ const gamePreload: Plugin = {
  * (vercel.json) and a release that changes one file has players fetch only that file.
  */
 const publicDir = resolve(__dirname, 'public');
-const VERSIONS: Record<string, string> = Object.fromEntries(filesIn(publicDir).filter(f => /^(assets|fonts|media\/maps)\//.test(f)).sort()
-  .map(f => [f, hash(readFileSync(join(publicDir, f)))]));
+const VERSIONS = assetVersions(publicDir);
+/**
+ * The asset CDN this build links to (src/buildtools/assetcdn.ts): its origin and the files it holds with this
+ * build's version. Set before any plugin hook runs; none in the dev server, local and CrazyGames builds.
+ */
+let cdn: { origin: string; files: Set<string> } | undefined;
 /**
  * The CrazyGames build (`vite build --mode crazygames`, `bun run build:crazygames`): the game page alone, uploaded to
  * CrazyGames and served from their CDN under a path we do not know, so every URL is relative (`base: './'`),
  * with no service worker, no info/privacy/admin pages and no search metadata. Set before any plugin hook runs.
  */
 let crazygames = false;
-/** A public/ file's URL with its version, from the site root (or, in the CrazyGames build, from the page). */
-const versioned = (file: string) => `${crazygames ? '' : '/'}${file}${VERSIONS[file] ? `?v=${VERSIONS[file]}` : ''}`;
+/** A public/ file's URL with its version: on the CDN when it holds it, else from the site root (or, in the CrazyGames build, from the page). */
+const versioned = (file: string) => cdn?.files.has(file) ? `${cdn.origin}/${cdnKey(file, VERSIONS[file])}`
+  : `${crazygames ? '' : '/'}${file}${VERSIONS[file] ? `?v=${VERSIONS[file]}` : ''}`;
 
 /** Stylesheets' `url(/fonts/…)` and the like get their file's version too. */
 const versionedCssUrls: Plugin = {
@@ -140,7 +138,7 @@ const pwa: Plugin = {
     // Precached: the page, this build's scripts and styles, the manifest, the small icons and the Latin fonts
     // (the 512 px icons are only for installing, and the browser fetches them then).
     const shell = [...built.map(f => `/${f}`), ...pub.filter(f => f === 'manifest.webmanifest' || (f.startsWith('icons/') && !f.includes('512')) || /^fonts\/rajdhani-\d+\.woff2$/.test(f)).map(versioned)].sort();
-    const data = { shell, shellVersion: `${appVersion()}-${hash(built.sort().join('|'))}`, assets: Object.keys(VERSIONS).map(versioned) };
+    const data = { shell, shellVersion: `${appVersion()}-${hash(built.sort().join('|'))}`, assets: Object.keys(VERSIONS).map(versioned), assetOrigin: cdn?.origin ?? '' };
     const file = join(options.dir!, 'sw.js');
     const code = readFileSync(file, 'utf8');
     const filled = code.replace(/(["'`])__TURFWAR_BUILD__\1/, JSON.stringify(JSON.stringify(data)));
@@ -192,13 +190,27 @@ function requireCrazygamesEnv(mode: string) {
   if (problems.length) throw new Error(`The CrazyGames build needs the production values. Missing or wrong: ${problems.join(', ')}. Put them in .env.crazygames.local (docs/DEVELOPMENT.md, "CrazyGames build").`);
 }
 
-export default defineConfig(({ command, mode }) => {
+/** The CDN for a website build, with the files of this checkout it holds (a file it lacks is served by the site; the build says which). */
+async function assetCdn(): Promise<typeof cdn> {
+  const origin = cdnOrigin(process.env);
+  if (!origin) return undefined;
+  const index = await fetchCdnIndex(origin);
+  const files = new Set(Object.keys(VERSIONS).filter(f => index?.files[cdnKey(f, VERSIONS[f])]));
+  const missing = Object.keys(VERSIONS).length - files.size;
+  if (!index) console.warn(`asset CDN: ${origin} has no readable index; every asset is served by the site (bun run cdn:deploy).`);
+  else if (missing) console.warn(`asset CDN: ${missing} changed file(s) not on ${origin} yet, served by the site: run bun run cdn:deploy.`);
+  return { origin, files };
+}
+
+export default defineConfig(async ({ command, mode }): Promise<UserConfig> => {
   crazygames = mode === 'crazygames';
   if (crazygames && command === 'build') requireCrazygamesEnv(mode);
+  cdn = command === 'build' && !crazygames ? await assetCdn() : undefined;
+  const cdnLocal = cdn ? Object.keys(VERSIONS).filter(f => !cdn!.files.has(f)) : [];
   return {
     base: crazygames ? './' : '/',
     plugins: [pageRoutes, versionedCssUrls, fontPreload, gamePreload, crazygamesPage, crazygamesPrune, pwa, sourcemaps(appVersion())],
-    define: { __APP_VERSION__: JSON.stringify(appVersion()), __ASSET_VERSIONS__: JSON.stringify(VERSIONS), __RELEASES__: JSON.stringify(releases()) },
+    define: { __APP_VERSION__: JSON.stringify(appVersion()), __ASSET_VERSIONS__: JSON.stringify(VERSIONS), __ASSET_CDN__: JSON.stringify(cdn ? { origin: cdn.origin, local: cdnLocal } : null), __RELEASES__: JSON.stringify(releases()) },
     server: {
       allowedHosts: true,
       // Same-origin websocket route to a local SpacetimeDB so one preview URL serves the game and the match server

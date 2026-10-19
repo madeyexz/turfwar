@@ -12,6 +12,7 @@
     "dev:spacetime": "./scripts/dev-spacetime.sh",
     "typecheck:module": "bun run --cwd spacetimedb typecheck",
     "publish:prod": "bash deploy/publish-prod.sh",
+    "cdn:deploy": "bun deploy/cloudflare/cdn/deploy.ts",
     "seo:report": "bun scripts/seo.ts report",
     "seo:ping": "bun scripts/seo.ts ping",
     "build:crazygames": "tsc --noEmit && vite build --mode crazygames && cd dist-crazygames && rm -f ../turfwar-crazygames.zip && python3 -m zipfile -c ../turfwar-crazygames.zip *",

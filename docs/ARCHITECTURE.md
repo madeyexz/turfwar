@@ -235,6 +235,6 @@ api/           Link previews for shared /c and /r/<code> links (Vercel: preview.
 scripts/       Local load test, simulation benchmark, recording recount/bias/deletion
 tools/         Reproducible CC0 asset import, sound and texture fetch scripts, the Chinese font subset,
                and the match recorder, processor and export (tools/recorder/)
-deploy/        Taipei VM (gcp-taipei/, recorder/), server image (instacloud/), ingest Worker (cloudflare/rec-ingest/)
+deploy/        Taipei VM (gcp-taipei/, recorder/), server image (instacloud/), ingest Worker (cloudflare/rec-ingest/), asset CDN (cloudflare/cdn/)
 dev/           Development preview pages
 ```
