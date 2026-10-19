@@ -1691,20 +1691,33 @@ async function boot() {
   // Chinese UI: fetch the CJK face with the assets, so the first screens never show a fallback font.
   const fonts = isZh() ? cjkFontReady('繁體中文') : Promise.resolve();
   showChallenge();
-  const loading = assetsLoad = loadAssets(f => {
-    // The total grows as the models name their textures: never shown going back, and 100% only when done.
-    loadFraction = Math.min(0.99, Math.max(loadFraction, f));
-    // Play pressed before the models are in: the start waits for them and says how far they are.
-    if (starting && !assets) status.textContent = loadingText();
-    renderQuick(); renderStart(); renderOthers(); renderChallenge();
-  }, { renderer: renderer.renderer, quality });
+  let retries = 0;
+  const loading = assetsLoad = (async () => {
+    // A failed file (a dropped connection, a CDN hiccup) is tried again twice before the page gives up: a press
+    // of Play waits for the models, so a failure would otherwise fail every Play until a reload.
+    for (;;) {
+      try {
+        return await loadAssets(f => {
+          // The total grows as the models name their textures: never shown going back, and 100% only when done.
+          loadFraction = Math.min(0.99, Math.max(loadFraction, f));
+          // Play pressed before the models are in: the start waits for them and says how far they are.
+          if (starting && !assets) status.textContent = loadingText();
+          renderQuick(); renderStart(); renderOthers(); renderChallenge();
+        }, { renderer: renderer.renderer, quality });
+      } catch (error) {
+        if (retries >= 2) throw error;
+        console.warn('Assets failed to load, trying again', error);
+        await new Promise(r => setTimeout(r, 1500 * ++retries));
+      }
+    }
+  })();
   loading.catch(() => undefined);
   // The lobby works while they load: a Play pressed now connects and joins as they arrive.
   await fonts;
   ready = true;
   refresh(); renderChallenge();
   assets = await loading;
-  if (!benchMode) lobbyReady();
+  if (!benchMode) lobbyReady(retries);
   if (CRAZYGAMES) crazyReady();
   // A match starting now caches its files 15 s after it begins instead (start), not while it loads its map.
   if (!starting) warmServiceWorker();
