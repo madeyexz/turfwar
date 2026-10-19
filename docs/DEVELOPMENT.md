@@ -271,6 +271,10 @@ when an ad blocker stops the script, and outside CrazyGames' domains. In that bu
   Esc leaves it as any match, and its end screen offers **Play online** (Quick Play). Since 2026-10-19, because
   players without a kill left after a median 46 s and those with one after about 4 minutes (Basic Launch, desktop
   conversion and playtime); `play_clicked` has `kind: warmup` for it;
+- textures load half-size first (the Low preset's `low/` KTX2 copies, at any preset; `lowFirst` in
+  src/render/textures.ts) and the preset's own replace them one file at a time 15 s after the lobby is ready
+  (`sharpenTextures`): a first visit on Medium downloads 9.7 MB before its first match instead of 16.6 MB
+  (measured 2026-10-19 on the warm-up; the other 10.8 MB follow in the background);
 - the platform's `muteAudio` and `disableChat` settings, its locale (unless the player chose a language) and,
   for a logged-in player, the CrazyGames username as callsign; the callsign prompt is skipped;
 - invite and challenge links become CrazyGames invite links (`r` room code, `c` challenge; no UTM tags),

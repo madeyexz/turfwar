@@ -6,6 +6,7 @@ import { cleanCode, notCodeLetters, hasSites, listOrder, mapsFor, pickAnyRoom, R
 import { ELIMINATION, SABOTAGE, type Mode, type Team } from '../shared/match/state';
 import { assetUrl } from './assetUrl';
 import { groundSets, loadAssets, type Assets } from './assets';
+import { sharpenTextures } from './render/textures';
 import { challengeMap, linkServer, parseChallenge, parseInvite, type Challenge } from './game/challenge';
 import { invitedFriends, onSkinChange } from './game/skins';
 import { GOLD_INVITES } from '../shared/skins';
@@ -1724,7 +1725,7 @@ async function boot() {
           // Play pressed before the models are in: the start waits for them and says how far they are.
           if (starting && !assets) status.textContent = loadingText();
           renderQuick(); renderStart(); renderOthers(); renderChallenge();
-        }, { renderer: renderer.renderer, quality });
+        }, { renderer: renderer.renderer, quality, lowFirst: CRAZYGAMES });
       } catch (error) {
         if (retries >= 2) throw error;
         console.warn('Assets failed to load, trying again', error);
@@ -1740,6 +1741,8 @@ async function boot() {
   if (warmupDue()) { special = { kind: 'warmup' }; run('solo'); }
   assets = await loading;
   if (!benchMode) lobbyReady(retries);
+  // CrazyGames loaded the half-size textures to reach play sooner: the preset's own follow in the background.
+  if (CRAZYGAMES) setTimeout(() => void sharpenTextures(), 15000);
   if (CRAZYGAMES) crazyReady();
   // A match starting now caches its files 15 s after it begins instead (start), not while it loads its map.
   if (!starting) warmServiceWorker();

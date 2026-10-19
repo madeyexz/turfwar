@@ -13,6 +13,12 @@ import { assetUrl } from '../assetUrl';
  */
 
 let low = false;
+/**
+ * A first load that takes the half-size `low/` copies even above Low (CrazyGames: a smaller download before
+ * the first match), until sharpenTextures swaps the preset's own in. The textures it filled with Low copies.
+ */
+let lowFirst = false;
+const softened = new Set<THREE.Texture>();
 /** The KTX2 loader (its code loads on demand, beside the first textures), while KTX2 is on. */
 let ktx2: Promise<KTX2Loader> | undefined;
 
@@ -90,8 +96,9 @@ export async function loadModelTextures(roots: THREE.Object3D[], manager?: THREE
  * loads; the preset's textures stay until the page reloads). Without a renderer (tools, tests)
  * textures load from the .webp files.
  */
-export function initTextures(renderer: THREE.WebGLRenderer | undefined, quality: string) {
+export function initTextures(renderer: THREE.WebGLRenderer | undefined, quality: string, opts: { lowFirst?: boolean } = {}) {
   low = quality === 'low' || quality === 'test';
+  lowFirst = !low && !!opts.lowFirst; softened.clear();
   void ktx2?.then(l => l.dispose(), () => undefined); ktx2 = undefined;
   const off = typeof location !== 'undefined' && new URLSearchParams(location.search).get('ktx2') === '0';
   if (!renderer || off || typeof WebAssembly === 'undefined' || typeof Worker === 'undefined') return;
@@ -103,9 +110,9 @@ export function initTextures(renderer: THREE.WebGLRenderer | undefined, quality:
 }
 
 /** The KTX2 copy of a public/ image (`assets/tex/brick_diff.webp` → `assets/tex/low/brick_diff.ktx2` on Low). */
-const ktx2Path = (webp: string) => {
+const ktx2Path = (webp: string, small = low) => {
   const slash = webp.lastIndexOf('/') + 1;
-  return `${webp.slice(0, slash)}${low ? 'low/' : ''}${webp.slice(slash).replace(/\.webp$/, '.ktx2')}`;
+  return `${webp.slice(0, slash)}${small ? 'low/' : ''}${webp.slice(slash).replace(/\.webp$/, '.ktx2')}`;
 };
 
 /**
@@ -128,7 +135,13 @@ export function loadTexture(path: string, opts: { srgb?: boolean; repeat?: boole
   opts.manager?.itemStart(url);
   const ready = (async () => {
     if (loader) {
-      try { fillCompressed(texture, await (await loader).loadAsync(assetUrl(ktx2Path(path)))); return; } catch (error) { console.warn('KTX2 texture failed, using', path, error); }
+      const soft = lowFirst;
+      try {
+        fillCompressed(texture, await (await loader).loadAsync(assetUrl(ktx2Path(path, low || soft))));
+        // A Low copy that arrives after the swap began is swapped by itself.
+        if (soft) { if (lowFirst) softened.add(texture); else void sharpen(texture); }
+        return;
+      } catch (error) { console.warn('KTX2 texture failed, using', path, error); }
       fillPixels(texture, await new THREE.ImageLoader().loadAsync(url), flip);
     } else {
       texture.image = await new THREE.ImageLoader().loadAsync(url);
@@ -137,6 +150,28 @@ export function loadTexture(path: string, opts: { srgb?: boolean; repeat?: boole
   })();
   ready.then(() => opts.manager?.itemEnd(url), () => { opts.manager?.itemError(url); opts.manager?.itemEnd(url); });
   return { texture, ready: ready.then(() => texture) };
+}
+
+/**
+ * Swap the Low copies of a low-first load for the preset's own, one file at a time in the background (each
+ * texture keeps its Low copy if its file fails); textures loaded from now on come at full size at once.
+ */
+export async function sharpenTextures() {
+  if (!lowFirst) return;
+  lowFirst = false;
+  const waiting = [...softened]; softened.clear();
+  for (const texture of waiting) await sharpen(texture);
+}
+
+async function sharpen(texture: THREE.Texture) {
+  const loader = ktx2;
+  if (!loader) return;
+  try {
+    const full = await (await loader).loadAsync(assetUrl(ktx2Path(texture.userData.src as string, false)));
+    // The GPU copy has the old size (and immutable storage): free it, the next draw makes a new one.
+    texture.dispose();
+    fillCompressed(texture, full);
+  } catch (error) { console.warn('Sharper texture failed, keeping the small one', texture.userData.src, error); }
 }
 
 /** Move a transcoded texture's levels into the texture handed out earlier (keeping its wrapping, filtering and colour space). */
