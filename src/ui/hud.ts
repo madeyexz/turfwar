@@ -53,6 +53,8 @@ export class Hud {
   readonly root: HTMLElement;
   crosshairStyle: CrosshairStyle = savedCrosshair();
   onRestart?: () => void;
+  /** The end screen's first button, when it is not Play again (the warm-up's Play online). */
+  nextLabel?: string;
   /** The end screen's 分享戰績 and 約朋友單挑 (share.ts); the latter opens a 1v1 room where online play is available, else shares a link the bot double answers. */
   onShare?: () => void;
   onDuel?: () => void;
@@ -797,7 +799,7 @@ export class Hud {
       <table><tr><th></th><th>${t('hud.player')}</th><th>${t('hud.k')}</th><th>${t('hud.d')}</th><th>${t('hud.a')}</th><th>${t('hud.score')}</th></tr>${top.map((s, i) => `<tr${s.team === myTeam ? ' class="mine"' : ''}><td>${i + 1}</td><td class="t${s.team}">${escape(s.name)}</td><td>${s.kills}</td><td>${s.deaths}</td><td>${s.assists}</td><td>${s.score}</td></tr>`).join('')}</table>
       ${career?.length ? this.careerTable(career) : ''}
       <p>${t(rematch ? 'hud.rematchIn' : 'hud.newMatchIn', { n: Math.ceil(state.phaseLeft) })}</p>
-      <div class="actions">${this.onRestart ? `<button data-act="restart">${t('hud.playAgain')}</button>` : ''}<button data-act="menu">${t('hud.leaveMatch')}</button></div>`, 'html');
+      <div class="actions">${this.onRestart ? `<button data-act="restart">${this.nextLabel ?? t('hud.playAgain')}</button>` : ''}<button data-act="menu">${t('hud.leaveMatch')}</button></div>`, 'html');
   }
 
   /** Top five of the server leaderboard, plus my own row if I'm further down. */

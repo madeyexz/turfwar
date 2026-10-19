@@ -265,6 +265,12 @@ when an ad blocker stops the script, and outside CrazyGames' domains. In that bu
 - loading start/stop (bootstrap and the lobby), gameplay start/stop from the game loop (playing unless the
   match has ended or the menu is open), and a midgame video ad when a player leaves a finished match (the SDK
   keeps ads 3 minutes apart; none during Basic Launch);
+- a new player's first visit (no warm-up stored, no rounds on this browser, not arriving by an invite, a challenge,
+  a room code or "Play with friends") starts by itself, without the lobby, in a Solo warm-up on Taipei 101: 6v6
+  Elimination, first to 4 rounds, bots at skill 0.2 on top of the rookie easing; a notice says it is against bots,
+  Esc leaves it as any match, and its end screen offers **Play online** (Quick Play). Since 2026-10-19, because
+  players without a kill left after a median 46 s and those with one after about 4 minutes (Basic Launch, desktop
+  conversion and playtime); `play_clicked` has `kind: warmup` for it;
 - the platform's `muteAudio` and `disableChat` settings, its locale (unless the player chose a language) and,
   for a logged-in player, the CrazyGames username as callsign; the callsign prompt is skipped;
 - invite and challenge links become CrazyGames invite links (`r` room code, `c` challenge; no UTM tags),
