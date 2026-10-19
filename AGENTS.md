@@ -21,6 +21,7 @@ requests.
   in the rebuild; do not assume the original prototype's physics engine remains.
 - **SpacetimeDB 2.10.2** TypeScript module and client SDK for Online matches.
 - **Vitest** for tests.
+- **Cloudflare** (`cdn.turfwar.ianhsiao.me`, Worker `turfwar-cdn`) serves the models, textures, sounds, fonts and map pictures; after changing a file in `public/assets`, `public/fonts` or `public/media/maps`, run `bun run cdn:deploy` before pushing (docs/DEVELOPMENT.md "Asset CDN").
 - **Vercel** serves the built frontend (static), plus link previews for shared links only: `api/preview.ts` (vercel.json sends preview crawlers on `/c` and `/r/<code>` there) and `api/og.ts` (the preview picture). No Routing Middleware: it failed to run on this project (MIDDLEWARE_INVOCATION_FAILED).
 - GLB characters/weapons and animations from CC0 Quaternius packs (store guns from the
   CC0 Ultimate Gun Pack via `tools/import-guns.ts`); CC0 Poly Haven

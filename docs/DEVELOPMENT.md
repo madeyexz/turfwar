@@ -132,6 +132,25 @@ Production: https://turfwar.ianhsiao.me (also https://lawbreaker.vercel.app). Th
 preview wired to the development database `lawbreaker-dev`. Releases are maintainers merging `dev` into
 `main` (see [CONTRIBUTING.md](../CONTRIBUTING.md)).
 
+### Asset CDN
+
+Vercel serves the pages, scripts and styles. The models, textures, sounds, fonts and map pictures (every
+versioned file in `public/assets`, `public/fonts` and `public/media/maps`) come from Cloudflare at
+`https://cdn.turfwar.ianhsiao.me`: the Worker `turfwar-cdn`, static assets only, which Cloudflare does not
+charge or limit. Vercel's free plan counts every request and byte, and the launch week of October 2026
+used most of a month's allowance on these files. Each file is at `/<content hash>/<path>`, so one URL is
+always the same bytes, and the `dev` previews and production share the CDN (`src/buildtools/assetcdn.ts`).
+
+- **When you add or change a file in those folders, run `bun run cdn:deploy` before you push** (Amp orbs
+  have the credentials; on a Mac, set `CLOUDFLARE_API_TOKEN` and `CLOUDFLARE_ACCOUNT_ID`). It adds the
+  checkout's files and keeps every file it deployed before, so pages left open over a release still load.
+- The build on Vercel reads the CDN's `index.json` and links each file it lists to the CDN. A file the
+  CDN lacks is served by Vercel as before, and the build log says `asset CDN: … run bun run cdn:deploy`.
+  Nothing breaks; it only costs Vercel requests until the next build after a deploy.
+- Local builds, the dev server and the CrazyGames build do not use the CDN. `ASSET_CDN=<origin>` makes a
+  build use one (`ASSET_CDN=https://cdn.turfwar.ianhsiao.me bun run build && bun run preview` tests it),
+  and `ASSET_CDN=off` turns it off on Vercel.
+
 ### Game servers
 
 | Use | Server | Database |
@@ -285,7 +304,7 @@ its tool. Releases still need the owner's go-ahead (see AGENTS.md).
 | `POSTHOG_PERSONAL_API_KEY` | project | read-only queries on PostHog project 649207 |
 | `GSC_SERVICE_ACCOUNT_JSON` | project | `bun run seo:report` / `seo:ping`: Google Search Console API on `sc-domain:ianhsiao.me` (service account of Google Cloud project `turfwar-seo`, Full user) |
 | `BING_WEBMASTER_API_KEY` | project | the same scripts' Bing Webmaster Tools API (site `https://turfwar.ianhsiao.me/`) |
-| `CLOUDFLARE_API_TOKEN`, `CLOUDFLARE_ACCOUNT_ID` | project | R2 buckets, account API tokens, the ingest Worker and its route/DNS on `ianhsiao.me` (docs/RECORDING.md) |
+| `CLOUDFLARE_API_TOKEN`, `CLOUDFLARE_ACCOUNT_ID` | project | R2 buckets, account API tokens, the ingest Worker and the asset CDN Worker (`bun run cdn:deploy`) with their routes/DNS on `ianhsiao.me` (docs/RECORDING.md) |
 | `REC_SALT` | project | the recording pid salt (also a Worker secret and in the VM's `/etc/turfwar-rec/env`); never rotate it without a plan |
 | `R2_REC_VM_*`, `R2_REC_READ_*`, `R2_REC_EXPORT_*` | project | R2 S3 keys (`_ACCESS_KEY_ID`, `_SECRET_ACCESS_KEY`): VM read/write, read-only, export (docs/RECORDING.md) |
 
