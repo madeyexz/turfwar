@@ -56,7 +56,7 @@ import { InputLog } from './inputlog';
 import { mayRecord } from './consent';
 import { currentDeviceKind } from './device';
 import { ASSIST, aimAssist, anglesTo } from './aimassist';
-import { GOALS, NUDGE_ROUNDS, levelOf, loadProgress, recordProgress, type ProgressEvent } from './progress';
+import { GOALS, NUDGE_ROUNDS, dailyXp, levelOf, loadProgress, recordProgress, streakOn, type ProgressEvent } from './progress';
 import { smokeBlocks } from '../../shared/match/combat';
 import { CRAZYGAMES, crazyGameplay, shareableLink } from '../crazygames';
 
@@ -882,6 +882,7 @@ export class Game {
     const r = recordProgress(e);
     const after = levelOf(r.next.xp).level;
     if (r.goalDone) this.hud.announce(t('prog.goalDone'), `+${GOALS[r.next.goal.kind].xp} XP`, 'var(--cash)');
+    else if (r.daily) this.hud.announce(t('prog.daily', { n: r.daily.streak }), `+${r.daily.xp} XP`, 'var(--cash)');
     else if (after > before) this.hud.announce(t('prog.levelUp', { n: after }), '', 'var(--accent)');
   }
 
@@ -1468,6 +1469,9 @@ export class Game {
           if (this.challenge && this.summary) track('challenge_completed', { ref: this.challenge.ref, via: this.challenge.via, won: this.summary.result === 'win' });
           const won = e.winner === this.myTeam;
           if (!state.config.practice) this.progress({ type: 'match', won });
+          // The end screen asks the player back tomorrow, with the bonus waiting then.
+          const next = streakOn(loadProgress()) + 1;
+          this.hud.comeBack = t('prog.tomorrow', { n: next, xp: dailyXp(next) });
           this.hud.announce(t(won ? 'hud.victory' : 'hud.defeat'), t('hud.winsMatch', { team: teamName(e.winner === -1 ? 0 : e.winner) }), won ? 'var(--accent)' : 'var(--crimson)');
         }
         if (e.phase === 'warmup') { this.tally = new MatchTally(); this.summary = undefined; }

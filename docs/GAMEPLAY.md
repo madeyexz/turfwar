@@ -368,7 +368,9 @@ map's art. People get the game as usual.
 - **Level and daily goal** (`src/game/progress.ts`, kept only in the browser): XP for rounds, wins, kills and
   headshots, levels at 100, 160, 220… XP, and one goal a day in rotation (win 3 rounds, get 8 kills, play 6
   rounds, land 3 headshots; +100–150 XP). The lobby shows both under the title; a finished goal or a new
-  level is announced in the match.
+  level is announced in the match. A **daily streak** pays with each day's first round: +50 XP a day in a row, up
+  to +250 from the fifth day, back to +50 after a day missed; the lobby and every end screen say what tomorrow's
+  first round pays (since 2026-10-19; on CrazyGames these saves also go to their Data module).
 - **Upright phones** (in-app browsers such as Threads and Instagram never turn to landscape, nor does an
   iPhone with rotation lock): the match turns the page a quarter and the player turns the phone
   (`src/ui/viewport.ts`); in-app browsers get a lobby note, and on Android an Open in Chrome link.

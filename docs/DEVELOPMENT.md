@@ -275,6 +275,10 @@ when an ad blocker stops the script, and outside CrazyGames' domains. In that bu
   src/render/textures.ts) and the preset's own replace them one file at a time 15 s after the lobby is ready
   (`sharpenTextures`): a first visit on Medium downloads 9.7 MB before its first match instead of 16.6 MB
   (measured 2026-10-19 on the warm-up; the other 10.8 MB follow in the background);
+- CrazyGames' Data module keeps `SAVED_KEYS` (src/crazygames.ts: progress with the daily streak, the warm-up flag,
+  skins, key bindings, crosshair; never the game ID): restored before the game reads its storage (bootstrap; the
+  progress with more XP wins), saved on progress, every 30 s and on page hide. It needs **Progress Save** turned on
+  in the CrazyGames submission; without it the module throws once and the game keeps local saves only;
 - the platform's `muteAudio` and `disableChat` settings, its locale (unless the player chose a language) and,
   for a logged-in player, the CrazyGames username as callsign; the callsign prompt is skipped;
 - invite and challenge links become CrazyGames invite links (`r` room code, `c` challenge; no UTM tags),

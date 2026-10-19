@@ -36,6 +36,8 @@ export interface CrazySdk {
   ad: {
     requestAd(type: 'midgame' | 'rewarded', callbacks: { adStarted(): void; adFinished(): void; adError(error: { code: string; message: string }): void }): void;
   };
+  /** The Data module (like localStorage; with the CrazyGames account when logged in). Throws when it is off. */
+  data?: { getItem(key: string): string | null; setItem(key: string, value: string): void };
   user: {
     isUserAccountAvailable: boolean;
     systemInfo?: { locale?: string; countryCode?: string; device?: { type?: string } };
@@ -60,6 +62,49 @@ export async function initCrazyGames(source: CrazySdk | undefined = CRAZYGAMES ?
   } catch (error) {
     console.warn('CrazyGames SDK not started', error);
   }
+}
+
+/**
+ * What CrazyGames' Data module keeps besides this browser: level and progress (with the daily streak), the
+ * warm-up flag, the knife and character skins, key bindings and the crosshair. A logged-in player has them on
+ * any device; the game ID (the server identity) stays on this browser only.
+ */
+export const SAVED_KEYS = ['lawbreaker.progress', 'lawbreaker.warmup', 'lawbreaker.skin', 'lawbreaker.keys', 'lawbreaker.crosshair'];
+/** Off after the module first fails (not enabled for the game): no warning on every save. */
+let dataOff = false;
+
+function withData(f: (data: NonNullable<CrazySdk['data']>, local: Storage) => void) {
+  if (!sdk?.data || dataOff) return;
+  try { f(sdk.data, localStorage); } catch (error) { dataOff = true; console.warn('CrazyGames Data module unavailable', error); }
+}
+
+/** XP in a saved progress value (to keep the further one of two). */
+const xpOf = (raw: string | null) => { try { return Number((JSON.parse(raw ?? '') as { xp?: unknown }).xp) || 0; } catch { return 0; } };
+
+/**
+ * At start, before the game reads its storage: what the Data module holds wins (the account's on a new device),
+ * except progress, where the one with more XP wins; what only this browser has is copied to the module (players
+ * from before it).
+ */
+export function crazyRestore(keys = SAVED_KEYS) {
+  withData((data, local) => {
+    for (const key of keys) {
+      const saved = data.getItem(key), here = local.getItem(key);
+      if (saved === here) continue;
+      if (saved !== null && (key !== 'lawbreaker.progress' || xpOf(saved) >= xpOf(here))) local.setItem(key, saved);
+      else if (here !== null) data.setItem(key, here);
+    }
+  });
+}
+
+/** Copy what changed in this browser to the Data module (it saves within a second or so). */
+export function crazySave(keys = SAVED_KEYS) {
+  withData((data, local) => {
+    for (const key of keys) {
+      const here = local.getItem(key);
+      if (here !== null && data.getItem(key) !== here) data.setItem(key, here);
+    }
+  });
 }
 
 /** Whether the SDK is running (CrazyGames build, on their site or localhost). */
@@ -177,4 +222,4 @@ export function crazyMidgameAd(mute: () => void, unmute: () => void): Promise<vo
 }
 
 /** Tests only: forget the SDK. */
-export function resetCrazyGamesForTest() { sdk = undefined; playing = false; }
+export function resetCrazyGamesForTest() { sdk = undefined; playing = false; dataOff = false; }

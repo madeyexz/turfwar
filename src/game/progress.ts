@@ -15,11 +15,19 @@ export const GOALS: Record<GoalKind, { target: number; xp: number }> = {
 const GOAL_ORDER: GoalKind[] = ['winRounds', 'kills', 'playRounds', 'headshots'];
 /** XP per thing done. */
 export const XP = { round: 10, roundWon: 20, kill: 15, headshot: 10, matchWon: 80 };
+/**
+ * The daily bonus, paid with the first round of each day: 50 XP a day in a row, up to 250 from the fifth day.
+ * A day missed starts the count again (a reason to come back tomorrow).
+ */
+export const dailyXp = (streak: number) => 50 * Math.min(Math.max(1, streak), 5);
 
 export interface Progress {
   xp: number; rounds: number; roundsWon: number; kills: number; headshots: number; matches: number; matchesWon: number;
   /** The local day (YYYY-MM-DD) the goal belongs to. */
   day: string;
+  /** Days in a row with a round played, and the last such day ('' before the first round). */
+  streak: number;
+  played: string;
   goal: { kind: GoalKind; count: number; done: boolean };
 }
 
@@ -30,6 +38,15 @@ export function today(now = new Date()) {
   return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`;
 }
 
+/** The day before a local day (YYYY-MM-DD). */
+export function dayBefore(day: string) {
+  const d = new Date(Date.UTC(+day.slice(0, 4), +day.slice(5, 7) - 1, +day.slice(8, 10) - 1));
+  return d.toISOString().slice(0, 10);
+}
+
+/** The streak as it stands on `day`: kept through yesterday, gone after a day missed. */
+export const streakOn = (p: Progress, day = today()) => (p.played === day || p.played === dayBefore(day) ? p.streak : 0);
+
 /** The goal for a day: the days rotate through the goals. */
 export function goalFor(day: string): GoalKind {
   const n = Math.floor(Date.UTC(+day.slice(0, 4), +day.slice(5, 7) - 1, +day.slice(8, 10)) / 86_400_000);
@@ -37,7 +54,7 @@ export function goalFor(day: string): GoalKind {
 }
 
 export function fresh(day = today()): Progress {
-  return { xp: 0, rounds: 0, roundsWon: 0, kills: 0, headshots: 0, matches: 0, matchesWon: 0, day, goal: { kind: goalFor(day), count: 0, done: false } };
+  return { xp: 0, rounds: 0, roundsWon: 0, kills: 0, headshots: 0, matches: 0, matchesWon: 0, day, streak: 0, played: '', goal: { kind: goalFor(day), count: 0, done: false } };
 }
 
 /** Level 1 at 0 XP; each level needs 60 XP more than the last (100, 160, 220…). */
@@ -52,13 +69,22 @@ export function rollDay(p: Progress, day: string): Progress {
   return p.day === day ? p : { ...p, day, goal: { kind: goalFor(day), count: 0, done: false } };
 }
 
-/** Apply one event: the new progress, the XP it gave, and whether it finished the day's goal. */
-export function apply(prev: Progress, e: ProgressEvent, day = today()): { next: Progress; gained: number; goalDone: boolean } {
+/**
+ * Apply one event: the new progress, the XP it gave, whether it finished the day's goal, and the daily bonus
+ * when this was the day's first round (`daily`: the streak it made and its XP).
+ */
+export function apply(prev: Progress, e: ProgressEvent, day = today()): { next: Progress; gained: number; goalDone: boolean; daily?: { streak: number; xp: number } } {
   const p = rollDay(prev, day);
   const next: Progress = { ...p, goal: { ...p.goal } };
   let gained = 0, step = 0;
+  let daily: { streak: number; xp: number } | undefined;
   if (e.type === 'round') {
     next.rounds++; gained += XP.round;
+    if (next.played !== day) {
+      next.streak = streakOn(p, day) + 1; next.played = day;
+      daily = { streak: next.streak, xp: dailyXp(next.streak) };
+      gained += daily.xp;
+    }
     if (e.won) { next.roundsWon++; gained += XP.roundWon; }
     if (next.goal.kind === 'playRounds') step = 1;
     if (next.goal.kind === 'winRounds' && e.won) step = 1;
@@ -77,7 +103,7 @@ export function apply(prev: Progress, e: ProgressEvent, day = today()): { next: 
     if (next.goal.count >= GOALS[next.goal.kind].target) { next.goal.done = true; goalDone = true; gained += GOALS[next.goal.kind].xp; }
   }
   next.xp += gained;
-  return { next, gained, goalDone };
+  return { next, gained, goalDone, ...(daily ? { daily } : {}) };
 }
 
 /** Until this many rounds are in the books, the first round's end points out the store (game.ts). */
@@ -95,7 +121,8 @@ export function loadProgress(): Progress {
     const base = fresh(typeof raw.day === 'string' ? raw.day : today());
     const num = (v: unknown) => (typeof v === 'number' && Number.isFinite(v) && v >= 0 ? v : 0);
     const goal = raw.goal && typeof raw.goal === 'object' && raw.goal.kind in GOALS ? { kind: raw.goal.kind, count: num(raw.goal.count), done: !!raw.goal.done } : base.goal;
-    return rollDay({ ...base, xp: num(raw.xp), rounds: num(raw.rounds), roundsWon: num(raw.roundsWon), kills: num(raw.kills), headshots: num(raw.headshots), matches: num(raw.matches), matchesWon: num(raw.matchesWon), goal }, today());
+    const played = typeof raw.played === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(raw.played) ? raw.played : '';
+    return rollDay({ ...base, xp: num(raw.xp), rounds: num(raw.rounds), roundsWon: num(raw.roundsWon), kills: num(raw.kills), headshots: num(raw.headshots), matches: num(raw.matches), matchesWon: num(raw.matchesWon), streak: played ? num(raw.streak) : 0, played, goal }, today());
   } catch { return fresh(); }
 }
 
