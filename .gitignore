@@ -9,6 +9,7 @@ dist-crazygames/
 .amp/portals/
 spacetimedb/target/
 spacetimedb/.spacetime/
+deploy/cloudflare/cdn/.out/
 public/_scratch
 tools/.taipei-work/
 tools/.xinyi-work/

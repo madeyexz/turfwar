@@ -4,6 +4,7 @@
  * Chrome, Edge, Samsung Internet) so the lobby's install hint can offer an Install button.
  */
 
+import { assetOrigin } from './assetUrl';
 import { CRAZYGAMES } from './crazygames';
 
 interface InstallPromptEvent extends Event {
@@ -49,13 +50,13 @@ export function registerServiceWorker() {
 }
 
 /**
- * After the game's assets have loaded: hand the worker the list of same-origin files this page
- * fetched, so a first visit (which loads before the worker takes control) is cached as well.
+ * After the game's assets have loaded: hand the worker the list of files this page fetched from the
+ * site and the asset CDN, so a first visit (which loads before the worker takes control) is cached as well.
  */
 export function warmServiceWorker() {
   if (CRAZYGAMES || !import.meta.env.PROD || !('serviceWorker' in navigator)) return;
   void navigator.serviceWorker.ready.then(reg => {
-    const urls = performance.getEntriesByType('resource').map(e => e.name).filter(u => u.startsWith(location.origin));
+    const urls = performance.getEntriesByType('resource').map(e => e.name).filter(u => u.startsWith(`${location.origin}/`) || (!!assetOrigin && u.startsWith(`${assetOrigin}/`)));
     reg.active?.postMessage({ type: 'warm', urls });
   }, () => undefined);
 }

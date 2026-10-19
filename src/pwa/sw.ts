@@ -7,8 +7,10 @@
  */
 import { cacheNames, immutableShellFile, routeOf, staleAssets, staleCaches } from './policy';
 
-// Filled in by the build (see vite.config.ts): JSON of { shell: string[], shellVersion, assets: string[] } (assets as `/path?v=version`).
-const BUILD = JSON.parse('__TURFWAR_BUILD__') as { shell: string[]; shellVersion: string; assets: string[] };
+// Filled in by the build (see vite.config.ts): JSON of { shell: string[], shellVersion, assets: string[], assetOrigin }
+// (assets as `/path?v=version`, or full URLs on the asset CDN at `assetOrigin`, '' without one).
+const BUILD = JSON.parse('__TURFWAR_BUILD__') as { shell: string[]; shellVersion: string; assets: string[]; assetOrigin?: string };
+const CDN = BUILD.assetOrigin ?? '';
 
 interface ExtendableEvent extends Event { waitUntil(p: Promise<unknown>): void }
 interface FetchEvent extends ExtendableEvent { request: Request; respondWith(r: Promise<Response> | Response): void }
@@ -27,7 +29,7 @@ const ASSETS = new Set(BUILD.assets);
 sw.addEventListener('install', e => {
   // Precache this build's shell; a file that fails to load just loads later. Hashed files come from the
   // HTTP cache when the page already has them (a first visit is not downloaded twice).
-  e.waitUntil(caches.open(CACHES.shell).then(c => Promise.all(BUILD.shell.map(p => c.add(new Request(p, immutableShellFile(p) ? {} : { cache: 'reload' })).catch(() => undefined))))
+  e.waitUntil(caches.open(CACHES.shell).then(c => Promise.all(BUILD.shell.map(p => c.add(new Request(p, immutableShellFile(p, CDN) ? {} : { cache: 'reload' })).catch(() => undefined))))
     .then(() => sw.skipWaiting()));
 });
 
@@ -41,7 +43,8 @@ sw.addEventListener('activate', e => {
     .then(() => sw.clients.claim()));
 });
 
-const storable = (r: Response) => r.ok && r.status === 200 && r.type === 'basic';
+/** A whole response from the site, or from the CDN (cross-origin, so `cors`). */
+const storable = (r: Response) => r.ok && r.status === 200 && (r.type === 'basic' || r.type === 'cors');
 
 /** The page: the network's copy (stored for offline), else the stored one. */
 async function page(req: Request) {
@@ -76,7 +79,7 @@ sw.addEventListener('message', e => {
   if (data?.type !== 'warm' || !Array.isArray(data.urls)) return;
   e.waitUntil(Promise.all(data.urls.filter((u): u is string => typeof u === 'string').slice(0, 400).map(async url => {
     const req = new Request(url);
-    const route = routeOf(req, sw.location.origin, SHELL);
+    const route = routeOf(req, sw.location.origin, SHELL, CDN);
     if (route !== 'shell' && route !== 'static') return;
     const cache = await caches.open(route === 'shell' ? CACHES.shell : CACHES.static);
     if (await cache.match(req)) return;
@@ -86,7 +89,7 @@ sw.addEventListener('message', e => {
 });
 
 sw.addEventListener('fetch', e => {
-  const route = routeOf(e.request, sw.location.origin, SHELL);
+  const route = routeOf(e.request, sw.location.origin, SHELL, CDN);
   if (route === 'bypass') return;
   e.respondWith(route === 'page' ? page(e.request) : cacheFirst(e.request, route === 'shell' ? CACHES.shell : CACHES.static));
 });

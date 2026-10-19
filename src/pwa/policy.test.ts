@@ -25,6 +25,19 @@ describe('service worker routes', () => {
     expect(get('/media/maps/taipei101.webp', 'cors')).toBe('static');
   });
 
+  it('caches the asset CDN’s files, the precached fonts in the shell, and nothing of other origins', () => {
+    const CDN = 'https://cdn.turfwar.ianhsiao.me';
+    const shell = new Set([...SHELL, `${CDN}/433a7007e474/fonts/rajdhani-600.woff2`]);
+    const route = (url: string, mode = 'cors', cdn = CDN) => routeOf({ url, method: 'GET', mode }, ORIGIN, shell, cdn);
+    expect(route(`${CDN}/6712b3b764a3/assets/props.glb`)).toBe('static');
+    expect(route(`${CDN}/0c1d2e3f4a5b/media/maps/taipei.webp`, 'no-cors')).toBe('static');
+    expect(route(`${CDN}/433a7007e474/fonts/rajdhani-600.woff2`)).toBe('shell');
+    expect(route(`${CDN}/6712b3b764a3/assets/props.glb`, 'navigate')).toBe('bypass');
+    expect(route(`${CDN}/6712b3b764a3/assets/props.glb`, 'cors', '')).toBe('bypass');
+    expect(route('https://us-assets.i.posthog.com/static/array.js')).toBe('bypass');
+    expect(route(`${ORIGIN}/assets/main-abc123.js`)).toBe('shell');
+  });
+
   it('never touches SpacetimeDB, the ping, PostHog, analytics, /admin or the dev pages', () => {
     expect(get('wss://maincloud.spacetimedb.com/v1/database/3d-game-c4lhd/subscribe')).toBe('bypass');
     expect(get('https://maincloud.spacetimedb.com/v1/ping')).toBe('bypass');
@@ -63,6 +76,13 @@ describe('service worker routes', () => {
     const stored = [`${ORIGIN}/assets/props.glb?v=old000`, `${ORIGIN}/assets/tex/brick_diff.webp?v=same22`, `${ORIGIN}/assets/soldier.glb`];
     expect(staleAssets(stored, current)).toEqual([`${ORIGIN}/assets/props.glb?v=old000`, `${ORIGIN}/assets/soldier.glb`]);
   });
+
+  it('keeps the asset CDN’s current files and drops the site’s copies of files that moved there', () => {
+    const CDN = 'https://cdn.turfwar.ianhsiao.me';
+    const current = new Set([`${CDN}/new111/assets/props.glb`, '/assets/tex/brick_diff.webp?v=same22']);
+    const stored = [`${CDN}/new111/assets/props.glb`, `${CDN}/old000/assets/props.glb`, `${ORIGIN}/assets/props.glb?v=new111`, `${ORIGIN}/assets/tex/brick_diff.webp?v=same22`];
+    expect(staleAssets(stored, current)).toEqual([`${CDN}/old000/assets/props.glb`, `${ORIGIN}/assets/props.glb?v=new111`]);
+  });
 });
 
 describe('service worker install', () => {
@@ -77,5 +97,7 @@ describe('service worker install', () => {
     expect(immutableShellFile('/manifest.webmanifest')).toBe(false);
     expect(immutableShellFile('/icons/icon-192.png')).toBe(false);
     expect(immutableShellFile('/sw.js')).toBe(false);
+    expect(immutableShellFile('https://cdn.turfwar.ianhsiao.me/433a7007e474/fonts/rajdhani-600.woff2', 'https://cdn.turfwar.ianhsiao.me')).toBe(true);
+    expect(immutableShellFile('https://cdn.turfwar.ianhsiao.me/433a7007e474/fonts/rajdhani-600.woff2')).toBe(false);
   });
 });
