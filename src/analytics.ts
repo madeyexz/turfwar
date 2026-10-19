@@ -18,7 +18,7 @@ import type { BenchResult } from './game/bench';
  * the automation flags (`?bench`, `?trailer`, `?capture`, `?fixeddt`) and in headless browsers
  * (`navigator.webdriver`). Dev-server events carry `test: true` and a `dev-test-` distinct id.
  */
-export type PlayKind = 'online' | 'start' | 'room' | 'solo' | 'practice' | 'private' | 'code';
+export type PlayKind = 'online' | 'start' | 'room' | 'solo' | 'practice' | 'private' | 'code' | 'warmup';
 export type Reason = 'menu' | 'disconnect' | 'close';
 /**
  * How a match ended for us, finer than `reason`: the in-game menu's Leave button, the end screen's

@@ -856,6 +856,8 @@ export class Game {
 
   /** A short line over the match (main.ts: the challenge's notes). */
   notice(text: string, ms = 6000) { this.hud.toast(text, ms); }
+  /** The end screen offers `label` first, which runs `go` (the warm-up's Play online). */
+  onward(label: string, go: () => void) { this.hud.nextLabel = label; this.hud.onRestart = go; }
 
   /** This match answers a 發起單挑 link: the end screen and the card name the challenger. */
   setChallenge(c: { name: string; ref: string; via: 'room' | 'fallback' }) {
