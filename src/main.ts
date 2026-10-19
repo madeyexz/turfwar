@@ -1067,7 +1067,8 @@ function menuMusic() {
   audio.start();
   void theme.then(buffer => { if (inMenu) audio.playMusic(buffer, THEME_START); }, () => undefined);
 }
-for (const type of ['pointerdown', 'keydown'] as const) document.addEventListener(type, () => { gestured = true; menuMusic(); });
+// A match that started without a tap (CrazyGames' first-visit warm-up) gets its sound with the first one.
+for (const type of ['pointerdown', 'keydown'] as const) document.addEventListener(type, () => { gestured = true; if (game) audio.start(); menuMusic(); });
 
 function showBackdrop() {
   const id = shownMap();
@@ -1098,7 +1099,8 @@ type Duel = { kind: 'join'; c: Challenge; mapId: string }
   | { kind: 'fallback'; c: Challenge; mapId: string; reason: 'no_room' | 'gone' | 'offline' }
   | { kind: 'host'; summary: MatchSummary; mapId: string }
   | { kind: 'invite'; mapId: string; mode: Mode }
-  | { kind: 'joinInvite'; ref: string };
+  | { kind: 'joinInvite'; ref: string }
+  | { kind: 'warmup' };
 let special: Duel | undefined;
 /** Where this page's link points: on CrazyGames, the invite it was opened with (src/crazygames.ts). */
 const place = crazyLinkPlace() ?? location;
@@ -1110,6 +1112,16 @@ if (challenge) track('challenge_link_opened', { ref: challenge.ref ?? '', has_ro
 const invite = challenge ? undefined : parseInvite(place.pathname, place.search);
 if (invite) noteArrival(invite.ref);
 if (invite) track('invite_link_opened', { ref: invite.ref ?? '' }, { setOnce: { ref_by: invite.ref ?? '' } });
+
+/**
+ * CrazyGames: a new player's first visit starts by itself (their rule: new players land in gameplay) in a short
+ * Solo warm-up on Taipei 101 against easy bots, on top of the rookie easing, so the first kills come early (players
+ * without a kill left after 46 s, with one after 4 minutes); its end screen leads to Quick Play. Never for a player
+ * who came by an invite, a challenge or "Play with friends": they go to their friends.
+ */
+const WARMUP = { mapId: 'taipei101', teamSize: 6, roundsToWin: 4, botSkill: 0.2 };
+const warmupDue = () => CRAZYGAMES && !benchMode && !store.get('warmup', '') && loadProgress().rounds === 0
+  && !challenge && !invite && !crazyInstantMultiplayer() && !params.get('room') && !params.get('autostart');
 
 /** 「<name> 向你下戰帖！」 over the lobby: one tap (with the callsign asked for if needed) and you're in. */
 let challengeBanner: HTMLElement | undefined;
@@ -1187,6 +1199,12 @@ function acceptChallenge() {
 /** In a challenge's match: the end screen names the challenger; a room nobody else is in falls back to the bot double. */
 function startedDuel(duel: Duel, link: GameLink) {
   if (duel.kind === 'joinInvite') { track('invite_joined', { ref: duel.ref, joined: true }); return; }
+  if (duel.kind === 'warmup') {
+    store.set('warmup', '1');
+    game?.notice(t('warmup.notice', { n: WARMUP.roundsToWin }), 10000);
+    game?.onward(t('warmup.online'), () => { backToLobby('menu', '', 'end_screen'); if (online.ok) run('quick'); });
+    return;
+  }
   if (duel.kind === 'invite') {
     // As for the 1v1 room: the code arrives a moment after the join.
     const hosting = game;
@@ -1324,7 +1342,8 @@ async function start(action: Action, retried = false) {
   const ruled = action === 'start' || action === 'solo' || action === 'range';
   // An online match goes to the chosen server (connectOnline reads the same choice).
   const playServer: ServerId | undefined = via === 'online' ? currentServer()?.id : undefined;
-  track('play_clicked', { kind: kinds[action], size: ruled ? sizeOf(size).label : '', mode: ruled ? mode : '', map: ruled ? map : '', ...(playServer ? { server_choice: playServer } : {}) }, { set: { name, lang: lang(), quality } });
+  const warm = duel?.kind === 'warmup';
+  track('play_clicked', { kind: warm ? 'warmup' : kinds[action], size: warm ? sizeLabel(WARMUP.teamSize) : ruled ? sizeOf(size).label : '', mode: warm ? 'elimination' : ruled ? mode : '', map: warm ? WARMUP.mapId : ruled ? map : '', ...(playServer ? { server_choice: playServer } : {}) }, { set: { name, lang: lang(), quality } });
   starting = action; closePop(false); refresh();
   options.hide();
   choicePings.setActive(false);
@@ -1350,6 +1369,8 @@ async function start(action: Action, retried = false) {
   try {
     link = via === 'online'
       ? await connectOnline(name, teamChoice, how, s => { status.textContent = s; }, { reuse: lobbyLink, before: assetsLoad })
+      : warm
+        ? new OfflineLink(WARMUP.mapId, name, undefined, { ...ELIMINATION, teamSize: WARMUP.teamSize, roundsToWin: WARMUP.roundsToWin, botSkill: WARMUP.botSkill })
       : duel?.kind === 'fallback'
         ? new OfflineLink(duel.mapId, name, undefined, { ...ELIMINATION, teamSize: 1, botSkill }, false, duel.c.name)
       : via === 'lab'
@@ -1716,6 +1737,7 @@ async function boot() {
   await fonts;
   ready = true;
   refresh(); renderChallenge();
+  if (warmupDue()) { special = { kind: 'warmup' }; run('solo'); }
   assets = await loading;
   if (!benchMode) lobbyReady(retries);
   if (CRAZYGAMES) crazyReady();
