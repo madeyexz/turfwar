@@ -30,11 +30,14 @@ export function frameTook(ms: number) {
   matchFrames.add(ms); reportFrames.add(ms);
 }
 
-/** The lobby is ready (assets loaded): the page's load time, sent once to PostHog and with the next server report. */
-export function lobbyReady() {
+/**
+ * The lobby is ready (assets loaded): the page's load time, sent once to PostHog and with the next server report;
+ * `retries`, the failed loads before it (only when there were some).
+ */
+export function lobbyReady(retries = 0) {
   const ms = Math.round(performance.now());
   pendingBoot = ms;
-  track('lobby_ready', { boot_ms: ms });
+  track('lobby_ready', { boot_ms: ms, ...(retries ? { retries } : {}) });
 }
 
 /** Play was pressed (a queued press keeps its first time). */
