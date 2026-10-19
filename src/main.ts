@@ -50,7 +50,7 @@ import { askCallsign, cleanCallsign, madeUpCallsign } from './ui/callsign';
 import { ask, confirmDialog } from './ui/ask';
 import { reportBootFailure, watchClientErrors } from './errors';
 import { registerServiceWorker, warmServiceWorker } from './pwa';
-import { CRAZYGAMES, crazyGameplay, crazyInstantMultiplayer, crazyLeftRoom, crazyLinkPlace, crazyLoadingStop, crazyMidgameAd, crazyRoom, crazySettings, crazyUser, linkPlace, onCrazyJoinRoom, onCrazySettings } from './crazygames';
+import { CRAZYGAMES, crazySave, crazyGameplay, crazyInstantMultiplayer, crazyLeftRoom, crazyLinkPlace, crazyLoadingStop, crazyMidgameAd, crazyRoom, crazySettings, crazyUser, linkPlace, onCrazyJoinRoom, onCrazySettings } from './crazygames';
 
 // Vercel Web Analytics exists only on the website (CrazyGames serves the files themselves).
 if (!CRAZYGAMES) inject();
@@ -284,6 +284,8 @@ if (!params.has('bench') && !CRAZYGAMES) new InstallBanner(menu);
 // Level and the day's goal in the profile popover (game/progress.ts); the chip shows the level.
 mountProgressBadge(menu.querySelector<HTMLElement>('#prog')!);
 onProgress(() => renderProfile());
+// CrazyGames' Data module keeps progress and choices with the player's account (src/crazygames.ts SAVED_KEYS).
+if (CRAZYGAMES) { onProgress(() => crazySave()); setInterval(() => crazySave(), 30000); addEventListener('pagehide', () => crazySave()); }
 // 最新更新: the newest entry of src/ui/news.ts.
 mountNews(menu.querySelector<HTMLElement>('#news')!);
 // CrazyGames: a first-visit note on what the game collects, with the privacy page (src/ui/privacynotice.ts).

@@ -84,6 +84,7 @@
 #menu .prog .bar { position: relative; height: 5px; background: rgba(255, 255, 255, 0.12); }
 #menu .prog .bar i { position: absolute; inset: 0 auto 0 0; background: var(--ink); }
 #menu .prog .goal { grid-column: 1 / -1; }
+#menu .prog .streak { grid-column: 1 / -1; color: var(--cash); }
 #menu .prog .goal b { color: var(--ink); }
 #menu .prog.done .goal b { color: var(--cash); }
 #menu #profile-pop .segmented { height: 40px; }
