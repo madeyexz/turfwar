@@ -67,11 +67,13 @@ export const groundSets = (theme: { ground: string; rock: string; dirt: string }
 /**
  * Load the models, animations and shared surface textures. `gpu` (the renderer and the quality preset's
  * name) lets textures come GPU-compressed and sized for the preset; without it they load as WebP.
+ * `onFileError` hears each file that failed to load (its URL).
  */
-export async function loadAssets(onProgress: (fraction: number) => void, gpu?: { renderer: THREE.WebGLRenderer; quality: string; lowFirst?: boolean }): Promise<Assets> {
+export async function loadAssets(onProgress: (fraction: number) => void, gpu?: { renderer: THREE.WebGLRenderer; quality: string; lowFirst?: boolean }, onFileError?: (url: string) => void): Promise<Assets> {
   initTextures(gpu?.renderer, gpu?.quality ?? 'medium', { lowFirst: gpu?.lowFirst });
   const manager = new THREE.LoadingManager();
   manager.onProgress = (_url, loaded, total) => onProgress(loaded / total);
+  if (onFileError) manager.onError = onFileError;
   const loader = new GLTFLoader(manager).setMeshoptDecoder(MeshoptDecoder);
   const textures = new TextureSets(manager);
   const gltf = (name: string) => loader.loadAsync(assetUrl(`assets/${name}`));
