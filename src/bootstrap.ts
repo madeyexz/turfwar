@@ -3,7 +3,7 @@ import { startAnalytics } from './analytics';
 import { hasChosenLang, langFromLocale, setLang, t } from './ui/i18n';
 import { serverHost } from './net/ping';
 import { asFailure, scrub } from './exceptions';
-import { CRAZYGAMES, crazyLoadingStart, crazyLocale, initCrazyGames } from './crazygames';
+import { CRAZYGAMES, crazyLoadingStart, crazyLocale, crazyRestore, initCrazyGames } from './crazygames';
 
 /**
  * The CrazyGames build starts their SDK first (it waits at most a few seconds): loading is reported to
@@ -13,6 +13,8 @@ async function platform() {
   if (!CRAZYGAMES) return;
   await initCrazyGames();
   crazyLoadingStart();
+  // Saved progress from the player's CrazyGames account, before the game reads it.
+  crazyRestore();
   const locale = crazyLocale();
   if (locale && !hasChosenLang()) setLang(langFromLocale(locale), false);
 }

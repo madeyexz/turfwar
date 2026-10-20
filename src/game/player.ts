@@ -1,5 +1,5 @@
 import { CollisionWorld } from '../../shared/collision';
-import { clamp, dirFromAngles, type Vec3 } from '../../shared/math';
+import { clamp, cloneData, dirFromAngles, type Vec3 } from '../../shared/math';
 import { PEEK, easePeek, peekShift, peekSide, type PeekSide } from '../../shared/peek';
 import { MOVE, createMoveState, eyeHeight, isSprinting, stepMovement, type MoveEvents, type MoveInput, type MoveState } from '../../shared/movement';
 import type { Obstacle } from '../../shared/obstacles';
@@ -149,7 +149,7 @@ export class LocalPlayer {
     this.m = { ...s.m, vx: 0, vy: 0, vz: 0 };
     this.prev = { x: s.m.x, y: s.m.y, z: s.m.z, crouch: s.m.crouch };
     this.yaw = s.yaw; this.pitch = 0; this.team = s.team; this.slot = 0; this.lastSlot = 1;
-    this.weapons = [...s.weapons]; this.attachments = structuredClone(s.attachments); this.reserve = [...s.reserve];
+    this.weapons = [...s.weapons]; this.attachments = cloneData(s.attachments); this.reserve = [...s.reserve];
     this.ammo = [this.statsOf(0).magazine, this.statsOf(1).magazine];
     this.reloadLeft = 0; this.switchLeft = this.statsOf(0).equipTime; this.fireCooldown = 0; this.bloom = 0; this.ads = 0; this.lean = 0; this.peekSide = 0;
     this.grenades = s.grenades; this.smokes = s.smokes; this.molotovs = s.molotovs; this.bobas = s.bobas; this.drinkLeft = 0; this.slippers = s.slippers ?? 1; this.slipperCharge = -1; this.slipperFollow = 0; this.health = s.health; this.alive = true; this.recoilDebt = 0; this.accumulator = 0;
@@ -170,7 +170,7 @@ export class LocalPlayer {
       this.selectSlot(i); this.switchLeft = this.statsOf(i).equipTime;
     }
     if (JSON.stringify(s.attachments) !== JSON.stringify(this.attachments)) {
-      this.attachments = structuredClone(s.attachments);
+      this.attachments = cloneData(s.attachments);
       for (const i of [0, 1] as const) this.ammo[i] = Math.min(this.ammo[i], this.statsOf(i).magazine);
     }
     if (this.reloadLeft <= 0) this.reserve = [...s.reserve];

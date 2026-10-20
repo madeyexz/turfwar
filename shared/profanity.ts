@@ -23,7 +23,9 @@ const english = new RegExpMatcher({
  * spaces or punctuation between them. The letters are joined and matched as one word on their own,
  * so "a s s e m b l y" is "assembly" and stays, while "f u c k" is masked.
  */
-const SPELLED = /(?<![\p{L}\p{N}])[\p{L}\p{N}@$!](?:[\s.,\-_·•~+*/\\|:;'"`^=]+[\p{L}\p{N}@$!]){2,}(?![\p{L}\p{N}])/gu;
+// No lookbehind anywhere in this file: Safari before 16.4 cannot parse it, and the whole game fails to start there
+// (iOS players hit "invalid group specifier name"). Group 1 is what stands before the match instead.
+const SPELLED = /(^|[^\p{L}\p{N}])([\p{L}\p{N}@$!](?:[\s.,\-_·•~+*/\\|:;'"`^=]+[\p{L}\p{N}@$!]){2,})(?![\p{L}\p{N}])/gu;
 const LETTER = /[\p{L}\p{N}@$!]/gu;
 
 /**
@@ -45,14 +47,16 @@ const CHINESE = [
 const GAP = '[\\s\\p{P}\\p{S}_]*';
 const chinese = new RegExp(CHINESE.map(w => [...w].map(c => c.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')).join(GAP)).join('|'), 'gu');
 // 幹 alone is the Taiwanese swear when it stands on its own ("幹!", "幹 好痛"), not inside a word (幹嘛).
-const ganAlone = /(?<!\p{Script=Han})幹+(?!\p{Script=Han})/gu;
+const ganAlone = /(^|[^\p{Script=Han}])(幹+)(?!\p{Script=Han})/gu;
 
 /** The text with every bad word masked (＊ per character); text without one comes back unchanged. */
 export function maskProfanity(text: string): string {
   const masked = new Uint8Array(text.length);
   for (const m of english.getAllMatches(text)) masked.fill(1, m.startIndex, m.endIndex + 1);
-  for (const re of [chinese, ganAlone]) for (const m of text.matchAll(re)) masked.fill(1, m.index, m.index + m[0].length);
-  for (const run of text.matchAll(SPELLED)) {
+  for (const m of text.matchAll(chinese)) masked.fill(1, m.index, m.index + m[0].length);
+  for (const m of text.matchAll(ganAlone)) masked.fill(1, m.index + m[1].length, m.index + m[0].length);
+  for (const found of text.matchAll(SPELLED)) {
+    const run = { 0: found[2], index: found.index + found[1].length };
     // The joined word, and for each of its UTF-16 units the letter's place in the text.
     let word = '';
     const from: number[] = [];

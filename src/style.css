@@ -346,6 +346,7 @@ body.menu-open #hud, body.menu-open #hud * { visibility: hidden; }
 .end td.t0 { color: var(--aegis); } .end td.t1 { color: var(--crimson); }
 .end tr.me td { color: var(--amber); }
 .end p { margin: 12px 0 10px; color: var(--muted); font-weight: 600; letter-spacing: 0.1em; }
+.end p.come-back { color: var(--cash); letter-spacing: 0.02em; }
 .end .actions { display: flex; gap: 8px; justify-content: center; }
 .end button { border: 1px solid var(--line); background: rgba(255, 255, 255, 0.05); padding: 7px 16px; font-weight: 700; letter-spacing: 0.1em; text-transform: uppercase; }
 .end button:first-child { border-color: var(--accent); color: var(--accent); }

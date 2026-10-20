@@ -1,4 +1,4 @@
-import { GOALS, levelOf, loadProgress, onProgress } from '../game/progress';
+import { GOALS, dailyXp, levelOf, loadProgress, onProgress, streakOn, today } from '../game/progress';
 import { escapeHtml as esc, onLang, t, type Key } from './i18n';
 
 /**
@@ -13,7 +13,9 @@ export function mountProgressBadge(el: HTMLElement) {
     el.innerHTML = `<b class="lv">${esc(t('prog.level', { n: lv.level }))}</b>`
       + `<span class="bar" role="progressbar" aria-valuemin="0" aria-valuemax="${lv.need}" aria-valuenow="${lv.into}" aria-label="${esc(t('prog.xp', { n: lv.into, of: lv.need }))}"><i style="width:${pct}%"></i></span>`
       + `<small class="xp">${esc(t('prog.xp', { n: lv.into, of: lv.need }))}</small>`
-      + `<span class="goal">${esc(t('prog.today'))} ${esc(t(`prog.goal.${p.goal.kind}` as Key, { n: goal.target }))} <b>${p.goal.done ? '✓' : `${p.goal.count}/${goal.target}`}</b></span>`;
+      + `<span class="goal">${esc(t('prog.today'))} ${esc(t(`prog.goal.${p.goal.kind}` as Key, { n: goal.target }))} <b>${p.goal.done ? '✓' : `${p.goal.count}/${goal.target}`}</b></span>`
+      // Played today: the streak, and what tomorrow's first round pays.
+      + (p.played === today() ? `<span class="streak">${esc(t('prog.streak', { n: streakOn(p), xp: dailyXp(streakOn(p) + 1) }))}</span>` : '');
   };
   render();
   const stops = [onProgress(render), onLang(render)];
