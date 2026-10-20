@@ -37,6 +37,8 @@ export type ClientErrorKind = 'error' | 'rejection' | 'boot' | 'webgl_lost' | 'w
  */
 export interface ConnectTiming { seconds: number; queued: boolean; failures: number; reconnect: boolean; ping_ms?: number; ping_ok?: boolean; connect_ms?: number; import_ms?: number }
 
+/** A `boot` failure of the models' load (src/main.ts): the first file that failed (host and path), the page's state, whether the service worker had it. */
+export interface AssetsFailure { file: string; hidden_while_loading: boolean; online: boolean; sw: boolean }
 /** What a `webgl_lost` / `webgl_restored` report adds (see `client_error`). */
 export interface GraphicsLoss { visible_s: number; losses: number; lost_ms: number; frame_ms: number; quality: string; pixel_ratio: number; canvas: string; map: string }
 
@@ -82,7 +84,7 @@ export interface Events {
    * `uptime_s`, `visible` and `visible_s` (seconds since the page last came into view), `standalone` (lost only), `lost_ms`, `frame_ms` (the first frame after it) and `losses` (restored only),
    * and the drawing: `quality`, `pixel_ratio`, `canvas` (drawing buffer, `1266x585`), `map` (in a match).
    */
-  client_error: { kind: ClientErrorKind; message: string; source?: string; in_match: boolean; uptime_s?: number; standalone?: boolean; visible?: boolean } & Partial<GraphicsLoss>;
+  client_error: { kind: ClientErrorKind; message: string; source?: string; in_match: boolean; uptime_s?: number; standalone?: boolean; visible?: boolean } & Partial<GraphicsLoss> & Partial<AssetsFailure>;
   /**
    * The lobby's connection to a server took over 6 s, or needed a retry after a failed ping or connect. (Until 2026-10-12 this was `server_woke`, which
    * also fired for Singapore waking from sleep; Singapore is no longer a choice and the event is gone.)
@@ -181,8 +183,10 @@ export function captureException(list: unknown[], props: Record<string, string |
 export function privateErrorProperties(props: Record<string, unknown>): Record<string, unknown> {
   const allowed = new Set(['token', 'distinct_id', '$device_id', '$session_id', '$window_id', '$lib', '$lib_version', '$browser', '$browser_version', '$os', '$os_version', '$current_url', '$exception_list', '$exception_level', '$release_id', 'app_version', 'server_host', 'in_app', 'kind', 'in_match', 'message', 'source', 'opaque', 'uptime_s', 'standalone', 'visible', 'test',
     // A lost graphics context (GraphicsLoss): times, counts, the preset, the drawing buffer's size and the map.
-    'visible_s', 'losses', 'lost_ms', 'frame_ms', 'quality', 'pixel_ratio', 'canvas', 'map']);
-  const diagnostic = new Set(['message', 'source', '$current_url', 'server_host']);
+    'visible_s', 'losses', 'lost_ms', 'frame_ms', 'quality', 'pixel_ratio', 'canvas', 'map',
+    // A failed load of the models (AssetsFailure): the first file that failed and the page's state.
+    'file', 'hidden_while_loading', 'online', 'sw']);
+  const diagnostic = new Set(['message', 'source', '$current_url', 'server_host', 'file']);
   return Object.fromEntries(Object.entries(props).filter(([key]) => allowed.has(key)).map(([key, value]) => [key, diagnostic.has(key) && typeof value === 'string' ? scrub(value) : value]));
 }
 

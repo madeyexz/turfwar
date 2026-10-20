@@ -70,9 +70,9 @@ let inMatch = () => false;
 const report = failureReporter(() => inMatch());
 let watching = false;
 
-export function reportBootFailure(error: unknown) {
+export function reportBootFailure(error: unknown, extra?: Extra) {
   const failure = asFailure(error);
-  report('boot', failure.message, undefined, failure);
+  report('boot', failure.message, undefined, failure, extra);
 }
 
 export function watchEarlyErrors() {
