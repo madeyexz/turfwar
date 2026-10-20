@@ -48,4 +48,12 @@ describe('browser support', () => {
     const found = ['src', 'shared'].flatMap(files).filter(f => /\(\?<[=!]/.test(readFileSync(f, 'utf8')));
     expect(found).toEqual([]);
   });
+
+  it('no game code calls structuredClone (Chrome before 98 lacks it; use cloneData from shared/math)', async () => {
+    const { readdirSync, readFileSync } = await import('node:fs');
+    const { join } = await import('node:path');
+    const files = (dir: string): string[] => readdirSync(dir, { withFileTypes: true }).flatMap(e => e.isDirectory() ? (e.name === 'module_bindings' ? [] : files(join(dir, e.name))) : /\.ts$/.test(e.name) && !/\.test\.ts$/.test(e.name) ? [join(dir, e.name)] : []);
+    const found = ['src', 'shared'].flatMap(files).filter(f => /\bstructuredClone\s*\(/.test(readFileSync(f, 'utf8')));
+    expect(found).toEqual([]);
+  });
 });
