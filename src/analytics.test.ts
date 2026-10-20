@@ -10,6 +10,9 @@ it('error reports exclude inherited player and attribution fields, but preserve 
   // A lost graphics context keeps its timing and drawing properties.
   const loss = { kind: 'webgl_restored', lost_ms: 6, frame_ms: 2400, losses: 2, visible: true, visible_s: 0.4, quality: 'low', pixel_ratio: 1.5, canvas: '1266x585', map: 'taipei' };
   expect(privateErrorProperties({ ...loss, callsign: 'Ian' })).toEqual(loss);
+  // A failed load of the models keeps the failed file and the page's state.
+  const load = { kind: 'boot', file: 'cdn.turfwar.ianhsiao.me/assets/soldier.glb', hidden_while_loading: true, online: false, sw: true, uptime_s: 12 };
+  expect(privateErrorProperties({ ...load, room: 'ABCD' })).toEqual(load);
   expect(privateErrorProperties({ distinct_id, callsign: 'Ian', room: 'ABCD', first_utm_source: 'private', $set: { name: 'Ian' }, $current_url: 'https://a.test/?room=ABCD#secret', message: 'bad token=secret', app_version: '123abc', test: true })).toEqual({ distinct_id, $current_url: 'https://a.test/', message: 'bad token=[x]', app_version: '123abc', test: true });
 });
 

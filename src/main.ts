@@ -543,8 +543,10 @@ let waitingLink: 'invite' | 'challenge' | undefined;
 /** The start under way is 邀請朋友's private room (its button says so). */
 let inviteStarting = false;
 let loadFraction = -1;
+/** The models failed to load three times in a row and are being tried again (until they are in). */
+let loadTrouble = false;
 let joiningRoom = -1;
-const loadingText = () => loadFraction < 0 ? t('lobby.loading') : t('lobby.loadingPct', { n: (loadFraction * 100).toFixed(0) });
+const loadingText = () => loadTrouble ? t('lobby.loadRetry') : loadFraction < 0 ? t('lobby.loading') : t('lobby.loadingPct', { n: (loadFraction * 100).toFixed(0) });
 
 /** The home screen (`quick`) or a page over the blurred city (Create room, Join room); the menu marks the open page. */
 function renderTabs() {
@@ -1716,26 +1718,59 @@ async function boot() {
   const fonts = isZh() ? cjkFontReady('繁體中文') : Promise.resolve();
   showChallenge();
   let retries = 0;
+  // Whether the page was hidden while the models loaded (an iPhone suspends a page in the background and its loads fail).
+  let hiddenWhileLoading = document.visibilityState !== 'visible';
+  const noteHidden = () => { if (document.visibilityState !== 'visible') hiddenWhileLoading = true; };
+  document.addEventListener('visibilitychange', noteHidden);
+  /**
+   * The next try: after `ms`, or sooner when the browser comes back online or the page into view; never while
+   * the page is hidden or the browser offline (it waits for both, so a background tab does not loop).
+   */
+  const nextTry = (ms: number) => new Promise<void>(resolve => {
+    const wake = () => {
+      if (document.visibilityState !== 'visible' || !navigator.onLine) return;
+      clearTimeout(timer); removeEventListener('online', wake); document.removeEventListener('visibilitychange', wake); resolve();
+    };
+    const timer = setTimeout(wake, ms);
+    addEventListener('online', wake);
+    document.addEventListener('visibilitychange', wake);
+  });
   const loading = assetsLoad = (async () => {
-    // A failed file (a dropped connection, a CDN hiccup) is tried again twice before the page gives up: a press
-    // of Play waits for the models, so a failure would otherwise fail every Play until a reload.
+    // A failed file (a dropped connection, a CDN hiccup, a phone that suspended the page) is tried again until it
+    // loads: a press of Play waits for the models, so a load that gave up failed every Play until a reload.
+    // The third failure in a row is reported (with the file and the page's state) and the lobby says it is retrying.
     for (;;) {
+      let failedFile = '';
       try {
-        return await loadAssets(f => {
+        const loaded = await loadAssets(f => {
           // The total grows as the models name their textures: never shown going back, and 100% only when done.
           loadFraction = Math.min(0.99, Math.max(loadFraction, f));
           // Play pressed before the models are in: the start waits for them and says how far they are.
           if (starting && !assets) status.textContent = loadingText();
           renderQuick(); renderStart(); renderOthers(); renderChallenge();
-        }, { renderer: renderer.renderer, quality, lowFirst: CRAZYGAMES });
+        }, { renderer: renderer.renderer, quality, lowFirst: CRAZYGAMES }, url => { failedFile ||= url; });
+        loadTrouble = false;
+        return loaded;
       } catch (error) {
-        if (retries >= 2) throw error;
         console.warn('Assets failed to load, trying again', error);
-        await new Promise(r => setTimeout(r, 1500 * ++retries));
+        if (++retries === 3) {
+          // The file's host and path (no query): which server failed, and whether a model or a texture.
+          const file = failedFile && (u => `${u.host}${u.pathname}`)(new URL(failedFile, location.href));
+          reportBootFailure(error, {
+            uptime_s: Math.round(performance.now() / 1000), visible: document.visibilityState === 'visible', hidden_while_loading: hiddenWhileLoading,
+            online: navigator.onLine, sw: !!navigator.serviceWorker?.controller, ...(file ? { file: file.slice(0, 120) } : {}),
+          });
+        }
+        if (retries >= 3) {
+          loadTrouble = true;
+          if (starting && !assets) status.textContent = loadingText();
+          renderQuick(); renderStart(); renderOthers(); renderChallenge();
+        }
+        await nextTry(Math.min(10_000, 1500 * retries));
       }
     }
   })();
-  loading.catch(() => undefined);
+  void loading.finally(() => document.removeEventListener('visibilitychange', noteHidden));
   // The lobby works while they load: a Play pressed now connects and joins as they arrive.
   await fonts;
   ready = true;
