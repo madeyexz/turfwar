@@ -277,8 +277,11 @@ when an ad blocker stops the script, and outside CrazyGames' domains. In that bu
   (measured 2026-10-19 on the warm-up; the other 10.8 MB follow in the background);
 - CrazyGames' Data module keeps `SAVED_KEYS` (src/crazygames.ts: progress with the daily streak, the warm-up flag,
   skins, key bindings, crosshair; never the game ID): restored before the game reads its storage (bootstrap; the
-  progress with more XP wins), saved on progress, every 30 s and on page hide. It needs **Progress Save** turned on
-  in the CrazyGames submission; without it the module throws once and the game keeps local saves only;
+  progress with more XP wins), saved on progress, every 30 s and on page hide. It works only when the submission's
+  **Progress Save** is "Data Module"; otherwise the module throws once and the game keeps local saves only. The
+  submission uses **"LocalStorage" (Automatic Progress Save)** since 2026-10-21: with "Data Module" (20–21 Oct)
+  CrazyGames stopped restoring localStorage, so returning players lost their callsign, game ID and settings
+  (`has_prior_storage` fell from ~30% to ~0) and PostHog D1 broke. Keep it on LocalStorage;
 - the platform's `muteAudio` and `disableChat` settings, its locale (unless the player chose a language) and,
   for a logged-in player, the CrazyGames username as callsign; the callsign prompt is skipped;
 - invite and challenge links become CrazyGames invite links (`r` room code, `c` challenge; no UTM tags),
