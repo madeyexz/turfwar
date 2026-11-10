@@ -245,6 +245,7 @@ export class Game {
     renderer.setTheme(theme, def.sun);
     this.level = new LevelView(assets, def, theme);
     renderer.scene.add(this.level.group, this.effects.group);
+    this.effects.haze.copy(theme.fog);
     this.bodies = new BodiesView(assets);
     renderer.scene.add(this.bodies.group, this.smoke.group, this.fire.group);
     if (import.meta.env.DEV && new URLSearchParams(location.search).has('flyover')) {
@@ -316,8 +317,10 @@ export class Game {
     // The preset's shadow casters (small props cast none on phones) and muzzle-flash lights.
     this.stopRendering = [
       ...[this.level.group, this.crates.group, this.sites.group, this.vehicles.group].map(g => renderer.limitShadows(g)),
-      renderer.onQuality(q => this.effects.dynamicLights(q.dynamicLights)),
+      renderer.onQuality(q => { this.effects.dynamicLights(q.dynamicLights); this.effects.detail = q.cheapMaterials ? 0.5 : 1; }),
     ];
+    // Baked light, except on the lean preset (asked for first: its shaders are in before the warm-up below).
+    if (!renderer.quality.cheapMaterials) void this.level.bake();
     // Shaders and textures for the whole map, once its dressing (trees, street sets) has loaded.
     this.level.ready.then(() => {
       if (!this.running) return;
@@ -1385,6 +1388,7 @@ export class Game {
           if (me?.alive) { this.player.spawnFrom(me); this.shownWeapon = ''; }
           this.skids.clear();
           this.effects.clearDecals();
+          this.level.restore();
           this.audio.roundStart();
           const sabotage = modeOf(state, this.map.def) === 'sabotage';
           const goal = t(!sabotage ? 'hud.goal.elim' : me?.team === ATTACKERS ? 'hud.goal.attack' : 'hud.goal.defend');
@@ -1403,6 +1407,12 @@ export class Game {
         const letter = this.map.def.sabotage?.sites[e.site] ?? '';
         if (e.action === 'armed') { this.audio.bombArmed(); this.hud.announce(t('hud.armedTitle'), t('hud.site', { site: letter }), 'var(--crimson)'); this.beepTimer = 0; }
         if (e.action === 'disarmed') { this.audio.bombDisarmed(); this.hud.announce(t('hud.disarmedTitle'), t('hud.site', { site: letter }), 'var(--aegis)'); }
+        if (e.action === 'exploded') {
+          // The blast brings the building at the site down (a picture only: the round is over, and the next one restores it).
+          const p = this.map.def.points.find(q => q.id === letter);
+          const fell = p && this.level.collapse(e.site, p);
+          if (fell) this.effects.dust(fell);
+        }
         break;
       }
       case 'vehicle': {
@@ -1422,7 +1432,9 @@ export class Game {
       }
       case 'explosion': {
         const at = new THREE.Vector3(e.x, e.y, e.z);
-        this.effects.explosion(at, e.weapon === 'bomb' ? 2.5 : e.weapon === 'vehicle' ? 1.8 : 1);
+        // The ring, the dust and the scorch mark lie on the ground under the blast.
+        const ground = this.map.world.raycast({ x: e.x, y: e.y + 0.3, z: e.z }, { x: 0, y: -1, z: 0 }, 8)?.point.y ?? e.y - 100;
+        this.effects.explosion(at, e.weapon === 'bomb' ? 2.5 : e.weapon === 'vehicle' ? 1.8 : 1, ground);
         this.audio.explosion(this.listener(), at);
         const d = at.distanceTo(this.renderer.camera.position);
         const reach = e.weapon === 'bomb' ? 40 : e.weapon === 'vehicle' ? 28 : 18;
