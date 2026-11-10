@@ -9,9 +9,10 @@ import type { VehicleSpot } from '../vehicles';
  * memorial is golden hour over Memorial Hall's white marble and its gardens.
  * sanchong is a warm, hazy late afternoon over Sanchong's walk-ups and the river.
  * alley is a back yard after dark and after rain, under a photographed sky (Theme.sky) and its own lamps.
+ * warehouse is the inside of a hall by day: sun through the roof lights, a photographed sky past them.
  */
 export type ThemeId = 'desert' | 'snow' | 'forest' | 'dusk' | 'twilight' | 'steppe' | 'meadow' | 'taipei' | 'xinyi' | 'highrise'
-  | 'memorial' | 'sanchong' | 'alley';
+  | 'memorial' | 'sanchong' | 'alley' | 'warehouse';
 
 /** Visual treatment of a solid. Collision is identical regardless of style. */
 export type BlockStyle =

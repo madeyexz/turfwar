@@ -49,8 +49,8 @@ browser shooter *BeGone*. It runs on TypeScript and Three.js in the browser and 
 
 - **Two modes:** *Elimination* and *Sabotage* (Militia arms the bomb at site A or B; SWAT defends or
   disarms). First to 10 rounds, one life per round, a 4 s freeze and 20 s of buy time.
-- **Thirteen maps:** Ximending (西門町), Taipei 101 · Xinyi, Taipei 101 · 88F with its tuned mass damper,
-  Memorial Hall (中正紀念堂), Sanchong (三重) across the river, homages to BeGone's maps and original
+- **Fourteen maps:** Ximending (西門町), Taipei 101 · Xinyi, Taipei 101 · 88F with its tuned mass damper,
+  Memorial Hall (中正紀念堂), Sanchong (三重) across the river, the photoscanned Back Alley (後巷), homages to BeGone's maps and original
   battlefields — see [Maps](docs/GAMEPLAY.md#maps).
 - **Vehicles:** cars and taxis with handbrake drifts, scooters you can shoot from, and a helicopter.
 - **Economy:** cash for kills, headshots, assists and objectives; five primaries, two secondaries,
@@ -117,7 +117,7 @@ bun run typecheck:module # the SpacetimeDB server module
 
 ```text
 shared/          Simulation shared by the browser and the server: movement, collision,
-  maps/          weapons, vehicles, bots, rounds and the thirteen maps
+  maps/          weapons, vehicles, bots, rounds and the fourteen maps
   match/         Match state, economy, rooms, the packed per-tick frame and the tick itself
 spacetimedb/     The SpacetimeDB server module: tables, reducers, admin views, scheduled tick
 src/             The browser game: rendering, HUD, input, audio, lobby, online client
@@ -241,7 +241,9 @@ texture, sound and line of code here is original or CC0/OFL.
   cobblestone architecture of the BeGone maps): Poly Haven, CC0 1.0, fetched by `tools/fetch-textures.ts`; see
   `public/assets/tex/LICENSE.txt`.
 - Back Alley (the hidden graphics showcase, `?map=alley`): scanned models, the facade kits, the asphalt and
-  the night sky from Poly Haven, CC0 1.0, packed by `tools/fetch-alley.ts`; see `public/assets/alley/LICENSE.txt`.
+  the night sky from Poly Haven, CC0 1.0, packed by `tools/fetch-scans.ts`; see `public/assets/alley/LICENSE.txt`.
+- Warehouse above the Low preset: the scanned floor, walls, decks, crates, lamps, drums and wall fittings and the
+  sky from Poly Haven, CC0 1.0, packed by `tools/fetch-scans.ts`; see `public/assets/warehouse/LICENSE.txt`.
 - Font: Rajdhani by Indian Type Foundry, SIL Open Font License 1.1 (`public/fonts/OFL.txt`).
 - Font: Oswald (Latin, the lobby) by the Oswald Project Authors, SIL Open Font License 1.1 (`public/fonts/Oswald-OFL.txt`).
 - Chinese font: Noto Sans TC by Google and Adobe, SIL Open Font License 1.1

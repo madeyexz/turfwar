@@ -17,12 +17,17 @@ type Models = Record<string, ModelData>;
 /** `object`: a set that builds its own scene (scanned models): added as it is, never batched here. */
 interface DressingSet { skyline?: SkylineData; object?: THREE.Object3D }
 
-const SETS: Record<string, () => Promise<DressingSet>> = {
+/** The level's own materials by bucket (src/render/level.ts): a set of scanned surfaces puts its textures into them. */
+export type LevelMaterials = Record<string, THREE.Material>;
+
+const SETS: Record<string, (materials: LevelMaterials) => Promise<DressingSet>> = {
   ximending: async () => ({ skyline: (await import('./cityscape')).ximendingSkyline() }),
   xinyi: async () => ({ skyline: (await import('./cityscape')).xinyiSkyline() }),
   // The city round Taipei 101, seen from 88F (the map sets it far below).
   // The Back Alley's photoscanned yard: its walls, ground, props and lamps.
   alley: async () => ({ object: await (await import('./alley')).buildAlley() }),
+  // The Warehouse's scanned floor, walls, decks and crates (nothing on the Low preset).
+  warehouse: async materials => ({ object: await (await import('./warehouse')).buildWarehouse(materials) }),
   taipei101: async () => ({ skyline: (await import('./cityscape')).highriseSkyline() }),
 };
 
@@ -34,14 +39,14 @@ const STRIDE = 8;
  * Build every dressing set and model instance of a map into `group` (asynchronously: sets load on
  * demand). Resolves to the time the static batching took (ms).
  */
-export async function addDressing(group: THREE.Group, decor: Decor[], near?: NearField): Promise<number> {
+export async function addDressing(group: THREE.Group, decor: Decor[], near?: NearField, materials: LevelMaterials = {}): Promise<number> {
   const sets = decor.filter((d): d is Dressing => d.kind === 'dressing');
   const instances = decor.filter((d): d is Instances => d.kind === 'instances');
   if (!sets.length && !instances.length) return 0;
   const models = builtModels();
   const before = new Set(group.children), own = new Set<THREE.Object3D>();
   for (const d of sets) {
-    const set = await SETS[d.set]?.();
+    const set = await SETS[d.set]?.(materials);
     if (!set) { console.warn('unknown dressing set', d.set); continue; }
     if (set.skyline) {
       const y = d.y ?? 0;

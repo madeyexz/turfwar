@@ -225,7 +225,7 @@ shared/        Pure TypeScript shared by browser, tests and the SpacetimeDB modu
                  Railyard, Skyline, Meridian), plus Ximending (the `taipei` map: ximending*.ts, our own layout),
                  Taipei 101 · Xinyi (xinyi.ts) and Taipei 101 · 88F (taipei101.ts; tower101.ts is the shared
                  tower outline)
-                 Memorial Hall (memorial*.ts) and Sanchong (sanchong*.ts),
+                 Memorial Hall (memorial*.ts), Sanchong (sanchong*.ts) and Back Alley (alley.ts),
                  with ladders, bomb sites and ammo crates
   match/         State, rounds and bomb, combat validation, economy, bots, navigation, packed frame
   rec/           Match recording formats (segments, input logs, export files), clean rules, segmenter, policy
