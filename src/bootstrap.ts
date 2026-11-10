@@ -5,6 +5,9 @@ import { serverHost } from './net/ping';
 import { asFailure, scrub } from './exceptions';
 import { CRAZYGAMES, crazyLoadingStart, crazyLocale, crazyRestore, initCrazyGames } from './crazygames';
 
+// The SpacetimeDB SDK calls Object.hasOwn when it connects; Chrome and Edge before 93 lack it, so they never reached a server.
+if (!Object.hasOwn) Object.defineProperty(Object, 'hasOwn', { configurable: true, writable: true, value: (o: object, k: PropertyKey) => Object.prototype.hasOwnProperty.call(o, k) });
+
 /**
  * The CrazyGames build starts their SDK first (it waits at most a few seconds): loading is reported to
  * it, and the language follows the locale CrazyGames reports unless the player chose one.

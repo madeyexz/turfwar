@@ -4,6 +4,8 @@ import { EffectComposer } from 'three/examples/jsm/postprocessing/EffectComposer
 import { RenderPass } from 'three/examples/jsm/postprocessing/RenderPass.js';
 import { UnrealBloomPass } from 'three/examples/jsm/postprocessing/UnrealBloomPass.js';
 import { OutputPass } from 'three/examples/jsm/postprocessing/OutputPass.js';
+import { GTAOPass } from 'three/examples/jsm/postprocessing/GTAOPass.js';
+import { assetUrl } from '../assetUrl';
 import { AdaptiveDpr, PHONE_ADAPTIVE_DPR, basePixelRatio, type AdaptiveDprOptions } from '../game/adaptivedpr';
 import { setMaterialQuality, type Theme } from './materials';
 import { ScopePass } from './sights';
@@ -102,6 +104,11 @@ export class Renderer {
   sky?: SkyView;
   private composer: EffectComposer;
   private bloom: UnrealBloomPass;
+  /** Ambient occlusion, built the first time a theme asks for it (Theme.ao) and off on every other map. */
+  private ao?: GTAOPass;
+  private theme?: Theme;
+  /** The photographed sky of the theme (Theme.sky), once loaded: kept to make the environment again after a lost context. */
+  private photoSky?: THREE.DataTexture;
   private sunOffset = new THREE.Vector3(-50, 70, 40);
   /** Picture-in-picture scope view, rendered only while the view model asks for it (a magnified optic raised). */
   private scope = new ScopePass();
@@ -177,6 +184,7 @@ export class Renderer {
     if (q.dynamicLights) this.camera.add(this.torch, this.torch.target);
     else { this.torch.removeFromParent(); this.torch.target.removeFromParent(); }
     this.bloom.enabled = q.bloom;
+    this.applyAo();
     for (const root of this.shadowRoots) limitShadowCasters(root, q);
     for (const f of this.qualityListeners) f(q);
     this.resize();
@@ -207,11 +215,61 @@ export class Renderer {
     this.sky = new SkyView(theme, dir);
     this.scene.add(this.sky.mesh);
     this.envSky = { theme, dir };
+    this.theme = theme;
+    this.photoSky?.dispose(); this.photoSky = undefined;
+    this.scene.background = null;
     this.buildEnvironment();
+    this.applyAo();
+    if (theme.sky) void this.loadPhotoSky(theme);
     const vmSun = this.viewScene.getObjectByName('vmSun') as THREE.DirectionalLight;
     vmSun.color.copy(theme.sunColor); vmSun.intensity = theme.sunIntensity * 0.7; vmSun.position.copy(dir);
     const vmHemi = this.viewScene.getObjectByName('vmHemi') as THREE.HemisphereLight;
     vmHemi.color.copy(theme.hemiSky); vmHemi.groundColor.copy(theme.hemiGround); vmHemi.intensity = theme.hemiIntensity;
+  }
+
+  /**
+   * The theme's photographed sky: the drawn sky lights the scene until the picture is here, then the
+   * picture is the background and the environment light. A theme set meanwhile wins.
+   */
+  private async loadPhotoSky(theme: Theme) {
+    try {
+      const { HDRLoader } = await import('three/examples/jsm/loaders/HDRLoader.js');
+      const texture = await new HDRLoader().loadAsync(assetUrl(theme.sky!));
+      if (this.theme !== theme) { texture.dispose(); return; }
+      texture.mapping = THREE.EquirectangularReflectionMapping;
+      this.photoSky = texture;
+      this.scene.background = texture;
+      this.scene.backgroundIntensity = 0.22;
+      if (this.sky) this.sky.mesh.visible = false;
+      this.buildEnvironment();
+    } catch (error) { console.warn('sky failed', error); }
+  }
+
+  /** Ambient occlusion follows the theme and the preset: on only where the theme asks and bloom is on (not `low`). */
+  private applyAo() {
+    const wanted = !!this.theme?.ao && this.quality.bloom;
+    if (wanted && !this.ao) {
+      const ao = this.ao = new GTAOPass(this.scene, this.camera, 256, 256);
+      ao.blendIntensity = 1;
+      ao.updateGtaoMaterial({ radius: 0.6, distanceExponent: 1.4, thickness: 1.2, scale: 1.15, samples: 12, screenSpaceRadius: false });
+      ao.updatePdMaterial({ lumaPhi: 10, depthPhi: 2, normalPhi: 3, radius: 6, rings: 2, samples: 12 });
+      // Its depth pass draws every mesh as a solid: keep out what writes no depth (halos, light shafts,
+      // muzzle flashes), or each one shades the wall behind it as a black card.
+      const pass = ao as unknown as { _overrideVisibility(): void; _visibilityCache: THREE.Object3D[] };
+      const lines = pass._overrideVisibility.bind(ao), scene = this.scene;
+      pass._overrideVisibility = () => {
+        lines();
+        scene.traverse(o => {
+          if (!o.visible) return;
+          const m = (o as THREE.Mesh).material as THREE.Material | THREE.Material[] | undefined;
+          const one = Array.isArray(m) ? m[0] : m;
+          if ((o as THREE.Sprite).isSprite || (one && !one.depthWrite)) { o.visible = false; pass._visibilityCache.push(o); }
+        });
+      };
+      this.composer.insertPass(ao, 1);
+      this.resize();
+    }
+    if (this.ao) this.ao.enabled = wanted;
   }
 
   /** The sky the environment light was made from (setTheme), to make it again after a lost context. */
@@ -229,8 +287,10 @@ export class Renderer {
     envScene.add(new SkyView(this.envSky.theme, this.envSky.dir).mesh);
     const pmrem = new THREE.PMREMGenerator(this.renderer);
     this.scene.environment?.dispose();
-    this.scene.environment = pmrem.fromScene(envScene, 0.02, 0.1, 100, { size: envSize(this.quality) }).texture;
-    this.scene.environmentIntensity = 0.55;
+    this.scene.environment = this.photoSky
+      ? pmrem.fromEquirectangular(this.photoSky).texture
+      : pmrem.fromScene(envScene, 0.02, 0.1, 100, { size: envSize(this.quality) }).texture;
+    this.scene.environmentIntensity = this.photoSky ? 0.22 : 0.55;
     this.viewScene.environment = this.scene.environment;
     this.viewScene.environmentIntensity = 0.7;
     pmrem.dispose();

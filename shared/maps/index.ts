@@ -1,6 +1,7 @@
 import { CollisionWorld, type Solid } from '../collision';
 import { buildNav, type NavGraph } from '../match/nav';
 import { createVehicle, vehicleGround, vehicleObstacles } from '../vehicles';
+import { alley } from './alley';
 import { cinderBasin } from './cinder';
 import { citadelKeep } from './citadel';
 import { courtyard } from './courtyard';
@@ -22,20 +23,21 @@ import { verdantDivide } from './verdant';
 import { warehouse } from './warehouse';
 import type { MapDef } from './types';
 
-/** BeGone's six maps first (in their release order), then the original battlefields, then Taipei's Ximending and Xinyi, then the office floor high up Taipei 101, then Memorial Hall (中正紀念堂), then Sanchong (三重) across the river. */
-export const MAP_IDS = ['crane', 'tower', 'warehouse', 'pipeline', 'courtyard', 'timbertown', 'cinder', 'frostline', 'verdant', 'ochre', 'citadel', 'railyard', 'skyline', 'meridian', 'taipei', 'xinyi', 'taipei101', 'memorial', 'sanchong'] as const;
+/** BeGone's six maps first (in their release order), then the original battlefields, then Taipei's Ximending and Xinyi, then the office floor high up Taipei 101, then Memorial Hall (中正紀念堂), then Sanchong (三重) across the river, then the photoscanned Back Alley (後巷) showcase. */
+export const MAP_IDS = ['crane', 'tower', 'warehouse', 'pipeline', 'courtyard', 'timbertown', 'cinder', 'frostline', 'verdant', 'ochre', 'citadel', 'railyard', 'skyline', 'meridian', 'taipei', 'xinyi', 'taipei101', 'memorial', 'sanchong', 'alley'] as const;
 export type MapId = (typeof MAP_IDS)[number];
 /**
  * Retired maps (soft delete): still defined and loadable (`?map=`, rooms already on them, tests),
  * but offered nowhere: not in the lobby, Solo or Practice choices, Quick Play or new rooms.
+ * Back Alley is here too while it is a graphics showcase: its 45 MB of scans are not on every player's budget.
  */
-export const RETIRED_MAPS: ReadonlySet<string> = new Set<MapId>(['crane', 'tower', 'courtyard', 'cinder', 'frostline', 'verdant']);
+export const RETIRED_MAPS: ReadonlySet<string> = new Set<MapId>(['crane', 'tower', 'courtyard', 'cinder', 'frostline', 'verdant', 'alley']);
 /** The maps players can choose and rooms rotate through. */
 export const PLAYABLE_MAP_IDS: readonly MapId[] = MAP_IDS.filter(id => !RETIRED_MAPS.has(id));
 const factories: Record<string, () => MapDef> = {
   cinder: cinderBasin, frostline: frostlineReach, verdant: verdantDivide, ochre: ochreQuarter, citadel: citadelKeep, railyard, skyline: skylineRooftops, meridian: meridianDistrict,
   crane, tower, warehouse, pipeline, courtyard, timbertown, taipei: ximending, xinyi, taipei101,
-  memorial: memorialHall, sanchong,
+  memorial: memorialHall, sanchong, alley,
 };
 
 /** A map's definition alone, without building its collision world (the recorder hashes it to tell map versions apart). */
