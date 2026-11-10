@@ -240,6 +240,8 @@ texture, sound and line of code here is original or CC0/OFL.
 - Terrain and surface textures (including the brick, plank, corrugated-iron, plaster and
   cobblestone architecture of the BeGone maps): Poly Haven, CC0 1.0, fetched by `tools/fetch-textures.ts`; see
   `public/assets/tex/LICENSE.txt`.
+- Back Alley (the hidden graphics showcase, `?map=alley`): scanned models, the facade kits, the asphalt and
+  the night sky from Poly Haven, CC0 1.0, packed by `tools/fetch-alley.ts`; see `public/assets/alley/LICENSE.txt`.
 - Font: Rajdhani by Indian Type Foundry, SIL Open Font License 1.1 (`public/fonts/OFL.txt`).
 - Font: Oswald (Latin, the lobby) by the Oswald Project Authors, SIL Open Font License 1.1 (`public/fonts/Oswald-OFL.txt`).
 - Chinese font: Noto Sans TC by Google and Adobe, SIL Open Font License 1.1

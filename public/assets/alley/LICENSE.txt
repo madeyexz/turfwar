@@ -1,0 +1,25 @@
+Models, surfaces and sky of the Back Alley map, from Poly Haven (https://polyhaven.com), CC0 1.0 Universal.
+Packed by tools/fetch-alley.ts (textures resized to WebP, geometry meshopt-compressed).
+
+https://polyhaven.com/a/modular_urban_apartments_facade
+https://polyhaven.com/a/modular_factory_facade
+https://polyhaven.com/a/modular_fire_escape
+https://polyhaven.com/a/exterior_aircon_unit
+https://polyhaven.com/a/metal_trash_can
+https://polyhaven.com/a/rollershutter_door
+https://polyhaven.com/a/modular_electricity_poles
+https://polyhaven.com/a/modular_chainlink_fence
+https://polyhaven.com/a/street_lamp_01
+https://polyhaven.com/a/security_light
+https://polyhaven.com/a/utility_box_01
+https://polyhaven.com/a/utility_box_02
+https://polyhaven.com/a/water_manhole_cover
+https://polyhaven.com/a/modular_metal_gutter
+https://polyhaven.com/a/concrete_road_barrier_02
+https://polyhaven.com/a/covered_car
+https://polyhaven.com/a/old_tyre
+https://polyhaven.com/a/barrel_stove
+https://polyhaven.com/a/cardboard_box_01
+https://polyhaven.com/a/modular_airduct_circular_01
+https://polyhaven.com/a/asphalt_04
+https://polyhaven.com/a/rooftop_night

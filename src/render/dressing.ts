@@ -14,12 +14,15 @@ import { builtModels, type ModelData } from './props';
  *   models      instanced meshes per model: cars and taxis are built below, the rest in ./props.ts.
  */
 type Models = Record<string, ModelData>;
-interface DressingSet { skyline?: SkylineData }
+/** `object`: a set that builds its own scene (scanned models): added as it is, never batched here. */
+interface DressingSet { skyline?: SkylineData; object?: THREE.Object3D }
 
 const SETS: Record<string, () => Promise<DressingSet>> = {
   ximending: async () => ({ skyline: (await import('./cityscape')).ximendingSkyline() }),
   xinyi: async () => ({ skyline: (await import('./cityscape')).xinyiSkyline() }),
   // The city round Taipei 101, seen from 88F (the map sets it far below).
+  // The Back Alley's photoscanned yard: its walls, ground, props and lamps.
+  alley: async () => ({ object: await (await import('./alley')).buildAlley() }),
   taipei101: async () => ({ skyline: (await import('./cityscape')).highriseSkyline() }),
 };
 
@@ -36,7 +39,7 @@ export async function addDressing(group: THREE.Group, decor: Decor[], near?: Nea
   const instances = decor.filter((d): d is Instances => d.kind === 'instances');
   if (!sets.length && !instances.length) return 0;
   const models = builtModels();
-  const before = new Set(group.children);
+  const before = new Set(group.children), own = new Set<THREE.Object3D>();
   for (const d of sets) {
     const set = await SETS[d.set]?.();
     if (!set) { console.warn('unknown dressing set', d.set); continue; }
@@ -46,12 +49,13 @@ export async function addDressing(group: THREE.Group, decor: Decor[], near?: Nea
       const sky = buildSkyline(set.skyline, d.x, d.z, near && { ...near, lowest: (x0, z0, x1, z1) => near.lowest(x0, z0, x1, z1) - y });
       sky.position.y = y; group.add(sky);
     }
+    if (set.object) { set.object.position.set(d.x, d.y ?? 0, d.z); group.add(set.object); own.add(set.object); }
   }
   const byModel = new Map<string, number[]>();
   for (const d of instances) byModel.set(d.model, [...(byModel.get(d.model) ?? []), ...d.data]);
   for (const [model, data] of byModel) for (const m of instanced(model, data, 0, 0, models)) group.add(m);
   const t0 = performance.now();
-  batch(group, group.children.filter(c => !before.has(c)));
+  batch(group, group.children.filter(c => !before.has(c) && !own.has(c)));
   return performance.now() - t0;
 }
 

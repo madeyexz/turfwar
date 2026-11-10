@@ -12,6 +12,10 @@ export interface Theme {
   planet: THREE.Color | null; exposure: number;
   /** A paved city: no scattered pebbles or boulders. */
   urban?: boolean;
+  /** A photographed sky (an equirectangular .hdr under public/): the background and the environment light, in place of the drawn sky. */
+  sky?: string;
+  /** Screen-space ambient occlusion (not on the `low` preset): for maps of scanned models, whose creases carry the look. */
+  ao?: boolean;
 }
 
 export const THEMES: Record<ThemeId, Theme> = {
@@ -111,6 +115,15 @@ export const THEMES: Record<ThemeId, Theme> = {
     skyTop: new THREE.Color(0x4a6c9c), skyHorizon: new THREE.Color(0xf0b47e), fog: new THREE.Color(0xc8a88c), fogDensity: 0.0032,
     sunColor: new THREE.Color(0xffc68e), sunIntensity: 3.0, hemiSky: new THREE.Color(0xb8c4dc), hemiGround: new THREE.Color(0x8a7a68), hemiIntensity: 1.55,
     planet: null, exposure: 1.0, urban: true,
+  },
+  // A back yard after dark and after rain: a photographed dusk sky, a faint cool moon, and the
+  // yard's own sodium lamps and stove fire doing the lighting (src/render/alley.ts).
+  alley: {
+    id: 'alley', ground: 'asphalt', rock: 'concrete', dirt: 'concrete',
+    groundTint: new THREE.Color(0.5, 0.5, 0.52), rockTint: new THREE.Color(0.6, 0.6, 0.6), dirtTint: new THREE.Color(0.5, 0.5, 0.52),
+    skyTop: new THREE.Color(0x0a1026), skyHorizon: new THREE.Color(0x3a3558), fog: new THREE.Color(0x141a2a), fogDensity: 0.011,
+    sunColor: new THREE.Color(0xaebcff), sunIntensity: 0.16, hemiSky: new THREE.Color(0x7484b8), hemiGround: new THREE.Color(0x5a4a3c), hemiIntensity: 0.09,
+    planet: null, exposure: 1.05, urban: true, sky: 'assets/alley/sky.hdr', ao: true,
   },
 };
 
