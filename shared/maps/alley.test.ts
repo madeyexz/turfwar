@@ -6,18 +6,18 @@ import { TICK_RATE, balanceTeams, createContext, createMatch, tickMatch } from '
 import { ELIMINATION, type MatchEvent } from '../match/state';
 
 describe('alley: Back Alley (後巷)', () => {
-  it('is offered to 1v1 and 6v6 Elimination rooms only: no bomb sites, not 24v24', () => {
+  it('is offered to 1v1 and 6v6 rooms in Elimination and Sabotage (sites A and B), not 24v24', () => {
     const { def } = loadMap('alley');
     expect(def.big).toBeFalsy();
-    expect(def.sabotage).toBeUndefined();
+    expect(def.sabotage?.sites).toEqual(['A', 'B']);
     for (const size of [1, 6]) {
       expect(mapsFor(size)).toContain('alley');
-      expect(mapsFor(size, 'sabotage')).not.toContain('alley');
+      expect(mapsFor(size, 'sabotage')).toContain('alley');
     }
     expect(mapsFor(24)).not.toContain('alley');
   });
 
-  it('bots fight 6v6 rounds to a result inside the yard', () => {
+  it('bots fight 6v6 rounds to a result inside the block', () => {
     const events: MatchEvent[] = [];
     const ctx = createContext('alley', rng(7), e => events.push(e));
     const state = createMatch('alley', { ...ELIMINATION, warmup: 0 });
