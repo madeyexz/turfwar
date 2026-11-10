@@ -7,6 +7,9 @@ import { fbm } from '../../shared/maps/builder';
 import type { BlockStyle, Decor, MapDef, RampStyle } from '../../shared/maps/types';
 import { rng } from '../../shared/math';
 import { mergeStatic, shadowProxies, staticMeshes } from './batch';
+import { BAKED } from './bake';
+import { applyBake, bakeMix, clearBake, loadBake } from './baked';
+import { COLLAPSE, Collapse, decorCentre } from './collapse';
 import { separateCoplanar, type DrawnBox } from './coplanar';
 import { addDressing } from './dressing';
 import type { NearField } from './skyline';
@@ -49,9 +52,18 @@ export class LevelView {
   private animated: { object: THREE.Object3D; update: (t: number) => void }[] = [];
   /** Self-lit fixtures and rings: the colour (past 1 for the bloom) rides in the vertices, so they batch. */
   private unlit = new THREE.MeshBasicMaterial({ vertexColors: true });
+  /** What the bomb brings down at each Sabotage site (collapse.ts): the zone being built (-1: none), its standing meshes and its falling pieces. */
+  private zone = -1;
+  private standing: THREE.Mesh[][] = [];
+  private collapses: Collapse[] = [];
+  private zones: THREE.Box3[] = [];
+  private last = 0;
+  /** Whether the baked light is in and fading up. */
+  private lit = false;
 
   constructor(private assets: Assets, private map: MapDef, private theme: Theme) {
     const tStart = performance.now();
+    clearBake();
     this.materials = {
       steel: surfaceMaterial(assets, 'concrete', { color: 0xb9c2c8, metalness: 0.12, roughness: 0.85, normalScale: 0.6 }),
       steelDark: surfaceMaterial(assets, 'metalplate', { color: 0x6c757c, metalness: 0.35, normalScale: 0.6 }),
@@ -101,11 +113,16 @@ export class LevelView {
     this.materials.neon = new THREE.MeshBasicMaterial({ vertexColors: true });
     // A set of scans that draws the crates and lamps itself (src/render/warehouse.ts).
     this.scanned = !textureBudget().low && map.decor.some(d => d.kind === 'dressing' && d.set === 'warehouse');
-    const signs: SignDecor[] = [];
+    const signs: SignDecor[] = [], zoneSigns: SignDecor[][] = [];
     let shapes = 0;
     this.buildTerrain();
     const drawn = drawnBoxes(map);
+    this.zones = (map.sabotage ? COLLAPSE[map.id] ?? [] : []).map(z => new THREE.Box3(new THREE.Vector3(z[0], z[1], z[2]), new THREE.Vector3(z[3], z[4], z[5])));
+    this.standing = this.zones.map(() => []);
+    const point = new THREE.Vector3();
     map.decor.forEach((d, i) => {
+      const centre = this.zones.length ? decorCentre(d, map.solids) : null;
+      this.zone = centre ? this.zones.findIndex(z => z.containsPoint(point.fromArray(centre))) : -1;
       switch (d.kind) {
         case 'block': this.block(drawn.get(i) ?? map.solids[d.solid], d.style, d.solid, d.color); break;
         case 'detail': this.block(drawn.get(i)!, d.style, 100000 + i, d.color); break;
@@ -124,7 +141,7 @@ export class LevelView {
         case 'tree': this.tree(d.x, d.y, d.z, d.scale, d.variant); break;
         case 'crystal': this.crystal(d.x, d.y, d.z, d.scale, d.rotY); break;
         case 'mast': this.mast(d.x, d.y, d.z, d.height); break;
-        case 'sign': signs.push(d); break;
+        case 'sign': if (this.zone < 0) signs.push(d); else (zoneSigns[this.zone] ??= []).push(d); break;
         case 'marking': {
           const g = boxGeo(d.x, d.y, d.z, d.w, 0.004, d.d, 0, 4);
           tint(g, d.color, d.y, 1, 1);
@@ -134,6 +151,7 @@ export class LevelView {
         default: break;
       }
     });
+    this.zone = -1;
     for (const l of map.ladders ?? []) this.ladder(l);
     this.flush();
     if (!theme.urban) this.scatter();
@@ -142,34 +160,78 @@ export class LevelView {
     if (!dressed) this.horizon();
     // Static batching: props, fixtures and pads that share a material draw as one mesh.
     const t0 = performance.now(), meshes0 = this.group.children.length;
-    mergeStatic(this.group, staticMeshes(this.group, new Set(this.animated.map(a => a.object))), { name: 'level' });
+    mergeStatic(this.group, staticMeshes(this.group, new Set([...this.animated.map(a => a.object), ...this.standing.flat()])), { name: 'level' });
     this.buildStats = { buildMs: Math.round(performance.now() - tStart), mergeMs: Math.round((performance.now() - t0) * 10) / 10, children: [meshes0, this.group.children.length] };
     // Signs bake their text into a canvas: wait for the Chinese face so they never keep a fallback font.
-    const signsBuilt = signs.length
-      ? cjkFontReady(signs.map(s => s.text + (s.sub ?? '')).join('')).then(() => { this.group.add(signMesh(signs)); })
+    const signsBuilt = signs.length || zoneSigns.length
+      ? cjkFontReady([...signs, ...zoneSigns.flat()].map(s => s.text + (s.sub ?? '')).join('')).then(() => {
+        if (signs.length) this.group.add(signMesh(signs));
+        zoneSigns.forEach((list, zone) => { const mesh = signMesh(list); this.standing[zone].push(mesh); this.group.add(mesh); });
+      })
       : Promise.resolve();
     /** Resolves once the map's signs, dressing sets and model instances are built (they load on demand). */
     this.ready = Promise.all([signsBuilt, addDressing(this.group, map.decor, nearField(map.terrain), this.materials).then(ms => { this.buildStats.dressingMergeMs = Math.round(ms * 10) / 10; }, e => console.warn('dressing failed', e))]).then(() => {
       // Once everything stands, the big static casters cast from shadow proxies cut into cells.
       const t1 = performance.now(), casters: THREE.Mesh[] = [];
-      this.group.traverse(o => { if ((o as THREE.Mesh).isMesh) casters.push(o as THREE.Mesh); });
+      // (What the bomb can bring down casts its own shadow: a proxy would leave it on the ground after the fall.)
+      const falls = new Set<THREE.Object3D>(this.standing.flat());
+      this.group.traverse(o => { if ((o as THREE.Mesh).isMesh && !falls.has(o)) casters.push(o as THREE.Mesh); });
       this.buildStats.proxies = shadowProxies(this.group, casters, 'level').length;
+      this.collapses = this.standing.map(meshes => new Collapse(meshes));
+      for (const c of this.collapses) this.group.add(c.group);
       this.buildStats.proxyMs = Math.round((performance.now() - t1) * 10) / 10;
       this.buildStats.readyMs = Math.round(performance.now() - tStart);
     });
   }
   readonly ready: Promise<void>;
   /** Load cost of the static batching (ms) and the level's top-level objects before and after it (dev measurement). */
-  buildStats: { buildMs: number; mergeMs: number; dressingMergeMs?: number; proxyMs?: number; proxies?: number; readyMs?: number; children: [number, number] };
+  buildStats: { buildMs: number; mergeMs: number; bakeMs?: number; dressingMergeMs?: number; proxyMs?: number; proxies?: number; readyMs?: number; children: [number, number] };
 
   update(time: number) {
     for (const s of this.shields) s.uniforms.time.value = time;
     for (const a of this.animated) a.update(time);
+    const dt = Math.min(0.05, Math.max(0, time - this.last));
+    this.last = time;
+    for (const c of this.collapses) c.update(dt);
+    if (this.lit && bakeMix.value < 1) bakeMix.value = Math.min(1, bakeMix.value + dt / 1.2);
+  }
+
+  /**
+   * Baked light for the maps that have it (bake.ts): the sky's light by how much sky each place sees,
+   * sunlight thrown back into the shade, and the glow of lamps and signs. Worked out in the background
+   * once the level stands, then faded in. Not for the lean preset: it adds a texture read per pixel.
+   */
+  bake(): Promise<void> {
+    if (!BAKED.has(this.map.id)) return Promise.resolve();
+    return this.ready.then(() => { applyBake(this.group); return loadBake(this.map, this.theme); }).then(r => {
+      this.buildStats.bakeMs = r.ms;
+      this.lit = true;
+    }, e => console.warn('light bake failed', e));
+  }
+
+  /**
+   * The bomb's blast at Sabotage site `site` (its place in `sabotage.sites`) brings the building there
+   * down. A picture only: collision does not change, and the blast ends the round. Returns the space
+   * the building stood in (for the dust), or nothing when this map has no collapse there.
+   */
+  collapse(site: number, at: { x: number; y: number; z: number }): THREE.Box3 | undefined {
+    const c = this.collapses[site];
+    if (!c || c.fallen) return undefined;
+    for (const m of this.standing[site]) m.visible = false;
+    c.start(new THREE.Vector3(at.x, at.y + 0.5, at.z), at.y);
+    return this.zones[site];
+  }
+
+  /** A new round: the buildings stand again. */
+  restore() {
+    this.collapses.forEach((c, site) => { c.reset(); for (const m of this.standing[site]) m.visible = true; });
   }
 
   private add(material: string, geometry: THREE.BufferGeometry) {
-    let list = this.parts.get(material);
-    if (!list) { list = []; this.parts.set(material, list); }
+    // Parts of a collapse zone keep their own bucket, so they stay apart from the rest of the level.
+    const key = this.zone < 0 ? material : `${material}@${this.zone}`;
+    let list = this.parts.get(key);
+    if (!list) { list = []; this.parts.set(key, list); }
     // Normalize attributes so everything in a bucket merges cleanly.
     const g = geometry.index ? geometry.toNonIndexed() : geometry;
     if (!g.getAttribute('color')) {
@@ -181,10 +243,12 @@ export class LevelView {
   }
 
   private flush() {
-    for (const [name, list] of this.parts) {
+    for (const [key, list] of this.parts) {
       const geometry = mergeGeometries(list, false);
       if (!geometry) continue;
+      const [name, zone] = key.split('@');
       const mesh = new THREE.Mesh(geometry, this.materials[name]);
+      if (zone !== undefined) this.standing[+zone].push(mesh);
       mesh.castShadow = name !== 'glow' && name !== 'glowWarm' && name !== 'glass' && name !== 'window' && name !== 'water' && name !== 'marking' && name !== 'lightPanel' && name !== 'neon';
       mesh.receiveShadow = true;
       mesh.name = `level:${name}`;

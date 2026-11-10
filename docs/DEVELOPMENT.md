@@ -81,6 +81,7 @@ free-buy Solo match; for a **local** Online database, set `"freeBuy":true` in th
 Development pages (dev server only): `/dev/level.html?map=verdant` (map preview; `&cut=6` clips
 everything above 6 m to see under roofs),
 `/dev/soldier.html` (animation/IK pose sheet), `/dev/roster.html` (every soldier model through each movement state) and `/dev/crew.html` (a scripted skirmish; both take `?capture`, which holds the clock and exposes `window.__frame(n)` for frame-by-frame recordings on a software renderer), `/dev/viewmodel.html?ads=1` (first-person weapon),
+`/dev/fx.html?map=taipei` (explosions, the bomb collapse at a Sabotage site and the baked light: `window.__fx.explode(x, y, z, scale)`, `__fx.bomb(site)`, `__fx.restore()`; `&bake=0` turns the baked light off, `&manual=1` holds the clock for `__fx.advance(seconds)`),
 `/dev/viewer.html?model=/assets/props.glb` (asset viewer), `/dev/vehicles.html?show=car:0,scooter:1,heli:2&focus=0&angle=front`
 (drivable vehicles in a studio, with `&wrecked=1`, `&rotor=1`, `&seats=1`, `&boxes=1`; `?map=taipei&focus=3` at their map
 spots; `window.__stats` gives each one's draw calls and triangles), `/dev/flyover.html?sky=overcast&live=1` (the National

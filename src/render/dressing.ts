@@ -24,7 +24,7 @@ const SETS: Record<string, (materials: LevelMaterials) => Promise<DressingSet>> 
   ximending: async () => ({ skyline: (await import('./cityscape')).ximendingSkyline() }),
   xinyi: async () => ({ skyline: (await import('./cityscape')).xinyiSkyline() }),
   // The city round Taipei 101, seen from 88F (the map sets it far below).
-  // The Back Alley's photoscanned yard: its walls, ground, props and lamps.
+  // The Back Alley's photoscanned lanes and yard: its buildings, ground, props and lamps.
   alley: async () => ({ object: await (await import('./alley')).buildAlley() }),
   // The Warehouse's scanned floor, walls, decks and crates (nothing on the Low preset).
   warehouse: async materials => ({ object: await (await import('./warehouse')).buildWarehouse(materials) }),

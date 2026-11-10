@@ -118,8 +118,8 @@ export const THEMES: Record<ThemeId, Theme> = {
     sunColor: new THREE.Color(0xffc68e), sunIntensity: 3.0, hemiSky: new THREE.Color(0xb8c4dc), hemiGround: new THREE.Color(0x8a7a68), hemiIntensity: 1.55,
     planet: null, exposure: 1.0, urban: true,
   },
-  // A back yard after dark and after rain: a photographed dusk sky, a faint cool moon, and the
-  // yard's own sodium lamps and stove fire doing the lighting (src/render/alley.ts).
+  // Back lanes after dark and after rain: a photographed dusk sky, a faint cool moon, and the
+  // lanes' own sodium lamps, security lights and stove fire doing the lighting (src/render/alley.ts).
   alley: {
     id: 'alley', ground: 'asphalt', rock: 'concrete', dirt: 'concrete',
     groundTint: new THREE.Color(0.5, 0.5, 0.52), rockTint: new THREE.Color(0.6, 0.6, 0.6), dirtTint: new THREE.Color(0.5, 0.5, 0.52),

@@ -23,7 +23,7 @@ import { verdantDivide } from './verdant';
 import { warehouse } from './warehouse';
 import type { MapDef } from './types';
 
-/** BeGone's six maps first (in their release order), then the original battlefields, then Taipei's Ximending and Xinyi, then the office floor high up Taipei 101, then Memorial Hall (中正紀念堂), then Sanchong (三重) across the river, then the photoscanned Back Alley (後巷). */
+/** BeGone's six maps first (in their release order), then the original battlefields, then Taipei's Ximending and Xinyi, then the office floor high up Taipei 101, then Memorial Hall (中正紀念堂), then Sanchong (三重) across the river, then the photoscanned Back Alley (後巷): a yard, two lanes and a cross alley between six buildings. */
 export const MAP_IDS = ['crane', 'tower', 'warehouse', 'pipeline', 'courtyard', 'timbertown', 'cinder', 'frostline', 'verdant', 'ochre', 'citadel', 'railyard', 'skyline', 'meridian', 'taipei', 'xinyi', 'taipei101', 'memorial', 'sanchong', 'alley'] as const;
 export type MapId = (typeof MAP_IDS)[number];
 /**

@@ -266,13 +266,16 @@ no spawn slot sees the other base, that SWAT reaches each site 1.5–2.5 s ahead
 both), that bots reach every lane, deck and roof from both bases, that every standing spot has
 chest-high cover within 8 m, that Militia bots arm both sites, and the bases' slots and crates.
 
-**Back Alley** (後巷, 1v1 and 6v6, Elimination only) is one 36 × 15 m service yard between a brick
-workshop and a plastered walk-up, at night after rain. Everything seen is a photoscanned CC0 Poly Haven
-model under a photographed sky (`alley` theme; `src/render/alley.ts`); the map definition is the
-collision alone. The cover is rotationally symmetric: road barriers, a car under a tarpaulin, bins, a
-meter cabinet and the oil-drum stove that burns in the middle. Militia deploys at the west end, SWAT at
-the east, 28 m apart, and the barriers are lower than eye height, so the bases see each other: it is
-the smallest and fastest map. Its scans are a 45 MB download. No bomb sites, no vehicles.
+**Back Alley** (後巷, 1v1 and 6v6, Elimination and Sabotage) is a 72 × 45 m block of service lanes at
+night after rain: a brick workshop and a tenement on the north side, a depot and a plastered walk-up on
+the south, and a yard between them. Everything seen is a photoscanned CC0 Poly Haven model under a
+photographed sky (`alley` theme; `src/render/alley.ts`); the map definition is the collision alone.
+Three routes run between the bases (the yard, and a lane north and south of it), and a cross alley
+with an ammo crate joins each lane to the yard. The plan and its cover are rotationally symmetric: road
+barriers, cars under tarpaulins, bins, meter cabinets and the oil-drum stove that burns in the middle of
+the yard. Militia deploys at the west end and SWAT at the east, each behind a row of garages that hides
+the spawn slots from every lane. Bomb site A is at the east end of the north lane and B at the east
+end of the south lane. Its scans are a 45 MB download. No vehicles.
 `shared/maps/alley.test.ts` checks the rooms that offer it and that bots fight rounds to a result.
 
 Every map has ammo crates (one more stands in each base) and open team bases. Sabotage lists only the

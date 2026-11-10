@@ -1,18 +1,21 @@
 import * as THREE from 'three';
 import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader.js';
 import { MeshoptDecoder } from 'three/examples/jsm/libs/meshopt_decoder.module.js';
-import { ALLEY, ALLEY_COVER } from '../../shared/maps/alley';
+import { ALLEY, ALLEY_BLOCKS, ALLEY_COVER, type AlleyBlock } from '../../shared/maps/alley';
+import { rng } from '../../shared/math';
 import { assetUrl } from '../assetUrl';
 import { mergeStatic, staticMeshes } from './batch';
 import { textureBudget } from './textures';
 
 /**
  * The Back Alley's whole picture (the 'alley' dressing set): photoscanned CC0 Poly Haven models
- * (public/assets/alley, packed by tools/fetch-scans.ts) assembled into a yard, with a wet ground and
- * the yard's own lamps. The collision is shared/maps/alley.ts; the cover props stand exactly on its boxes.
+ * (public/assets/alley, packed by tools/fetch-scans.ts) assembled into lanes of buildings, with a wet
+ * ground and the lanes' own lamps. The collision is shared/maps/alley.ts: the buildings stand on its
+ * blocks (ALLEY_BLOCKS) and the cover props exactly on its boxes (ALLEY_COVER).
  *
  * The two facade kits are catalogues: every piece lies beside the others in the file. A piece is taken
- * by name, moved to its own corner and set on a 3 m grid (FACADES): x along the wall, y up, z out of it.
+ * by name, moved to its own corner and set on a 3 m grid (buildFacade): x along the wall, y up, z out of it.
+ * The walls are not drawn one by one by hand: a seeded lot fills each (cellsOf), so the map is the same every time.
  */
 
 const MODELS = [
@@ -82,8 +85,10 @@ function prop(kit: Kit, model: Model, spec: string, o: PropOptions) {
  * floor (0 the ground): the kits draw a different window for each of their floors.
  */
 type Cell = (k: number) => [wall: string, fill: string | null, slots: number];
+// 'r' is a plain wall without its foot: a roller shutter stands there (buildAlley), down to the ground.
 const FACTORY: Record<string, Cell> = {
   w: () => ['wall_standard_standard_01', null, 1],
+  r: () => ['wall_standard_standard_01', null, 1],
   G2: () => ['wall_door_garage_centered_01', 'door_garage_centered_01', 2],
   G3: () => ['wall_door_garage_double_01', 'door_garage_double_01', 3],
   dl: () => ['wall_door_centered_large_01', 'door_centered_large_01', 1],
@@ -95,6 +100,7 @@ const FACTORY: Record<string, Cell> = {
 };
 const APARTMENTS: Record<string, Cell> = {
   w: () => ['wall_standard_standard_01', null, 1],
+  r: () => ['wall_standard_standard_01', null, 1],
   dl: () => ['wall_door_centered_large_01', 'door_centered_large_01', 1],
   ds: () => ['wall_door_centered_small_01', 'door_centered_small_01', 1],
   L: k => [`wall_window_centered_large_0${k}`, `window_centered_large_0${k}`, 1],
@@ -102,59 +108,126 @@ const APARTMENTS: Record<string, Cell> = {
   D: k => [`wall_window_centered_double_0${k}`, `window_centered_double_0${k}`, 1],
 };
 
-interface Facade {
+type KitName = AlleyBlock['kit'];
+interface FacadeKit {
   model: Model; cells: Record<string, Cell>;
+  /** Trim along the whole wall: a cornice over the ground, first and second floors, and the crown on top. */
+  cornices: string[]; crown: string;
+  /** The foot of a plain ground-floor wall: [piece, y]. */
+  base: [string, number][];
+  /** The pier that wraps a building's corner (it stands at a wall's left end): x of the catalogue's, and its pieces. */
+  corner: number;
+  pier: { wall: string; foot: [string, number][]; cornices: string[]; crown: string };
+  /** What a slot holds where the wall is not set by hand, and how often: on the ground and above it. */
+  ground: [string, number][]; upper: [string, number][];
+  /** How many of its windows are lit. */
+  lit: number;
+  aircon: string;
+}
+const KITS: Record<KitName, FacadeKit> = {
+  // Brick workshops, with garage doors on the lanes.
+  factory: {
+    model: 'modular_factory_facade', cells: FACTORY,
+    cornices: ['cornice03_standard_standard_01', 'cornice02_standard_standard_01', 'cornice01_standard_standard_01'], crown: 'crown_standard_standard_01',
+    base: [['base_standard_standard_01', 0]],
+    corner: -29,
+    pier: { wall: 'wall_pier_corner_01', foot: [['dado_pier_corner_01', 0]], cornices: ['cornice02_pier_corner_01', 'cornice02_pier_corner_01', 'cornice01_pier_corner_01'], crown: 'crown_pier_corner_01' },
+    ground: [['w', 42], ['r', 10], ['dr', 12], ['dl', 8], ['G2', 18], ['G3', 10]],
+    upper: [['L', 25], ['M', 30], ['S', 10], ['D', 15], ['w', 20]],
+    lit: 0.12, aircon: 'exterior_aircon_unit_rusted',
+  },
+  // Plastered walk-ups, seen from behind.
+  apartments: {
+    model: 'modular_urban_apartments_facade', cells: APARTMENTS,
+    cornices: ['cornice_standard_standard_01', 'cornice_standard_standard_01', 'cornice_standard_standard_01'], crown: 'crown_standard_standard_01',
+    base: [['base_standard_01', 0], ['dado_standard_standard_01', 0.75]],
+    corner: -20,
+    pier: { wall: 'wall_pier_corner_01', foot: [['dado_pier_corner_01', 0.75]], cornices: ['cornice_pier_corner_01', 'cornice_pier_corner_01', 'cornice_pier_corner_01'], crown: 'crown_pier_corner_01' },
+    ground: [['w', 56], ['r', 12], ['ds', 22], ['dl', 10]],
+    upper: [['S', 25], ['L', 30], ['D', 20], ['w', 25]],
+    lit: 0.14, aircon: 'exterior_aircon_unit',
+  },
+};
+
+interface Facade {
+  id: string; kit: KitName;
   /** Where its left end stands and which way it runs: the wall faces local +z. */
   x: number; z: number; rot: number;
-  /** Floors from the ground up; each a row of cells ('-' continues a wide one). A '*' after a window lights it. */
-  floors: string[][];
-  /** Trim pieces along the whole wall: [piece, y of its foot]; `base` only under plain ground-floor walls. */
-  trims: [string, number][];
-  base: [string, number][];
+  slots: number; floors: number;
+  /** Its ground floor, where that is set by hand: a row of cells ('-' continues a wide one). */
+  ground?: string;
+  /** A building's own wall: a pier wraps its left end, the corner it shares with the wall before it. */
+  corner?: boolean;
 }
 
 const { halfX, halfZ } = ALLEY;
 const row = (s: string) => s.trim().split(/\s+/);
-const FACADES: Facade[] = [
-  // North: the brick workshop, with its garage doors on the yard.
-  {
-    model: 'modular_factory_facade', cells: FACTORY, x: -halfX, z: -halfZ, rot: 0,
-    floors: [
-      row('w  G2 -  w  dr w  G3 -  -  dl w  w'),
-      row('L  M* w  D  S  L  M  M* L  w  D  S'),
-      row('M  L  D* w  M  M  L  w  S  D  L* M'),
-      row('L  M  M  D  w  L* M  M  L  S  w  L'),
-    ],
-    trims: [['cornice03_standard_standard_01', 3], ['cornice02_standard_standard_01', 6], ['cornice01_standard_standard_01', 9], ['crown_standard_standard_01', 12]],
-    base: [['base_standard_standard_01', 0]],
-  },
-  // South: the plastered walk-up, seen from behind.
-  {
-    model: 'modular_urban_apartments_facade', cells: APARTMENTS, x: halfX, z: halfZ, rot: Math.PI,
-    floors: [
-      row('w  ds w  w  w  dl w  w  ds w  w  w'),
-      row('S  L* w  D  S  L  L  D* w  S  L  w'),
-      row('L  w  S* D  L  w  S  L  D  L* w  S'),
-      row('S  D  L  w  S* L  D  w  L  S  D  L'),
-    ],
-    trims: [['cornice_standard_standard_01', 3], ['cornice_standard_standard_01', 6], ['cornice_standard_standard_01', 9], ['crown_standard_standard_01', 12]],
-    base: [['base_standard_01', 0], ['dado_standard_standard_01', 0.75]],
-  },
-  // West end: the workshop turns the corner.
-  {
-    model: 'modular_factory_facade', cells: FACTORY, x: -halfX, z: halfZ, rot: Math.PI / 2,
-    floors: [row('w w w w w'), row('M w L* w M'), row('w S w S w'), row('M w L w M')],
-    trims: [['cornice03_standard_standard_01', 3], ['cornice02_standard_standard_01', 6], ['cornice01_standard_standard_01', 9], ['crown_standard_standard_01', 12]],
-    base: [['base_standard_standard_01', 0]],
-  },
-  // East end: the walk-up's gable.
-  {
-    model: 'modular_urban_apartments_facade', cells: APARTMENTS, x: halfX, z: -halfZ, rot: -Math.PI / 2,
-    floors: [row('w w w w w'), row('S w D w S*'), row('w L w S w'), row('S* w D w S')],
-    trims: [['cornice_standard_standard_01', 3], ['cornice_standard_standard_01', 6], ['cornice_standard_standard_01', 9], ['crown_standard_standard_01', 12]],
-    base: [['base_standard_01', 0], ['dado_standard_standard_01', 0.75]],
-  },
-];
+
+/** The ground floors set by hand, by building and side. */
+const GROUND: Record<string, Partial<Record<'north' | 'east' | 'south' | 'west', string>>> = {
+  // The workshop's garages and back door on the yard.
+  workshop: { south: 'w G2 - w w dr w G2 -' },
+  // Each row of lock-ups opens on the yard; a side door lets on the base.
+  'garages-west': { east: 'G3 - -', west: 'w dr w' },
+  'garages-east': { west: 'G3 - -', east: 'w dr w' },
+};
+
+/** Every wall of the map: the outer walls, as a street of different buildings, then the four sides of each block. */
+function facades(): Facade[] {
+  const out: Facade[] = [];
+  const run = (side: string, x: number, z: number, rot: number, parts: [KitName, number][]) => {
+    let at = 0;
+    parts.forEach(([kit, slots], i) => {
+      out.push({ id: `outer:${side}:${i}`, kit, x: x + Math.cos(rot) * at, z: z - Math.sin(rot) * at, rot, slots, floors: ALLEY.height / M });
+      at += slots * M;
+    });
+  };
+  // Where two outer walls meet in a corner they are of one building.
+  run('north', -halfX, -halfZ, 0, [['factory', 9], ['apartments', 8], ['factory', 7]]);
+  run('east', halfX, -halfZ, -Math.PI / 2, [['factory', 7], ['apartments', 8]]);
+  run('south', halfX, halfZ, Math.PI, [['apartments', 9], ['factory', 8], ['apartments', 7]]);
+  run('west', -halfX, halfZ, Math.PI / 2, [['apartments', 7], ['factory', 8]]);
+  for (const b of ALLEY_BLOCKS) {
+    const w = (b.x1 - b.x0) / M, d = (b.z1 - b.z0) / M, own = GROUND[b.id] ?? {}, wall = { kit: b.kit, floors: b.floors, corner: true };
+    out.push(
+      { ...wall, id: `${b.id}:south`, x: b.x0, z: b.z1, rot: 0, slots: w, ground: own.south },
+      { ...wall, id: `${b.id}:east`, x: b.x1, z: b.z1, rot: Math.PI / 2, slots: d, ground: own.east },
+      { ...wall, id: `${b.id}:north`, x: b.x1, z: b.z0, rot: Math.PI, slots: w, ground: own.north },
+      { ...wall, id: `${b.id}:west`, x: b.x0, z: b.z0, rot: -Math.PI / 2, slots: d, ground: own.west },
+    );
+  }
+  return out;
+}
+
+/** One of `from` ([value, weight]), by weight. */
+function pick<T>(random: () => number, from: [T, number][]) {
+  let r = random() * from.reduce((a, [, w]) => a + w, 0);
+  for (const [v, w] of from) if ((r -= w) < 0) return v;
+  return from[0][0];
+}
+
+/** A facade's cells, floor by floor from the ground: drawn by lot where they are not set by hand. A '*' after a window lights it. */
+function cellsOf(f: Facade, random: () => number): string[][] {
+  const K = KITS[f.kit], floors: string[][] = [];
+  if (f.ground) floors.push(row(f.ground));
+  else {
+    const g: string[] = [];
+    while (g.length < f.slots) {
+      // The ends stay plain: a corner pier or a downpipe stands there.
+      const i = g.length, token = i === 0 || i === f.slots - 1 ? 'w' : pick(random, K.ground);
+      const wide = K.cells[token](0)[2];
+      if (i + wide > f.slots - 1) { g.push('w'); continue; }
+      g.push(token);
+      for (let k = 1; k < wide; k++) g.push('-');
+    }
+    floors.push(g);
+  }
+  for (let k = 1; k < f.floors; k++) floors.push(Array.from({ length: f.slots }, () => {
+    const token = pick(random, K.upper);
+    return token !== 'w' && random() < K.lit ? `${token}*` : token;
+  }));
+  return floors;
+}
 
 const litGlass = new Map<THREE.Material, THREE.Material>();
 /**
@@ -175,38 +248,71 @@ function lightUp(window: THREE.Object3D) {
   });
 }
 
-function buildFacade(kit: Kit, f: Facade) {
-  const scene = kit[f.model], group = new THREE.Group();
-  group.position.set(f.x, 0, f.z); group.rotation.y = f.rot;
+const darkness = new THREE.MeshBasicMaterial({ color: 0x040507 });
+darkness.name = 'alley_dark';
+
+// The map is drawn in strips across x: what stands in one strip is one draw for each of its materials,
+// and a strip out of sight (or out of a lamp's reach, in its shadow pass) is not drawn at all.
+const STRIPS = 4;
+const strip = (x: number) => Math.min(STRIPS - 1, Math.max(0, Math.floor((x + halfX) / (halfX * 2 / STRIPS))));
+
+/** A facade as built: its cells, and the way to put more things on it. */
+interface Wall {
+  f: Facade; cells: string[][]; length: number; height: number;
+  /** The group (in the wall's own coordinates: x along it from its left end, y up, z out) that holds what stands at x. */
+  at: (x: number) => THREE.Group;
+  /** A point of the wall in the map's coordinates. */
+  point: (x: number, y: number, z: number) => THREE.Vector3;
+}
+
+function buildFacade(kit: Kit, f: Facade, random: () => number, strips: THREE.Group[], common: THREE.Group): Wall {
+  const K = KITS[f.kit], scene = kit[K.model];
+  const cos = Math.cos(f.rot), sin = Math.sin(f.rot);
+  const point = (x: number, y: number, z: number) => new THREE.Vector3(f.x + x * cos + z * sin, y, f.z - x * sin + z * cos);
+  const groups = new Map<number, THREE.Group>();
+  const at = (x: number) => {
+    const s = strip(point(x, 0, 0).x);
+    let g = groups.get(s);
+    if (!g) { g = new THREE.Group(); g.position.set(f.x, 0, f.z); g.rotation.y = f.rot; strips[s].add(g); groups.set(s, g); }
+    return g;
+  };
   /** A piece with (ax, ay) of the catalogue put on (x, y) of the wall. */
   let placed: THREE.Object3D | undefined;
   const put = (name: string, x: number, y: number, ax?: number, ay?: number) => {
     const g = take(scene, n => n === name);
-    if (!g.children.length) { console.warn('alley: no piece', f.model, name); return undefined; }
+    if (!g.children.length) { console.warn('alley: no piece', K.model, name); return undefined; }
     const b = bounds(g);
     g.position.set(x - (ax ?? Math.round(b.min.x)), y - (ay ?? b.min.y), 0);
-    group.add(g);
+    at(x + 0.01).add(g);
     placed = g;
     return b;
   };
-  const slots = f.floors[0].length, length = slots * M, height = f.floors.length * M;
-  f.floors.forEach((cells, k) => cells.forEach((token, i) => {
+  const cells = cellsOf(f, random), length = f.slots * M, height = f.floors * M;
+  cells.forEach((floor, k) => floor.forEach((token, i) => {
     if (token === '-') return;
-    const lit = token.endsWith('*'), cell = f.cells[lit ? token.slice(0, -1) : token];
+    const lit = token.endsWith('*'), cell = K.cells[lit ? token.slice(0, -1) : token];
     const [wall, fill] = cell(k);
     const b = put(wall, i * M, k * M);
     if (!b) return;
     const ax = Math.round(b.min.x), ay = Math.round(b.min.y);
     if (fill && put(fill, i * M, k * M, ax, ay) && lit) lightUp(placed!);
-    if (k === 0 && token === 'w') for (const [piece, y] of f.base) put(piece, i * M, y);
+    if (k === 0 && token === 'w') for (const [piece, y] of K.base) put(piece, i * M, y);
   }));
-  for (const [piece, y] of f.trims) for (let i = 0; i < slots; i++) put(piece, i * M, y);
+  for (let i = 0; i < f.slots; i++) {
+    for (let k = 1; k < f.floors; k++) put(K.cornices[k - 1], i * M, k * M);
+    put(K.crown, i * M, height);
+  }
+  if (f.corner) {
+    for (let k = 0; k < f.floors; k++) put(K.pier.wall, 0, k * M, K.corner);
+    for (const [piece, y] of K.pier.foot) put(piece, 0, y, K.corner);
+    for (let k = 1; k < f.floors; k++) put(K.pier.cornices[k - 1], 0, k * M, K.corner);
+    put(K.pier.crown, 0, height, K.corner);
+  }
   // Darkness behind the openings: the walls are one sheet thick.
-  const dark = new THREE.Mesh(new THREE.PlaneGeometry(length, height), new THREE.MeshBasicMaterial({ color: 0x040507 }));
-  dark.material.name = 'alley_dark';
-  dark.position.set(length / 2, height / 2, -0.62);
-  group.add(dark);
-  return group;
+  const dark = new THREE.Mesh(new THREE.PlaneGeometry(length, height), darkness);
+  dark.position.copy(point(length / 2, height / 2, -0.62)); dark.rotation.y = f.rot;
+  common.add(dark);
+  return { f, cells, length, height, at, point };
 }
 
 // ---- Ground ----------------------------------------------------------------------------------
@@ -369,10 +475,27 @@ function cable(a: THREE.Vector3, b: THREE.Vector3, sag: number, material: THREE.
 
 // ---- The yard --------------------------------------------------------------------------------
 
+/** The Low preset: the scans' pictures at half their size, a quarter of the memory (1 GB as they come). */
+async function halve(scenes: THREE.Object3D[]) {
+  const sources = new Set<THREE.Source>();
+  for (const scene of scenes) scene.traverse(o => {
+    const m = (o as THREE.Mesh).material as THREE.MeshStandardMaterial | undefined;
+    if (m) for (const t of [m.map, m.normalMap, m.roughnessMap, m.metalnessMap, m.aoMap, m.emissiveMap]) if (t) sources.add(t.source);
+  });
+  await Promise.all([...sources].map(async source => {
+    const image = source.data as ImageBitmap | HTMLImageElement;
+    if (!image || image.width < 512 || typeof createImageBitmap === 'undefined') return;
+    source.data = await createImageBitmap(image, { resizeWidth: image.width >> 1, resizeHeight: image.height >> 1, resizeQuality: 'medium' });
+    (image as ImageBitmap).close?.();
+    source.needsUpdate = true;
+  }));
+}
+
 async function loadKit(): Promise<Kit> {
   const loader = new GLTFLoader().setMeshoptDecoder(MeshoptDecoder);
   const scenes = await Promise.all(MODELS.map(id => loader.loadAsync(assetUrl(`assets/alley/${id}.glb`)).then(g => g.scene)));
-  const kit = {} as Kit, anisotropy = textureBudget().anisotropy;
+  const kit = {} as Kit, { anisotropy, low } = textureBudget();
+  if (low) await halve(scenes);
   MODELS.forEach((id, i) => {
     const scene = scenes[i];
     scene.updateMatrixWorld(true);
@@ -395,47 +518,75 @@ export async function buildAlley(): Promise<THREE.Object3D> {
   const low = textureBudget().low;
   const yard = new THREE.Group();
   yard.name = 'dressing:alley';
-  const still = new THREE.Group(), lights = new THREE.Group(), glare = new THREE.Group();
-  yard.add(still, lights, glare);
+  const strips = Array.from({ length: STRIPS }, () => new THREE.Group()), common = new THREE.Group();
+  const lights = new THREE.Group(), glare = new THREE.Group();
+  yard.add(...strips, common, lights, glare);
 
   yard.add(ground(low, glare));
-  const walls = FACADES.map(f => buildFacade(kit, f));
-  still.add(...walls);
-  const [north, south, west, east] = walls;
+  const walls = facades().map((f, i) => buildFacade(kit, f, rng(977 * (i + 1)), strips, common));
+  const wallOf = (id: string) => walls.find(w => w.f.id === id)!;
 
+  // A roof on each building, for whoever looks down on one.
+  const roofing = new THREE.MeshStandardMaterial({ color: 0x0c0c0e, roughness: 1 });
+  roofing.name = 'alley_roof';
+  for (const b of ALLEY_BLOCKS) {
+    const roof = new THREE.Mesh(new THREE.PlaneGeometry(b.x1 - b.x0, b.z1 - b.z0).rotateX(-Math.PI / 2), roofing);
+    roof.position.set((b.x0 + b.x1) / 2, b.floors * M, (b.z0 + b.z1) / 2);
+    roof.castShadow = true;
+    common.add(roof);
+  }
+
+  // ---- On the ground ----
+  const stand = (model: Model, spec: string, x: number, z: number, rot = 0, o: Partial<PropOptions> = {}) => { const p = prop(kit, model, spec, { x, z, rot, ...o }); strips[strip(x)].add(p); return p; };
   // The cover, on its collision boxes.
-  for (const c of ALLEY_COVER) still.add(prop(kit, c.model as Model, c.node, { x: c.x, z: c.z, rot: c.rot }));
+  for (const c of ALLEY_COVER) stand(c.model as Model, c.node, c.x, c.z, c.rot);
+  for (const [x, z, rot] of [[-2.4, 2.6, 0.3], [9.5, -1.2, 1.2], [-12, -19.4, 0.7], [12.5, 19.6, 2.1], [3.1, -12.2, 0.2], [-30.5, 9, 1.6], [30, -10, 0.5]]) stand('water_manhole_cover', '*', x, z, rot);
 
   // ---- On the walls (wall coordinates: x along it from its left end, y up, z out) ----
-  const on = (wall: THREE.Object3D, model: Model, spec: string, x: number, y: number, z = 0, o: Partial<PropOptions> = {}) => {
+  const on = (wall: Wall, model: Model, spec: string, x: number, y: number, z = 0, o: Partial<PropOptions> = {}) => {
     const p = prop(kit, model, spec, { x, y, z, anchor: 'back', ...o });
-    wall.add(p);
+    wall.at(x).add(p);
     return p;
   };
-  // Air conditioners under the windows, the rusted ones on the workshop.
-  for (const [x, y] of [[7.5, 3.5], [13.5, 6.6], [22.5, 3.6], [31.5, 6.5], [4.5, 9.6]]) on(north, 'exterior_aircon_unit', 'exterior_aircon_unit_rusted', x, y, 0.02);
-  for (const [x, y] of [[7.5, 6.5], [10.5, 3.6], [25.5, 6.6], [28.5, 3.5], [34.5, 6.5], [16.5, 9.6]]) on(south, 'exterior_aircon_unit', 'exterior_aircon_unit', x, y, 0.02);
-  on(east, 'exterior_aircon_unit', 'exterior_aircon_unit', 7.5, 3.6, 0.02);
-  on(west, 'exterior_aircon_unit', 'exterior_aircon_unit_rusted', 4.5, 6.6, 0.02);
-  // Roller shutters on the blank ground-floor walls.
-  on(south, 'rollershutter_door', 'rollershutter_door_graffiti', 7.5, 0, 0.0);
-  on(south, 'rollershutter_door', 'rollershutter_door', 19.5, 0, 0.0);
-  on(south, 'rollershutter_door', 'rollershutter_door', 28.5, 0, 0.0);
-  on(west, 'rollershutter_door', 'rollershutter_door_graffiti', 7.5, 0, 0.0);
-  on(east, 'rollershutter_door', 'rollershutter_door', 4.5, 0, 0.0);
-  on(east, 'rollershutter_door', 'rollershutter_door_graffiti', 10.5, 0, 0.0);
-  on(north, 'utility_box_01', 'utility_box_01_box', 10.2, 0, 0.0);
-  on(west, 'utility_box_01', 'utility_box_01_box', 13.2, 0, 0.0);
-  // Downpipes: in the four corners and between the buildings' bays.
-  const pipe = (wall: THREE.Object3D, x: number) => {
-    for (let y = 0.4; y < 11.5; y += 1) on(wall, 'modular_metal_gutter', 'modular_metal_gutter_section', x, y, 0.1);
+  const pipe = (wall: Wall, x: number) => {
+    for (let y = 0.4; y < wall.height - 0.5; y += 1) on(wall, 'modular_metal_gutter', 'modular_metal_gutter_section', x, y, 0.1);
     on(wall, 'modular_metal_gutter', 'modular_metal_gutter_outlet', x, 0, 0.05);
   };
-  pipe(north, 0.25); pipe(north, 18); pipe(north, 35.75); pipe(south, 0.25); pipe(south, 12); pipe(south, 24); pipe(south, 35.75); pipe(west, 0.3); pipe(east, 0.3);
+  /** Things left against a wall: boxes, or a stack of tyres. */
+  const litter = (wall: Wall, x: number, random: () => number) => {
+    if (random() < 0.55) {
+      for (let i = 0, n = 1 + Math.floor(random() * 3); i < n; i++) {
+        const p = wall.point(x - 0.6 + i * 0.62 + random() * 0.1, 0, 0.42 + random() * 0.2);
+        stand('cardboard_box_01', '*', p.x, p.z, random() * 3, { scale: 1.2 + random() * 0.5 });
+      }
+    } else {
+      const p = wall.point(x, 0, 0.5);
+      for (let i = 0, n = 2 + Math.floor(random() * 3); i < n; i++) stand('old_tyre', '*', p.x, p.z, random() * 3, { rx: Math.PI / 2, y: i * 0.16 });
+    }
+  };
+  const doors: { wall: Wall; x: number }[] = [];
+  walls.forEach((wall, n) => {
+    const random = rng(31 * (n + 1) + 7), K = KITS[wall.f.kit], slots = wall.f.slots;
+    wall.cells.forEach((floor, k) => floor.forEach((token, i) => {
+      const x = (i + 0.5) * M;
+      // Air conditioners under some of the windows.
+      if (k > 0) { if (token !== 'w' && random() < 0.09) on(wall, 'exterior_aircon_unit', K.aircon, x, k * M + 0.55, 0.02); return; }
+      if (token.startsWith('d')) { doors.push({ wall, x }); return; }
+      if (token === 'r') { on(wall, 'rollershutter_door', random() < 0.4 ? 'rollershutter_door_graffiti' : 'rollershutter_door', x, 0); return; }
+      if (token !== 'w' || i === 0 || i === slots - 1) return;
+      // Against a blank ground-floor wall: litter, a meter box, or nothing.
+      const r = random();
+      if (r < 0.25) litter(wall, x, random);
+      else if (r < 0.33) on(wall, 'utility_box_01', 'utility_box_01_box', x, 0);
+    }));
+    // Downpipes: where one outer building ends and the next begins, and one on a long side of a block.
+    if (!wall.f.corner) pipe(wall, 0.25);
+    else if (slots >= 7 && wall.cells[0][4] !== '-') pipe(wall, 4 * M);
+  });
 
   // The fire escape on the walk-up: decks at the first and second floors, stairs between and up.
   {
-    const fe = new THREE.Group(), src = kit.modular_fire_escape;
+    const fe = new THREE.Group(), src = kit.modular_fire_escape, wall = wallOf('walkup:north');
     const part = (name: string, y: number, sy = 1, top = false) => {
       const g = take(src, n => n === `modular_fire_escape_${name}`);
       g.scale.y = sy;
@@ -449,60 +600,62 @@ export async function buildAlley(): Promise<THREE.Object3D> {
     }
     part('stairs', 3, 0.75); part('stairs', 6, 0.75);
     part('ladder_bottom', 3.9, 0.6, true);
-    fe.position.set(21, 0, 0.8);
-    south.add(fe);
+    fe.position.set(7.5, 0, 0.8);
+    wall.at(7.5).add(fe);
   }
 
-  // ---- On the ground ----
-  const stand = (model: Model, spec: string, x: number, z: number, rot = 0, o: Partial<PropOptions> = {}) => { const p = prop(kit, model, spec, { x, z, rot, ...o }); still.add(p); return p; };
-  stand('water_manhole_cover', '*', -2.4, 2.6, 0.3); stand('water_manhole_cover', '*', 9.5, -1.2, 1.2);
-  // Boxes and tyres by the doors.
-  stand('cardboard_box_01', '*', -8.5, -6.9, 0.3, { scale: 1.5 }); stand('cardboard_box_01', '*', -8.45, -6.85, 1.1, { scale: 1.2, y: 0.5 });
-  stand('cardboard_box_01', '*', 8.6, 6.9, 2.2, { scale: 1.6 }); stand('cardboard_box_01', '*', 9.3, 6.7, 0.4, { scale: 1.3 });
-  stand('cardboard_box_01', '*', 15.2, -6.8, 0.9, { scale: 1.7 }); stand('cardboard_box_01', '*', 15.25, -6.85, 2.0, { scale: 1.3, y: 0.57 });
-  for (let i = 0; i < 4; i++) stand('old_tyre', '*', 2.2, -6.9, i * 0.5, { rx: Math.PI / 2, y: i * 0.16 });
-  for (let i = 0; i < 2; i++) stand('old_tyre', '*', 3.0, -6.8, i * 0.9, { rx: Math.PI / 2, y: i * 0.16 });
-  stand('old_tyre', '*', 3.7, -7.3, Math.PI / 2 + 0.2, { rx: 0.18 });
-  stand('old_tyre', '*', -16.9, 6.2, 0.4, { rx: Math.PI / 2 });
-  stand('metal_trash_can', 'metal_trash_can*', -17.0, -1.2, 0.3); stand('metal_trash_can', 'metal_trash_can*', 17.0, 1.2, 2.0);
-  // A power pole in two corners, cables across the yard between them and the walls.
-  stand('modular_electricity_poles', 'preset_01_*', -17.2, -6.8, Math.PI / 2); stand('modular_electricity_poles', 'preset_02_*', 17.2, 6.8, -Math.PI / 2);
+  // A power pole at each end of the yard, cables across the yard between them and the walls, and more across the lanes.
+  stand('modular_electricity_poles', 'preset_01_*', -16.6, -6.8, Math.PI / 2); stand('modular_electricity_poles', 'preset_02_*', 16.6, 6.8, -Math.PI / 2);
   const wire = new THREE.MeshStandardMaterial({ color: 0x0b0b0c, roughness: 0.5, metalness: 0.1 });
   wire.name = 'alley_wire';
-  const A = new THREE.Vector3(-17.2, 5.5, -6.8), B = new THREE.Vector3(17.2, 5.5, 6.8);
+  const A = new THREE.Vector3(-16.6, 5.5, -6.8), B = new THREE.Vector3(16.6, 5.5, 6.8), v = (x: number, y: number, z: number) => new THREE.Vector3(x, y, z);
   for (const [a, b, sag] of [
-    [A, B, 0.9], [A.clone().setY(5.0), new THREE.Vector3(-4, 7.4, 7.4), 0.5], [A.clone().setY(4.6), new THREE.Vector3(6, 8.2, 7.4), 0.7],
-    [B.clone().setY(5.1), new THREE.Vector3(3, 7.6, -7.4), 0.55], [B.clone().setY(4.7), new THREE.Vector3(-9, 8.6, -7.4), 0.8], [new THREE.Vector3(-12, 9.4, -7.4), new THREE.Vector3(-10, 9.1, 7.4), 0.6],
-  ] as [THREE.Vector3, THREE.Vector3, number][]) still.add(cable(a, b, sag, wire));
+    [A, B, 0.9], [A.clone().setY(5.0), v(-8, 7.4, 7.4), 0.5], [A.clone().setY(4.6), v(6, 8.2, 7.4), 0.7],
+    [B.clone().setY(5.1), v(8, 7.6, -7.4), 0.55], [B.clone().setY(4.7), v(-9, 8.6, -7.4), 0.8], [v(-12, 8.6, -7.4), v(-10, 8.2, 7.4), 0.6],
+    [v(-20, 8.4, -22.4), v(-18.5, 7.8, -16.6), 0.35], [v(12, 8.8, -22.4), v(14, 8.1, -16.6), 0.4],
+    [v(20, 8.4, 22.4), v(18.5, 7.8, 16.6), 0.35], [v(-12, 8.8, 22.4), v(-14, 8.1, 16.6), 0.4],
+    [v(0.1, 7.6, -12.5), v(5.9, 7.0, -11), 0.3], [v(-0.1, 7.0, 12.5), v(-5.9, 7.6, 11), 0.3],
+  ] as [THREE.Vector3, THREE.Vector3, number][]) common.add(cable(a, b, sag, wire));
 
   // ---- Light ----
   const warm = 0xffa24a, cool = 0xd6e4ff;
-  // Two sodium street lamps, in opposite corners of the middle: they light the yard and cast its shadows.
-  for (const [x, z] of [[-13.4, -7.05], [13.4, 7.05]]) {
-    stand('street_lamp_01', '*', x, z, z < 0 ? 0 : Math.PI);
-    const head = new THREE.Vector3(x, 3.55, z + (z < 0 ? 0.25 : -0.25));
+  // Sodium street lamps: [x, z, the way it faces, x of the ground it lights]. The two in the yard cast its shadows.
+  const lamps: [number, number, number, number, boolean][] = [
+    [-13.4, -7.05, 0, -10.7, true], [13.4, 7.05, Math.PI, 10.7, true],
+    [-9, -22.05, 0, -9, false], [19.5, -22.05, 0, 18, false], [9, 22.05, Math.PI, 9, false], [-19.5, 22.05, Math.PI, -18, false],
+    [-35.55, 0, Math.PI / 2, -31, false], [35.55, 0, -Math.PI / 2, 31, false],
+  ];
+  for (const [x, z, rot, tx, shadow] of lamps) {
+    stand('street_lamp_01', '*', x, z, rot);
+    const fx = Math.sin(rot), fz = Math.cos(rot);
+    const head = new THREE.Vector3(x + fx * 0.25, 3.55, z + fz * 0.25);
     const spot = new THREE.SpotLight(warm, 260, 22, 1.15, 0.7, 1.8);
     spot.position.copy(head);
-    spot.target.position.set(x * 0.8, 0, z * 0.25);
-    if (!low) { spot.castShadow = true; spot.shadow.mapSize.set(1024, 1024); spot.shadow.camera.near = 0.3; spot.shadow.camera.far = 22; spot.shadow.bias = -0.0006; spot.shadow.normalBias = 0.03; }
-    const fill = new THREE.PointLight(warm, 10, 9, 2);
-    fill.position.copy(head);
+    spot.target.position.set(tx, 0, z + fz * 5.3);
+    if (shadow && !low) { spot.castShadow = true; spot.shadow.mapSize.set(1024, 1024); spot.shadow.camera.near = 0.3; spot.shadow.camera.far = 22; spot.shadow.bias = -0.0006; spot.shadow.normalBias = 0.03; }
     const h = halo(warm, 2.6, 1.6); h.position.copy(head);
     const s = lightShaft(warm, 0.5, 3.5, 2.6); s.position.copy(head);
-    lights.add(spot, spot.target, fill); glare.add(h, s);
-  }
-  // Security lights over the doors: cold white pools on the wall and the ground under them.
-  const security = (wall: THREE.Object3D, x: number, y: number, color = cool, power = 70) => {
-    on(wall, 'security_light', 'security_light*', x, y, 0.0);
-    const at = wall.localToWorld(new THREE.Vector3(x, y - 0.05, 0.3)), to = wall.localToWorld(new THREE.Vector3(x, 0, 2.2));
-    const spot = new THREE.SpotLight(color, power, 11, 0.95, 0.85, 1.9);
-    spot.position.copy(at); spot.target.position.copy(to);
-    const h = halo(color, 1.3, 1.3); h.position.copy(at);
-    const s = lightShaft(color, 0.3, 3.0, 2.2); s.position.copy(at);
     lights.add(spot, spot.target); glare.add(h, s);
-  };
-  yard.updateMatrixWorld(true);
-  security(north, 13.5, 2.95); security(north, 28.5, 2.95); security(south, 16.5, 2.95); security(south, 4.5, 2.95, 0xffd2a0, 55); security(south, 25.5, 2.95, 0xffd2a0, 55);
+    if (shadow) { const fill = new THREE.PointLight(warm, 10, 9, 2); fill.position.copy(head); lights.add(fill); }
+  }
+  // Security lights over the doors. Every lamp is a cost in every lit surface, so only some of them
+  // burn (the others are dead fixtures): none within 12 m of another, the most a preset allows.
+  {
+    const random = rng(4242), burning: THREE.Vector3[] = [], most = low ? 4 : 8;
+    const order = doors.map(d => ({ d, key: random() })).sort((a, b) => a.key - b.key).map(o => o.d);
+    for (const { wall, x } of order) {
+      on(wall, 'security_light', 'security_light*', x, 2.95, 0.0);
+      const at = wall.point(x, 2.9, 0.3), to = wall.point(x, 0, 2.2);
+      if (burning.length >= most || burning.some(p => p.distanceTo(at) < 12)) continue;
+      burning.push(at);
+      const [color, power] = burning.length % 3 === 0 ? [0xffd2a0, 55] : [cool, 70];
+      const spot = new THREE.SpotLight(color, power, 11, 0.95, 0.85, 1.9);
+      spot.position.copy(at); spot.target.position.copy(to);
+      const h = halo(color, 1.3, 1.3); h.position.copy(at);
+      const s = lightShaft(color, 0.3, 3.0, 2.2); s.position.copy(at);
+      lights.add(spot, spot.target); glare.add(h, s);
+    }
+  }
   // The stove's fire: it flickers, and throws the shadows of everything near it across the yard.
   {
     const fire = new THREE.PointLight(0xff7a2a, 26, 13, 1.9);
@@ -525,7 +678,7 @@ export async function buildAlley(): Promise<THREE.Object3D> {
     flames.onBeforeRender = () => { if (drawn < 3) { drawn++; fire.shadow.needsUpdate = true; } };
   }
 
-  // One draw per material for everything that stands still.
-  mergeStatic(still, staticMeshes(still), { name: 'alley' });
+  // One draw per material for everything that stands still, in each strip.
+  for (const g of [...strips, common]) mergeStatic(g, staticMeshes(g), { name: 'alley' });
   return yard;
 }

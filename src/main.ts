@@ -345,7 +345,8 @@ const validMaps = () => mapsFor(perTeam(), mode);
 const mapOk = (id: string) => validMaps().includes(id);
 /** The first featured map the form can play: where a map the form cannot host moves to. */
 const firstMap = () => FEATURED.find(mapOk) ?? validMaps()[0];
-if (!mapOk(map)) map = firstMap();
+// A retired map stays when its ?map= link asked for it (Solo and Practice play it; the grid does not list it).
+if (!mapOk(map) && !(RETIRED_MAPS.has(map) && params.get('map') === map)) map = firstMap();
 
 // ---- Live rooms: a light subscription to the server's room rows while the lobby is open. ----
 /*
