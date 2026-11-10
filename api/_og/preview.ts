@@ -12,7 +12,7 @@ export type Preview = { kind: 'duel'; name: string; map?: string; beat?: number 
 
 /** Maps with a backdrop in `api/_og/maps` (the ones whose art is public), by their 繁體中文 names (src/ui/i18n.ts MAPS_ZH). */
 export const MAP_NAMES: Record<string, string> = {
-  citadel: '山城要塞', memorial: '中正紀念堂', meridian: '子午線街區', ochre: '赭石舊城', pipeline: '輸油管', railyard: '鐵道貨場',
+  alley: '後巷', citadel: '山城要塞', memorial: '中正紀念堂', meridian: '子午線街區', ochre: '赭石舊城', pipeline: '輸油管', railyard: '鐵道貨場',
   sanchong: '三重', skyline: '天際屋頂', taipei: '西門町', taipei101: '台北101・88F', timbertown: '伐木鎮', warehouse: '倉庫', xinyi: '台北101・信義',
 };
 
