@@ -1,5 +1,5 @@
 Models, surfaces and sky of the Back Alley map, from Poly Haven (https://polyhaven.com), CC0 1.0 Universal.
-Packed by tools/fetch-alley.ts (textures resized to WebP, geometry meshopt-compressed).
+Packed by tools/fetch-scans.ts (textures resized to WebP, geometry meshopt-compressed).
 
 https://polyhaven.com/a/modular_urban_apartments_facade
 https://polyhaven.com/a/modular_factory_facade

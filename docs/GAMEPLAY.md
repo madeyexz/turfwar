@@ -106,7 +106,7 @@ players nearby hear; the server heals +50 when the sip ends.
 
 ### Maps
 
-Thirteen maps are offered today. Crane, Tower, Courtyard, Cinder Basin, Frostline Reach and Verdant
+Fourteen maps are offered today. Crane, Tower, Courtyard, Cinder Basin, Frostline Reach and Verdant
 Divide are retired (`RETIRED_MAPS` in `shared/maps/index.ts`): still defined and loadable with
 `?map=`, but offered nowhere. All are described below.
 
@@ -265,6 +265,15 @@ checks that no eye-level line between two places a soldier can stand exceeds 60 
 no spawn slot sees the other base, that SWAT reaches each site 1.5–2.5 s ahead of Militia (2.3 s at
 both), that bots reach every lane, deck and roof from both bases, that every standing spot has
 chest-high cover within 8 m, that Militia bots arm both sites, and the bases' slots and crates.
+
+**Back Alley** (後巷, 1v1 and 6v6, Elimination only) is one 36 × 15 m service yard between a brick
+workshop and a plastered walk-up, at night after rain. Everything seen is a photoscanned CC0 Poly Haven
+model under a photographed sky (`alley` theme; `src/render/alley.ts`); the map definition is the
+collision alone. The cover is rotationally symmetric: road barriers, a car under a tarpaulin, bins, a
+meter cabinet and the oil-drum stove that burns in the middle. Militia deploys at the west end, SWAT at
+the east, 28 m apart, and the barriers are lower than eye height, so the bases see each other: it is
+the smallest and fastest map. Its scans are a 45 MB download. No bomb sites, no vehicles.
+`shared/maps/alley.test.ts` checks the rooms that offer it and that bots fight rounds to a result.
 
 Every map has ammo crates (one more stands in each base) and open team bases. Sabotage lists only the
 maps with bomb sites.

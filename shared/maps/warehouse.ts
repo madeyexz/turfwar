@@ -40,7 +40,7 @@ export function warehouse(): MapDef {
   const b = new MapBuilder({
     id: 'warehouse', name: 'Warehouse', region: 'FREIGHT DEPOT / CRATE HALL',
     description: 'A crate maze under a bridge, with sniping decks over both bays.',
-    theme: 'snow', halfX: HALF_X, halfZ: HALF_Z, seed: 5, roll: 0, ridge: 0,
+    theme: 'warehouse', halfX: HALF_X, halfZ: HALF_Z, seed: 5, roll: 0, ridge: 0,
     sun: { x: 0.35, y: 0.82, z: 0.3 },
     // Buried under the hall's slab floor (deep enough that no walkable layer hides beneath it); snowdrifts heap up against the outside walls.
     ground: (x, z) => { const e = Math.max(Math.abs(x) - HALF_X, Math.abs(z) - HALF_Z); return e > 0 ? Math.min(3, e * 0.3) : -1; },
@@ -96,5 +96,7 @@ export function warehouse(): MapDef {
     for (const [x, z, stack] of MAZE) for (let k = 0; k < stack; k++) b.crate(x, k * CRATE, z);
     b.point(b.mirroredSide ? 'C' : 'A', b.mirroredSide ? 'South Stacks' : 'North Stacks', -0.8, 0, -10, 6);
   });
+  // Above the Low preset the renderer draws scanned surfaces and crates in place of the plain ones (src/render/warehouse.ts).
+  b.raw({ kind: 'dressing', set: 'warehouse', x: 0, z: 0 });
   return b.build();
 }
