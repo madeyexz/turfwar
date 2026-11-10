@@ -28,20 +28,28 @@ const MILITIA: Look[] = [
 const lookOf = (team: number, variant: number) => team === 0 ? SWAT : MILITIA[variant % MILITIA.length];
 
 /**
- * The default crew (src/game/crew.ts, Quaternius' CC0 Modular Men): the SWAT operator is team 0, the
- * Militia are street-gang irregulars: the one the player picked (shared/skins.ts `look`), else in
- * rotation. Their bones carry the classic rig's names (tools/import-modular.ts), so the IK below
- * drives them unchanged; the colours are baked in the mesh (one skinned mesh, one draw call per soldier).
+ * The default crew (src/game/crew.ts, public/assets/operator.glb from tools/import-operator.ts): one
+ * textured soldier on the classic rig's bone names, so the IK below drives it unchanged. SWAT (team 0)
+ * wear its navy uniform; the Militia wear the camouflage, tinted by the look the player picked
+ * (shared/skins.ts `look`), else in rotation. One skinned mesh, one draw call per soldier.
  */
-const CREW_MILITIA = ['Farmer', 'Punk', 'Worker', 'Adventurer', 'Casual_2', 'Casual_Hoodie'];
-const crewMaterial = new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.84, metalness: 0.04 });
+/** Where the glove holds, from the wrist: metres along the hand and out of the palm. */
+const PALM = [0.08, 0.03];
+const MILITIA_TINTS = [0xffffff, 0xd9c7a0, 0xb9c4a2, 0xe6d2b8, 0xc2b79a, 0xa9b0a0];
+const crewMaterials = new Map<number, THREE.Material>();
 /** Which Militia variant a skin asks for, or the next in rotation. */
 const variantOf = (skin: Skin) => { const i = MILITIA_LOOKS.indexOf(skin.look as (typeof MILITIA_LOOKS)[number]); return i >= 0 ? i : spawned++; };
 function crewModel(assets: Assets, team: number, variant: number) {
-  const name = team === 0 ? 'Swat' : CREW_MILITIA[variant % CREW_MILITIA.length];
-  const model = SkeletonUtils.clone(assets.crew!.getObjectByName(name)!);
+  const model = SkeletonUtils.clone(assets.crew!.getObjectByName(team === 0 ? 'Swat' : 'Militia')!);
   const body = bodyOf(model);
-  body.material = crewMaterial;
+  const tint = team === 0 ? -1 : variant % MILITIA_TINTS.length;
+  let material = crewMaterials.get(tint);
+  if (!material) {
+    material = body.material as THREE.MeshStandardMaterial;
+    if (tint > 0) { material = material.clone(); (material as THREE.MeshStandardMaterial).color.setHex(MILITIA_TINTS[tint]); }
+    crewMaterials.set(tint, material);
+  }
+  body.material = material;
   body.castShadow = true; body.receiveShadow = true; body.frustumCulled = false;
   return model;
 }
@@ -681,10 +689,14 @@ export class SoldierView {
     const pole = (sign: number) => chest.clone().addScaledVector(right, sign * 0.7 + (sign > 0 ? elbowLift * 0.2 : 0))
       .addScaledVector(up, -0.9 + (sign > 0 ? elbowLift * 1.5 : 0)).addScaledVector(fwd, sign > 0 ? -0.3 : 0.1);
     this.debug = { chest: chest.clone(), grip: gripWorld.clone(), fore: foreWorld.clone() };
-    solveArm(this.bones, 'r', gripWorld, pole(1));
-    solveArm(this.bones, 'l', foreWorld, pole(-1));
-    orientHand(this.bones, 'r', fwd.clone().addScaledVector(gunUp, -0.8).normalize().applyQuaternion(wrist), right.clone().negate().applyQuaternion(wrist));
-    orientHand(this.bones, 'l', knife ? fwd.clone().addScaledVector(gunUp, 0.5).normalize() : fwd.clone().addScaledVector(right, 0.3).normalize(), knife ? right : gunUp);
+    const aimR = fwd.clone().addScaledVector(gunUp, -0.8).normalize().applyQuaternion(wrist), palmR = right.clone().negate().applyQuaternion(wrist);
+    const aimL = knife ? fwd.clone().addScaledVector(gunUp, 0.5).normalize() : fwd.clone().addScaledVector(right, 0.3).normalize(), palmL = knife ? right : gunUp;
+    // The crew's glove closes round the point PALM: its wrist sits behind the grip. (The classic rig takes the grip at the wrist.)
+    const wristAt = (hold: THREE.Vector3, aim: THREE.Vector3, palm: THREE.Vector3) => this.crew ? hold.clone().addScaledVector(aim, -PALM[0]).addScaledVector(palm, -PALM[1]) : hold;
+    solveArm(this.bones, 'r', wristAt(gripWorld, aimR, palmR), pole(1));
+    solveArm(this.bones, 'l', wristAt(foreWorld, aimL, palmL), pole(-1));
+    orientHand(this.bones, 'r', aimR, palmR);
+    orientHand(this.bones, 'l', aimL, palmL);
     const curl = this.crew ? CREW_CURL : 1;
     curlFingers(this.bones, 'r', (knife ? 0.85 : 0.55) * curl, 0.5);
     curlFingers(this.bones, 'l', (knife ? 0.8 : 0.45) * curl, 0.4);

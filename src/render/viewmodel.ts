@@ -15,8 +15,8 @@ import { SWING, type KnifeSkin } from '../../shared/skins';
 /** Where the weapon rests at the hip (gun-group space) and how far ahead of the eye it sits when aimed (fitted sights set their own eye relief). */
 const HOLD: Record<WeaponId, { hip: THREE.Vector3; adsZ: number }> = {
   knife: { hip: new THREE.Vector3(0.16, -0.18, -0.34), adsZ: -0.34 },
-  mp5: { hip: new THREE.Vector3(0.14, -0.3, -0.36), adsZ: -0.34 },
-  mp7: { hip: new THREE.Vector3(0.14, -0.28, -0.36), adsZ: -0.33 },
+  mp5: { hip: new THREE.Vector3(0.14, -0.3, -0.36), adsZ: -0.2 },
+  mp7: { hip: new THREE.Vector3(0.14, -0.22, -0.46), adsZ: -0.3 },
   m4a1: { hip: new THREE.Vector3(0.14, -0.32, -0.36), adsZ: -0.36 },
   m110: { hip: new THREE.Vector3(0.12, -0.22, -0.34), adsZ: -0.4 },
   m249: { hip: new THREE.Vector3(0.15, -0.36, -0.38), adsZ: -0.4 },

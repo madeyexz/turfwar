@@ -1,6 +1,6 @@
 /**
- * The models' own textures (soldier.glb, weapons.glb, props.glb: the kit's trim sheets, gun and prop
- * batches and the first-person arms) as GPU-compressed KTX2, like the surface sets (tools/make-ktx2.ts).
+ * The models' own textures (soldier.glb, weapons.glb, props.glb, arsenal.glb, operator.glb: the kit's trim sheets, gun and prop
+ * batches, the first-person arms and the store guns) as GPU-compressed KTX2, like the surface sets (tools/make-ktx2.ts).
  * Inside a GLB they were WebP that the browser unpacks to raw RGBA: on Low each 512² map cost 1.4 MB of
  * video memory, about 40 MB for the set; as ETC1S it is 0.2–0.4 MB.
  *
@@ -17,7 +17,7 @@
  * normals, the packed occlusion/roughness/metalness maps linear ETC1S.
  *
  * Idempotent: a GLB that already holds stand-ins is left alone and its KTX2 files are made from the .webp
- * in modeltex/. Re-run after tools/import-assets.ts or tools/import-guns.ts writes new GLBs.
+ * in modeltex/. Re-run after tools/import-assets.ts tools/import-arsenal.ts or tools/import-operator.ts writes new GLBs.
  * Needs `basisu` 2.x (see tools/make-ktx2.ts).
  * Run: bun tools/make-model-textures.ts
  */
@@ -33,7 +33,7 @@ import { compressLossless } from './compress-models';
 
 const ASSETS = join(import.meta.dir, '../public/assets');
 const OUT = join(ASSETS, 'modeltex');
-const MODELS = ['soldier', 'weapons', 'props'];
+const MODELS = ['soldier', 'weapons', 'props', 'arsenal', 'operator'];
 
 const ETC1S = ['-etc1s', '-quality', '100', '-effort', '5'];
 type Kind = 'color' | 'normal' | 'data';

@@ -1,7 +1,7 @@
 /**
- * Which soldier models the game draws. The default crew is Quaternius' "Ultimate Modular Men" (CC0):
- * the SWAT operator for team 0 and street-gang irregulars for the Militia (public/assets/soldiers.glb,
- * tools/import-modular.ts). `?soldiers=classic` brings back the Universal Base Characters soldier
+ * Which soldier models the game draws. The default crew is one realistic infantry soldier (CC0, Grab3D)
+ * in a navy uniform for the SWAT side and camouflage for the Militia, whose six looks are tints of it
+ * (public/assets/operator.glb, tools/import-operator.ts; it moves on the skeleton of soldiers.glb). `?soldiers=classic` brings back the Universal Base Characters soldier
  * painted in team colours with procedural gear (public/assets/soldier.glb).
  */
 export const crewRequested = (search: string) => !/(?:^|[?&])soldiers=classic(?:&|$)/i.test(search);

@@ -51,6 +51,18 @@ export function solveArm(bones: Bones, side: 'l' | 'r', target: THREE.Vector3, p
 }
 
 /**
+ * The knuckle line, index to pinky. On the crew's rig the `_01` finger bones all start at one point
+ * in the palm (its knuckles are the `_02` bones).
+ */
+function knuckleLine(bones: Bones, side: 'l' | 'r') {
+  const at = (n: number, finger: string) => bones.get(`${finger}_0${n}_${side}`)?.getWorldPosition(new THREE.Vector3());
+  let line = at(1, 'pinky')!.sub(at(1, 'index')!);
+  const index = at(2, 'index'), pinky = at(2, 'pinky');
+  if (line.lengthSq() < 1e-8 && index && pinky) line = pinky.sub(index);
+  return line.normalize();
+}
+
+/**
  * Point the hand along `forward` and roll it so the palm faces `palm` (both world space).
  * The palm normal is derived from the knuckle line, so no bone-axis knowledge is needed.
  */
@@ -60,7 +72,7 @@ export function orientHand(bones: Bones, side: 'l' | 'r', forward: THREE.Vector3
   const origin = hand.getWorldPosition(new THREE.Vector3());
   aimBone(hand, middle, origin.clone().add(forward));
   const handDir = middle.getWorldPosition(new THREE.Vector3()).sub(origin).normalize();
-  const knuckles = pinky.getWorldPosition(new THREE.Vector3()).sub(index.getWorldPosition(new THREE.Vector3())).normalize();
+  const knuckles = knuckleLine(bones, side);
   // For the right hand index→pinky × direction points out of the palm; mirrored on the left.
   const currentPalm = new THREE.Vector3().crossVectors(handDir, knuckles).multiplyScalar(side === 'r' ? 1 : -1).normalize();
   const wanted = palm.clone().sub(handDir.clone().multiplyScalar(palm.dot(handDir))).normalize();
@@ -75,7 +87,7 @@ const FINGERS = ['index', 'middle', 'ring', 'pinky'];
 export function curlFingers(bones: Bones, side: 'l' | 'r', curl: number, thumb: number) {
   const index = bones.get(`index_01_${side}`), pinky = bones.get(`pinky_01_${side}`), hand = bones.get(`hand_${side}`), middle = bones.get(`middle_01_${side}`);
   if (!index || !pinky || !hand || !middle) return;
-  const axis = pinky.getWorldPosition(new THREE.Vector3()).sub(index.getWorldPosition(new THREE.Vector3())).normalize();
+  const axis = knuckleLine(bones, side);
   if (side === 'l') axis.negate();
   for (const f of FINGERS) for (let j = 1; j <= 3; j++) {
     const bone = bones.get(`${f}_0${j}_${side}`);

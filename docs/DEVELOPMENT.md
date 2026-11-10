@@ -90,10 +90,12 @@ Day flyover, `src/render/flyover.ts`, over Liberty Square from the memorial hall
 `fixeddt` and `capture` make automated runs deterministic on software renderers; `flyover` sends the flyover over a
 match every minute (not in production builds).
 
-Third-person soldiers are Quaternius' Modular Men (`public/assets/soldiers.glb`, `soldier-anims.glb`; `bun tools/import-modular.ts`
-with the pack's `Individual Characters/glTF` folder at `MODULAR_SRC`): the SWAT operator for team 0, six street-gang characters
-for the Militia (`src/game/crew.ts`). The importer renames their bones to the Universal Base Characters rig's names, so the IK in
-`src/render/rig.ts` drives both. `?soldiers=classic` brings back the older soldier with procedural gear; first-person arms always
+Third-person soldiers are one realistic soldier (`public/assets/operator.glb`, `bun tools/import-operator.ts`): navy for the SWAT
+side, camouflage for the Militia, whose six looks are tints (`src/game/crew.ts`, `src/render/soldier.ts`). It moves on the skeleton
+and clips of Quaternius' Modular Men (`soldiers.glb`, which only the importer reads, and `soldier-anims.glb`; `bun tools/import-modular.ts`
+with the pack's `Individual Characters/glTF` folder at `MODULAR_SRC`). That importer renames the bones to the Universal Base Characters
+rig's names, so the IK in `src/render/rig.ts` drives both. The store's guns are `public/assets/arsenal.glb` (`bun tools/import-arsenal.ts`).
+After either importer, run `bun tools/make-model-textures.ts`. `?soldiers=classic` brings back the older soldier with procedural gear; first-person arms always
 use that classic soldier.
 
 The map picker shows a picture of each map (`public/media/maps/<id>.webp`, 480×270, under 40 KB).
