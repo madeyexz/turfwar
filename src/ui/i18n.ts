@@ -828,6 +828,7 @@ const MAPS_ZH: Record<MapId, { name: string }> = {
   taipei101: { name: '台北101・88F' },
   memorial: { name: '中正紀念堂' },
   sanchong: { name: '三重' },
+  alley: { name: '後巷' },
 };
 
 /** Attachment names: the optics in Taiwan players' words (紅點, 全像, ACOG, 倍鏡). */

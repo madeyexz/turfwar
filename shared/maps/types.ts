@@ -8,9 +8,10 @@ import type { VehicleSpot } from '../vehicles';
  * highrise is golden hour seen from an office floor 380 m up Taipei 101.
  * memorial is golden hour over Memorial Hall's white marble and its gardens.
  * sanchong is a warm, hazy late afternoon over Sanchong's walk-ups and the river.
+ * alley is a back yard after dark and after rain, under a photographed sky (Theme.sky) and its own lamps.
  */
 export type ThemeId = 'desert' | 'snow' | 'forest' | 'dusk' | 'twilight' | 'steppe' | 'meadow' | 'taipei' | 'xinyi' | 'highrise'
-  | 'memorial' | 'sanchong';
+  | 'memorial' | 'sanchong' | 'alley';
 
 /** Visual treatment of a solid. Collision is identical regardless of style. */
 export type BlockStyle =
