@@ -6,6 +6,8 @@
   "scripts": {
     "import-assets": "bun import-assets.ts",
     "import-guns": "bun import-guns.ts",
+    "import-arsenal": "bun import-arsenal.ts",
+    "import-operator": "bun import-operator.ts",
     "fetch-sounds": "bun fetch-sounds.ts",
     "subset-font": "bun subset-font.ts",
     "make-icons": "bun make-icons.ts",

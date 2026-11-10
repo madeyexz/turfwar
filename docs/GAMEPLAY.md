@@ -69,8 +69,8 @@ same slipper in polished gold, swung and heard the same; earned by inviting frie
 red-handled plastic broom with a neon-green head and splayed pink-and-green bristles, held two-handed and
 brought down flat in an overhead swat, with a straw whoosh and THWUMP) and the classic **knife**. The knife
 slot is called by your skin wherever it is named for you, and the kill feed names and marks the killer's.
-Militia characters: Rotate (the default) or one of Farmer, Punk, Worker, Adventurer, Casual, Hoodie; SWAT
-keep their one operator so the sides stay easy to tell apart. Looks, names and sounds only: the weapon id,
+Militia characters: Rotate (the default) or one of Farmer, Punk, Worker, Adventurer, Casual, Hoodie, which are
+now six shades of the one camouflage soldier; SWAT keep their one navy operator so the sides stay easy to tell apart. Looks, names and sounds only: the weapon id,
 stats, strike, throw and pick-up are the knife's whatever the skin. The choice is saved per browser
 (`src/game/skins.ts`; `?classic=1` shows the knife for one visit). Online the client sends it with the
 `set_skin` reducer; the tick cleans it (`setSkin`) and keeps it in the soldier's gear JSON, and every client

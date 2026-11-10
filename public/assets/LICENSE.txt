@@ -10,13 +10,24 @@ pack (Swat, Farmer, Punk, Worker, Adventurer, Casual_2, Casual_Hoodie; Feb 2022)
 (https://quaternius.com/packs/ultimatemodularcharacters.html). Bones renamed to the soldier rig's names, meshes merged
 with their colours baked as vertex colours and compressed by tools/import-modular.ts.
 
-guns.glb: guns and accessories from Quaternius' "Ultimate Gun Pack" (July 2019), CC0 1.0 Universal
-(https://opengameart.org/content/low-poly-guns-pack, https://quaternius.itch.io/50-lowpoly-guns):
-SubmachineGun_3 (MP5), SubmachineGun_2 (MP7), AssaultRifle2_1 (M4A1), AssaultRifle2_2 (M110),
-AssaultRifle2_3 (M249), Shotgun_1 (M1014), Pistol_3 (M9A1), Accessories/Bayonet_2 (knife),
-Accessories/Silencer_2 (suppressor) and Accessories/Grip (vertical grip). Converted from OBJ with
-tools/import-guns.ts (flipped to barrel -X, rescaled, meshopt-compressed). Optics, bipods, the M249's
-stock and ammo box, lasers, flashlights and other attachments are modelled in code (src/render).
+operator.glb: the third-person soldier, from "Soldier" by Grab3D (https://grab3d.com), CC0 1.0 Universal. Its
+licence file states: "AI-assisted: base mesh and textures generated with Meshy". Converted by
+tools/import-operator.ts: simplified to 14 000 triangles, posed onto the skeleton of soldiers.glb (which stays in
+this folder as that skeleton's source and is not loaded by the game), textures resized, and a navy copy of the
+uniform painted for the SWAT side.
+
+arsenal.glb: the store's guns and the knife, converted by tools/import-arsenal.ts (flipped to barrel -X, rescaled,
+simplified, meshopt-compressed; textures packed and resized):
+- Stein Games' "Free Classic Weapons Pack", CC0 1.0 Universal (stated in the pack's licence file): MP5, M4A1,
+  and the AK-47, M14, MAC-10, M1911 and pump shotgun that stand in for the M249, M110, MP7, M9A1 and M1014.
+- 3dmodelscc0's "Guns & Explosives" and "Melee Weapons Pack #1" (https://www.3dmodelscc0.com), CC0 1.0 Universal
+  (stated on the packs' web pages; the archives hold no licence file): see tools/import-arsenal.ts for the model
+  each pack gives.
+
+guns.glb: the suppressor and vertical grip (Accessories/Silencer_2, Accessories/Grip) from Quaternius' "Ultimate
+Gun Pack" (July 2019), CC0 1.0 Universal (https://opengameart.org/content/low-poly-guns-pack,
+https://quaternius.itch.io/50-lowpoly-guns). Converted from OBJ with tools/import-guns.ts. Optics, bipods, lasers,
+flashlights and other attachments are modelled in code (src/render).
 
 sfx/: gunshots from "The Free Firearm Sound Library" (Ben Jaszczak, Brian Nelson, Kevin Heras and
 Matthew Nanney) and reload/handling foley by SpringySpringo, BMacZero (Brian MacIntosh), zer0_sol and

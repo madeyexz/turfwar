@@ -31,7 +31,7 @@ describe('props.glb', () => {
   });
 
   it('needs only extensions the client decodes', () => {
-    for (const file of ['props.glb', 'weapons.glb', 'soldier.glb']) {
+    for (const file of ['props.glb', 'weapons.glb', 'soldier.glb', 'arsenal.glb', 'operator.glb']) {
       for (const ext of glbJson(file).extensionsRequired ?? []) expect(['EXT_meshopt_compression', 'EXT_texture_webp', 'KHR_mesh_quantization'], `${file}: ${ext}`).toContain(ext);
     }
   });
@@ -41,7 +41,7 @@ describe('model textures', () => {
   // tools/make-model-textures.ts: each GLB texture is a 1×1 stand-in; the real one loads from assets/modeltex (src/render/textures.ts loadModelTextures).
   it('are stand-ins in the GLBs, with their WebP and both KTX2 sizes in modeltex/', () => {
     const dir = join(__dirname, '../public/assets/modeltex');
-    for (const file of ['props.glb', 'weapons.glb', 'soldier.glb']) {
+    for (const file of ['props.glb', 'weapons.glb', 'soldier.glb', 'arsenal.glb', 'operator.glb']) {
       const gltf = glbJson(file);
       expect(gltf.images?.length, file).toBeGreaterThan(0);
       for (const image of gltf.images ?? []) {
