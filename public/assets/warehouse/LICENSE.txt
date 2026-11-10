@@ -1,0 +1,15 @@
+Models, surfaces and sky of the Warehouse map, from Poly Haven (https://polyhaven.com), CC0 1.0 Universal.
+Packed by tools/fetch-scans.ts (textures resized to WebP, geometry meshopt-compressed).
+
+https://polyhaven.com/a/wooden_military_crate
+https://polyhaven.com/a/hanging_industrial_lamp
+https://polyhaven.com/a/power_box_01
+https://polyhaven.com/a/korean_fire_extinguisher_01
+https://polyhaven.com/a/Barrel_01
+https://polyhaven.com/a/barrel_03
+https://polyhaven.com/a/hand_truck
+https://polyhaven.com/a/concrete_floor_worn_001
+https://polyhaven.com/a/corrugated_iron_02
+https://polyhaven.com/a/metal_plate
+https://polyhaven.com/a/green_metal_rust
+https://polyhaven.com/a/kloofendal_48d_partly_cloudy_puresky

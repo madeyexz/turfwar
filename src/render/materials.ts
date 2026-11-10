@@ -14,6 +14,8 @@ export interface Theme {
   urban?: boolean;
   /** A photographed sky (an equirectangular .hdr under public/): the background and the environment light, in place of the drawn sky. */
   sky?: string;
+  /** How bright that sky is, as backdrop and as light (0.22, a night sky, unless given). */
+  skyLight?: number;
   /** Screen-space ambient occlusion (not on the `low` preset): for maps of scanned models, whose creases carry the look. */
   ao?: boolean;
 }
@@ -124,6 +126,15 @@ export const THEMES: Record<ThemeId, Theme> = {
     skyTop: new THREE.Color(0x0a1026), skyHorizon: new THREE.Color(0x3a3558), fog: new THREE.Color(0x141a2a), fogDensity: 0.011,
     sunColor: new THREE.Color(0xaebcff), sunIntensity: 0.16, hemiSky: new THREE.Color(0x7484b8), hemiGround: new THREE.Color(0x5a4a3c), hemiIntensity: 0.09,
     planet: null, exposure: 1.05, urban: true, sky: 'assets/alley/sky.hdr', ao: true,
+  },
+  // Inside the Warehouse by day (snow outside, as on the snow theme it had): the sun comes through the roof lights in bars, the rest is the dim
+  // bounce of a closed hall, so the sky lights little and the creases are dark (src/render/warehouse.ts).
+  warehouse: {
+    id: 'warehouse', ground: 'snow', rock: 'icerock', dirt: 'icerock',
+    groundTint: new THREE.Color(0.95, 0.98, 1.05), rockTint: new THREE.Color(0.56, 0.64, 0.78), dirtTint: new THREE.Color(0.8, 0.88, 1.0),
+    skyTop: new THREE.Color(0x5f86b8), skyHorizon: new THREE.Color(0xcfdbe6), fog: new THREE.Color(0xa9b4bd), fogDensity: 0.004,
+    sunColor: new THREE.Color(0xfff0d8), sunIntensity: 5.2, hemiSky: new THREE.Color(0xcfdcec), hemiGround: new THREE.Color(0x8a8378), hemiIntensity: 0.95,
+    planet: null, exposure: 0.95, urban: true, sky: 'assets/warehouse/sky.hdr', skyLight: 0.85, ao: true,
   },
 };
 

@@ -45,6 +45,7 @@ export class LevelView {
   readonly shields: THREE.ShaderMaterial[] = [];
   private parts = new Map<string, THREE.BufferGeometry[]>();
   private materials: Record<string, THREE.Material>;
+  private scanned = false;
   private animated: { object: THREE.Object3D; update: (t: number) => void }[] = [];
   /** Self-lit fixtures and rings: the colour (past 1 for the bloom) rides in the vertices, so they batch. */
   private unlit = new THREE.MeshBasicMaterial({ vertexColors: true });
@@ -98,6 +99,8 @@ export class LevelView {
     this.materials.gold = new THREE.MeshStandardMaterial({ vertexColors: true, metalness: 0.85, roughness: 0.32 });
     // Self-lit strips and lamps: vertex colours brighter than white, so bloom picks them up.
     this.materials.neon = new THREE.MeshBasicMaterial({ vertexColors: true });
+    // A set of scans that draws the crates and lamps itself (src/render/warehouse.ts).
+    this.scanned = !textureBudget().low && map.decor.some(d => d.kind === 'dressing' && d.set === 'warehouse');
     const signs: SignDecor[] = [];
     let shapes = 0;
     this.buildTerrain();
@@ -115,7 +118,7 @@ export class LevelView {
         case 'truss': this.truss(new THREE.Vector3(d.x0, d.y0, d.z0), new THREE.Vector3(d.x1, d.y1, d.z1), d.w, d.h, d.color ?? LOOKS.steel.color); break;
         case 'ramp': this.ramp(map.ramps[d.ramp], d.style); break;
         case 'prop': this.prop(d.model, d.x, d.y, d.z, d.rotY, d.scale ?? 1); break;
-        case 'light': this.light(d.x, d.y, d.z, d.color, d.intensity, d.distance); break;
+        case 'light': if (!this.scanned) this.light(d.x, d.y, d.z, d.color, d.intensity, d.distance); break;
         case 'rail': this.rail(d.x0, d.z0, d.x1, d.z1, d.y); break;
         case 'spawnPad': this.spawnPad(d.team, d.x, d.y, d.z, d.rotY); break;
         case 'tree': this.tree(d.x, d.y, d.z, d.scale, d.variant); break;
@@ -146,7 +149,7 @@ export class LevelView {
       ? cjkFontReady(signs.map(s => s.text + (s.sub ?? '')).join('')).then(() => { this.group.add(signMesh(signs)); })
       : Promise.resolve();
     /** Resolves once the map's signs, dressing sets and model instances are built (they load on demand). */
-    this.ready = Promise.all([signsBuilt, addDressing(this.group, map.decor, nearField(map.terrain)).then(ms => { this.buildStats.dressingMergeMs = Math.round(ms * 10) / 10; }, e => console.warn('dressing failed', e))]).then(() => {
+    this.ready = Promise.all([signsBuilt, addDressing(this.group, map.decor, nearField(map.terrain), this.materials).then(ms => { this.buildStats.dressingMergeMs = Math.round(ms * 10) / 10; }, e => console.warn('dressing failed', e))]).then(() => {
       // Once everything stands, the big static casters cast from shadow proxies cut into cells.
       const t1 = performance.now(), casters: THREE.Mesh[] = [];
       this.group.traverse(o => { if ((o as THREE.Mesh).isMesh) casters.push(o as THREE.Mesh); });
@@ -246,7 +249,7 @@ export class LevelView {
         }
         return;
       }
-      case 'crate': this.crate(cx, s.minY, cz, w, h, d, color); return;
+      case 'crate': if (!this.scanned) this.crate(cx, s.minY, cz, w, h, d, color); return;
       case 'facade': {
         // Buildings standing on the street get a shopfront storey under the window grid.
         const shop = s.minY < 0.5 && h > 6 ? SHOPFRONT : 0;

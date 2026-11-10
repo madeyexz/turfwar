@@ -239,7 +239,7 @@ export class Renderer {
       texture.mapping = THREE.EquirectangularReflectionMapping;
       this.photoSky = texture;
       this.scene.background = texture;
-      this.scene.backgroundIntensity = 0.22;
+      this.scene.backgroundIntensity = theme.skyLight ?? 0.22;
       if (this.sky) this.sky.mesh.visible = false;
       this.buildEnvironment();
     } catch (error) { console.warn('sky failed', error); }
@@ -290,7 +290,7 @@ export class Renderer {
     this.scene.environment = this.photoSky
       ? pmrem.fromEquirectangular(this.photoSky).texture
       : pmrem.fromScene(envScene, 0.02, 0.1, 100, { size: envSize(this.quality) }).texture;
-    this.scene.environmentIntensity = this.photoSky ? 0.22 : 0.55;
+    this.scene.environmentIntensity = this.photoSky ? this.theme?.skyLight ?? 0.22 : 0.55;
     this.viewScene.environment = this.scene.environment;
     this.viewScene.environmentIntensity = 0.7;
     pmrem.dispose();

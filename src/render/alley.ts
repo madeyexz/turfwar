@@ -8,7 +8,7 @@ import { textureBudget } from './textures';
 
 /**
  * The Back Alley's whole picture (the 'alley' dressing set): photoscanned CC0 Poly Haven models
- * (public/assets/alley, packed by tools/fetch-alley.ts) assembled into a yard, with a wet ground and
+ * (public/assets/alley, packed by tools/fetch-scans.ts) assembled into a yard, with a wet ground and
  * the yard's own lamps. The collision is shared/maps/alley.ts; the cover props stand exactly on its boxes.
  *
  * The two facade kits are catalogues: every piece lies beside the others in the file. A piece is taken
@@ -27,7 +27,7 @@ type Kit = Record<Model, THREE.Object3D>;
 const M = 3; // the facade module (m)
 
 /** Clones of the nodes of `scene` whose names pass `match`, in the file's own coordinates. */
-function take(scene: THREE.Object3D, match: (name: string) => boolean) {
+export function take(scene: THREE.Object3D, match: (name: string) => boolean) {
   const out = new THREE.Group();
   const walk = (o: THREE.Object3D) => {
     if (o !== scene && match(o.name)) {
@@ -46,7 +46,7 @@ function take(scene: THREE.Object3D, match: (name: string) => boolean) {
 const matcher = (spec: string) => spec === '*' ? () => true : spec.endsWith('*') ? (n: string) => n.startsWith(spec.slice(0, -1)) : (n: string) => n === spec;
 
 const box = new THREE.Box3();
-function bounds(o: THREE.Object3D) { o.updateMatrixWorld(true); return box.setFromObject(o).clone(); }
+export function bounds(o: THREE.Object3D) { o.updateMatrixWorld(true); return box.setFromObject(o).clone(); }
 
 interface PropOptions {
   x: number; y?: number; z: number; rot?: number; scale?: number;
@@ -332,7 +332,7 @@ function glowTexture() {
   return glow;
 }
 
-function halo(color: number, size: number, strength: number) {
+export function halo(color: number, size: number, strength: number) {
   const s = new THREE.Sprite(new THREE.SpriteMaterial({ map: glowTexture(), color: new THREE.Color(color).multiplyScalar(strength), blending: THREE.AdditiveBlending, depthWrite: false, fog: false }));
   s.scale.setScalar(size);
   return s;
@@ -349,7 +349,7 @@ function shaftMaterial() {
   });
 }
 
-function lightShaft(color: number, strength: number, height: number, radius: number) {
+export function lightShaft(color: number, strength: number, height: number, radius: number) {
   const g = new THREE.ConeGeometry(radius, height, 32, 1, true).translate(0, -height / 2, 0);
   const c = new THREE.Color(color).multiplyScalar(strength), n = g.getAttribute('position').count, tint = new Float32Array(n * 3);
   for (let i = 0; i < n; i++) tint.set([c.r, c.g, c.b], i * 3);
