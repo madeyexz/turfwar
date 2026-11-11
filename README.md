@@ -215,14 +215,17 @@ texture, sound and line of code here is original or CC0/OFL.
   *Sci-Fi Essentials Kit* and *Modular Sci-Fi MegaKit* — CC0 1.0 (https://quaternius.com).
   Converted by `tools/import-assets.ts` (textures resized to WebP, animation tracks pruned and
   meshopt-compressed); see `public/assets/LICENSE.txt`.
-- Soldiers: Quaternius' *Ultimate Modular Men* (the SWAT operator and six street-gang irregulars with
-  their idle, walk, run and death animations) — CC0 1.0 (https://quaternius.com/packs/ultimatemodularcharacters.html).
-  Converted by `tools/import-modular.ts` into `public/assets/soldiers.glb` and `soldier-anims.glb`; `?soldiers=classic`
-  brings back the Universal Base Characters soldier.
-- Weapons: models from Quaternius' *Ultimate Gun Pack* (a bayonet for the knife) — CC0 1.0
-  (https://opengameart.org/content/low-poly-guns-pack). Converted from OBJ by `tools/import-guns.ts`
-  (`bun tools/import-guns.ts`, with the pack extracted under `GUN_SRC`; `--preview <dir>` renders
-  measured side views for placing grips, sights and muzzles) into `public/assets/guns.glb`.
+- Soldiers: *Soldier* by Grab3D — CC0 1.0; its licence file states that the base mesh and textures are
+  AI-assisted (generated with Meshy). `tools/import-operator.ts` converts it into `public/assets/operator.glb`
+  (a navy SWAT uniform and the Militia's camouflage). It moves on the skeleton and the idle, walk, run and death
+  animations of Quaternius' *Ultimate Modular Men* — CC0 1.0 (https://quaternius.com/packs/ultimatemodularcharacters.html;
+  `tools/import-modular.ts`, `soldiers.glb` and `soldier-anims.glb`). `?soldiers=classic` brings back the
+  Universal Base Characters soldier.
+- Weapons: Stein Games' *Free Classic Weapons Pack* and 3dmodelscc0's *Guns & Explosives* and *Melee Weapons
+  Pack #1* — CC0 1.0. Converted by `tools/import-arsenal.ts` into `public/assets/arsenal.glb`. The MP5, M4A1 and
+  knife are models of those weapons; a MAC-10, M14, AK-47, pump shotgun and M1911 stand in for the MP7, M110,
+  M249, M1014 and M9A1. The suppressor and vertical grip are from Quaternius' *Ultimate Gun Pack* — CC0 1.0
+  (https://opengameart.org/content/low-poly-guns-pack; `tools/import-guns.ts`, `public/assets/guns.glb`).
 - Gunshots: recordings from *The Free Firearm Sound Library* by Ben Jaszczak, Brian Nelson,
   Kevin Heras and Matthew Nanney — CC0 1.0
   (https://opengameart.org/content/the-free-firearm-sound-library). Each firearm plays two to four
@@ -240,7 +243,7 @@ texture, sound and line of code here is original or CC0/OFL.
 - Terrain and surface textures (including the brick, plank, corrugated-iron, plaster and
   cobblestone architecture of the BeGone maps): Poly Haven, CC0 1.0, fetched by `tools/fetch-textures.ts`; see
   `public/assets/tex/LICENSE.txt`.
-- Back Alley (the hidden graphics showcase, `?map=alley`): scanned models, the facade kits, the asphalt and
+- Back Alley: scanned models, the facade kits, the asphalt and
   the night sky from Poly Haven, CC0 1.0, packed by `tools/fetch-scans.ts`; see `public/assets/alley/LICENSE.txt`.
 - Warehouse above the Low preset: the scanned floor, walls, decks, crates, lamps, drums and wall fittings and the
   sky from Poly Haven, CC0 1.0, packed by `tools/fetch-scans.ts`; see `public/assets/warehouse/LICENSE.txt`.

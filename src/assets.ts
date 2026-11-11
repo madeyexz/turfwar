@@ -17,7 +17,7 @@ export interface Assets {
   soldier: GLTF;
   /** The clips of whichever soldiers are drawn (src/game/crew.ts). */
   clips: Map<string, THREE.AnimationClip>;
-  /** The Modular Men crew (the default): one named root per character. */
+  /** The default third-person soldiers (operator.glb): one named root per side. */
   crew?: THREE.Object3D;
   textures: TextureSets;
 }
@@ -77,11 +77,11 @@ export async function loadAssets(onProgress: (fraction: number) => void, gpu?: {
   const loader = new GLTFLoader(manager).setMeshoptDecoder(MeshoptDecoder);
   const textures = new TextureSets(manager);
   const gltf = (name: string) => loader.loadAsync(assetUrl(`assets/${name}`));
-  const [weapons, props, soldier, anims, imported, crew] = await Promise.all([
-    gltf('weapons.glb'), gltf('props.glb'), gltf('soldier.glb'), gltf(CREW ? 'soldier-anims.glb' : 'anims.glb'), gltf('guns.glb'), CREW ? gltf('soldiers.glb') : undefined, textures.load(SHARED_SETS),
+  const [weapons, props, soldier, anims, imported, arsenal, crew] = await Promise.all([
+    gltf('weapons.glb'), gltf('props.glb'), gltf('soldier.glb'), gltf(CREW ? 'soldier-anims.glb' : 'anims.glb'), gltf('guns.glb'), gltf('arsenal.glb'), CREW ? gltf('operator.glb') : undefined, textures.load(SHARED_SETS),
   ]) as GLTF[];
   // The GLBs hold 1×1 stand-ins for their textures (the real ones load here, GPU-compressed where the browser can).
-  await loadModelTextures([weapons, props, soldier, imported].map(g => g.scene), manager);
+  await loadModelTextures([weapons, props, soldier, imported, arsenal, ...(crew ? [crew] : [])].map(g => g.scene), manager);
   if (crew) restoreBoneNames(crew.scene);
   const named = (g: GLTF) => {
     const map = new Map<string, THREE.Object3D>();
@@ -92,7 +92,8 @@ export async function loadAssets(onProgress: (fraction: number) => void, gpu?: {
     return map;
   };
   const guns = named(weapons);
-  for (const [name, gun] of named(imported)) guns.set(name, gun);
+  // guns.glb: the suppressor and vertical grip; arsenal.glb: the store's guns and the knife (tools/import-arsenal.ts).
+  for (const file of [imported, arsenal]) for (const [name, gun] of named(file)) guns.set(name, gun);
   addProceduralGuns(guns);
   applyOptics(guns);
   // The knife skins (shared/skins.ts): each view picks its soldier's (knifeModel).
@@ -113,7 +114,7 @@ export const weaponModel = (model: string, knife: KnifeSkin) => (model === 'Gun_
 
 /**
  * GLTFLoader makes node names unique across a file (`Head`, `Head_1` ...), but every character of
- * soldiers.glb has the same bone names (and shares the clips, which bind by name): put them back.
+ * operator.glb has the same bone names (and shares the clips, which bind by name): put them back.
  */
 function restoreBoneNames(scene: THREE.Object3D) {
   const first = scene.children[0], known = new Set<string>();

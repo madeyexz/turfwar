@@ -69,8 +69,8 @@ same slipper in polished gold, swung and heard the same; earned by inviting frie
 red-handled plastic broom with a neon-green head and splayed pink-and-green bristles, held two-handed and
 brought down flat in an overhead swat, with a straw whoosh and THWUMP) and the classic **knife**. The knife
 slot is called by your skin wherever it is named for you, and the kill feed names and marks the killer's.
-Militia characters: Rotate (the default) or one of Farmer, Punk, Worker, Adventurer, Casual, Hoodie; SWAT
-keep their one operator so the sides stay easy to tell apart. Looks, names and sounds only: the weapon id,
+Militia characters: Rotate (the default) or one of Farmer, Punk, Worker, Adventurer, Casual, Hoodie, which are
+now six shades of the one camouflage soldier; SWAT keep their one navy operator so the sides stay easy to tell apart. Looks, names and sounds only: the weapon id,
 stats, strike, throw and pick-up are the knife's whatever the skin. The choice is saved per browser
 (`src/game/skins.ts`; `?classic=1` shows the knife for one visit). Online the client sends it with the
 `set_skin` reducer; the tick cleans it (`setSkin`) and keeps it in the soldier's gear JSON, and every client
@@ -266,13 +266,16 @@ no spawn slot sees the other base, that SWAT reaches each site 1.5–2.5 s ahead
 both), that bots reach every lane, deck and roof from both bases, that every standing spot has
 chest-high cover within 8 m, that Militia bots arm both sites, and the bases' slots and crates.
 
-**Back Alley** (後巷, 1v1 and 6v6, Elimination only) is one 36 × 15 m service yard between a brick
-workshop and a plastered walk-up, at night after rain. Everything seen is a photoscanned CC0 Poly Haven
-model under a photographed sky (`alley` theme; `src/render/alley.ts`); the map definition is the
-collision alone. The cover is rotationally symmetric: road barriers, a car under a tarpaulin, bins, a
-meter cabinet and the oil-drum stove that burns in the middle. Militia deploys at the west end, SWAT at
-the east, 28 m apart, and the barriers are lower than eye height, so the bases see each other: it is
-the smallest and fastest map. Its scans are a 45 MB download. No bomb sites, no vehicles.
+**Back Alley** (後巷, 1v1 and 6v6, Elimination and Sabotage) is a 72 × 45 m block of service lanes at
+night after rain: a brick workshop and a tenement on the north side, a depot and a plastered walk-up on
+the south, and a yard between them. Everything seen is a photoscanned CC0 Poly Haven model under a
+photographed sky (`alley` theme; `src/render/alley.ts`); the map definition is the collision alone.
+Three routes run between the bases (the yard, and a lane north and south of it), and a cross alley
+with an ammo crate joins each lane to the yard. The plan and its cover are rotationally symmetric: road
+barriers, cars under tarpaulins, bins, meter cabinets and the oil-drum stove that burns in the middle of
+the yard. Militia deploys at the west end and SWAT at the east, each behind a row of garages that hides
+the spawn slots from every lane. Bomb site A is at the east end of the north lane and B at the east
+end of the south lane. Its scans are a 45 MB download. No vehicles.
 `shared/maps/alley.test.ts` checks the rooms that offer it and that bots fight rounds to a result.
 
 Every map has ammo crates (one more stands in each base) and open team bases. Sabotage lists only the

@@ -8,7 +8,8 @@ import { lang, onLang, t, type Lang } from './i18n';
 export interface NewsItem { id: string; date: string; text: Record<Lang, string> }
 
 export const NEWS: readonly NewsItem[] = [
-  { id: 'alley-scans', date: '2026-11-10', text: { 'zh-TW': '新地圖「後巷」：雨夜裡的小巷（1v1、6v6）；倉庫的畫面也更新了', en: 'New map: Back Alley, a tiny rain-wet yard (1v1, 6v6). Warehouse looks sharper too' } },
+  { id: 'real-models', date: '2026-11-11', text: { 'zh-TW': '角色和槍換上新模型；後巷擴建成完整街區，爆炸更有威力', en: 'New soldier and gun models. Back Alley is now a full block, and explosions hit harder' } },
+  { id: 'alley-scans', date: '2026-11-10', text: { 'zh-TW': '新地圖「後巷」：雨夜裡的後巷街區（1v1、6v6）；倉庫的畫面也更新了', en: 'New map: Back Alley, rain-wet back lanes at night (1v1, 6v6). Warehouse looks sharper too' } },
   { id: 'faster-chat-filter', date: '2026-10-15', text: { 'zh-TW': '手機載入更快（下載量少約四成），聊天會過濾髒話，設定裡也能關閉玩家聊天', en: 'Faster loading on phones, a chat swear filter, and a setting to turn player chat off' } },
   { id: 'molotov', date: '2026-10-14', text: { 'zh-TW': '新增燃燒彈（$400，按 7）：落地起火，站在火裡會被燒；煙霧彈可以滅火', en: 'New: the molotov ($400, key 7). It sets the floor alight; a smoke grenade puts it out' } },
   { id: 'invite-gold', date: '2026-10-14', text: { 'zh-TW': '新增「邀請朋友」：開私人房一鍵傳 LINE，揪 3 位朋友來玩解鎖金拖', en: 'Invite friends: a private room sent on LINE in one tap. 3 friends unlock the gold slipper' } },

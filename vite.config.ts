@@ -67,7 +67,7 @@ const fontPreload: Plugin = {
  * after the scripts have run (on CrazyGames, after their SDK has started). Low priority, so the page's
  * scripts and fonts still come first. The surface textures depend on the quality preset and are not here.
  */
-const GAME_PRELOADS = ['assets/weapons.glb', 'assets/props.glb', 'assets/soldier.glb', 'assets/guns.glb', 'assets/soldiers.glb', 'assets/soldier-anims.glb',
+const GAME_PRELOADS = ['assets/weapons.glb', 'assets/props.glb', 'assets/soldier.glb', 'assets/guns.glb', 'assets/arsenal.glb', 'assets/operator.glb', 'assets/soldier-anims.glb',
   'assets/basis/basis_transcoder.js', 'assets/basis/basis_transcoder.wasm'];
 const gamePreload: Plugin = {
   name: 'game-preload',

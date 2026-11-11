@@ -5,7 +5,7 @@ import { settings, type OpticDetail, type ReticleColor } from '../game/settings'
 import { lensMaterial, windowMaterial, type Sight } from './sights';
 
 /**
- * Gun fitting for BeGone's arsenal: every weapon's finish, hand and muzzle points, and the visible
+ * Gun fitting for BeGone's arsenal: every weapon's hand and muzzle points, and the visible
  * attachments (optic, suppressor, laser, flashlight, ammo counter, extended clip, recoil pad, ammo
  * band), shared by the first-person view and third-person soldiers.
  *
@@ -33,7 +33,7 @@ export const overlayFor = (w: WeaponDef): Overlay => {
   return o === 'x6' ? 'sniper' : o === 'acog' || o === 'x4' ? 'prism' : undefined;
 };
 
-// ---- Per-gun fitting (model space: barrel -X, up +Y, origin at the grip; tools/import-guns.ts) ----
+// ---- Per-gun fitting (model space: barrel -X, up +Y, origin at the grip; tools/import-arsenal.ts) ----
 type V = [number, number, number];
 export interface GunFit {
   /** Shooting-hand grip, support hand, muzzle, magazine (reload hand target). */
@@ -51,30 +51,20 @@ export interface GunFit {
   kind: 'long' | 'pistol' | 'knife';
 }
 export const GUN_FIT: Record<WeaponId, GunFit> = {
-  knife: { grip: [0.005, 0, 0], fore: [0.04, -0.06, 0.04], muzzle: [-0.28, 0, 0], mag: [0, 0, 0], irons: 0, optic: 0, bore: 0, rail: [0, 0, 0], clip: { at: [0, 0, 0], tilt: 0, w: 0, d: 0 }, kind: 'knife' },
-  mp5: { grip: [0.005, 0, 0], fore: [-0.27, -0.045, 0], muzzle: [-0.39, 0.086, 0], mag: [-0.15, -0.06, 0], magModel: 'Gun_SMG_Ammo', irons: 0.151, optic: -0.1, bore: 0.85, rail: [-0.31, 0.09, 0.03], clip: { at: [-0.142, -0.139, 0], tilt: 0, w: 0.05, d: 0.028 }, butt: [0.35, 0.06, 0.1], kind: 'long' },
-  mp7: { grip: [0.005, 0, 0], fore: [-0.17, 0.035, 0], muzzle: [-0.33, 0.085, 0], mag: [-0.1, -0.07, 0], magModel: 'Gun_SMG_Ammo', irons: 0.142, optic: -0.08, bore: 0.8, rail: [-0.24, 0.1, 0.032], clip: { at: [-0.125, -0.128, 0], tilt: 0, w: 0.045, d: 0.024 }, butt: [0.27, 0.04, 0.1], kind: 'long' },
-  m4a1: { grip: [0.005, 0, 0], fore: [-0.33, 0.035, 0], muzzle: [-0.71, 0.13, 0], mag: [-0.2, -0.05, 0], magModel: 'Gun_SMG_Ammo', irons: 0.19, optic: -0.14, bore: 1, rail: [-0.37, 0.13, 0.03], clip: { at: [-0.18, -0.135, 0], tilt: -0.3, w: 0.05, d: 0.026 }, butt: [0.31, 0.07, 0.16], kind: 'long' },
-  m110: { grip: [0.005, 0, 0], fore: [-0.4, -0.04, 0], muzzle: [-0.935, 0.05, 0], mag: [-0.266, -0.01, 0], magModel: 'Gun_SMG_Ammo', irons: 0.095, optic: -0.155, bore: 0.95, rail: [-0.44, 0.022, 0.024], clip: { at: [-0.266, -0.026, 0], tilt: 0, w: 0.078, d: 0.022 }, butt: [0.312, -0.045, 0.17], kind: 'long' },
-  m249: { grip: [0.005, 0, 0], fore: [-0.42, 0.12, 0], muzzle: [-1.02, 0.18, 0], mag: [-0.24, -0.08, 0], irons: 0.279, optic: 0, bore: 1.25, rail: [-0.56, 0.17, 0.04], clip: { at: [-0.23, -0.125, 0.045], tilt: 0, w: 0.14, d: 0.1 }, butt: [0.372, 0.1, 0.16], kind: 'long' },
-  m1014: { grip: [0.025, -0.02, 0], fore: [-0.45, 0.0, 0], muzzle: [-0.79, 0.052, 0], mag: [-0.4, 0.0, 0], irons: 0.082, optic: -0.15, bore: 1.15, rail: [-0.55, 0.03, 0.026], clip: { at: [-0.71, 0.0, 0], tilt: 0, w: 0.05, d: 0.03, tube: true }, butt: [0.29, -0.05, 0.1], kind: 'long' },
-  m9a1: { grip: [0.005, 0, 0], fore: [0.02, -0.05, 0.03], muzzle: [-0.295, 0.135, 0], mag: [0.025, -0.074, 0], irons: 0.174, optic: -0.05, bore: 0.62, rail: [-0.205, 0.064, 0], clip: { at: [0.02, -0.082, 0], tilt: 0.28, w: 0.042, d: 0.026 }, kind: 'pistol' },
+  knife: { grip: [0.005, 0, 0], fore: [0.04, -0.06, 0.04], muzzle: [-0.27, 0, 0], mag: [0, 0, 0], irons: 0, optic: 0, bore: 0, rail: [0, 0, 0], clip: { at: [0, 0, 0], tilt: 0, w: 0, d: 0 }, kind: 'knife' },
+  mp5: { grip: [0.005, 0, 0], fore: [-0.34, 0.095, 0], muzzle: [-0.43, 0.125, 0], mag: [-0.24, 0, 0], magModel: 'Gun_SMG_Ammo', irons: 0.198, optic: -0.14, bore: 0.85, rail: [-0.36, 0.135, 0.023], clip: { at: [-0.25, -0.082, 0], tilt: -0.55, w: 0.04, d: 0.024 }, butt: [0.31, 0.075, 0.15], kind: 'long' },
+  mp7: { grip: [0.005, 0, 0], fore: [-0.1, 0.01, 0], muzzle: [-0.22, 0.079, 0], mag: [0, -0.12, 0], magModel: 'Gun_SMG_Ammo', irons: 0.13, optic: -0.02, bore: 0.8, rail: [-0.12, 0.06, 0.024], clip: { at: [0, -0.222, 0], tilt: 0, w: 0.035, d: 0.022 }, butt: [0.19, 0.075, 0.07], kind: 'long' },
+  m4a1: { grip: [0.005, 0, 0], fore: [-0.38, 0.035, 0], muzzle: [-0.76, 0.125, 0], mag: [-0.2, -0.02, 0], magModel: 'Gun_SMG_Ammo', irons: 0.207, optic: -0.15, bore: 1, rail: [-0.42, 0.124, 0.036], clip: { at: [-0.185, -0.108, 0], tilt: -0.15, w: 0.06, d: 0.026 }, butt: [0.285, 0.06, 0.16], kind: 'long' },
+  m110: { grip: [0.005, 0, 0], fore: [-0.42, 0.045, 0], muzzle: [-1.0, 0.085, 0], mag: [-0.24, -0.02, 0], magModel: 'Gun_SMG_Ammo', irons: 0.127, optic: -0.22, bore: 0.95, rail: [-0.5, 0.07, 0.025], clip: { at: [-0.24, -0.088, 0], tilt: 0, w: 0.07, d: 0.024 }, butt: [0.28, -0.035, 0.14], kind: 'long' },
+  m249: { grip: [0.005, 0, 0], fore: [-0.39, 0.075, 0], muzzle: [-0.79, 0.11, 0], mag: [-0.26, -0.03, 0], magModel: 'Gun_SMG_Ammo', irons: 0.174, optic: -0.12, bore: 1.1, rail: [-0.4, 0.12, 0.022], clip: { at: [-0.27, -0.13, 0], tilt: -0.6, w: 0.06, d: 0.026 }, butt: [0.335, 0.045, 0.13], kind: 'long' },
+  m1014: { grip: [0.005, 0, 0], fore: [-0.5, 0, 0], muzzle: [-0.79, 0.068, 0], mag: [-0.2, 0, 0], irons: 0.088, optic: -0.18, bore: 1.15, rail: [-0.62, 0.035, 0.02], clip: { at: [-0.7, 0.034, 0], tilt: 0, w: 0.05, d: 0.03, tube: true }, butt: [0.28, -0.05, 0.14], kind: 'long' },
+  m9a1: { grip: [0.005, 0, 0], fore: [0.02, -0.05, 0.03], muzzle: [-0.25, 0.098, 0], mag: [0, -0.05, 0], irons: 0.127, optic: -0.06, bore: 0.62, rail: [-0.15, 0.06, 0], clip: { at: [0.01, -0.08, 0], tilt: 0.28, w: 0.036, d: 0.02 }, kind: 'pistol' },
 };
 export const vec = (v: V, out = new THREE.Vector3()) => out.set(v[0], v[1], v[2]);
 
 // ---- Finishes -------------------------------------------------------------------------------
 /** Colours by material role: body (main metal/polymer), dark (furniture), accent (light parts), wood, edge (knife edge). */
 interface Finish { body: number; dark: number; accent: number; wood?: number; edge?: number; metal?: number }
-const FINISHES: Record<WeaponId, Finish> = {
-  knife: { body: 0x2c3027, dark: 0x16171a, accent: 0x34373b, edge: 0xc9ced3, metal: 0.7 },  // coated blade, olive grip
-  mp5: { body: 0x2a2d31, dark: 0x141518, accent: 0x50555c },                               // HK black
-  mp7: { body: 0x474d3e, dark: 0x1a1c18, accent: 0x6a705e },                               // ranger-green polymer
-  m4a1: { body: 0x26282b, dark: 0x3a3d41, accent: 0x6b7077 },                              // matte black
-  m110: { body: 0x3a3833, dark: 0x2a2b2c, accent: 0x85775a },                              // flat-dark-earth stock, black steel
-  m249: { body: 0x3c4236, dark: 0x1c1e1a, accent: 0x5d6352 },                              // parkerized olive
-  m1014: { body: 0x1e2023, dark: 0x2c2e31, accent: 0x8d939a, metal: 0.55 },                // black, bright bolt
-  m9a1: { body: 0x2a2c30, dark: 0x141516, accent: 0x303236, wood: 0x1f2022, metal: 0.6 },  // black slide and grips
-};
 const ROLE: Record<string, keyof Finish> = {
   Main: 'body', Metal: 'body', Grey: 'body', Green: 'body',
   MainDark: 'dark', Black: 'dark', Black2: 'dark', DarkMetal: 'dark',
@@ -321,84 +311,6 @@ function flipCap(kit: Kit, x: number, axis: number, r: number, side: -1 | 1, dir
   const cup = lathe([[0, 0], [r + 0.0022, 0], [r + 0.0026, 0.0006], [r + 0.0026, 0.0045], [r + 0.0012, 0.0045], [r + 0.0012, 0.0016], [0, 0.0016]], kit.seg(40));
   kit.add('rubber', cup, C.rubber, x + (side < 0 ? -0.001 : 0.0055), axis + dir * (2 * r + 0.0058), 0);
   kit.add('rubber', roundedBox(0.0055, 0.008, 0.008, 0.0018), C.rubber, x + side * 0.0005, axis + dir * (r + 0.0035));
-}
-
-// ---- Iron sights (model space) ---------------------------------------------------------------
-interface IronFit {
-  /** Rear and front sight positions (x, base height) and the sight line through them. */
-  rear: [number, number]; front: [number, number]; line: number;
-  rearKind: 'aperture' | 'ghost' | 'notch'; frontKind: 'post' | 'hood' | 'bead' | 'blade';
-}
-const IRONS: Partial<Record<WeaponId, IronFit>> = {
-  m4a1: { rear: [-0.035, 0.187], front: [-0.5, 0.188], line: 0.21, rearKind: 'aperture', frontKind: 'post' },
-  m110: { rear: [-0.1, 0.0642], front: [-0.6, 0.056], line: 0.095, rearKind: 'aperture', frontKind: 'post' },
-  m249: { rear: [-0.02, 0.27], front: [-0.725, 0.28], line: 0.304, rearKind: 'aperture', frontKind: 'post' },
-  mp5: { rear: [0.012, 0.143], front: [-0.312, 0.143], line: 0.157, rearKind: 'aperture', frontKind: 'hood' },
-  mp7: { rear: [0.02, 0.134], front: [-0.262, 0.134], line: 0.153, rearKind: 'aperture', frontKind: 'hood' },
-  m1014: { rear: [-0.045, 0.085], front: [-0.675, 0.068], line: 0.102, rearKind: 'ghost', frontKind: 'bead' },
-  m9a1: { rear: [0.03, 0.159], front: [-0.252, 0.158], line: 0.172, rearKind: 'notch', frontKind: 'blade' },
-};
-
-/**
- * Flip-up rear aperture (rifles) or ghost ring (shotgun), low profile: slim clamp base, thin leaf and
- * aperture ring, thin protective wings, windage knob. Returns the rear sighting surface.
- */
-function rearAperture(kit: Kit, x: number, y: number, line: number, ghost: boolean) {
-  const s = kit.seg(40), ro = ghost ? 0.0066 : 0.0042, ri = ghost ? 0.0048 : 0.0022, t = ghost ? 0.0026 : 0.0018;
-  const deck = y + 0.0042;
-  kit.add('body', roundedBox(0.022, 0.0042, 0.016, 0.0015), C.anodised, x, y + 0.0021);
-  screw(kit, x - 0.007, deck, 0, 'y', 1, 0.0012);
-  kit.add('body', knurl(0.0034, 0.0032, 12, 'z'), C.anodised, x + 0.004, y + 0.0026, 0.0096);
-  kit.add('body', cyl(0.0015, 0.0012, 'z', kit.seg(12)), C.screw, x + 0.004, y + 0.0026, 0.0118);
-  const h = line - ro - deck + 0.001;
-  kit.add('body', roundedBox(t, h, 0.0075, 0.0008), C.anodised, x, deck + h / 2);
-  kit.add('body', washer(ri, ro, t, s), C.anodised, x + t / 2, line);
-  const wingTop = line + ro * 0.2, wh = wingTop - deck;
-  for (const sz of [-1, 1]) kit.add('body', roundedBox(0.011, wh, 0.0012, 0.0005), C.anodised, x, deck + wh / 2, sz * (ro + 0.0026));
-  return x + t / 2;
-}
-
-/** Front sight: a thin square post between slim protective ears, a hooded post, a fibre bead or a pistol blade with a tritium dot. */
-function frontSight(kit: Kit, x: number, y: number, line: number, kind: IronFit['frontKind']) {
-  const s = kit.seg(32);
-  if (kind === 'post') {
-    const earTop = line + 0.002, eh = earTop - y;
-    for (const sz of [-1, 1]) kit.add('body', roundedBox(0.008, eh, 0.0016, 0.0007), C.anodised, x, y + eh / 2, sz * 0.0072);
-    kit.add('body', roundedBox(0.01, 0.0042, 0.016, 0.0012), C.anodised, x, y + 0.0021);
-    kit.add('body', cyl(0.0034, 0.0022, 'y', s), C.steel, x, y + 0.0053);
-    const ph = line - (y + 0.0064);
-    kit.add('body', roundedBox(0.0024, ph, 0.0022, 0.0003, 2), C.anodised, x, y + 0.0064 + ph / 2);
-  } else if (kind === 'hood') {
-    const ro = 0.0078, ri = 0.0068, len = 0.008;
-    kit.add('body', washer(ri, ro, len, s), C.anodised, x + len / 2, line);
-    const bh = line - ri - y;
-    kit.add('body', roundedBox(0.01, bh, 0.0075, 0.0018), C.anodised, x, y + bh / 2);
-    kit.add('body', roundedBox(0.0022, ri + 0.0006, 0.0022, 0.0003, 2), C.anodised, x, line - ri / 2 - 0.0003);
-  } else if (kind === 'bead') {
-    const bh = line - 0.0016 - y;
-    kit.add('body', slab([[-0.008, 0], [0.008, 0], [0.005, bh], [-0.005, bh]], 0.003), C.anodised, x, y);
-    kit.add('body', roundedBox(0.01, 0.001, 0.0042, 0.0003), C.anodised, x, y + bh - 0.0005);
-    kit.add('glow', cyl(0.0015, 0.009, 'x', kit.seg(14)), C.red, x, line);
-  } else {
-    const bh = line - y;
-    kit.add('body', slab([[-0.004, 0], [0.004, 0], [0.004, bh], [-0.0022, bh], [-0.004, bh * 0.7]], 0.0028), C.anodised, x, y);
-    kit.add('body', disc(0.0012, s), C.white, x + 0.0041, line - 0.0022, 0);
-    kit.add('glow', disc(0.0007, s), C.tritium, x + 0.00415, line - 0.0022, 0);
-  }
-}
-
-/** Pistol rear sight: low dovetailed block with a square notch and two tritium dots (three-dot with the front). */
-function rearNotch(kit: Kit, x: number, y: number, line: number) {
-  const s = kit.seg(32), notch = 0.0042, depth = 0.0038, half = 0.0092, bh = line - depth - y;
-  kit.add('body', slab([[-0.004, 0], [0.004, 0], [0.004, bh], [-0.004, bh]], 2 * half), C.anodised, x, y);
-  const w = half - notch / 2;
-  for (const sz of [-1, 1]) {
-    kit.add('body', slab([[-0.004, 0], [0.004, 0], [0.004, depth], [-0.0022, depth], [-0.004, depth * 0.6]], w), C.anodised, x, line - depth, sz * (notch / 2 + w / 2));
-    kit.add('body', disc(0.0012, s), C.white, x + 0.0041, line - 0.0021, sz * (notch / 2 + 0.0024));
-    kit.add('glow', disc(0.0007, s), C.tritium, x + 0.00415, line - 0.0021, sz * (notch / 2 + 0.0024));
-  }
-  screw(kit, x, y + bh, 0.0, 'y', 1, 0.001);
-  return x + 0.004;
 }
 
 // ---- Optic builders (kit space: mount surface at y = 0, centred on the optic's x) ----------------
@@ -669,14 +581,8 @@ function opticModel(weapons: Map<string, THREE.Object3D>, id: WeaponId, optic: O
   const fit = GUN_FIT[id], model = weapons.get(WEAPONS[id].model)!, kit = new Kit(detail);
   const relief = RELIEF[optic][fit.kind === 'pistol' ? 'pistol' : 'long'];
   if (optic === 'irons') {
-    const iron = IRONS[id];
-    // Third-person soldiers keep the model's own sights (no extra draw calls across a 100-soldier match).
-    if (!iron || !first) o = { group: new THREE.Group(), sightLine: iron?.line ?? fit.irons };
-    else {
-      const eyeX = iron.rearKind === 'notch' ? rearNotch(kit, iron.rear[0], iron.rear[1], iron.line) : rearAperture(kit, iron.rear[0], iron.rear[1], iron.line, iron.rearKind === 'ghost');
-      frontSight(kit, iron.front[0], iron.front[1], iron.line, iron.frontKind);
-      o = { group: kit.build('Optic_irons', true), sightLine: iron.line, eyeX, relief };
-    }
+    // The models carry their own sights: the eye looks just over them.
+    o = { group: new THREE.Group(), sightLine: fit.irons };
   } else if (optic === 'x4' || optic === 'x6') {
     // x6: a long rifle scope on two rings; x4: a slim long-eye-relief pistol scope over the slide.
     const pistol = optic === 'x4', L = pistol ? 0.17 : 0.34, at = fit.optic - (pistol ? 0.04 : 0), rt = pistol ? 0.0105 : 0.0155;
@@ -845,8 +751,8 @@ export function fitAttachments(weapons: Map<string, THREE.Object3D>, id: WeaponI
     if (c.tube) group.add(mesh(new THREE.CylinderGeometry(0.0135, 0.0135, c.w, 12).rotateZ(Math.PI / 2), M.housing, c.at[0] - c.w / 2, c.at[1], c.at[2]));
     else {
       const ext = new THREE.Group();
-      const h = id === 'm249' ? 0.05 : 0.042;
-      ext.add(mesh(new THREE.BoxGeometry(c.w * 0.94, h, c.d * 0.94), id === 'm249' ? std(0x535a40, 0.9, 0) : M.polymer, 0, -h / 2, 0));
+      const h = 0.042;
+      ext.add(mesh(new THREE.BoxGeometry(c.w * 0.94, h, c.d * 0.94), M.polymer, 0, -h / 2, 0));
       ext.add(mesh(new THREE.BoxGeometry(c.w * 1.08, 0.008, c.d * 1.1), M.rubber, 0, -h, 0));
       ext.position.set(c.at[0], c.at[1] + 0.004, c.at[2]); ext.rotation.z = c.tilt;
       group.add(ext);
@@ -862,15 +768,10 @@ export function fitAttachments(weapons: Map<string, THREE.Object3D>, id: WeaponI
   return { group, sightLine: optic.sightLine, muzzle, laser, torch, eyeX: optic.eyeX, relief: optic.relief, lens, sight: optic.sight };
 }
 
-/** Give every gun its finish and the accessories a dark anodised one (called once on the asset registry). */
+/** Give the accessories a dark anodised finish (the guns keep their own textures); called once on the asset registry. */
 export function applyOptics(weapons: Map<string, THREE.Object3D>) {
-  for (const [id, finish] of Object.entries(FINISHES) as [WeaponId, Finish][]) {
-    const model = weapons.get(WEAPONS[id].model);
-    if (model) refinish(model, finish);
-  }
   for (const name of ['Acc_Suppressor', 'Acc_Grip']) {
     const model = weapons.get(name);
     if (model) refinish(model, { body: 0x1d1f22, dark: 0x141517, accent: 0x34373b, metal: 0.55 });
   }
 }
-

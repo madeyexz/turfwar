@@ -1,6 +1,6 @@
 /**
- * Converts guns from Quaternius' CC0 "Ultimate Gun Pack" (OBJ + MTL, flat colours) into
- * public/assets/guns.glb, one named root per gun, in the same model space as weapons.glb:
+ * Converts the suppressor and the vertical grip from Quaternius' CC0 "Ultimate Gun Pack" (OBJ + MTL, flat
+ * colours) into public/assets/guns.glb (the guns themselves are tools/import-arsenal.ts), one named root each, in the same model space as weapons.glb:
  * barrel along -X, +Y up, metres, origin at the shooting hand's grip.
  *
  * The source pack is not committed. Download it (CC0 1.0) from
@@ -31,14 +31,6 @@ const OUT = join(import.meta.dir, '../public/assets');
  */
 interface GunSpec { name: string; file: string; length: number; grip: [number, number]; fit?: 'max'; anchor?: 'rear' | 'centre'; cut?: { above: number; x: [number, number] } }
 export const GUNS: GunSpec[] = [
-  { name: 'Gun_MP5', file: 'SubmachineGun_3', length: 0.74, grip: [0, 0] },
-  { name: 'Gun_MP7', file: 'SubmachineGun_2', length: 0.6, grip: [0, 0] },
-  { name: 'Gun_M4A1', file: 'AssaultRifle2_1', length: 1.02, grip: [0, 0] },
-  { name: 'Gun_M110', file: 'SniperRifle_2', length: 1.25, grip: [0, 0], cut: { above: 0.0655, x: [-0.36, 0.05] } },
-  { name: 'Gun_M249', file: 'AssaultRifle2_3', length: 1.1, grip: [0, 0] },
-  { name: 'Gun_M1014', file: 'Shotgun_1', length: 1.06, grip: [0, 0] },
-  { name: 'Gun_M9A1', file: 'Pistol_3', length: 0.36, grip: [0, 0] },
-  { name: 'Gun_Knife', file: 'Accessories/Bayonet_2', length: 0.34, grip: [0, 0] },
   { name: 'Acc_Suppressor', file: 'Accessories/Silencer_2', length: 0.22, grip: [0, 0], anchor: 'rear' },
   { name: 'Acc_Grip', file: 'Accessories/Grip', length: 0.1, grip: [0, 0], fit: 'max', anchor: 'centre' },
 ];
