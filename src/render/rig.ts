@@ -82,6 +82,14 @@ export function orientHand(bones: Bones, side: 'l' | 'r', forward: THREE.Vector3
   rotateWorld(hand, handDir, angle);
 }
 
+/**
+ * Where the wrist goes so that a full hand (the crew's glove) closes round `hold`: the palm's centre
+ * is ahead of the wrist along the hand and a little out of the palm.
+ */
+export function wristFor(hold: THREE.Vector3, forward: THREE.Vector3, palm: THREE.Vector3, reach = 0.08, depth = 0.03) {
+  return hold.clone().addScaledVector(forward, -reach).addScaledVector(palm, -depth);
+}
+
 const FINGERS = ['index', 'middle', 'ring', 'pinky'];
 /** Curl fingers toward the palm (radians per joint); thumb wraps around the grip. */
 export function curlFingers(bones: Bones, side: 'l' | 'r', curl: number, thumb: number) {

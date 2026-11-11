@@ -95,8 +95,9 @@ side, camouflage for the Militia, whose six looks are tints (`src/game/crew.ts`,
 and clips of Quaternius' Modular Men (`soldiers.glb`, which only the importer reads, and `soldier-anims.glb`; `bun tools/import-modular.ts`
 with the pack's `Individual Characters/glTF` folder at `MODULAR_SRC`). That importer renames the bones to the Universal Base Characters
 rig's names, so the IK in `src/render/rig.ts` drives both. The store's guns are `public/assets/arsenal.glb` (`bun tools/import-arsenal.ts`).
-After either importer, run `bun tools/make-model-textures.ts`. `?soldiers=classic` brings back the older soldier with procedural gear; first-person arms always
-use that classic soldier.
+After either importer, run `bun tools/make-model-textures.ts`. The first-person arms are the same soldier's sleeves and gloves in more detail
+(`public/assets/operator-arms.glb`, `ARMS=1 bun tools/import-operator.ts`; no textures of its own, it takes the soldier's material).
+`?soldiers=classic` brings back the older soldier with procedural gear, in both views.
 
 The map picker shows a picture of each map (`public/media/maps/<id>.webp`, 480×270, under 40 KB).
 `bun scripts/mapshots.ts [--url <dev server>] [map …]` shoots them from the level preview through the

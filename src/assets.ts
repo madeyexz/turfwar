@@ -13,12 +13,14 @@ import { initTextures, loadModelTextures, loadTexture } from './render/textures'
 export interface Assets {
   weapons: Map<string, THREE.Object3D>;
   props: Map<string, THREE.Object3D>;
-  /** The Universal Base Characters soldier: the classic third-person soldier (`?soldiers=classic`) and, always, the first-person arms. */
+  /** The Universal Base Characters soldier: the classic third-person soldier and first-person arms (`?soldiers=classic`). */
   soldier: GLTF;
   /** The clips of whichever soldiers are drawn (src/game/crew.ts). */
   clips: Map<string, THREE.AnimationClip>;
   /** The default third-person soldiers (operator.glb): one named root per side. */
   crew?: THREE.Object3D;
+  /** The default first-person arms (operator-arms.glb): the same soldier's sleeves and gloves in more detail, without a material of their own. */
+  crewArms?: THREE.Object3D;
   textures: TextureSets;
 }
 
@@ -77,8 +79,8 @@ export async function loadAssets(onProgress: (fraction: number) => void, gpu?: {
   const loader = new GLTFLoader(manager).setMeshoptDecoder(MeshoptDecoder);
   const textures = new TextureSets(manager);
   const gltf = (name: string) => loader.loadAsync(assetUrl(`assets/${name}`));
-  const [weapons, props, soldier, anims, imported, arsenal, crew] = await Promise.all([
-    gltf('weapons.glb'), gltf('props.glb'), gltf('soldier.glb'), gltf(CREW ? 'soldier-anims.glb' : 'anims.glb'), gltf('guns.glb'), gltf('arsenal.glb'), CREW ? gltf('operator.glb') : undefined, textures.load(SHARED_SETS),
+  const [weapons, props, soldier, anims, imported, arsenal, crew, crewArms] = await Promise.all([
+    gltf('weapons.glb'), gltf('props.glb'), gltf('soldier.glb'), gltf(CREW ? 'soldier-anims.glb' : 'anims.glb'), gltf('guns.glb'), gltf('arsenal.glb'), CREW ? gltf('operator.glb') : undefined, CREW ? gltf('operator-arms.glb') : undefined, textures.load(SHARED_SETS),
   ]) as GLTF[];
   // The GLBs hold 1×1 stand-ins for their textures (the real ones load here, GPU-compressed where the browser can).
   await loadModelTextures([weapons, props, soldier, imported, arsenal, ...(crew ? [crew] : [])].map(g => g.scene), manager);
@@ -101,7 +103,7 @@ export async function loadAssets(onProgress: (fraction: number) => void, gpu?: {
   guns.set(KNIFE_MODELS.gold, slipperModel(true));
   guns.set(KNIFE_MODELS.broom, broomModel());
   return {
-    weapons: guns, props: named(props), soldier, crew: crew?.scene,
+    weapons: guns, props: named(props), soldier, crew: crew?.scene, crewArms: crewArms?.scene,
     clips: new Map(anims.animations.map(c => [c.name, c])),
     textures,
   };

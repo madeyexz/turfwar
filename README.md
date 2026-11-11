@@ -217,7 +217,7 @@ texture, sound and line of code here is original or CC0/OFL.
   meshopt-compressed); see `public/assets/LICENSE.txt`.
 - Soldiers: *Soldier* by Grab3D — CC0 1.0; its licence file states that the base mesh and textures are
   AI-assisted (generated with Meshy). `tools/import-operator.ts` converts it into `public/assets/operator.glb`
-  (a navy SWAT uniform and the Militia's camouflage). It moves on the skeleton and the idle, walk, run and death
+  (a navy SWAT uniform and the Militia's camouflage) and its sleeves and gloves into `public/assets/operator-arms.glb` (the first-person arms). It moves on the skeleton and the idle, walk, run and death
   animations of Quaternius' *Ultimate Modular Men* — CC0 1.0 (https://quaternius.com/packs/ultimatemodularcharacters.html;
   `tools/import-modular.ts`, `soldiers.glb` and `soldier-anims.glb`). `?soldiers=classic` brings back the
   Universal Base Characters soldier.

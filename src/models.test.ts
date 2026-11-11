@@ -31,7 +31,7 @@ describe('props.glb', () => {
   });
 
   it('needs only extensions the client decodes', () => {
-    for (const file of ['props.glb', 'weapons.glb', 'soldier.glb', 'arsenal.glb', 'operator.glb']) {
+    for (const file of ['props.glb', 'weapons.glb', 'soldier.glb', 'arsenal.glb', 'operator.glb', 'operator-arms.glb']) {
       for (const ext of glbJson(file).extensionsRequired ?? []) expect(['EXT_meshopt_compression', 'EXT_texture_webp', 'KHR_mesh_quantization'], `${file}: ${ext}`).toContain(ext);
     }
   });
