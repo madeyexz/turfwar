@@ -17,7 +17,7 @@ describes what runs.
 | **Where** | Cloudflare R2: `turfwar-rec` (internal, for bot training) and `turfwar-export` (de-identified, for licensing). |
 | **Volume** | About 11 MB per 6v6 room-hour of frames (zstd; 2.7 MB for 1v1, 32 MB for 24v24; measured on bot matches) and about 1 MB per player-hour of input (estimate). About 0.4 GB/day at 30 human room-hours/day (estimate). |
 | **Cost** | R2 is about US$0.015 per GB-month after the 10 GB free tier, with no egress fee: about US$0.20 more every month at current traffic, about US$2/month after a year. The Worker is free, or US$5/month on Workers Paid. VM-to-R2 upload is GCP egress, about US$0.12/GB (about US$1.50/month now). List prices; check the bills. |
-| **Targets** | 200 h movement-clean and 50 h aim-clean for bots (about 2 weeks and 8 days at launch traffic), 1,000 h for the dataset (about 74 days to 1,000 h movement-clean; the export set keeps about 83 % of it). Progress is on `/admin` → Recording. |
+| **Targets** | 200 h movement-clean and 50 h aim-clean for bots, 1,000 h for the dataset. Measured on 2026-11-10, 27 days in: 114.6 h movement-clean, 40.0 h aim-clean and 60.6 h in the export set, which keeps 53 % of the movement-clean hours (the plan assumed about 83 %). The rate fell from 6.9 movement-clean hours a day in the first week to about 2.6 (aim-clean: 2.5 to 1.1), so at that rate 50 h aim-clean is about 9 days away, 200 h movement-clean about a month and 1,000 h in the export set about 2 years (the plan said 74 days). Progress is on `/admin` → Recording. |
 
 ```
  browser (online match)                     Taipei VM (turfwar-tw)                         Cloudflare
