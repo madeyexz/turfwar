@@ -155,6 +155,15 @@ mouse) and `aimAssist`.
 - `bun scripts/rec-bias.ts` — clean hours by device, input, map, mode, size, Taipei hour and player
   concentration, next to all recorded hours.
 
+## Use in the bots
+
+The first use is in the repository: the bots' habits (`shared/match/bots.ts`), their buy table (`BOT_BUY`),
+the places they go to (`shared/match/places.ts`) and the bench's numbers (`scripts/botbench/human.json`)
+were measured from the internal copy of 2026-10-15 to 2026-11-10
+([docs/DEVELOPMENT.md](DEVELOPMENT.md), "Bot bench"). They are totals of many players (medians, shares
+and quantiles; the places are of 21 to 90 players a map side), with no pid and no row of one player, so a
+later deletion does not change them. No trained model is in the repository.
+
 ## Deletion
 
 `bun scripts/rec-delete.ts --identity <hex>` (or `--pid`): deletes the player's input batches, rewrites
