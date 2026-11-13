@@ -7,6 +7,7 @@ import { GRENADE, STAMINA } from '../weapons';
 import { eyeOf, feetOf, onSite, shapeOf, resolvePellets, resolveShot, sideOf, smokeBlocks, spreadFor, throwGrenadeFrom, traceShot, weaponOf, type SimContext } from './combat';
 import { fireNear, throwMolotovFrom } from './fire';
 import { findPath, nearestNode } from './nav';
+import { PLACES, PLACE_WEIGHTS } from './places';
 import { ATTACKERS, type BotBrain, type MatchState, type Soldier } from './state';
 
 /** Distance (m) from a bomb site's centre at which a bot stops to arm or disarm. */
@@ -185,10 +186,14 @@ function sitesOf(ctx: SimContext) {
   return (ctx.map.sabotage?.sites ?? []).map(id => ctx.map.points.find(p => p.id === id)!);
 }
 
+/** A place of the players stays a bot's goal for at most `time` s (enough to walk there), and the goal is within `near` m of it. */
+const PLACE = { time: 40, near: 2.5 };
+
 /**
- * Choose where to go. Elimination: sweep the map's landmarks toward the enemy, then hunt the nearest
- * enemy once the round drags on (a timed-out round is a replay). Sabotage: Militia pushes the round's
- * site and arms it; SWAT spreads over the sites, and everyone converges on an armed bomb.
+ * Choose where to go. Elimination: go where recorded players stay on this side of the map (places.ts; a map
+ * without that table sweeps its landmarks toward the enemy), then hunt the nearest enemy once the round drags
+ * on (a timed-out round is a replay). Sabotage: Militia pushes the round's site and arms it; SWAT spreads over
+ * the sites, and everyone converges on an armed bomb.
  */
 function chooseGoal(state: MatchState, ctx: SimContext, bot: Soldier, brain: BotBrain) {
   brain.repath = 0;
@@ -211,6 +216,16 @@ function chooseGoal(state: MatchState, ctx: SimContext, bot: Soldier, brain: Bot
     let nearest = enemies[0], best = Infinity;
     for (const e of enemies) { const d = Math.hypot(e.m.x - bot.m.x, e.m.z - bot.m.z); if (d < best) { best = d; nearest = e; } }
     brain.goal = 'hunt'; brain.goalX = nearest.m.x; brain.goalZ = nearest.m.z; brain.goalY = nearest.m.y; brain.goalLeft = 4 + ctx.random() * 3;
+    return;
+  }
+  // The places of the players on this side of the map, each by its share of their time.
+  const places = PLACES[ctx.map.id]?.[sideOf(state, ctx.map, bot.team)];
+  if (places) {
+    let at = 0, left = ctx.random() * PLACE_WEIGHTS - places[3];
+    while (left >= 0 && at + 4 < places.length) { at += 4; left -= places[at + 3]; }
+    const angle = ctx.random() * Math.PI * 2, r = ctx.random() * PLACE.near;
+    brain.goal = 'roam'; brain.goalX = places[at] + Math.cos(angle) * r; brain.goalZ = places[at + 2] + Math.sin(angle) * r; brain.goalY = places[at + 1];
+    brain.goalLeft = PLACE.time;
     return;
   }
   // Landmarks, weighted toward the enemy's half of the map.
