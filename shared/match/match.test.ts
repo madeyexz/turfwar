@@ -6,6 +6,7 @@ import { createMoveState, eyeHeight, stepMovement } from '../movement';
 import { hitShape } from '../hitbox';
 import { BOBA, GRENADE, HEALTH, MOLOTOV, SLIPPER, SMOKE, WEAPONS, pelletCone, pelletDirs, weaponStats } from '../weapons';
 import { findPath, nearestNode } from './nav';
+import { PLACES, PLACE_WEIGHTS } from './places';
 import {
   BOMB_REACH, addSoldier, balanceTeams, buyAttachmentFor, buyItem, createContext, createMatch, drinkBoba, fireShot, reportState,
   canSwitchTeam, removeSoldier, resetMatch, switchTeam, switchWeapon, throwMolotov, throwSlipper, throwSmoke, tickMatch, useAmmoCrate, LATE_JOIN_SECONDS, TICK_RATE,
@@ -65,6 +66,40 @@ describe('maps and navigation', () => {
     });
   }
   // Taipei's own layout checks (sightlines, levels, base distances) are in shared/maps/taipei.test.ts, Taipei 101 · 88F's in taipei101.test.ts.
+
+  it('the nearest nav node to a point at the west or east edge of a map is at that edge', () => {
+    for (const id of MAP_IDS) {
+      const nav = loadNav(id);
+      // The search goes 5 columns out; a column past one edge is not a column of the other edge.
+      for (let iz = 0; iz < nav.nz; iz++) for (const ix of [0, 1, 2, 3, 4, nav.nx - 5, nav.nx - 4, nav.nx - 3, nav.nx - 2, nav.nx - 1]) {
+        const x = nav.x0 + ix * nav.spacing, z = nav.z0 + iz * nav.spacing;
+        const node = nearestNode(nav, x, 0, z);
+        if (node >= 0) expect(Math.abs(nav.x[node] - x), `${id} ${x},${z}`).toBeLessThanOrEqual(5 * nav.spacing);
+      }
+    }
+  });
+
+  it('bots can walk from their base to every place of the recorded players (places.ts)', () => {
+    for (const [id, sides] of Object.entries(PLACES)) {
+      const { def } = loadMap(id); const nav = loadNav(id);
+      expect(sides.length, id).toBe(2);
+      sides.forEach((cells, side) => {
+        const base = def.spawns.find(s => s.team === side)!;
+        const start = nearestNode(nav, base.x, base.y, base.z);
+        let sum = 0;
+        for (let i = 0; i < cells.length; i += 4) {
+          const [x, y, z, weight] = cells.slice(i, i + 4), at = `${id} side ${side}: ${x},${y},${z}`;
+          // The node a bot goes to for this place is at the place, on its floor (a deck outside the nav grid is not a place for bots).
+          const node = nearestNode(nav, x, y, z);
+          expect(Math.hypot(nav.x[node] - x, nav.z[node] - z), at).toBeLessThanOrEqual(4);
+          expect(Math.abs(nav.y[node] - y), at).toBeLessThanOrEqual(2.5);
+          expect(findPath(nav, start, node).length, at).toBeGreaterThan(0);
+          sum += weight;
+        }
+        expect(sum, `${id} side ${side}`).toBe(PLACE_WEIGHTS);
+      });
+    }
+  });
 });
 
 describe('bot matches', () => {

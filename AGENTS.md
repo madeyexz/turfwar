@@ -32,7 +32,9 @@ requests.
 - `shared/`: environment-independent simulation, collision, movement, hit volumes,
   weapons, attachments and prices, thrown bodies, drivable vehicles, and map definitions (with ammo crates, bomb sites, ladders and vehicle spots). No browser APIs here.
 - `shared/match/`: match state, combat validation, economy (cash, store, crates), rounds and the bomb, bots,
-  navigation, the packed per-tick frame, and the simulation tick.
+  navigation, the packed per-tick frame, and the simulation tick. The bots' habits (`bots.ts`), buy table (`BOT_BUY`) and
+  places (`places.ts`) are measured from recorded players: run `bun scripts/botbench.ts` before and after a change to
+  them and compare (docs/DEVELOPMENT.md "Bot bench").
 - `src/game/`: client loop, player prediction/input, Solo link, settings, performance check.
 - `src/net/online.ts`: SpacetimeDB connection, replicated state, interpolation, and intents.
 - `src/crazygames.ts`: the CrazyGames build flag and SDK wrapper (`bun run build:crazygames`; docs/DEVELOPMENT.md "CrazyGames build"). Keep that build free of links back to the playable website.

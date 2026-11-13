@@ -27,11 +27,19 @@ export interface BotBrain {
   reaction: number;
   lastSeen: number;
   seenX: number; seenY: number; seenZ: number;
-  aimYaw: number; aimPitch: number;
+  /** The view angles of the enemy as the bot sees it (with its error), and the seconds until the error changes (absent or below -1: no error drawn yet). */
+  aimYaw: number; aimPitch: number; aimLeft?: number;
+  /** The hand's move of the view: the seconds left of it, the seconds it takes in all, the angles left of it, and the seconds of rest after it. */
+  handLeft?: number; handFor?: number; handYaw?: number; handPitch?: number; handRest?: number;
+  /** The aim point's error, sideways and up, in units of the bot's usual error. */
   errYaw: number; errPitch: number;
+  /** What the body does in a fight: 0 stands, ±1 strafes, ±0.25 keeps to its way; and the seconds until the next choice. */
   strafe: number; strafeLeft: number;
   crouchLeft: number;
-  burst: number; burstPause: number;
+  /** Shots in the burst so far (above 0: the trigger is down), the seconds until the next burst, and the weapon's bloom (degrees) at the last shot. */
+  burst: number; burstPause: number; bloom?: number;
+  /** Seconds before an attacker on a bomb site starts to arm (absent: not there). */
+  plantIn?: number;
   stuck: number; lastX: number; lastY: number; lastZ: number;
   think: number;
   grenadeCooldown: number;

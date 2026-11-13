@@ -206,6 +206,14 @@ instead of downloading them again, and leaves the 512 px icons to the browser's 
   limits the server allows.
 - Every client receives every soldier's pose (no interest management), and every tick writes the
   full soldier set to the database's durable log.
+- The 24v24 room does not hold 30 ticks/s on the Taipei VM. In the recordings of 2026-10-16 to
+  2026-11-07 (399 rounds), 17 % of its ticks came 100 ms or more after the tick before (median
+  16 ticks/s), and because the module caps a tick's step at 0.1 s the room ran at about 77 % of real
+  speed. A 6v6 room open at the same time stalled with it (23 % of its ticks, against 2 % otherwise);
+  1v1 and 6v6 rooms alone hold 30 ticks/s. The stalls are as frequent during freeze time, when no bot
+  acts, and the simulation alone needs under 1 ms a tick (`bun scripts/simbench.ts meridian`), so the
+  cause is the host (CPU share, disk or memory) or the per-tick database work, not the bots. It has
+  not been measured on the VM.
 - Third-person camera (V) and the toggle/hold options for crouch and accuracy are not implemented.
 - First-person and third-person animation is code-driven on CC0 clips; there are no authored
   weapon-specific reload animations, fingers are posed procedurally, and a soldier on a ladder shows

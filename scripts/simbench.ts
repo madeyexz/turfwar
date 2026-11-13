@@ -4,8 +4,10 @@
  *
  *   bun scripts/simbench.ts meridian 60
  */
+import { loadMap } from '../shared/maps/index';
 import { rng } from '../shared/math';
-import { balanceTeams, createContext, createMatch, takeSnapshot, tickMatch, TICK_RATE } from '../shared/match/sim';
+import { encodeFrame } from '../shared/match/frame';
+import { balanceTeams, createContext, createMatch, tickMatch, TICK_RATE } from '../shared/match/sim';
 import { ONLINE_CONFIG } from '../shared/match/state';
 
 const mapId = process.argv[2] ?? 'meridian';
@@ -13,7 +15,8 @@ const seconds = Number(process.argv[3] ?? 60);
 const random = rng(7);
 let events = 0;
 const ctx = createContext(mapId, random, () => { events++; });
-const state = createMatch(mapId, { ...ONLINE_CONFIG, warmup: 1 }, random);
+// Full team size: 24v24 on a battlefield, 6v6 on the other maps.
+const state = createMatch(mapId, { ...ONLINE_CONFIG, teamSize: loadMap(mapId).def.big ? 24 : 6, warmup: 1 });
 balanceTeams(state, ctx);
 const times: number[] = [];
 for (let i = 0; i < seconds * TICK_RATE; i++) {
@@ -23,7 +26,7 @@ for (let i = 0; i < seconds * TICK_RATE; i++) {
 }
 // Per-tick serialization the module does on top of the simulation.
 const t0 = performance.now();
-for (let i = 0; i < 100; i++) { for (const s of state.soldiers) { JSON.stringify(s); if (s.brain) JSON.parse(JSON.stringify(s.brain)); } JSON.stringify(takeSnapshot(state)); }
+for (let i = 0; i < 100; i++) { for (const s of state.soldiers) { JSON.stringify(s); if (s.brain) JSON.parse(JSON.stringify(s.brain)); } encodeFrame(state, []); }
 const serialize = (performance.now() - t0) / 100;
 times.sort((a, b) => a - b);
 const pct = (q: number) => times[Math.floor(q * (times.length - 1))].toFixed(2);
