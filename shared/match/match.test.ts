@@ -65,6 +65,18 @@ describe('maps and navigation', () => {
     });
   }
   // Taipei's own layout checks (sightlines, levels, base distances) are in shared/maps/taipei.test.ts, Taipei 101 · 88F's in taipei101.test.ts.
+
+  it('the nearest nav node to a point at the west or east edge of a map is at that edge', () => {
+    for (const id of MAP_IDS) {
+      const nav = loadNav(id);
+      // The search goes 5 columns out; a column past one edge is not a column of the other edge.
+      for (let iz = 0; iz < nav.nz; iz++) for (const ix of [0, 1, 2, 3, 4, nav.nx - 5, nav.nx - 4, nav.nx - 3, nav.nx - 2, nav.nx - 1]) {
+        const x = nav.x0 + ix * nav.spacing, z = nav.z0 + iz * nav.spacing;
+        const node = nearestNode(nav, x, 0, z);
+        if (node >= 0) expect(Math.abs(nav.x[node] - x), `${id} ${x},${z}`).toBeLessThanOrEqual(5 * nav.spacing);
+      }
+    }
+  });
 });
 
 describe('bot matches', () => {
