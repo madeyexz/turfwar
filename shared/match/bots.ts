@@ -28,6 +28,127 @@ export function rookieEase(s: Soldier): number {
 /** Path hops this short that rise or drop more than 1.5 m are ladders (see nav). */
 const SPACING_LADDER = 2;
 
+/**
+ * The bots copy the habits of recorded mouse players, so that they play like people; the skill still sets how
+ * strong a bot is. The numbers in the comments below are the players' (docs/DEVELOPMENT.md, "Bot bench", has the
+ * check that compares the bots with them). Distances are metres, angles radians, times seconds.
+ */
+const NOTICE = {
+  /** Shortest time from the first sight of an enemy to the first move of the aim, and what a bot of no skill adds. */
+  base: 0.08, slow: 0.12,
+  /** Added per radian between the enemy and the centre of the view (players' first shot: 0.67 s head-on, 1.67 s at 0.75 to 1.6 rad). */
+  angle: 0.3,
+  /** Mean of the long tail on top (the first move of the aim: 0.37 s at the median, but the upper quarter is past 0.8 s). */
+  tail: 0.1, tailSlow: 0.25,
+  /**
+   * Chance of a late notice = late × √angle (a bot of no skill: `lateSlow` more), plus `far` beyond 30 m: players engage
+   * 90% of the enemies in the middle of the view inside 3 s, 61% at 0.3 to 0.75 rad and 39% at 0.75 to 1.6 rad.
+   * The wait is 0.5 to 1.5 × lateTime.
+   */
+  late: 0.12, lateSlow: 0.15, far: 0.05, lateTime: 2.4,
+  /** A hit from the enemy cuts what is left of the wait to this, plus `wakeSlow` for a bot of no skill. */
+  wake: 0.2, wakeSlow: 0.2,
+};
+const AIM = {
+  /**
+   * Median distance (m) between the aim point and the enemy's chest, sideways, for a bot of no skill: `error + errorFar × distance`
+   * (players' shots at a slow enemy: 0.22 m off under 5 m, 0.34 m at 8 to 15 m, 0.49 m at 30 to 60 m). Skill divides it by 1 + sharp × skill.
+   */
+  error: 0.22, errorFar: 0.006, sharp: 6,
+  /** The first aim point at an enemy is looser (players: 1.3 m off half a second before the first shot); each next one keeps this share of the last error. */
+  first: 2, keep: 0.6,
+  /** The aim point is this far above the chest's middle (m), more with skill; the error up and down is this share of the sideways one. */
+  up: 0.1, vertical: 0.6,
+  /** Seconds between two aim points at full skill, and what a bot of no skill adds. */
+  every: 0.3, everySlow: 0.2,
+  /**
+   * A move of the hand goes to where the enemy will be when the move ends, by this share (more with skill): players are behind an enemy
+   * that crosses their view (by 0.035 s of its way under 5 m, 0.07 to 0.12 s beyond).
+   */
+  lead: 0.5, leadSkill: 0.5,
+  /** The hand leaves the view alone while it is within `rest` m of the aim point (and never corrects less than `fine` rad). */
+  rest: 0.06, fine: 0.004,
+  /** The trigger goes down when the view is within `fire` m of the enemy as the bot sees it (and never needs less than `fireMin` rad). */
+  fire: 0.6, fireMin: 0.02,
+};
+const HAND = {
+  /**
+   * A player's hand turns the view in short moves, with rests between them. Seconds: the shortest move and the mean of what comes on
+   * top (players: 0.13 s at the median, 0.19 s at the mean), and the mean rest after a move with no enemy in sight, with one, and with
+   * the trigger down (players: 0.1 s, 0.07 s and 0.07 s at the median).
+   */
+  moveLeast: 0.05, move: 0.11, rest: 0.1, restSeen: 0.07, restFire: 0.05,
+  /** One move covers this share of the way to where the bot wants to look, or up to `gainMore` more; the next move corrects what is left. */
+  gain: 0.75, gainMore: 0.35,
+  /** No hand moves straight: a move takes the view up or down by up to this share of its sideways part (players: 0.3 at the median), but not more than `tiltMost` rad. */
+  tilt: 0.4, tiltMost: 0.05,
+  /** The fastest turn (rad/s): a longer way takes a longer move (players: 10.5 rad/s in the fastest 1% of the ticks). */
+  flick: 12,
+};
+const FIRE = {
+  /** Share of the recoil climb that the hand does not pull down (players cancel 0.79), over at most this many shots. */
+  climb: 0.21, climbShots: 6,
+  /** A burst ends after any shot past `min` with this chance (players: 9 to 10 shots at the median under 15 m, 8 to 30 m, 4 to 60 m, 2 beyond). */
+  stop: 0.09, stopFar: 0.2, stopVeryFar: 0.4, min: 2,
+  /** Seconds between bursts: a floor, what a bot of no skill adds, and the mean of the tail (players: 0.57 s at the median). */
+  pause: 0.15, pauseSlow: 0.1, pauseTail: 0.1, pauseTailSlow: 0.15,
+  /** The finger comes off late: the chance per shot to stop once the enemy is out of sight or down (17% of the players' shots have no enemy in sight). */
+  release: 0.4,
+};
+const BODY = {
+  /** Share of the bots that aim down the sights at a distance: `ads + adsPerMetre × distance` (players: 26% of the shots under 5 m, 66% at 8 to 15 m, 87% beyond 30 m). */
+  ads: 0.2, adsPerMetre: 0.035, adsMost: 0.92,
+  /** Chance to stand still in a fight (players: 15% of the shots under 5 m, 28% at 8 to 15 m, 55% beyond 30 m); of the rest, this share strafes and the others keep to their way. */
+  still: 0.1, stillPerMetre: 0.013, stillLeast: 0.15, stillMost: 0.6, strafeShare: 0.6,
+  /** Seconds one of these lasts before the next choice (players change side 0.17 times per second). */
+  strafe: 1.5, strafeMore: 3,
+  /** The view rests this far below level when no enemy is engaged (players: 0.09 at the median). It is on the way `ahead` path steps in front (2.5 m each), and the hand moves it once it is more than `slack` rad off. */
+  rest: 0.04, restMore: 0.1, ahead: 3, slack: 0.03,
+  /**
+   * Bots sprint out of the base until the round clock is at this (s), and to an armed bomb; they walk otherwise (players sprint 14%
+   * of the time). The clock starts with the 4 s freeze, so this is the first 3 s of play.
+   */
+  dash: 7,
+  /** An attacker looks round the bomb site for this long (s, and up to `plantMore` longer) before it starts to arm (players arm at 35 s into the round at the median). */
+  plant: 2, plantMore: 6,
+};
+const DEG = Math.PI / 180;
+/** The median size of a normal number, in standard deviations. */
+const MEDIAN = 0.674;
+
+/** A fixed number in [0, 1) per bot and habit: players differ from each other, and each keeps to their habits. */
+const habit = (bot: Soldier, n: 0 | 1 | 2) => (bot.id * (n === 0 ? 0.6180339887 : n === 1 ? 0.4142135624 : 0.7320508076)) % 1;
+
+/** The share of a move of the hand that is done after the share `u` of its time: the hand speeds up, then slows down. */
+const ease = (u: number) => u * u * (3 - 2 * u);
+
+/**
+ * One tick of the hand on the view. `toYaw` and `toPitch` (rad) are the way to where the bot wants to look. A move starts when the
+ * rest after the last one is over and the view is more than `slack` rad off; it is then carried out as it was planned, so the view
+ * is behind something that moves. `rest`: the mean rest (s); one shorter than half a tick is no rest, so the hand can turn back at
+ * once when it went too far. `drift`: how fast (rad/s) the thing crosses the view.
+ */
+function turnView(ctx: SimContext, bot: Soldier, brain: BotBrain, toYaw: number, toPitch: number, slack: number, rest: number, drift: number, dt: number) {
+  let left = brain.handLeft ?? 0;
+  if (left <= 0) {
+    const wait = brain.handRest ?? 0;
+    if (wait > dt * 0.5) { brain.handRest = wait - dt; return; }
+    if (Math.hypot(toYaw, toPitch) <= slack) return;
+    left = Math.max(dt, HAND.moveLeast - Math.log(1 - ctx.random()) * HAND.move);
+    const gain = HAND.gain + ctx.random() * HAND.gainMore;
+    const yaw = (toYaw + drift * left) * gain;
+    const pitch = toPitch * gain + (ctx.random() * 2 - 1) * Math.min(HAND.tiltMost, HAND.tilt * Math.abs(yaw));
+    left = Math.max(left, Math.hypot(yaw, pitch) / HAND.flick);
+    brain.handYaw = yaw; brain.handPitch = pitch;
+    brain.handRest = -Math.log(1 - ctx.random()) * rest; brain.handFor = left;
+  }
+  // The share of what is left of the move that this tick does.
+  const all = Math.max(left, brain.handFor ?? left), from = 1 - left / all, to = from + dt / all;
+  const share = to >= 1 ? 1 : (ease(to) - ease(from)) / (1 - ease(from)), yaw = brain.handYaw! * share, pitch = brain.handPitch! * share;
+  bot.yaw = wrapAngle(bot.yaw + yaw); bot.pitch = clamp(bot.pitch + pitch, -1.3, 1.3);
+  brain.handYaw! -= yaw; brain.handPitch! -= pitch; brain.handLeft = left - dt;
+}
+
 const CALLSIGNS = [
   'Halcyon', 'Vex', 'Marrow', 'Kestrel', 'Onyx', 'Sable', 'Rook', 'Cinder', 'Talon', 'Wren', 'Juno', 'Brask',
   'Ember', 'Quill', 'Nyx', 'Dagger', 'Lumen', 'Shrike', 'Vesper', 'Atlas', 'Mako', 'Pike', 'Orrin', 'Zephyr',
@@ -56,7 +177,6 @@ export function createBrain(skill: number): BotBrain {
 }
 
 const yawTo = (from: Vec3, to: Vec3) => Math.atan2(-(to.x - from.x), -(to.z - from.z));
-const pitchTo = (from: Vec3, to: Vec3) => Math.atan2(to.y - from.y, Math.hypot(to.x - from.x, to.z - from.z));
 
 const sabotageOn = (state: MatchState, ctx: SimContext) => state.config.mode === 'sabotage' && !!ctx.map.sabotage?.sites.length;
 
@@ -176,20 +296,34 @@ export function updateBot(state: MatchState, ctx: SimContext, bot: Soldier, dt: 
   if (!bot.alive || dt <= 0) return;
   brain.think -= dt; brain.repath -= dt; brain.strafeLeft -= dt; brain.crouchLeft -= dt;
   brain.burstPause -= dt; brain.grenadeCooldown -= dt; brain.reaction -= dt;
+  const slow = 1 - brain.skill;
 
   // ---- Perception -----------------------------------------------------------------
   let target = state.soldiers.find(s => s.id === brain.target && s.alive);
+  // A hit gets the bot's attention: the enemy in view has it at once, and for anyone else the bot looks round now.
+  if (bot.sinceHit < dt * 1.5) {
+    if (bot.lastAttacker === brain.target) brain.reaction = Math.min(brain.reaction, NOTICE.wake + slow * NOTICE.wakeSlow);
+    else brain.think = 0;
+  }
   if (brain.think <= 0) {
     brain.think = 0.2 + ctx.random() * 0.15;
     const seen = perceive(state, ctx, bot, brain);
     if (seen) {
       if (seen.id !== brain.target) {
         brain.target = seen.id;
-        // Rookies (new players) get a beat longer and a looser first aim, so their first fights are winnable.
+        // How long the bot takes to notice the enemy: longer off the centre of its view, and now and then much longer.
+        // Rookies (new players) get a beat on top, so their first fights are winnable. The draws do not depend on the enemy.
+        const off = Math.abs(wrapAngle(yawTo(bot.m, seen.m) - bot.yaw));
+        const tail = -Math.log(1 - ctx.random()) * (NOTICE.tail + slow * NOTICE.tailSlow), late = ctx.random(), lateFor = 0.5 + ctx.random();
+        if (bot.lastAttacker === seen.id && bot.sinceHit < 2) brain.reaction = NOTICE.wake + slow * NOTICE.wakeSlow + tail * 0.5;
+        else {
+          const chance = (NOTICE.late + slow * NOTICE.lateSlow) * Math.sqrt(off) + (Math.hypot(seen.m.x - bot.m.x, seen.m.z - bot.m.z) > 30 ? NOTICE.far : 0);
+          brain.reaction = NOTICE.base + slow * NOTICE.slow + Math.min(off, 1.6) * NOTICE.angle + tail + (late < chance ? NOTICE.lateTime * lateFor : 0);
+        }
         const ease = rookieEase(seen);
-        brain.reaction = 0.22 + (1 - brain.skill) * 0.38 + ctx.random() * 0.16 + ease * ROOKIE_EASE.reaction;
-        const scale = (1.25 - brain.skill) * (0.03 + ctx.random() * 0.05) * (ease > 0 ? ROOKIE_EASE.aimError : 1);
-        brain.errYaw = (ctx.random() < 0.5 ? -1 : 1) * scale; brain.errPitch = (ctx.random() - 0.3) * scale;
+        brain.reaction += ease * ROOKIE_EASE.reaction;
+        // The first aim is loose, and looser at a rookie. -9 marks that this enemy has no aim point yet.
+        brain.errYaw = (ctx.random() < 0.5 ? -1 : 1) * AIM.first * (ease > 0 ? ROOKIE_EASE.aimError : 1); brain.errPitch = 0; brain.aimLeft = -9;
       }
       brain.lastSeen = state.time; brain.seenX = seen.m.x; brain.seenY = seen.m.y; brain.seenZ = seen.m.z;
       target = seen;
@@ -197,7 +331,10 @@ export function updateBot(state: MatchState, ctx: SimContext, bot: Soldier, dt: 
       brain.target = -1; target = undefined;
     }
   }
-  const visible = !!target && state.time - brain.lastSeen < 0.3;
+  // In sight at the last look (the looks are up to 0.35 s apart).
+  const visible = !!target && state.time - brain.lastSeen < 0.4;
+  // The bot fights an enemy once it has noticed it; until then it goes on as before.
+  const engaged = visible && brain.reaction <= 0;
 
   // ---- Goals and navigation ------------------------------------------------------
   brain.goalLeft -= dt;
@@ -214,7 +351,7 @@ export function updateBot(state: MatchState, ctx: SimContext, bot: Soldier, dt: 
     else plan(ctx, bot, brain, brain.goalX, brain.goalY ?? bot.m.y, brain.goalZ);
     brain.repath = 2.5 + ctx.random() * 2;
   }
-  let moveX = 0, moveZ = 0;
+  let moveX = 0, moveZ = 0, lookX = 0, lookZ = 0;
   if (ctx.nav && brain.path.length) {
     const nav = ctx.nav;
     let i = brain.pathIndex;
@@ -228,72 +365,82 @@ export function updateBot(state: MatchState, ctx: SimContext, bot: Soldier, dt: 
     const dx = nav.x[node] - bot.m.x, dz = nav.z[node] - bot.m.z, d = Math.hypot(dx, dz);
     if (d > 0.6 || i < brain.path.length - 1) { moveX = dx / (d || 1); moveZ = dz / (d || 1); }
     else if (ctx.random() < dt * 0.6) { brain.goalLeft = Math.min(brain.goalLeft, 1.5); }
+    // The eyes are on the way a few steps ahead, not on the next step: the view does not follow each bend of the path.
+    const far = brain.path[Math.min(i + BODY.ahead, brain.path.length - 1)];
+    lookX = nav.x[far] - bot.m.x; lookZ = nav.z[far] - bot.m.z;
     if (nav.y[node] - bot.m.y > 0.9 && bot.m.grounded && d < 2 && !ctx.world.ladderAt(bot.m.x, bot.m.y, bot.m.z, MOVE.radius)) brain.jump = true;
   }
 
   // ---- Combat ----------------------------------------------------------------------
   const w = weaponOf(bot);
-  let wantAds = false;
-  if (target && visible) {
+  let wantAds = false, pull = false, stop = FIRE.release;
+  if (target && engaged) {
     const eye = eyeOf(bot);
-    const shape = shapeOf(ctx, target), peeking = peekOf(ctx.world, target) !== 0;
-    const aimAt = ctx.random() < 0.18 + brain.skill * 0.15 ? { ...shape.head, y: shape.head.y + 0.02 } : peeking ? { ...shape.chestTop } : chestPoint(feetOf(target), target.m.crouch);
-    // Imperfect lead on moving targets.
-    const lead = 0.06 + (1 - brain.skill) * 0.08;
-    aimAt.x += target.m.vx * lead * (ctx.random() - 0.2); aimAt.z += target.m.vz * lead * (ctx.random() - 0.2);
-    const distance = Math.hypot(aimAt.x - eye.x, aimAt.z - eye.z);
-    brain.errYaw *= Math.exp(-dt * (1.6 + brain.skill * 2.4)); brain.errPitch *= Math.exp(-dt * (1.6 + brain.skill * 2.4));
-    const wantYaw = yawTo(eye, aimAt) + brain.errYaw, wantPitch = pitchTo(eye, aimAt) + brain.errPitch;
-    const turn = (4 + brain.skill * 6) * dt;
-    bot.yaw = wrapAngle(bot.yaw + clamp(wrapAngle(wantYaw - bot.yaw), -turn, turn));
-    bot.pitch = clamp(bot.pitch + clamp(wantPitch - bot.pitch, -turn, turn), -1.3, 1.3);
-    const aligned = Math.abs(wrapAngle(wantYaw - bot.yaw)) < 0.06 && Math.abs(wantPitch - bot.pitch) < 0.06;
-    wantAds = w.class === 'sniper' || ((w.class === 'rifle' || w.class === 'lmg') && distance > 18) || (w.class === 'smg' && distance > 26);
+    const dx = target.m.x - eye.x, dz = target.m.z - eye.z, distance = Math.hypot(dx, dz), reach = Math.max(1.5, distance);
+    // The aim point rides on the enemy as the bot sees it: its chest (or what shows of it), a little high, with the bot's error.
+    // A soldier peeking round cover shows its head and shoulder, not its chest.
+    const chest = peekOf(ctx.world, target) !== 0 ? shapeOf(ctx, target).chestTop : chestPoint(feetOf(target), target.m.crouch);
+    let aimLeft = (brain.aimLeft ?? -9) - dt;
+    if (aimLeft <= 0) {
+      // A new error, which keeps a part of the last one (the first one at this enemy is set where the bot notices it).
+      if (aimLeft > -1) {
+        const g = Math.sqrt(-2 * Math.log(1 - ctx.random()) * (1 - AIM.keep * AIM.keep)), a = ctx.random() * Math.PI * 2;
+        brain.errYaw = brain.errYaw * AIM.keep + g * Math.cos(a); brain.errPitch = brain.errPitch * AIM.keep + g * Math.sin(a);
+      }
+      aimLeft = (AIM.every + slow * AIM.everySlow) * (0.7 + ctx.random() * 0.6);
+    }
+    brain.aimLeft = aimLeft;
+    const sd = (AIM.error + AIM.errorFar * distance) / (1 + AIM.sharp * brain.skill) / MEDIAN;
+    brain.aimYaw = Math.atan2(-(chest.x - eye.x), -(chest.z - eye.z)) + brain.errYaw * sd / reach;
+    brain.aimPitch = Math.atan2(chest.y + AIM.up * (1 + 2 * brain.skill) - eye.y, distance) + brain.errPitch * sd * AIM.vertical / reach;
+    // How fast the enemy crosses the view (rad/s), from its speed and the bot's own: a move of the hand goes a part of the way ahead of it.
+    const crossing = (dz * (target.m.vx - bot.m.vx) - dx * (target.m.vz - bot.m.vz)) / (reach * reach);
+    turnView(ctx, bot, brain, wrapAngle(brain.aimYaw - bot.yaw), brain.aimPitch - bot.pitch, Math.max(AIM.fine, AIM.rest / reach),
+      brain.burst > 0 ? HAND.restFire : HAND.restSeen, crossing * Math.min(1, AIM.lead + AIM.leadSkill * brain.skill), dt);
+    const near = Math.max(AIM.fireMin, AIM.fire / reach);
+    const aligned = Math.abs(wrapAngle(brain.aimYaw - bot.yaw)) < near && Math.abs(brain.aimPitch - bot.pitch) < near * 1.5;
+    wantAds = w.class !== 'melee' && (w.class === 'sniper' || habit(bot, 0) < Math.min(BODY.adsMost, BODY.ads + BODY.adsPerMetre * distance));
 
-    // Strafe and range-keeping while fighting.
-    if (brain.strafeLeft <= 0) { brain.strafe = ctx.random() < 0.5 ? -1 : 1; brain.strafeLeft = 0.5 + ctx.random() * 0.9; }
-    const preferred = w.botRange;
-    const fx = -Math.sin(bot.yaw), fz = -Math.cos(bot.yaw), rx = Math.cos(bot.yaw), rz = -Math.sin(bot.yaw);
-    const advance = distance > preferred * 1.4 ? 0.7 : distance < preferred * 0.5 ? -0.6 : 0;
-    const pathWeight = distance > preferred ? 0.6 : 0.2;
-    moveX = moveX * pathWeight + (fx * advance + rx * brain.strafe * 0.9);
-    moveZ = moveZ * pathWeight + (fz * advance + rz * brain.strafe * 0.9);
+    // The body: stand, strafe, or keep to the way, for a few seconds each; and keep the weapon's range.
+    if (brain.strafeLeft <= 0) {
+      const r = ctx.random(), still = clamp(BODY.still + BODY.stillPerMetre * distance, BODY.stillLeast, BODY.stillMost) * (0.5 + habit(bot, 1));
+      brain.strafe = r < still ? 0 : (ctx.random() < 0.5 ? -1 : 1) * (r < still + (1 - still) * BODY.strafeShare ? 1 : 0.25);
+      brain.strafeLeft = BODY.strafe + ctx.random() * BODY.strafeMore;
+    }
+    if (brain.strafe === 0 && bot.weapon !== 2) { moveX = 0; moveZ = 0; }
+    else {
+      const preferred = w.botRange;
+      const fx = -Math.sin(bot.yaw), fz = -Math.cos(bot.yaw), rx = Math.cos(bot.yaw), rz = -Math.sin(bot.yaw);
+      const advance = distance > preferred * 1.4 ? 0.7 : distance < preferred * 0.5 ? -0.6 : 0;
+      const pathWeight = distance > preferred ? 0.6 : 0.2;
+      moveX = moveX * pathWeight + (fx * advance + rx * brain.strafe * 0.9);
+      moveZ = moveZ * pathWeight + (fz * advance + rz * brain.strafe * 0.9);
+    }
     if (brain.crouchLeft < -2 && ctx.random() < dt * 0.25 * brain.skill && distance > 15) brain.crouchLeft = 0.8 + ctx.random();
 
     // Knife anyone who closes right in; draw the gun again once they back off.
     if (bot.switchLeft <= 0 && bot.reloadLeft <= 0 && (bot.weapon === 2 ? distance > 3.5 : distance < 1.6 && ctx.random() < dt * 4)) {
-      bot.weapon = bot.weapon === 2 ? 0 : 2; bot.switchLeft = weaponOf(bot).equipTime;
+      bot.weapon = bot.weapon === 2 ? 0 : 2; bot.switchLeft = weaponOf(bot).equipTime; brain.burst = 0;
     }
 
-    // Fire in bursts once the reaction delay has passed.
-    if (brain.reaction <= 0 && aligned && bot.reloadLeft <= 0 && bot.switchLeft <= 0 && bot.fireCooldown <= 0 && brain.burstPause <= 0 && distance < w.range * 0.6) {
-      if (bot.weapon !== 2 && bot.ammo[bot.weapon] <= 0) { bot.reloadLeft = w.reload; }
-      else {
-        const spread = (w.pellets > 1 ? 0.8 : spreadFor({ ...bot, ads: wantAds }, w)) * (1.35 - brain.skill * 0.55) * (rookieEase(target) > 0 ? ROOKIE_EASE.spread : 1) * Math.PI / 180;
-        const yaw = bot.yaw + (ctx.random() - 0.5) * 2 * spread, pitch = bot.pitch + (ctx.random() - 0.5) * 2 * spread;
-        if (w.pellets > 1) resolvePellets(state, ctx, bot, w, eye, dirFromAngles(yaw, pitch), wantAds);
-        else resolveShot(state, ctx, bot, w, eye, traceShot(state, ctx, bot, eye, dirFromAngles(yaw, pitch), w.range));
-        if (bot.weapon !== 2) bot.ammo[bot.weapon]--;
-        bot.sinceShot = 0;
-        bot.fireCooldown = w.auto ? w.interval : w.interval * (1.15 + ctx.random() * 0.6);
-        brain.burst++;
-        const burstLength = w.auto ? 3 + Math.floor(ctx.random() * (distance < 15 ? 8 : 4)) : 1;
-        if (brain.burst >= burstLength) { brain.burst = 0; brain.burstPause = (w.auto ? 0.18 : 0.05) + ctx.random() * (distance > 30 ? 0.6 : 0.3); }
-      }
-    }
+    // The trigger goes down when the view is on the aim point, and stays down for a burst: a few shots at long range, many up close.
+    pull = brain.burst > 0 || (aligned && brain.burstPause <= 0 && distance < w.range * 0.6);
+    stop = !w.auto || w.class === 'melee' ? 1 : brain.burst + 1 < FIRE.min ? 0 : distance < 30 ? FIRE.stop : distance < 60 ? FIRE.stopFar : FIRE.stopVeryFar;
   } else {
-    // Look where we are going (smoothly) when not fighting.
-    if (moveX || moveZ) {
-      const want = Math.atan2(-moveX, -moveZ);
-      bot.yaw = wrapAngle(bot.yaw + clamp(wrapAngle(want - bot.yaw), -4 * dt, 4 * dt));
-      bot.pitch *= Math.exp(-dt * 3);
+    // The finger comes off late when the enemy drops or goes out of sight; the hand ends its move and no more for those shots.
+    pull = brain.burst > 0;
+    if (pull) turnView(ctx, bot, brain, 0, 0, 1, HAND.restFire, 0, dt);
+    else {
+      // Look where we are going when not fighting, a little below level.
+      const far = lookX * lookX + lookZ * lookZ > 1;
+      turnView(ctx, bot, brain, far ? wrapAngle(Math.atan2(-lookX, -lookZ) - bot.yaw) : moveX || moveZ ? wrapAngle(Math.atan2(-moveX, -moveZ) - bot.yaw) : 0,
+        -(BODY.rest + habit(bot, 2) * BODY.restMore) - bot.pitch, BODY.slack, HAND.rest, 0, dt);
+      if (bot.weapon === 2 && bot.switchLeft <= 0) { bot.weapon = 0; bot.switchLeft = weaponOf(bot).equipTime; }
+      else if (bot.weapon !== 2 && bot.ammo[bot.weapon] < w.magazine * 0.4 && bot.reloadLeft <= 0) bot.reloadLeft = w.reload;
     }
-    brain.burst = 0;
-    if (bot.weapon === 2 && bot.switchLeft <= 0) { bot.weapon = 0; bot.switchLeft = weaponOf(bot).equipTime; }
-    else if (bot.weapon !== 2 && bot.ammo[bot.weapon] < w.magazine * 0.4 && bot.reloadLeft <= 0) bot.reloadLeft = w.reload;
     // Grenade the last known position of an enemy who ducked behind cover.
     // A molotov goes on a nearer one, where it would land at their feet.
-    if (target && brain.grenadeCooldown <= 0 && (bot.grenades > 0 || bot.molotovs > 0) && state.time - brain.lastSeen < 2.5) {
+    if (target && !visible && brain.grenadeCooldown <= 0 && (bot.grenades > 0 || bot.molotovs > 0) && state.time - brain.lastSeen < 2.5) {
       const d = Math.hypot(brain.seenX - bot.m.x, brain.seenZ - bot.m.z);
       const frag = bot.grenades > 0 && d > 9 && d < 24, molotov = bot.molotovs > 0 && d > 6 && d < 20;
       if ((frag || molotov) && ctx.random() < 0.35) {
@@ -308,15 +455,48 @@ export function updateBot(state: MatchState, ctx: SimContext, bot: Soldier, dt: 
     }
   }
 
+  // ---- Fire: the weapon's own spread with its bloom, and the part of the recoil that the hand does not hold ----
+  if (pull && bot.reloadLeft <= 0 && bot.switchLeft <= 0 && bot.fireCooldown <= 0) {
+    if (bot.weapon !== 2 && bot.ammo[bot.weapon] <= 0) { bot.reloadLeft = w.reload; brain.burst = 0; }
+    else {
+      const eye = eyeOf(bot);
+      // The bloom falls off as on a player's weapon: slowly for a moment after a shot, then at the weapon's rate.
+      const bloom = Math.max(0, (brain.bloom ?? 0) - w.spread.recovery * (Math.min(bot.sinceShot, 0.08) * 0.25 + Math.max(0, bot.sinceShot - 0.08)));
+      const cone = w.pellets > 1 || w.class === 'melee' ? 0
+        : spreadFor(bot, w, bloom * (bot.ads ? 0.4 : 1)) * (target && rookieEase(target) > 0 ? ROOKIE_EASE.spread : 1) * DEG;
+      const a = ctx.random() * Math.PI * 2, r = Math.sqrt(ctx.random()) * cone;
+      const climb = FIRE.climb * w.recoil.pitch * DEG * Math.min(brain.burst, FIRE.climbShots) * (bot.ads ? 0.65 : 1);
+      const dir = dirFromAngles(bot.yaw + Math.cos(a) * r, bot.pitch + climb + Math.sin(a) * r);
+      if (w.pellets > 1) resolvePellets(state, ctx, bot, w, eye, dir, bot.ads);
+      else resolveShot(state, ctx, bot, w, eye, traceShot(state, ctx, bot, eye, dir, w.range));
+      if (bot.weapon !== 2) bot.ammo[bot.weapon]--;
+      bot.sinceShot = 0;
+      bot.fireCooldown = w.auto ? w.interval : w.interval * (1.15 + ctx.random() * 0.6);
+      brain.bloom = Math.min(w.spread.bloomMax, bloom + w.spread.bloomPerShot);
+      brain.burst++;
+      if (ctx.random() < stop) {
+        brain.burst = 0;
+        brain.burstPause = w.auto && w.class !== 'melee' ? FIRE.pause + slow * FIRE.pauseSlow - Math.log(1 - ctx.random()) * (FIRE.pauseTail + slow * FIRE.pauseTailSlow) : 0.05 + ctx.random() * 0.4;
+      }
+    }
+  }
+
   // ---- Sabotage: hold E on the site (standing still) to arm or disarm --------------
   bot.using = false;
-  if (sabotage && !visible && bot.m.grounded) {
+  let onJob = false;
+  if (sabotage && !engaged && bot.m.grounded) {
     const site = state.bomb.armed ? state.bomb.site : bot.team === ATTACKERS ? sitesOf(ctx).findIndex(p => onSite(p, bot.m.x, bot.m.y, bot.m.z, SITE_STOP)) : -1;
     const p = site >= 0 ? sitesOf(ctx)[site] : undefined;
     const busy = state.bomb.by !== -1 && state.bomb.by !== bot.id;
     const myJob = state.bomb.armed ? bot.team !== ATTACKERS : bot.team === ATTACKERS;
-    if (p && myJob && !busy && onSite(p, bot.m.x, bot.m.y, bot.m.z, SITE_STOP)) { bot.using = true; moveX = 0; moveZ = 0; }
+    if (p && myJob && !busy && onSite(p, bot.m.x, bot.m.y, bot.m.z, SITE_STOP)) {
+      onJob = true;
+      // An attacker looks round the site for a moment first; nobody waits to disarm.
+      if (!state.bomb.armed && state.bomb.by !== bot.id) brain.plantIn = (brain.plantIn ?? BODY.plant + ctx.random() * BODY.plantMore) - dt;
+      if (state.bomb.armed || state.bomb.by === bot.id || brain.plantIn! <= 0) { bot.using = true; moveX = 0; moveZ = 0; }
+    }
   }
+  if (!onJob && brain.plantIn !== undefined) brain.plantIn = undefined;
 
   // ---- Fire: step out of the flames, and keep a step clear of them --------------
   const fire = state.bodies.length ? fireNear(state, ctx, feetOf(bot), 0.6) : undefined;
@@ -342,10 +522,12 @@ export function updateBot(state: MatchState, ctx: SimContext, bot: Soldier, dt: 
   if (len > 1) { moveX /= len; moveZ /= len; }
   const fx = -Math.sin(bot.yaw), fz = -Math.cos(bot.yaw), rx = Math.cos(bot.yaw), rz = -Math.sin(bot.yaw);
   const forward = moveX * fx + moveZ * fz, strafe = moveX * rx + moveZ * rz;
+  // Sprint out of the base, and to an armed bomb; walk the rest of the way, as most players do.
+  const hurry = !target && (state.roundClock < BODY.dash || state.bomb.armed);
   const input: MoveInput = {
     forward, strafe, yaw: bot.yaw, jump: brain.jump, crouch: brain.crouchLeft > 0,
-    sprint: !visible && len > 0.5 && forward > 0.7 && bot.stamina > (bot.sprint ? 0 : STAMINA.tired),
-    ads: wantAds && visible, speed: w.speed,
+    sprint: hurry && len > 0.5 && forward > 0.7 && bot.stamina > (bot.sprint ? 0 : STAMINA.tired),
+    ads: wantAds, speed: w.speed,
   };
   brain.jump = false;
   bot.sprint = input.sprint && bot.m.grounded; bot.ads = input.ads;
