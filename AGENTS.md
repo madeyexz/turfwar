@@ -50,7 +50,7 @@ requests.
 - `src/module_bindings/`: generated client bindings; regenerate after module API changes.
 - `public/assets/`, `public/fonts/`: runtime assets and licenses.
 - `shared/rec/`: match recording formats, clean rules, segmenter and export transform (docs/RECORDING.md). `tools/recorder/` (recorder, processor, export), `scripts/rec-*.ts` (recount, bias, deletion), `deploy/cloudflare/rec-ingest/` (ingest Worker) and `deploy/gcp-taipei/recorder/` run it; `src/game/consent.ts` and `src/game/inputlog.ts` are the client side. Keep `/privacy` and `/terms` true to what is recorded; never record chat, callsigns or players who are not subjects.
-- `tools/`: asset conversion/fetch tools with their own dependencies; not runtime code.
+- `tools/`: asset conversion/fetch tools with their own dependencies; not runtime code. `tools/botlab/` holds the research scripts behind the bots' habits (they read the private recordings; never commit data, trained weights or keys there).
 - `dev/`: development-only map, model, soldier, and first-person weapon preview pages.
 
 ## Gameplay and authority

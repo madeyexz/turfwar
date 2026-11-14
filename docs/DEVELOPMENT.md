@@ -163,8 +163,8 @@ easy or too hard for the players, change `botSkill` (`shared/match/state.ts`).
 ([docs/RECORDING.md](RECORDING.md)): the aim and the shooting are from 42 h of aim-clean mouse play, the
 movement from 40 h of mouse play and 75 h of touch play, the buying from 23,370 soldier-rounds, and the places
 from 6v6 Elimination after the first 10 s of a round (0.7 to 4.7 h per map side). They hold no player ids
-and no data of one player. The scripts that made them read the private recordings and are not in the
-repository; to make them again, measure the players as `botbench.ts` measures the bots.
+and no data of one player. The scripts that made them read the private recordings; they are in `tools/botlab/`
+(its README says how to run them), without any recording or trained weight.
 
 `places.ts` has 11 maps; a map that is not there (Meridian and the other maps with too little play) uses
 its landmarks. The test "bots can walk from their base to every place of the recorded players" fails when a
