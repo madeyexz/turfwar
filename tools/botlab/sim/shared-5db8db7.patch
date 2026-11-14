@@ -1,0 +1,1050 @@
+diff -ruN a/shared/match/bots.ts b/shared/match/bots.ts
+--- a/shared/match/bots.ts	2026-11-10 05:36:01.000000000 +0000
++++ b/shared/match/bots.ts	2026-11-14 06:09:41.116377240 +0000
+@@ -7,8 +7,17 @@
+ import { eyeOf, feetOf, onSite, shapeOf, resolvePellets, resolveShot, sideOf, smokeBlocks, spreadFor, throwGrenadeFrom, traceShot, weaponOf, type SimContext } from './combat';
+ import { fireNear, throwMolotovFrom } from './fire';
+ import { findPath, nearestNode } from './nav';
++import { PLACES, PLACE_WEIGHTS } from './places';
+ import { ATTACKERS, type BotBrain, type MatchState, type Soldier } from './state';
+ 
++/** Lab only: a per-bot controller that can take the aim, the trigger and the sights from the script. */
++export interface LabControl { active: boolean; noSprint: boolean; moveScale?: number; ads?: boolean; /** The script keeps the trigger (the learned aim has the view only). */ script?: boolean }
++export const LAB: {
++  before?: (state: MatchState, ctx: SimContext, bot: Soldier, dt: number) => LabControl | undefined;
++  after?: (state: MatchState, ctx: SimContext, bot: Soldier, dt: number) => void;
++  shot?: (state: MatchState, ctx: SimContext, bot: Soldier, burst: number) => void;
++} = {};
++
+ /** Distance (m) from a bomb site's centre at which a bot stops to arm or disarm. */
+ const SITE_STOP = 3;
+ /** Rounds played before a player stops being a rookie (bots go easier on rookies). */
+@@ -28,6 +37,127 @@
+ /** Path hops this short that rise or drop more than 1.5 m are ladders (see nav). */
+ const SPACING_LADDER = 2;
+ 
++/**
++ * The bots copy the habits of recorded mouse players, so that they play like people; the skill still sets how
++ * strong a bot is. The numbers in the comments below are the players' (docs/DEVELOPMENT.md, "Bot bench", has the
++ * check that compares the bots with them). Distances are metres, angles radians, times seconds.
++ */
++const NOTICE = {
++  /** Shortest time from the first sight of an enemy to the first move of the aim, and what a bot of no skill adds. */
++  base: 0.08, slow: 0.12,
++  /** Added per radian between the enemy and the centre of the view (players' first shot: 0.67 s head-on, 1.67 s at 0.75 to 1.6 rad). */
++  angle: 0.3,
++  /** Mean of the long tail on top (the first move of the aim: 0.37 s at the median, but the upper quarter is past 0.8 s). */
++  tail: 0.1, tailSlow: 0.25,
++  /**
++   * Chance of a late notice = late × √angle (a bot of no skill: `lateSlow` more), plus `far` beyond 30 m: players engage
++   * 90% of the enemies in the middle of the view inside 3 s, 61% at 0.3 to 0.75 rad and 39% at 0.75 to 1.6 rad.
++   * The wait is 0.5 to 1.5 × lateTime.
++   */
++  late: 0.12, lateSlow: 0.15, far: 0.05, lateTime: 2.4,
++  /** A hit from the enemy cuts what is left of the wait to this, plus `wakeSlow` for a bot of no skill. */
++  wake: 0.2, wakeSlow: 0.2,
++};
++const AIM = {
++  /**
++   * Median distance (m) between the aim point and the enemy's chest, sideways, for a bot of no skill: `error + errorFar × distance`
++   * (players' shots at a slow enemy: 0.22 m off under 5 m, 0.34 m at 8 to 15 m, 0.49 m at 30 to 60 m). Skill divides it by 1 + sharp × skill.
++   */
++  error: 0.22, errorFar: 0.006, sharp: 6,
++  /** The first aim point at an enemy is looser (players: 1.3 m off half a second before the first shot); each next one keeps this share of the last error. */
++  first: 2, keep: 0.6,
++  /** The aim point is this far above the chest's middle (m), more with skill; the error up and down is this share of the sideways one. */
++  up: 0.1, vertical: 0.6,
++  /** Seconds between two aim points at full skill, and what a bot of no skill adds. */
++  every: 0.3, everySlow: 0.2,
++  /**
++   * A move of the hand goes to where the enemy will be when the move ends, by this share (more with skill): players are behind an enemy
++   * that crosses their view (by 0.035 s of its way under 5 m, 0.07 to 0.12 s beyond).
++   */
++  lead: 0.5, leadSkill: 0.5,
++  /** The hand leaves the view alone while it is within `rest` m of the aim point (and never corrects less than `fine` rad). */
++  rest: 0.06, fine: 0.004,
++  /** The trigger goes down when the view is within `fire` m of the enemy as the bot sees it (and never needs less than `fireMin` rad). */
++  fire: 0.6, fireMin: 0.02,
++};
++const HAND = {
++  /**
++   * A player's hand turns the view in short moves, with rests between them. Seconds: the shortest move and the mean of what comes on
++   * top (players: 0.13 s at the median, 0.19 s at the mean), and the mean rest after a move with no enemy in sight, with one, and with
++   * the trigger down (players: 0.1 s, 0.07 s and 0.07 s at the median).
++   */
++  moveLeast: 0.05, move: 0.11, rest: 0.1, restSeen: 0.07, restFire: 0.05,
++  /** One move covers this share of the way to where the bot wants to look, or up to `gainMore` more; the next move corrects what is left. */
++  gain: 0.75, gainMore: 0.35,
++  /** No hand moves straight: a move takes the view up or down by up to this share of its sideways part (players: 0.3 at the median), but not more than `tiltMost` rad. */
++  tilt: 0.4, tiltMost: 0.05,
++  /** The fastest turn (rad/s): a longer way takes a longer move (players: 10.5 rad/s in the fastest 1% of the ticks). */
++  flick: 12,
++};
++const FIRE = {
++  /** Share of the recoil climb that the hand does not pull down (players cancel 0.79), over at most this many shots. */
++  climb: 0.21, climbShots: 6,
++  /** A burst ends after any shot past `min` with this chance (players: 9 to 10 shots at the median under 15 m, 8 to 30 m, 4 to 60 m, 2 beyond). */
++  stop: 0.09, stopFar: 0.2, stopVeryFar: 0.4, min: 2,
++  /** Seconds between bursts: a floor, what a bot of no skill adds, and the mean of the tail (players: 0.57 s at the median). */
++  pause: 0.15, pauseSlow: 0.1, pauseTail: 0.1, pauseTailSlow: 0.15,
++  /** The finger comes off late: the chance per shot to stop once the enemy is out of sight or down (17% of the players' shots have no enemy in sight). */
++  release: 0.4,
++};
++const BODY = {
++  /** Share of the bots that aim down the sights at a distance: `ads + adsPerMetre × distance` (players: 26% of the shots under 5 m, 66% at 8 to 15 m, 87% beyond 30 m). */
++  ads: 0.2, adsPerMetre: 0.035, adsMost: 0.92,
++  /** Chance to stand still in a fight (players: 15% of the shots under 5 m, 28% at 8 to 15 m, 55% beyond 30 m); of the rest, this share strafes and the others keep to their way. */
++  still: 0.1, stillPerMetre: 0.013, stillLeast: 0.15, stillMost: 0.6, strafeShare: 0.6,
++  /** Seconds one of these lasts before the next choice (players change side 0.17 times per second). */
++  strafe: 1.5, strafeMore: 3,
++  /** The view rests this far below level when no enemy is engaged (players: 0.09 at the median). It is on the way `ahead` path steps in front (2.5 m each), and the hand moves it once it is more than `slack` rad off. */
++  rest: 0.04, restMore: 0.1, ahead: 3, slack: 0.03,
++  /**
++   * Bots sprint out of the base until the round clock is at this (s), and to an armed bomb; they walk otherwise (players sprint 14%
++   * of the time). The clock starts with the 4 s freeze, so this is the first 3 s of play.
++   */
++  dash: 7,
++  /** An attacker looks round the bomb site for this long (s, and up to `plantMore` longer) before it starts to arm (players arm at 35 s into the round at the median). */
++  plant: 2, plantMore: 6,
++};
++const DEG = Math.PI / 180;
++/** The median size of a normal number, in standard deviations. */
++const MEDIAN = 0.674;
++
++/** A fixed number in [0, 1) per bot and habit: players differ from each other, and each keeps to their habits. */
++const habit = (bot: Soldier, n: 0 | 1 | 2) => (bot.id * (n === 0 ? 0.6180339887 : n === 1 ? 0.4142135624 : 0.7320508076)) % 1;
++
++/** The share of a move of the hand that is done after the share `u` of its time: the hand speeds up, then slows down. */
++const ease = (u: number) => u * u * (3 - 2 * u);
++
++/**
++ * One tick of the hand on the view. `toYaw` and `toPitch` (rad) are the way to where the bot wants to look. A move starts when the
++ * rest after the last one is over and the view is more than `slack` rad off; it is then carried out as it was planned, so the view
++ * is behind something that moves. `rest`: the mean rest (s); one shorter than half a tick is no rest, so the hand can turn back at
++ * once when it went too far. `drift`: how fast (rad/s) the thing crosses the view.
++ */
++function turnView(ctx: SimContext, bot: Soldier, brain: BotBrain, toYaw: number, toPitch: number, slack: number, rest: number, drift: number, dt: number) {
++  let left = brain.handLeft ?? 0;
++  if (left <= 0) {
++    const wait = brain.handRest ?? 0;
++    if (wait > dt * 0.5) { brain.handRest = wait - dt; return; }
++    if (Math.hypot(toYaw, toPitch) <= slack) return;
++    left = Math.max(dt, HAND.moveLeast - Math.log(1 - ctx.random()) * HAND.move);
++    const gain = HAND.gain + ctx.random() * HAND.gainMore;
++    const yaw = (toYaw + drift * left) * gain;
++    const pitch = toPitch * gain + (ctx.random() * 2 - 1) * Math.min(HAND.tiltMost, HAND.tilt * Math.abs(yaw));
++    left = Math.max(left, Math.hypot(yaw, pitch) / HAND.flick);
++    brain.handYaw = yaw; brain.handPitch = pitch;
++    brain.handRest = -Math.log(1 - ctx.random()) * rest; brain.handFor = left;
++  }
++  // The share of what is left of the move that this tick does.
++  const all = Math.max(left, brain.handFor ?? left), from = 1 - left / all, to = from + dt / all;
++  const share = to >= 1 ? 1 : (ease(to) - ease(from)) / (1 - ease(from)), yaw = brain.handYaw! * share, pitch = brain.handPitch! * share;
++  bot.yaw = wrapAngle(bot.yaw + yaw); bot.pitch = clamp(bot.pitch + pitch, -1.3, 1.3);
++  brain.handYaw! -= yaw; brain.handPitch! -= pitch; brain.handLeft = left - dt;
++}
++
+ const CALLSIGNS = [
+   'Halcyon', 'Vex', 'Marrow', 'Kestrel', 'Onyx', 'Sable', 'Rook', 'Cinder', 'Talon', 'Wren', 'Juno', 'Brask',
+   'Ember', 'Quill', 'Nyx', 'Dagger', 'Lumen', 'Shrike', 'Vesper', 'Atlas', 'Mako', 'Pike', 'Orrin', 'Zephyr',
+@@ -56,7 +186,6 @@
+ }
+ 
+ const yawTo = (from: Vec3, to: Vec3) => Math.atan2(-(to.x - from.x), -(to.z - from.z));
+-const pitchTo = (from: Vec3, to: Vec3) => Math.atan2(to.y - from.y, Math.hypot(to.x - from.x, to.z - from.z));
+ 
+ const sabotageOn = (state: MatchState, ctx: SimContext) => state.config.mode === 'sabotage' && !!ctx.map.sabotage?.sites.length;
+ 
+@@ -65,10 +194,14 @@
+   return (ctx.map.sabotage?.sites ?? []).map(id => ctx.map.points.find(p => p.id === id)!);
+ }
+ 
++/** A place of the players stays a bot's goal for at most `time` s (enough to walk there), and the goal is within `near` m of it. */
++const PLACE = { time: 40, near: 2.5 };
++
+ /**
+- * Choose where to go. Elimination: sweep the map's landmarks toward the enemy, then hunt the nearest
+- * enemy once the round drags on (a timed-out round is a replay). Sabotage: Militia pushes the round's
+- * site and arms it; SWAT spreads over the sites, and everyone converges on an armed bomb.
++ * Choose where to go. Elimination: go where recorded players stay on this side of the map (places.ts; a map
++ * without that table sweeps its landmarks toward the enemy), then hunt the nearest enemy once the round drags
++ * on (a timed-out round is a replay). Sabotage: Militia pushes the round's site and arms it; SWAT spreads over
++ * the sites, and everyone converges on an armed bomb.
+  */
+ function chooseGoal(state: MatchState, ctx: SimContext, bot: Soldier, brain: BotBrain) {
+   brain.repath = 0;
+@@ -93,6 +226,16 @@
+     brain.goal = 'hunt'; brain.goalX = nearest.m.x; brain.goalZ = nearest.m.z; brain.goalY = nearest.m.y; brain.goalLeft = 4 + ctx.random() * 3;
+     return;
+   }
++  // The places of the players on this side of the map, each by its share of their time.
++  const places = PLACES[ctx.map.id]?.[sideOf(state, ctx.map, bot.team)];
++  if (places) {
++    let at = 0, left = ctx.random() * PLACE_WEIGHTS - places[3];
++    while (left >= 0 && at + 4 < places.length) { at += 4; left -= places[at + 3]; }
++    const angle = ctx.random() * Math.PI * 2, r = ctx.random() * PLACE.near;
++    brain.goal = 'roam'; brain.goalX = places[at] + Math.cos(angle) * r; brain.goalZ = places[at + 2] + Math.sin(angle) * r; brain.goalY = places[at + 1];
++    brain.goalLeft = PLACE.time;
++    return;
++  }
+   // Landmarks, weighted toward the enemy's half of the map.
+   const enemyBase = ctx.map.spawns.filter(p => p.team === sideOf(state, ctx.map, (1 - bot.team) as 0 | 1));
+   const ex = enemyBase.reduce((a, p) => a + p.x, 0) / (enemyBase.length || 1), ez = enemyBase.reduce((a, p) => a + p.z, 0) / (enemyBase.length || 1);
+@@ -176,20 +319,36 @@
+   if (!bot.alive || dt <= 0) return;
+   brain.think -= dt; brain.repath -= dt; brain.strafeLeft -= dt; brain.crouchLeft -= dt;
+   brain.burstPause -= dt; brain.grenadeCooldown -= dt; brain.reaction -= dt;
++  const slow = 1 - brain.skill;
++  const lab = LAB.before?.(state, ctx, bot, dt);
++  const own = !!lab?.active, ownTrigger = own && !lab?.script;
+ 
+   // ---- Perception -----------------------------------------------------------------
+   let target = state.soldiers.find(s => s.id === brain.target && s.alive);
++  // A hit gets the bot's attention: the enemy in view has it at once, and for anyone else the bot looks round now.
++  if (bot.sinceHit < dt * 1.5) {
++    if (bot.lastAttacker === brain.target) brain.reaction = Math.min(brain.reaction, NOTICE.wake + slow * NOTICE.wakeSlow);
++    else brain.think = 0;
++  }
+   if (brain.think <= 0) {
+     brain.think = 0.2 + ctx.random() * 0.15;
+     const seen = perceive(state, ctx, bot, brain);
+     if (seen) {
+       if (seen.id !== brain.target) {
+         brain.target = seen.id;
+-        // Rookies (new players) get a beat longer and a looser first aim, so their first fights are winnable.
++        // How long the bot takes to notice the enemy: longer off the centre of its view, and now and then much longer.
++        // Rookies (new players) get a beat on top, so their first fights are winnable. The draws do not depend on the enemy.
++        const off = Math.abs(wrapAngle(yawTo(bot.m, seen.m) - bot.yaw));
++        const tail = -Math.log(1 - ctx.random()) * (NOTICE.tail + slow * NOTICE.tailSlow), late = ctx.random(), lateFor = 0.5 + ctx.random();
++        if (bot.lastAttacker === seen.id && bot.sinceHit < 2) brain.reaction = NOTICE.wake + slow * NOTICE.wakeSlow + tail * 0.5;
++        else {
++          const chance = (NOTICE.late + slow * NOTICE.lateSlow) * Math.sqrt(off) + (Math.hypot(seen.m.x - bot.m.x, seen.m.z - bot.m.z) > 30 ? NOTICE.far : 0);
++          brain.reaction = NOTICE.base + slow * NOTICE.slow + Math.min(off, 1.6) * NOTICE.angle + tail + (late < chance ? NOTICE.lateTime * lateFor : 0);
++        }
+         const ease = rookieEase(seen);
+-        brain.reaction = 0.22 + (1 - brain.skill) * 0.38 + ctx.random() * 0.16 + ease * ROOKIE_EASE.reaction;
+-        const scale = (1.25 - brain.skill) * (0.03 + ctx.random() * 0.05) * (ease > 0 ? ROOKIE_EASE.aimError : 1);
+-        brain.errYaw = (ctx.random() < 0.5 ? -1 : 1) * scale; brain.errPitch = (ctx.random() - 0.3) * scale;
++        brain.reaction += ease * ROOKIE_EASE.reaction;
++        // The first aim is loose, and looser at a rookie. -9 marks that this enemy has no aim point yet.
++        brain.errYaw = (ctx.random() < 0.5 ? -1 : 1) * AIM.first * (ease > 0 ? ROOKIE_EASE.aimError : 1); brain.errPitch = 0; brain.aimLeft = -9;
+       }
+       brain.lastSeen = state.time; brain.seenX = seen.m.x; brain.seenY = seen.m.y; brain.seenZ = seen.m.z;
+       target = seen;
+@@ -197,7 +356,10 @@
+       brain.target = -1; target = undefined;
+     }
+   }
+-  const visible = !!target && state.time - brain.lastSeen < 0.3;
++  // In sight at the last look (the looks are up to 0.35 s apart).
++  const visible = !!target && state.time - brain.lastSeen < 0.4;
++  // The bot fights an enemy once it has noticed it; until then it goes on as before.
++  const engaged = visible && brain.reaction <= 0;
+ 
+   // ---- Goals and navigation ------------------------------------------------------
+   brain.goalLeft -= dt;
+@@ -214,7 +376,7 @@
+     else plan(ctx, bot, brain, brain.goalX, brain.goalY ?? bot.m.y, brain.goalZ);
+     brain.repath = 2.5 + ctx.random() * 2;
+   }
+-  let moveX = 0, moveZ = 0;
++  let moveX = 0, moveZ = 0, lookX = 0, lookZ = 0;
+   if (ctx.nav && brain.path.length) {
+     const nav = ctx.nav;
+     let i = brain.pathIndex;
+@@ -228,72 +390,84 @@
+     const dx = nav.x[node] - bot.m.x, dz = nav.z[node] - bot.m.z, d = Math.hypot(dx, dz);
+     if (d > 0.6 || i < brain.path.length - 1) { moveX = dx / (d || 1); moveZ = dz / (d || 1); }
+     else if (ctx.random() < dt * 0.6) { brain.goalLeft = Math.min(brain.goalLeft, 1.5); }
++    // The eyes are on the way a few steps ahead, not on the next step: the view does not follow each bend of the path.
++    const far = brain.path[Math.min(i + BODY.ahead, brain.path.length - 1)];
++    lookX = nav.x[far] - bot.m.x; lookZ = nav.z[far] - bot.m.z;
+     if (nav.y[node] - bot.m.y > 0.9 && bot.m.grounded && d < 2 && !ctx.world.ladderAt(bot.m.x, bot.m.y, bot.m.z, MOVE.radius)) brain.jump = true;
+   }
+ 
+   // ---- Combat ----------------------------------------------------------------------
+   const w = weaponOf(bot);
+-  let wantAds = false;
+-  if (target && visible) {
++  let wantAds = false, pull = false, stop = FIRE.release;
++  if (target && engaged) {
+     const eye = eyeOf(bot);
+-    const shape = shapeOf(ctx, target), peeking = peekOf(ctx.world, target) !== 0;
+-    const aimAt = ctx.random() < 0.18 + brain.skill * 0.15 ? { ...shape.head, y: shape.head.y + 0.02 } : peeking ? { ...shape.chestTop } : chestPoint(feetOf(target), target.m.crouch);
+-    // Imperfect lead on moving targets.
+-    const lead = 0.06 + (1 - brain.skill) * 0.08;
+-    aimAt.x += target.m.vx * lead * (ctx.random() - 0.2); aimAt.z += target.m.vz * lead * (ctx.random() - 0.2);
+-    const distance = Math.hypot(aimAt.x - eye.x, aimAt.z - eye.z);
+-    brain.errYaw *= Math.exp(-dt * (1.6 + brain.skill * 2.4)); brain.errPitch *= Math.exp(-dt * (1.6 + brain.skill * 2.4));
+-    const wantYaw = yawTo(eye, aimAt) + brain.errYaw, wantPitch = pitchTo(eye, aimAt) + brain.errPitch;
+-    const turn = (4 + brain.skill * 6) * dt;
+-    bot.yaw = wrapAngle(bot.yaw + clamp(wrapAngle(wantYaw - bot.yaw), -turn, turn));
+-    bot.pitch = clamp(bot.pitch + clamp(wantPitch - bot.pitch, -turn, turn), -1.3, 1.3);
+-    const aligned = Math.abs(wrapAngle(wantYaw - bot.yaw)) < 0.06 && Math.abs(wantPitch - bot.pitch) < 0.06;
+-    wantAds = w.class === 'sniper' || ((w.class === 'rifle' || w.class === 'lmg') && distance > 18) || (w.class === 'smg' && distance > 26);
+-
+-    // Strafe and range-keeping while fighting.
+-    if (brain.strafeLeft <= 0) { brain.strafe = ctx.random() < 0.5 ? -1 : 1; brain.strafeLeft = 0.5 + ctx.random() * 0.9; }
+-    const preferred = w.botRange;
+-    const fx = -Math.sin(bot.yaw), fz = -Math.cos(bot.yaw), rx = Math.cos(bot.yaw), rz = -Math.sin(bot.yaw);
+-    const advance = distance > preferred * 1.4 ? 0.7 : distance < preferred * 0.5 ? -0.6 : 0;
+-    const pathWeight = distance > preferred ? 0.6 : 0.2;
+-    moveX = moveX * pathWeight + (fx * advance + rx * brain.strafe * 0.9);
+-    moveZ = moveZ * pathWeight + (fz * advance + rz * brain.strafe * 0.9);
++    const dx = target.m.x - eye.x, dz = target.m.z - eye.z, distance = Math.hypot(dx, dz), reach = Math.max(1.5, distance);
++    // The aim point rides on the enemy as the bot sees it: its chest (or what shows of it), a little high, with the bot's error.
++    // A soldier peeking round cover shows its head and shoulder, not its chest.
++    const chest = peekOf(ctx.world, target) !== 0 ? shapeOf(ctx, target).chestTop : chestPoint(feetOf(target), target.m.crouch);
++    let aimLeft = (brain.aimLeft ?? -9) - dt;
++    if (aimLeft <= 0) {
++      // A new error, which keeps a part of the last one (the first one at this enemy is set where the bot notices it).
++      if (aimLeft > -1) {
++        const g = Math.sqrt(-2 * Math.log(1 - ctx.random()) * (1 - AIM.keep * AIM.keep)), a = ctx.random() * Math.PI * 2;
++        brain.errYaw = brain.errYaw * AIM.keep + g * Math.cos(a); brain.errPitch = brain.errPitch * AIM.keep + g * Math.sin(a);
++      }
++      aimLeft = (AIM.every + slow * AIM.everySlow) * (0.7 + ctx.random() * 0.6);
++    }
++    brain.aimLeft = aimLeft;
++    const sd = (AIM.error + AIM.errorFar * distance) / (1 + AIM.sharp * brain.skill) / MEDIAN;
++    brain.aimYaw = Math.atan2(-(chest.x - eye.x), -(chest.z - eye.z)) + brain.errYaw * sd / reach;
++    brain.aimPitch = Math.atan2(chest.y + AIM.up * (1 + 2 * brain.skill) - eye.y, distance) + brain.errPitch * sd * AIM.vertical / reach;
++    // How fast the enemy crosses the view (rad/s), from its speed and the bot's own: a move of the hand goes a part of the way ahead of it.
++    const crossing = (dz * (target.m.vx - bot.m.vx) - dx * (target.m.vz - bot.m.vz)) / (reach * reach);
++    if (!own) turnView(ctx, bot, brain, wrapAngle(brain.aimYaw - bot.yaw), brain.aimPitch - bot.pitch, Math.max(AIM.fine, AIM.rest / reach),
++      brain.burst > 0 ? HAND.restFire : HAND.restSeen, crossing * Math.min(1, AIM.lead + AIM.leadSkill * brain.skill), dt);
++    const near = Math.max(AIM.fireMin, AIM.fire / reach);
++    const aligned = Math.abs(wrapAngle(brain.aimYaw - bot.yaw)) < near && Math.abs(brain.aimPitch - bot.pitch) < near * 1.5;
++    wantAds = w.class !== 'melee' && (w.class === 'sniper' || habit(bot, 0) < Math.min(BODY.adsMost, BODY.ads + BODY.adsPerMetre * distance));
++
++    // The body: stand, strafe, or keep to the way, for a few seconds each; and keep the weapon's range.
++    if (brain.strafeLeft <= 0) {
++      const r = ctx.random(), still = clamp(BODY.still + BODY.stillPerMetre * distance, BODY.stillLeast, BODY.stillMost) * (0.5 + habit(bot, 1));
++      brain.strafe = r < still ? 0 : (ctx.random() < 0.5 ? -1 : 1) * (r < still + (1 - still) * BODY.strafeShare ? 1 : 0.25);
++      brain.strafeLeft = BODY.strafe + ctx.random() * BODY.strafeMore;
++    }
++    if (brain.strafe === 0 && bot.weapon !== 2) { moveX = 0; moveZ = 0; }
++    else {
++      const preferred = w.botRange;
++      const fx = -Math.sin(bot.yaw), fz = -Math.cos(bot.yaw), rx = Math.cos(bot.yaw), rz = -Math.sin(bot.yaw);
++      const advance = distance > preferred * 1.4 ? 0.7 : distance < preferred * 0.5 ? -0.6 : 0;
++      const pathWeight = distance > preferred ? 0.6 : 0.2;
++      moveX = moveX * pathWeight + (fx * advance + rx * brain.strafe * 0.9);
++      moveZ = moveZ * pathWeight + (fz * advance + rz * brain.strafe * 0.9);
++    }
+     if (brain.crouchLeft < -2 && ctx.random() < dt * 0.25 * brain.skill && distance > 15) brain.crouchLeft = 0.8 + ctx.random();
+ 
+     // Knife anyone who closes right in; draw the gun again once they back off.
+     if (bot.switchLeft <= 0 && bot.reloadLeft <= 0 && (bot.weapon === 2 ? distance > 3.5 : distance < 1.6 && ctx.random() < dt * 4)) {
+-      bot.weapon = bot.weapon === 2 ? 0 : 2; bot.switchLeft = weaponOf(bot).equipTime;
++      bot.weapon = bot.weapon === 2 ? 0 : 2; bot.switchLeft = weaponOf(bot).equipTime; brain.burst = 0;
+     }
+ 
+-    // Fire in bursts once the reaction delay has passed.
+-    if (brain.reaction <= 0 && aligned && bot.reloadLeft <= 0 && bot.switchLeft <= 0 && bot.fireCooldown <= 0 && brain.burstPause <= 0 && distance < w.range * 0.6) {
+-      if (bot.weapon !== 2 && bot.ammo[bot.weapon] <= 0) { bot.reloadLeft = w.reload; }
+-      else {
+-        const spread = (w.pellets > 1 ? 0.8 : spreadFor({ ...bot, ads: wantAds }, w)) * (1.35 - brain.skill * 0.55) * (rookieEase(target) > 0 ? ROOKIE_EASE.spread : 1) * Math.PI / 180;
+-        const yaw = bot.yaw + (ctx.random() - 0.5) * 2 * spread, pitch = bot.pitch + (ctx.random() - 0.5) * 2 * spread;
+-        if (w.pellets > 1) resolvePellets(state, ctx, bot, w, eye, dirFromAngles(yaw, pitch), wantAds);
+-        else resolveShot(state, ctx, bot, w, eye, traceShot(state, ctx, bot, eye, dirFromAngles(yaw, pitch), w.range));
+-        if (bot.weapon !== 2) bot.ammo[bot.weapon]--;
+-        bot.sinceShot = 0;
+-        bot.fireCooldown = w.auto ? w.interval : w.interval * (1.15 + ctx.random() * 0.6);
+-        brain.burst++;
+-        const burstLength = w.auto ? 3 + Math.floor(ctx.random() * (distance < 15 ? 8 : 4)) : 1;
+-        if (brain.burst >= burstLength) { brain.burst = 0; brain.burstPause = (w.auto ? 0.18 : 0.05) + ctx.random() * (distance > 30 ? 0.6 : 0.3); }
+-      }
+-    }
++    // The trigger goes down when the view is on the aim point, and stays down for a burst: a few shots at long range, many up close.
++    pull = !ownTrigger && (brain.burst > 0 || (aligned && brain.burstPause <= 0 && distance < w.range * 0.6));
++    stop = !w.auto || w.class === 'melee' ? 1 : brain.burst + 1 < FIRE.min ? 0 : distance < 30 ? FIRE.stop : distance < 60 ? FIRE.stopFar : FIRE.stopVeryFar;
+   } else {
+-    // Look where we are going (smoothly) when not fighting.
+-    if (moveX || moveZ) {
+-      const want = Math.atan2(-moveX, -moveZ);
+-      bot.yaw = wrapAngle(bot.yaw + clamp(wrapAngle(want - bot.yaw), -4 * dt, 4 * dt));
+-      bot.pitch *= Math.exp(-dt * 3);
++    // The finger comes off late when the enemy drops or goes out of sight; the hand ends its move and no more for those shots.
++    pull = !ownTrigger && brain.burst > 0;
++    if (ownTrigger) brain.burst = 0;
++    if (own) { /* the learned hand has the view */ }
++    else if (pull) turnView(ctx, bot, brain, 0, 0, 1, HAND.restFire, 0, dt);
++    else {
++      // Look where we are going when not fighting, a little below level.
++      const far = lookX * lookX + lookZ * lookZ > 1;
++      turnView(ctx, bot, brain, far ? wrapAngle(Math.atan2(-lookX, -lookZ) - bot.yaw) : moveX || moveZ ? wrapAngle(Math.atan2(-moveX, -moveZ) - bot.yaw) : 0,
++        -(BODY.rest + habit(bot, 2) * BODY.restMore) - bot.pitch, BODY.slack, HAND.rest, 0, dt);
++      if (bot.weapon === 2 && bot.switchLeft <= 0) { bot.weapon = 0; bot.switchLeft = weaponOf(bot).equipTime; }
++      else if (bot.weapon !== 2 && bot.ammo[bot.weapon] < w.magazine * 0.4 && bot.reloadLeft <= 0) bot.reloadLeft = w.reload;
+     }
+-    brain.burst = 0;
+-    if (bot.weapon === 2 && bot.switchLeft <= 0) { bot.weapon = 0; bot.switchLeft = weaponOf(bot).equipTime; }
+-    else if (bot.weapon !== 2 && bot.ammo[bot.weapon] < w.magazine * 0.4 && bot.reloadLeft <= 0) bot.reloadLeft = w.reload;
+     // Grenade the last known position of an enemy who ducked behind cover.
+     // A molotov goes on a nearer one, where it would land at their feet.
+-    if (target && brain.grenadeCooldown <= 0 && (bot.grenades > 0 || bot.molotovs > 0) && state.time - brain.lastSeen < 2.5) {
++    if (target && !visible && brain.grenadeCooldown <= 0 && (bot.grenades > 0 || bot.molotovs > 0) && state.time - brain.lastSeen < 2.5) {
+       const d = Math.hypot(brain.seenX - bot.m.x, brain.seenZ - bot.m.z);
+       const frag = bot.grenades > 0 && d > 9 && d < 24, molotov = bot.molotovs > 0 && d > 6 && d < 20;
+       if ((frag || molotov) && ctx.random() < 0.35) {
+@@ -308,15 +482,49 @@
+     }
+   }
+ 
++  // ---- Fire: the weapon's own spread with its bloom, and the part of the recoil that the hand does not hold ----
++  if (pull && bot.reloadLeft <= 0 && bot.switchLeft <= 0 && bot.fireCooldown <= 0) {
++    if (bot.weapon !== 2 && bot.ammo[bot.weapon] <= 0) { bot.reloadLeft = w.reload; brain.burst = 0; }
++    else {
++      const eye = eyeOf(bot);
++      // The bloom falls off as on a player's weapon: slowly for a moment after a shot, then at the weapon's rate.
++      const bloom = Math.max(0, (brain.bloom ?? 0) - w.spread.recovery * (Math.min(bot.sinceShot, 0.08) * 0.25 + Math.max(0, bot.sinceShot - 0.08)));
++      const cone = w.pellets > 1 || w.class === 'melee' ? 0
++        : spreadFor(bot, w, bloom * (bot.ads ? 0.4 : 1)) * (target && rookieEase(target) > 0 ? ROOKIE_EASE.spread : 1) * DEG;
++      const a = ctx.random() * Math.PI * 2, r = Math.sqrt(ctx.random()) * cone;
++      const climb = FIRE.climb * w.recoil.pitch * DEG * Math.min(brain.burst, FIRE.climbShots) * (bot.ads ? 0.65 : 1);
++      const dir = dirFromAngles(bot.yaw + Math.cos(a) * r, bot.pitch + climb + Math.sin(a) * r);
++      if (own && lab?.script && LAB.shot) LAB.shot(state, ctx, bot, brain.burst);
++      else if (w.pellets > 1) resolvePellets(state, ctx, bot, w, eye, dir, bot.ads);
++      else resolveShot(state, ctx, bot, w, eye, traceShot(state, ctx, bot, eye, dir, w.range));
++      if (bot.weapon !== 2) bot.ammo[bot.weapon]--;
++      bot.sinceShot = 0;
++      bot.fireCooldown = w.auto ? w.interval : w.interval * (1.15 + ctx.random() * 0.6);
++      brain.bloom = Math.min(w.spread.bloomMax, bloom + w.spread.bloomPerShot);
++      brain.burst++;
++      if (ctx.random() < stop) {
++        brain.burst = 0;
++        brain.burstPause = w.auto && w.class !== 'melee' ? FIRE.pause + slow * FIRE.pauseSlow - Math.log(1 - ctx.random()) * (FIRE.pauseTail + slow * FIRE.pauseTailSlow) : 0.05 + ctx.random() * 0.4;
++      }
++    }
++  }
++
+   // ---- Sabotage: hold E on the site (standing still) to arm or disarm --------------
+   bot.using = false;
+-  if (sabotage && !visible && bot.m.grounded) {
++  let onJob = false;
++  if (sabotage && !engaged && bot.m.grounded) {
+     const site = state.bomb.armed ? state.bomb.site : bot.team === ATTACKERS ? sitesOf(ctx).findIndex(p => onSite(p, bot.m.x, bot.m.y, bot.m.z, SITE_STOP)) : -1;
+     const p = site >= 0 ? sitesOf(ctx)[site] : undefined;
+     const busy = state.bomb.by !== -1 && state.bomb.by !== bot.id;
+     const myJob = state.bomb.armed ? bot.team !== ATTACKERS : bot.team === ATTACKERS;
+-    if (p && myJob && !busy && onSite(p, bot.m.x, bot.m.y, bot.m.z, SITE_STOP)) { bot.using = true; moveX = 0; moveZ = 0; }
++    if (p && myJob && !busy && onSite(p, bot.m.x, bot.m.y, bot.m.z, SITE_STOP)) {
++      onJob = true;
++      // An attacker looks round the site for a moment first; nobody waits to disarm.
++      if (!state.bomb.armed && state.bomb.by !== bot.id) brain.plantIn = (brain.plantIn ?? BODY.plant + ctx.random() * BODY.plantMore) - dt;
++      if (state.bomb.armed || state.bomb.by === bot.id || brain.plantIn! <= 0) { bot.using = true; moveX = 0; moveZ = 0; }
++    }
+   }
++  if (!onJob && brain.plantIn !== undefined) brain.plantIn = undefined;
+ 
+   // ---- Fire: step out of the flames, and keep a step clear of them --------------
+   const fire = state.bodies.length ? fireNear(state, ctx, feetOf(bot), 0.6) : undefined;
+@@ -338,18 +546,22 @@
+   if (brain.stuck > 0.7) { brain.jump = true; brain.stuck = 0; brain.repath = 0; brain.strafe *= -1; }
+ 
+   // ---- Drive the shared movement controller ---------------------------------------
++  if (lab?.moveScale !== undefined) { moveX *= lab.moveScale; moveZ *= lab.moveScale; }
+   const len = Math.hypot(moveX, moveZ);
+   if (len > 1) { moveX /= len; moveZ /= len; }
+   const fx = -Math.sin(bot.yaw), fz = -Math.cos(bot.yaw), rx = Math.cos(bot.yaw), rz = -Math.sin(bot.yaw);
+   const forward = moveX * fx + moveZ * fz, strafe = moveX * rx + moveZ * rz;
++  // Sprint out of the base, and to an armed bomb; walk the rest of the way, as most players do.
++  const hurry = !target && !lab?.noSprint && (state.roundClock < BODY.dash || state.bomb.armed);
+   const input: MoveInput = {
+     forward, strafe, yaw: bot.yaw, jump: brain.jump, crouch: brain.crouchLeft > 0,
+-    sprint: !visible && len > 0.5 && forward > 0.7 && bot.stamina > (bot.sprint ? 0 : STAMINA.tired),
+-    ads: wantAds && visible, speed: w.speed,
++    sprint: hurry && len > 0.5 && forward > 0.7 && bot.stamina > (bot.sprint ? 0 : STAMINA.tired),
++    ads: lab?.ads ?? wantAds, speed: w.speed,
+   };
+   brain.jump = false;
+   bot.sprint = input.sprint && bot.m.grounded; bot.ads = input.ads;
+   stepMovement(ctx.world, bot.m, input, dt, bot.team, obstacles);
+   // Safety net: never let a bot fall out of the world.
+   if (bot.m.y < -60) bot.m.y = ctx.world.groundHeight(bot.m.x, bot.m.z, 100, MOVE.radius);
++  LAB.after?.(state, ctx, bot, dt);
+ }
+diff -ruN a/shared/match/bots_old.ts b/shared/match/bots_old.ts
+--- a/shared/match/bots_old.ts	1970-01-01 00:00:00.000000000 +0000
++++ b/shared/match/bots_old.ts	2026-11-13 00:14:31.435073529 +0000
+@@ -0,0 +1,398 @@
++import { chestPoint } from '../hitbox';
++import { clamp, dirFromAngles, wrapAngle, type Vec3 } from '../math';
++import { MOVE, stepMovement, type MoveInput } from '../movement';
++import { peekOf } from '../peek';
++import { blocksHeight, near, penetration, type Obstacle } from '../obstacles';
++import { GRENADE, STAMINA } from '../weapons';
++import { eyeOf, feetOf, onSite, shapeOf, resolvePellets, resolveShot, sideOf, smokeBlocks, spreadFor, throwGrenadeFrom, traceShot, weaponOf, type SimContext } from './combat';
++import { fireNear, throwMolotovFrom } from './fire';
++import { findPath, nearestNode } from './nav';
++import { ATTACKERS, type BotBrain, type MatchState, type Soldier } from './state';
++
++/**
++ * Research hook (lab copy only, not in the repository): a per-bot controller that can take the aim and the trigger
++ * from the script. `before` runs first in a bot's tick (it applies the learned aim change and fires); `after` runs last
++ * (it writes the aim row and asks the model for the next tick).
++ */
++export interface LabControl { /** The controller turned the aim and held the trigger this tick. */ active: boolean; /** No sprint this tick. */ noSprint: boolean; /** Scale of the script's walk this tick (0 = stand still). */ moveScale?: number; /** Aim down the sights this tick (the script decides if undefined). */ ads?: boolean }
++export const LAB: {
++  before?: (state: MatchState, ctx: SimContext, bot: Soldier, dt: number) => LabControl | undefined;
++  after?: (state: MatchState, ctx: SimContext, bot: Soldier, dt: number) => void;
++} = {};
++
++/** Distance (m) from a bomb site's centre at which a bot stops to arm or disarm. */
++const SITE_STOP = 3;
++/** Rounds played before a player stops being a rookie (bots go easier on rookies). */
++export const ROOKIE_ROUNDS = 10;
++/**
++ * How much easier bots are on rookies: extra reaction time (s) for a brand-new player, tapering to none
++ * at ROOKIE_ROUNDS (rookieEase), and multipliers on the first aim error and on spread while still a rookie.
++ */
++export const ROOKIE_EASE = { reaction: 0.6, aimError: 2, spread: 1.5 };
++
++/** 1 for a player with no rounds yet, falling evenly to 0 at ROOKIE_ROUNDS (career rounds at joining + rounds here). */
++export function rookieEase(s: Soldier): number {
++  if (s.rookieRounds === undefined) return 0;
++  return clamp(1 - (s.rookieRounds + s.roundsHere) / ROOKIE_ROUNDS, 0, 1);
++}
++
++/** Path hops this short that rise or drop more than 1.5 m are ladders (see nav). */
++const SPACING_LADDER = 2;
++
++const CALLSIGNS = [
++  'Halcyon', 'Vex', 'Marrow', 'Kestrel', 'Onyx', 'Sable', 'Rook', 'Cinder', 'Talon', 'Wren', 'Juno', 'Brask',
++  'Ember', 'Quill', 'Nyx', 'Dagger', 'Lumen', 'Shrike', 'Vesper', 'Atlas', 'Mako', 'Pike', 'Orrin', 'Zephyr',
++];
++
++export function botName(state: MatchState, random: () => number) {
++  const used = new Set(state.soldiers.map(s => s.name));
++  for (let i = 0; i < 40; i++) {
++    const name = CALLSIGNS[Math.floor(random() * CALLSIGNS.length)];
++    if (!used.has(name)) return name;
++  }
++  // Big battles outnumber the callsigns: number them like squad members instead.
++  for (let i = 0; i < 200; i++) {
++    const name = `${CALLSIGNS[Math.floor(random() * CALLSIGNS.length)]}-${2 + Math.floor(random() * 8)}`;
++    if (!used.has(name)) return name;
++  }
++  return `Unit-${state.nextId}`;
++}
++
++export function createBrain(skill: number): BotBrain {
++  return {
++    skill, goal: '', goalLeft: 0, goalX: 0, goalZ: 0, path: [], pathIndex: 0, repath: 0, target: -1, reaction: 0, lastSeen: -99,
++    seenX: 0, seenY: 0, seenZ: 0, aimYaw: 0, aimPitch: 0, errYaw: 0, errPitch: 0, strafe: 1, strafeLeft: 0,
++    crouchLeft: 0, burst: 0, burstPause: 0, stuck: 0, lastX: 0, lastY: 0, lastZ: 0, think: 0, grenadeCooldown: 6, jump: false,
++  };
++}
++
++const yawTo = (from: Vec3, to: Vec3) => Math.atan2(-(to.x - from.x), -(to.z - from.z));
++const pitchTo = (from: Vec3, to: Vec3) => Math.atan2(to.y - from.y, Math.hypot(to.x - from.x, to.z - from.z));
++
++const sabotageOn = (state: MatchState, ctx: SimContext) => state.config.mode === 'sabotage' && !!ctx.map.sabotage?.sites.length;
++
++/** Bomb site centres for this map, in site order. */
++function sitesOf(ctx: SimContext) {
++  return (ctx.map.sabotage?.sites ?? []).map(id => ctx.map.points.find(p => p.id === id)!);
++}
++
++/**
++ * Choose where to go. Elimination: sweep the map's landmarks toward the enemy, then hunt the nearest
++ * enemy once the round drags on (a timed-out round is a replay). Sabotage: Militia pushes the round's
++ * site and arms it; SWAT spreads over the sites, and everyone converges on an armed bomb.
++ */
++function chooseGoal(state: MatchState, ctx: SimContext, bot: Soldier, brain: BotBrain) {
++  brain.repath = 0;
++  brain.goalLeft = 8 + ctx.random() * 8;
++  if (sabotageOn(state, ctx)) {
++    const sites = sitesOf(ctx);
++    const attacking = bot.team === ATTACKERS;
++    // Attackers commit to one site per round; defenders split between the sites.
++    let site = state.bomb.armed || state.bomb.site >= 0 ? state.bomb.site
++      : attacking ? state.round % sites.length : bot.id % sites.length;
++    if (site < 0) site = 0;
++    const p = sites[site];
++    const near = attacking || state.bomb.armed ? SITE_STOP * 0.4 : p.radius * 0.8;
++    const angle = ctx.random() * Math.PI * 2, r = ctx.random() * near;
++    brain.goal = 'site'; brain.goalX = p.x + Math.cos(angle) * r; brain.goalZ = p.z + Math.sin(angle) * r; brain.goalY = p.y;
++    return;
++  }
++  const enemies = state.soldiers.filter(s => s.alive && s.team !== bot.team);
++  if (enemies.length && (state.roundClock > 35 || ctx.random() < 0.25)) {
++    let nearest = enemies[0], best = Infinity;
++    for (const e of enemies) { const d = Math.hypot(e.m.x - bot.m.x, e.m.z - bot.m.z); if (d < best) { best = d; nearest = e; } }
++    brain.goal = 'hunt'; brain.goalX = nearest.m.x; brain.goalZ = nearest.m.z; brain.goalY = nearest.m.y; brain.goalLeft = 4 + ctx.random() * 3;
++    return;
++  }
++  // Landmarks, weighted toward the enemy's half of the map.
++  const enemyBase = ctx.map.spawns.filter(p => p.team === sideOf(state, ctx.map, (1 - bot.team) as 0 | 1));
++  const ex = enemyBase.reduce((a, p) => a + p.x, 0) / (enemyBase.length || 1), ez = enemyBase.reduce((a, p) => a + p.z, 0) / (enemyBase.length || 1);
++  let best = ctx.map.points[0], bestScore = -Infinity;
++  for (const p of ctx.map.points) {
++    const score = -Math.hypot(p.x - ex, p.z - ez) / 120 - Math.hypot(p.x - bot.m.x, p.z - bot.m.z) / 200 + ctx.random() * 0.9;
++    if (score > bestScore) { bestScore = score; best = p; }
++  }
++  const angle = ctx.random() * Math.PI * 2, r = ctx.random() * best.radius;
++  brain.goal = 'roam'; brain.goalX = best.x + Math.cos(angle) * r; brain.goalZ = best.z + Math.sin(angle) * r; brain.goalY = best.y;
++}
++
++function plan(ctx: SimContext, bot: Soldier, brain: BotBrain, tx: number, ty: number, tz: number) {
++  if (!ctx.nav) return;
++  const start = nearestNode(ctx.nav, bot.m.x, bot.m.y, bot.m.z);
++  const goal = nearestNode(ctx.nav, tx, ty, tz);
++  brain.path = findPath(ctx.nav, start, goal);
++  brain.pathIndex = brain.path.length > 1 ? 1 : 0;
++}
++
++/** Find the most pressing visible enemy. */
++/** Line-of-sight checks one bot may spend per look; big battles have many candidates in view. */
++const SIGHT_CHECKS = 4;
++
++function perceive(state: MatchState, ctx: SimContext, bot: Soldier, brain: BotBrain) {
++  const eye = eyeOf(bot);
++  // Cheap filters first (range, field of view), then ray-test only the most pressing few.
++  const candidates: { s: Soldier; score: number }[] = [];
++  for (const s of state.soldiers) {
++    if (!s.alive || s.team === bot.team) continue;
++    const dx = s.m.x - bot.m.x, dz = s.m.z - bot.m.z;
++    const d = Math.hypot(dx, dz);
++    if (d > 95) continue;
++    const facing = Math.abs(wrapAngle(yawTo(eye, s.m) - bot.yaw));
++    const recentlyHit = bot.lastAttacker === s.id && bot.sinceHit < 2;
++    if (facing > 1.25 && d > 11 && !recentlyHit) continue;
++    candidates.push({ s, score: d * (facing > 1.25 ? 1.6 : 1) * (s.id === brain.target ? 0.7 : 1) * (recentlyHit ? 0.5 : 1) });
++  }
++  candidates.sort((a, b) => a.score - b.score);
++  for (const { s } of candidates.slice(0, SIGHT_CHECKS)) {
++    // A soldier peeking round cover shows its head and shoulder, not its chest.
++    const shape = shapeOf(ctx, s);
++    const chest = peekOf(ctx.world, s) ? shape.chestTop : chestPoint(feetOf(s), s.m.crouch);
++    const head = shape.head;
++    // Smoke hides: a bot sees through a cloud no better than a player does.
++    if ((ctx.world.lineOfSight(eye, chest, bot.team) && !smokeBlocks(state.bodies, eye, chest))
++      || (ctx.world.lineOfSight(eye, head, bot.team) && !smokeBlocks(state.bodies, eye, head))) return s;
++  }
++  return undefined;
++}
++
++/** How far ahead (m) a bot looks for a vehicle body across its way. */
++const AVOID_AHEAD = [0.5, 1.1, 1.8];
++
++/**
++ * Steer round the first vehicle body the next couple of metres toward (moveX, moveZ) would walk
++ * into: along its side that turns least from the way we want to go (ties broken by the bot's id).
++ */
++export function avoidObstacles(bot: Soldier, obstacles: readonly Obstacle[], moveX: number, moveZ: number): [number, number] {
++  const len = Math.hypot(moveX, moveZ);
++  if (len < 0.05) return [moveX, moveZ];
++  const dx = moveX / len, dz = moveZ / len, r = MOVE.radius + 0.15;
++  for (const ob of obstacles) {
++    if (!near(ob, bot.m.x, bot.m.z, AVOID_AHEAD[2] + r) || !blocksHeight(ob, bot.m.y, MOVE.standHeight)) continue;
++    if (!AVOID_AHEAD.some(t => penetration(ob, bot.m.x + dx * t, bot.m.z + dz * t, r).depth > 0)) continue;
++    // Tangents round the body's centre; take the one closer to where we are heading.
++    const cx = ob.x - bot.m.x, cz = ob.z - bot.m.z, cl = Math.hypot(cx, cz) || 1;
++    const lx = -cz / cl, lz = cx / cl;
++    const dot = lx * dx + lz * dz;
++    const side = Math.abs(dot) > 0.05 ? Math.sign(dot) : bot.id % 2 ? 1 : -1;
++    // Lean a little away from the body too, so the bot clears its corners instead of grinding along them.
++    const ax = lx * side - cx / cl * 0.35 + dx * 0.2, az = lz * side - cz / cl * 0.35 + dz * 0.2, al = Math.hypot(ax, az) || 1;
++    return [ax / al * len, az / al * len];
++  }
++  return [moveX, moveZ];
++}
++
++/** `obstacles`: the vehicles' bodies this tick (bots walk round them, and are pushed by them like anyone). */
++export function updateBot(state: MatchState, ctx: SimContext, bot: Soldier, dt: number, obstacles?: readonly Obstacle[]) {
++  const brain = bot.brain!;
++  if (!bot.alive || dt <= 0) return;
++  brain.think -= dt; brain.repath -= dt; brain.strafeLeft -= dt; brain.crouchLeft -= dt;
++  brain.burstPause -= dt; brain.grenadeCooldown -= dt; brain.reaction -= dt;
++  const lab = LAB.before?.(state, ctx, bot, dt);
++  const own = !!lab?.active;
++
++  // ---- Perception -----------------------------------------------------------------
++  let target = state.soldiers.find(s => s.id === brain.target && s.alive);
++  if (brain.think <= 0) {
++    brain.think = 0.2 + ctx.random() * 0.15;
++    const seen = perceive(state, ctx, bot, brain);
++    if (seen) {
++      if (seen.id !== brain.target) {
++        brain.target = seen.id;
++        // Rookies (new players) get a beat longer and a looser first aim, so their first fights are winnable.
++        const ease = rookieEase(seen);
++        brain.reaction = 0.22 + (1 - brain.skill) * 0.38 + ctx.random() * 0.16 + ease * ROOKIE_EASE.reaction;
++        const scale = (1.25 - brain.skill) * (0.03 + ctx.random() * 0.05) * (ease > 0 ? ROOKIE_EASE.aimError : 1);
++        brain.errYaw = (ctx.random() < 0.5 ? -1 : 1) * scale; brain.errPitch = (ctx.random() - 0.3) * scale;
++      }
++      brain.lastSeen = state.time; brain.seenX = seen.m.x; brain.seenY = seen.m.y; brain.seenZ = seen.m.z;
++      target = seen;
++    } else if (state.time - brain.lastSeen > 2.2) {
++      brain.target = -1; target = undefined;
++    }
++  }
++  const visible = !!target && state.time - brain.lastSeen < 0.3;
++
++  // ---- Goals and navigation ------------------------------------------------------
++  brain.goalLeft -= dt;
++  const sabotage = sabotageOn(state, ctx);
++  // Re-plan at once when the bomb goes down or a new arm starts somewhere else.
++  if (sabotage && brain.goal === 'site') {
++    const p = state.bomb.site >= 0 ? sitesOf(ctx)[state.bomb.site] : undefined;
++    if (p && Math.hypot(brain.goalX - p.x, brain.goalZ - p.z) > p.radius) brain.goalLeft = 0;
++  }
++  if (!brain.goal || brain.goalLeft <= 0) chooseGoal(state, ctx, bot, brain);
++  if (brain.repath <= 0) {
++    if (target && !visible && state.time - brain.lastSeen < 2.2) plan(ctx, bot, brain, brain.seenX, brain.seenY, brain.seenZ);
++    // Toward the goal's floor (a site or landmark on an upper storey is not the one under it).
++    else plan(ctx, bot, brain, brain.goalX, brain.goalY ?? bot.m.y, brain.goalZ);
++    brain.repath = 2.5 + ctx.random() * 2;
++  }
++  let moveX = 0, moveZ = 0;
++  if (ctx.nav && brain.path.length) {
++    const nav = ctx.nav;
++    let i = brain.pathIndex;
++    // A ladder is a steep, short hop between path nodes: stand right at its foot (or head) before
++    // heading for the other end, so the climb starts square in front of the rungs.
++    const ladderNext = (k: number) => k < brain.path.length - 1 && Math.abs(nav.y[brain.path[k + 1]] - nav.y[brain.path[k]]) > 1.5
++      && Math.hypot(nav.x[brain.path[k + 1]] - nav.x[brain.path[k]], nav.z[brain.path[k + 1]] - nav.z[brain.path[k]]) < SPACING_LADDER;
++    while (i < brain.path.length - 1 && Math.hypot(nav.x[brain.path[i]] - bot.m.x, nav.z[brain.path[i]] - bot.m.z) < (ladderNext(i) ? 0.35 : 1.3)) i++;
++    brain.pathIndex = i;
++    const node = brain.path[i];
++    const dx = nav.x[node] - bot.m.x, dz = nav.z[node] - bot.m.z, d = Math.hypot(dx, dz);
++    if (d > 0.6 || i < brain.path.length - 1) { moveX = dx / (d || 1); moveZ = dz / (d || 1); }
++    else if (ctx.random() < dt * 0.6) { brain.goalLeft = Math.min(brain.goalLeft, 1.5); }
++    if (nav.y[node] - bot.m.y > 0.9 && bot.m.grounded && d < 2 && !ctx.world.ladderAt(bot.m.x, bot.m.y, bot.m.z, MOVE.radius)) brain.jump = true;
++  }
++
++  // ---- Combat ----------------------------------------------------------------------
++  const w = weaponOf(bot);
++  let wantAds = false;
++  if (target && visible) {
++    const eye = eyeOf(bot);
++    const shape = shapeOf(ctx, target), peeking = peekOf(ctx.world, target) !== 0;
++    const aimAt = ctx.random() < 0.18 + brain.skill * 0.15 ? { ...shape.head, y: shape.head.y + 0.02 } : peeking ? { ...shape.chestTop } : chestPoint(feetOf(target), target.m.crouch);
++    // Imperfect lead on moving targets.
++    const lead = 0.06 + (1 - brain.skill) * 0.08;
++    aimAt.x += target.m.vx * lead * (ctx.random() - 0.2); aimAt.z += target.m.vz * lead * (ctx.random() - 0.2);
++    const distance = Math.hypot(aimAt.x - eye.x, aimAt.z - eye.z);
++    brain.errYaw *= Math.exp(-dt * (1.6 + brain.skill * 2.4)); brain.errPitch *= Math.exp(-dt * (1.6 + brain.skill * 2.4));
++    const wantYaw = yawTo(eye, aimAt) + brain.errYaw, wantPitch = pitchTo(eye, aimAt) + brain.errPitch;
++    const turn = (4 + brain.skill * 6) * dt;
++    if (!own) {
++      bot.yaw = wrapAngle(bot.yaw + clamp(wrapAngle(wantYaw - bot.yaw), -turn, turn));
++      bot.pitch = clamp(bot.pitch + clamp(wantPitch - bot.pitch, -turn, turn), -1.3, 1.3);
++    }
++    const aligned = Math.abs(wrapAngle(wantYaw - bot.yaw)) < 0.06 && Math.abs(wantPitch - bot.pitch) < 0.06;
++    wantAds = w.class === 'sniper' || ((w.class === 'rifle' || w.class === 'lmg') && distance > 18) || (w.class === 'smg' && distance > 26);
++
++    // Strafe and range-keeping while fighting.
++    if (brain.strafeLeft <= 0) { brain.strafe = ctx.random() < 0.5 ? -1 : 1; brain.strafeLeft = 0.5 + ctx.random() * 0.9; }
++    const preferred = w.botRange;
++    const fx = -Math.sin(bot.yaw), fz = -Math.cos(bot.yaw), rx = Math.cos(bot.yaw), rz = -Math.sin(bot.yaw);
++    const advance = distance > preferred * 1.4 ? 0.7 : distance < preferred * 0.5 ? -0.6 : 0;
++    const pathWeight = distance > preferred ? 0.6 : 0.2;
++    moveX = moveX * pathWeight + (fx * advance + rx * brain.strafe * 0.9);
++    moveZ = moveZ * pathWeight + (fz * advance + rz * brain.strafe * 0.9);
++    if (brain.crouchLeft < -2 && ctx.random() < dt * 0.25 * brain.skill && distance > 15) brain.crouchLeft = 0.8 + ctx.random();
++
++    // Knife anyone who closes right in; draw the gun again once they back off.
++    if (bot.switchLeft <= 0 && bot.reloadLeft <= 0 && (bot.weapon === 2 ? distance > 3.5 : distance < 1.6 && ctx.random() < dt * 4)) {
++      bot.weapon = bot.weapon === 2 ? 0 : 2; bot.switchLeft = weaponOf(bot).equipTime;
++    }
++
++    // Fire in bursts once the reaction delay has passed.
++    if (!own && brain.reaction <= 0 && aligned && bot.reloadLeft <= 0 && bot.switchLeft <= 0 && bot.fireCooldown <= 0 && brain.burstPause <= 0 && distance < w.range * 0.6) {
++      if (bot.weapon !== 2 && bot.ammo[bot.weapon] <= 0) { bot.reloadLeft = w.reload; }
++      else {
++        const spread = (w.pellets > 1 ? 0.8 : spreadFor({ ...bot, ads: wantAds }, w)) * (1.35 - brain.skill * 0.55) * (rookieEase(target) > 0 ? ROOKIE_EASE.spread : 1) * Math.PI / 180;
++        const yaw = bot.yaw + (ctx.random() - 0.5) * 2 * spread, pitch = bot.pitch + (ctx.random() - 0.5) * 2 * spread;
++        if (w.pellets > 1) resolvePellets(state, ctx, bot, w, eye, dirFromAngles(yaw, pitch), wantAds);
++        else resolveShot(state, ctx, bot, w, eye, traceShot(state, ctx, bot, eye, dirFromAngles(yaw, pitch), w.range));
++        if (bot.weapon !== 2) bot.ammo[bot.weapon]--;
++        bot.sinceShot = 0;
++        bot.fireCooldown = w.auto ? w.interval : w.interval * (1.15 + ctx.random() * 0.6);
++        brain.burst++;
++        const burstLength = w.auto ? 3 + Math.floor(ctx.random() * (distance < 15 ? 8 : 4)) : 1;
++        if (brain.burst >= burstLength) { brain.burst = 0; brain.burstPause = (w.auto ? 0.18 : 0.05) + ctx.random() * (distance > 30 ? 0.6 : 0.3); }
++      }
++    }
++  } else {
++    // Look where we are going (smoothly) when not fighting.
++    if ((moveX || moveZ) && !own) {
++      const want = Math.atan2(-moveX, -moveZ);
++      bot.yaw = wrapAngle(bot.yaw + clamp(wrapAngle(want - bot.yaw), -4 * dt, 4 * dt));
++      bot.pitch *= Math.exp(-dt * 3);
++    }
++    brain.burst = 0;
++    if (bot.weapon === 2 && bot.switchLeft <= 0) { bot.weapon = 0; bot.switchLeft = weaponOf(bot).equipTime; }
++    else if (bot.weapon !== 2 && bot.ammo[bot.weapon] < w.magazine * 0.4 && bot.reloadLeft <= 0) bot.reloadLeft = w.reload;
++    // Grenade the last known position of an enemy who ducked behind cover.
++    // A molotov goes on a nearer one, where it would land at their feet.
++    if (target && brain.grenadeCooldown <= 0 && (bot.grenades > 0 || bot.molotovs > 0) && state.time - brain.lastSeen < 2.5) {
++      const d = Math.hypot(brain.seenX - bot.m.x, brain.seenZ - bot.m.z);
++      const frag = bot.grenades > 0 && d > 9 && d < 24, molotov = bot.molotovs > 0 && d > 6 && d < 20;
++      if ((frag || molotov) && ctx.random() < 0.35) {
++        const eye = eyeOf(bot);
++        const yaw = yawTo(eye, { x: brain.seenX, y: 0, z: brain.seenZ });
++        // Flat-ground ballistic estimate: pick a pitch whose range matches the distance.
++        const v = GRENADE.throwSpeed, pitch = clamp(0.5 * Math.asin(clamp(d * 9.8 / (v * v), -1, 1)) - 0.08, 0.05, 0.9);
++        if (molotov && (!frag || ctx.random() < 0.5)) throwMolotovFrom(state, bot, eye, dirFromAngles(yaw, pitch));
++        else throwGrenadeFrom(state, bot, eye, dirFromAngles(yaw, pitch));
++      }
++      brain.grenadeCooldown = 9 + ctx.random() * 8;
++    }
++  }
++
++  // ---- Sabotage: hold E on the site (standing still) to arm or disarm --------------
++  bot.using = false;
++  if (sabotage && !visible && bot.m.grounded) {
++    const site = state.bomb.armed ? state.bomb.site : bot.team === ATTACKERS ? sitesOf(ctx).findIndex(p => onSite(p, bot.m.x, bot.m.y, bot.m.z, SITE_STOP)) : -1;
++    const p = site >= 0 ? sitesOf(ctx)[site] : undefined;
++    const busy = state.bomb.by !== -1 && state.bomb.by !== bot.id;
++    const myJob = state.bomb.armed ? bot.team !== ATTACKERS : bot.team === ATTACKERS;
++    if (p && myJob && !busy && onSite(p, bot.m.x, bot.m.y, bot.m.z, SITE_STOP)) { bot.using = true; moveX = 0; moveZ = 0; }
++  }
++
++  // ---- Fire: step out of the flames, and keep a step clear of them --------------
++  const fire = state.bodies.length ? fireNear(state, ctx, feetOf(bot), 0.6) : undefined;
++  if (fire) {
++    const ax = bot.m.x - fire.x, az = bot.m.z - fire.z, d = Math.hypot(ax, az);
++    if (d > 0.05) { moveX = ax / d; moveZ = az / d; } else { moveX = -Math.sin(bot.yaw); moveZ = -Math.cos(bot.yaw); }
++    bot.using = false;
++  }
++
++  // ---- Vehicles in the way: the nav grid knows only where they park, so walk round the bodies ----
++  if (obstacles?.length && (moveX || moveZ)) [moveX, moveZ] = avoidObstacles(bot, obstacles, moveX, moveZ);
++
++  // ---- Stuck detection ------------------------------------------------------------
++  // Climbing a ladder is progress too.
++  const moved = Math.hypot(bot.m.x - brain.lastX, bot.m.z - brain.lastZ, bot.m.y - brain.lastY);
++  brain.lastX = bot.m.x; brain.lastY = bot.m.y; brain.lastZ = bot.m.z;
++  const wanted = Math.hypot(moveX, moveZ) > 0.3;
++  brain.stuck = wanted && moved < dt * 0.8 ? brain.stuck + dt : Math.max(0, brain.stuck - dt * 2);
++  if (brain.stuck > 0.7) { brain.jump = true; brain.stuck = 0; brain.repath = 0; brain.strafe *= -1; }
++
++  // ---- Drive the shared movement controller ---------------------------------------
++  let len = Math.hypot(moveX, moveZ);
++  if (len > 1) { moveX /= len; moveZ /= len; }
++  if (lab?.moveScale !== undefined) { moveX *= lab.moveScale; moveZ *= lab.moveScale; len *= lab.moveScale; }
++  const fx = -Math.sin(bot.yaw), fz = -Math.cos(bot.yaw), rx = Math.cos(bot.yaw), rz = -Math.sin(bot.yaw);
++  const forward = moveX * fx + moveZ * fz, strafe = moveX * rx + moveZ * rz;
++  const input: MoveInput = {
++    forward, strafe, yaw: bot.yaw, jump: brain.jump, crouch: brain.crouchLeft > 0,
++    sprint: !visible && !lab?.noSprint && len > 0.5 && forward > 0.7 && bot.stamina > (bot.sprint ? 0 : STAMINA.tired),
++    ads: lab?.ads ?? (wantAds && visible), speed: w.speed,
++  };
++  brain.jump = false;
++  bot.sprint = input.sprint && bot.m.grounded; bot.ads = input.ads;
++  stepMovement(ctx.world, bot.m, input, dt, bot.team, obstacles);
++  // Safety net: never let a bot fall out of the world.
++  if (bot.m.y < -60) bot.m.y = ctx.world.groundHeight(bot.m.x, bot.m.z, 100, MOVE.radius);
++  LAB.after?.(state, ctx, bot, dt);
++}
++
++// Lab only: the old shop of the bots.
++import { ATTACHMENTS as ATT_OLD, MOLOTOV, WEAPONS as W_OLD, fitsWeapon as fits_old, type WeaponDef as WD_OLD } from '../weapons';
++export function botShopOld(s: Soldier, random: () => number) {
++  const primaries = (Object.values(W_OLD) as WD_OLD[]).filter(w => w.slot === 0 && w.price > 0);
++  if (random() < 0.7) {
++    const options = primaries.filter(w => w.price <= s.money && !s.owned.includes(w.id));
++    if (options.length) {
++      let best = options[0], bestScore = -Infinity;
++      for (const w of options) { const score = w.price + random() * 1500; if (score > bestScore) { bestScore = score; best = w; } }
++      s.money -= best.price; s.owned.push(best.id);
++    }
++  }
++  const owned = primaries.filter(w => s.owned.includes(w.id));
++  if (owned.length) s.weapons[0] = owned[Math.floor(random() * owned.length)].id;
++  if (s.money > 2500 && random() < 0.4) {
++    const fitted = s.attachments[s.weapons[0]] ?? {};
++    if (!fitted.optic) {
++      const optic = (['holo', 'reflex', 'acog'] as const)[Math.floor(random() * 3)];
++      const a = ATT_OLD[optic];
++      if (fits_old(a, s.weapons[0]) && s.money >= a.price) { s.money -= a.price; s.attachments[s.weapons[0]] = { ...fitted, optic }; }
++    }
++  }
++  if (s.grenades < GRENADE.max && s.money > 3000 && random() < 0.5) { s.money -= GRENADE.price; s.grenades = 1; }
++  if (s.molotovs < MOLOTOV.max && s.money > 2000 && random() < 0.35) { s.money -= MOLOTOV.price; s.molotovs = 1; }
++}
+diff -ruN a/shared/match/economy.ts b/shared/match/economy.ts
+--- a/shared/match/economy.ts	2026-11-10 05:36:01.000000000 +0000
++++ b/shared/match/economy.ts	2026-11-14 06:09:41.096377118 +0000
+@@ -175,20 +175,24 @@
+   if (!s.bot) s.reserve[s.weapon] -= take;
+ }
+ 
+-/** Bots shop like casual players at the start of a round: the best primary they can afford, sometimes an optic and a frag. */
++/**
++ * How the bots choose a primary, from the recorded players. Players keep their primary from one round to the next in 88% of the
++ * rounds, and carry the MP5 in 56% of their rounds, the M4A1 in 20%, the M249 in 10%, the M1014 in 9% and the M110 in 4%.
++ * A bot chooses again in `change` of the rounds, with these chances (the free MP5 has the rest). A match starts with the MP5 and
++ * little cash, so the chances of the bought weapons are above the players' shares: over a match the bots then get those shares.
++ */
++const BOT_BUY = { change: 0.2, primaries: [['m4a1', 0.39], ['m249', 0.2], ['m1014', 0.15], ['m110', 0.075]] as const };
++
++/** Bots shop as the recorded players do at the start of a round: most keep their primary, and sometimes they add an optic, a frag or a molotov. */
+ export function botShop(s: Soldier, random: () => number) {
+-  const primaries = (Object.values(WEAPONS) as WeaponDef[]).filter(w => w.slot === 0 && w.price > 0);
+-  if (random() < 0.7) {
+-    const options = primaries.filter(w => w.price <= s.money && !s.owned.includes(w.id));
+-    if (options.length) {
+-      let best = options[0], bestScore = -Infinity;
+-      for (const w of options) { const score = w.price + random() * 1500; if (score > bestScore) { bestScore = score; best = w; } }
+-      s.money -= best.price; s.owned.push(best.id);
+-    }
++  if (random() < BOT_BUY.change) {
++    let r = random(), pick: WeaponId = DEFAULT_WEAPONS[0];
++    for (const [id, chance] of BOT_BUY.primaries) { if (r < chance) { pick = id; break; } r -= chance; }
++    // A weapon that the bot has is free; one that it cannot pay for stays in the store, and the bot keeps what it carries.
++    if (s.owned.includes(pick)) s.weapons[0] = pick;
++    else if (WEAPONS[pick].price <= s.money) { s.money -= WEAPONS[pick].price; s.owned.push(pick); s.weapons[0] = pick; }
+   }
+-  const owned = primaries.filter(w => s.owned.includes(w.id));
+-  if (owned.length) s.weapons[0] = owned[Math.floor(random() * owned.length)].id;
+-  if (s.money > 2500 && random() < 0.4) {
++  if (s.money > 2500 && random() < 0.07) {
+     const fitted = s.attachments[s.weapons[0]] ?? {};
+     if (!fitted.optic) {
+       const optic = (['holo', 'reflex', 'acog'] as const)[Math.floor(random() * 3)];
+@@ -196,6 +200,6 @@
+       if (fitsWeapon(a, s.weapons[0]) && s.money >= a.price) { s.money -= a.price; s.attachments[s.weapons[0]] = { ...fitted, optic }; }
+     }
+   }
+-  if (s.grenades < GRENADE.max && s.money > 3000 && random() < 0.5) { s.money -= GRENADE.price; s.grenades = 1; }
+-  if (s.molotovs < MOLOTOV.max && s.money > 2000 && random() < 0.35) { s.money -= MOLOTOV.price; s.molotovs = 1; }
++  if (s.grenades < GRENADE.max && s.money > 3000 && random() < 0.08) { s.money -= GRENADE.price; s.grenades = 1; }
++  if (s.molotovs < MOLOTOV.max && s.money > 2000 && random() < 0.15) { s.money -= MOLOTOV.price; s.molotovs = 1; }
+ }
+diff -ruN a/shared/match/nav.ts b/shared/match/nav.ts
+--- a/shared/match/nav.ts	2026-11-10 05:36:01.000000000 +0000
++++ b/shared/match/nav.ts	2026-11-14 06:09:41.104377167 +0000
+@@ -164,7 +164,8 @@
+   // Always search the neighbouring ring too: the closest column can hold an unreachable roof.
+   for (let ring = 0; ring <= 5 && (best < 0 || ring <= 1); ring++) {
+     for (let dz = -ring; dz <= ring; dz++) for (let dx = -ring; dx <= ring; dx++) {
+-      if (Math.max(Math.abs(dx), Math.abs(dz)) !== ring) continue;
++      // A column past the west or east edge has the key of a column at the other edge, one row away: skip it.
++      if (Math.max(Math.abs(dx), Math.abs(dz)) !== ring || ix + dx < 0 || ix + dx >= nav.nx) continue;
+       const ids = nav.columns.get((iz + dz) * nav.nx + ix + dx);
+       if (!ids) continue;
+       for (const id of ids) {
+diff -ruN a/shared/match/places.lab.ts b/shared/match/places.lab.ts
+--- a/shared/match/places.lab.ts	1970-01-01 00:00:00.000000000 +0000
++++ b/shared/match/places.lab.ts	2026-11-13 00:48:49.991593424 +0000
+@@ -0,0 +1 @@
++export const PLACES: Record<string, Record<number, number[][]>> = {"citadel":{"0":[[-19.81,2.5,2.65,0.0583],[-14.73,2.58,-2.25,0.0502],[-15.31,2.51,2.57,0.0333],[-9.4,2.5,-15.39,0.0292],[-20.79,2.51,-2.11,0.0272],[-9.09,2.5,-20.52,0.0252],[-4.05,2.5,-21.61,0.0243],[-9.32,2.51,2.59,0.0229],[3.68,2.5,21.62,0.0226],[-14.83,6.14,-22.25,0.0225],[-15.66,2.5,8.66,0.0207],[-26.68,2.5,1.16,0.0197],[-27.08,2.5,-1.21,0.0178],[-33.85,2.52,-2.06,0.0174],[-9.39,6.1,-22.0,0.0172],[-9.01,2.95,-2.51,0.0167],[-3.28,2.8,2.28,0.0163],[-14.76,6.12,22.04,0.0158],[-38.34,2.5,-2.7,0.0155],[-15.62,2.51,-15.53,0.0152],[-33.25,2.5,1.18,0.0138],[-14.17,2.51,-20.75,0.0138],[-2.64,2.85,-2.07,0.0135],[-20.45,2.97,8.42,0.0133],[-49.17,1.28,1.99,0.0124],[-9.49,2.5,8.8,0.0119],[-15.88,2.52,-8.24,0.0117],[-10.61,7.04,-9.27,0.0115],[-44.67,2.52,-2.4,0.0112],[-9.07,2.51,14.71,0.011],[-38.6,2.5,2.05,0.0106],[-49.74,1.13,-1.58,0.0105],[20.76,2.51,-2.38,0.0104],[2.52,2.79,-2.91,0.0101],[21.35,2.52,2.22,0.0101],[14.84,2.51,21.14,0.01],[8.32,2.51,22.41,0.0089],[-20.86,2.5,-22.62,0.0088],[-19.54,2.79,-8.76,0.0087],[27.17,2.5,0.97,0.0079],[9.13,2.52,-2.53,0.0078],[-47.42,2.08,2.09,0.0074],[3.24,2.5,-8.97,0.0071],[-3.23,6.13,-22.1,0.0071],[-38.54,2.54,-8.74,0.0069],[26.7,2.51,-0.86,0.0068],[14.84,2.51,-1.96,0.0068],[-9.68,6.14,22.28,0.0067],[2.47,2.86,2.35,0.0067],[16.29,2.52,15.36,0.0066],[15.28,2.51,8.68,0.0065],[7.68,2.5,25.59,0.0064],[15.71,2.54,-15.32,0.0063],[-20.78,6.11,-21.39,0.0063],[8.46,2.5,-21.75,0.0062],[21.21,6.1,-21.02,0.0062],[-8.44,2.51,-25.58,0.0061],[-15.59,2.51,14.94,0.006],[-3.34,2.52,-15.46,0.0058],[-8.54,2.5,-9.8,0.0056],[-20.97,6.12,21.06,0.0055],[14.83,2.73,2.51,0.0052],[8.78,2.51,-8.24,0.0051],[19.77,2.9,9.01,0.0051],[2.58,6.12,-22.36,0.0051],[33.34,2.53,1.38,0.0051],[-3.07,2.51,9.1,0.005],[-32.21,1.02,27.42,0.005],[-2.78,2.58,-9.07,0.0049],[2.95,2.5,-22.03,0.0049],[19.92,3.0,-9.04,0.0047],[2.93,2.5,-14.98,0.0046],[15.08,6.12,-22.19,0.0046],[21.0,6.1,20.67,0.0046],[-27.16,1.21,31.76,0.0046],[-31.41,1.53,3.46,0.0045],[33.02,2.53,-1.39,0.0044],[-29.22,1.81,2.95,0.0044],[-43.63,2.52,1.17,0.0044],[-31.99,1.76,-3.57,0.0044],[-63.23,0.31,3.13,0.0044],[-21.67,1.05,32.28,0.0044],[2.76,2.53,15.42,0.0043],[3.48,2.51,26.87,0.0042],[-3.4,2.52,14.95,0.0041],[15.21,2.5,-20.92,0.0041],[15.42,2.52,-8.82,0.004],[8.91,2.51,15.22,0.004],[-21.79,5.96,15.61,0.004],[-29.35,1.75,-2.93,0.0039],[9.29,2.82,1.71,0.0039],[38.78,2.54,-2.4,0.0039],[-62.64,0.3,-2.71,0.0038],[-19.16,2.93,-14.24,0.0038],[-14.77,6.56,-24.47,0.0038],[-9.05,2.52,20.27,0.0038]],"1":[[20.02,2.51,-2.91,0.0302],[15.36,2.51,-9.03,0.0297],[49.14,1.3,-1.56,0.025],[3.81,2.51,21.79,0.0242],[62.62,0.3,4.15,0.0216],[15.64,2.51,-2.96,0.0212],[-14.93,2.5,-21.01,0.0194],[49.19,1.29,1.54,0.019],[26.6,2.51,-1.07,0.0186],[8.99,6.13,22.16,0.0182],[7.89,2.53,22.37,0.0179],[9.99,2.51,-9.01,0.0177],[33.24,2.51,-1.44,0.0177],[2.77,2.84,-1.93,0.0173],[14.94,2.59,1.98,0.0169],[9.2,2.52,-2.88,0.0162],[33.78,2.52,1.29,0.0158],[-15.79,2.52,-15.7,0.0158],[21.75,2.51,21.75,0.0155],[15.51,2.5,21.42,0.0147],[2.85,2.85,2.39,0.0145],[21.05,2.55,2.18,0.014],[9.36,2.52,15.14,0.0135],[-8.77,2.5,-21.9,0.0134],[38.85,2.51,1.6,0.0134],[26.93,2.52,0.9,0.0134],[38.81,2.52,-1.86,0.0132],[-3.79,2.5,-21.31,0.0128],[9.11,2.5,25.91,0.0126],[-2.54,2.83,2.35,0.0125],[19.88,2.76,-8.38,0.0123],[47.33,2.11,-1.72,0.0121],[-21.15,2.51,2.66,0.0117],[-21.04,2.54,-2.61,0.0105],[14.64,6.12,22.32,0.0105],[44.67,2.61,1.89,0.0101],[43.98,2.52,-1.57,0.0101],[20.39,3.21,9.13,0.0099],[-9.41,2.52,2.09,0.0097],[-14.97,2.53,15.08,0.0096],[-14.71,2.51,2.26,0.0096],[-19.9,2.92,-8.69,0.0096],[9.09,2.72,2.77,0.0095],[31.92,0.82,31.43,0.009],[9.65,2.51,-13.76,0.0089],[-20.42,3.0,8.87,0.0089],[-8.52,2.52,22.03,0.0088],[-7.74,2.5,-25.62,0.0087],[-8.69,2.54,15.3,0.0087],[15.66,2.52,15.3,0.0084],[-39.11,2.56,2.37,0.0084],[2.95,2.56,15.07,0.0081],[15.77,2.54,8.44,0.0079],[-9.23,2.83,-2.48,0.0078],[8.01,2.5,-21.47,0.0078],[-26.69,2.54,0.94,0.0077],[27.24,1.12,32.12,0.0074],[-20.04,2.5,-22.4,0.0073],[-15.27,2.5,21.23,0.0073],[-2.46,2.87,-2.16,0.0073],[15.72,2.54,-14.74,0.0073],[-16.63,2.54,-9.36,0.0073],[26.92,1.28,-31.68,0.007],[-14.65,2.73,-2.62,0.0068],[-9.47,2.53,-16.13,0.0066],[-21.32,6.12,20.73,0.0066],[21.08,1.3,31.69,0.0065],[-3.42,6.11,22.07,0.0062],[-26.77,2.56,-0.88,0.0061],[32.77,0.88,27.65,0.0061],[-10.74,7.07,-9.14,0.006],[-20.94,2.5,21.95,0.0059],[-33.29,2.55,-1.31,0.0059],[8.42,2.5,9.75,0.0058],[-33.21,2.58,1.13,0.0057],[-22.61,6.04,15.35,0.0057],[31.73,1.69,-3.68,0.0056],[3.4,2.5,-22.2,0.0055],[-3.48,2.52,22.36,0.0055],[48.9,1.35,-9.76,0.0055],[-21.08,6.1,-20.59,0.0055],[3.19,6.12,22.29,0.0054],[-44.14,0.2,-45.56,0.0054],[-24.41,6.27,20.87,0.0051],[32.21,1.74,3.94,0.0049],[32.55,0.99,21.06,0.0048],[-22.66,6.05,-15.53,0.0047],[-3.42,2.5,-26.96,0.0047],[21.36,1.15,-31.95,0.0047],[-8.28,2.5,8.6,0.0047],[-9.13,6.14,22.17,0.0047],[3.4,2.51,-9.0,0.0047],[-2.51,2.55,15.0,0.0046],[-15.15,6.13,22.22,0.0046],[15.07,6.11,-22.69,0.0044],[57.45,0.37,3.0,0.0044]]},"memorial":{"0":[[-20.71,12.99,2.51,0.0309],[15.79,13.53,-4.27,0.0294],[-15.44,13.54,1.79,0.0273],[-20.53,13.09,-2.69,0.0273],[-9.03,13.52,2.16,0.0261],[-9.25,13.51,-2.26,0.0251],[-15.53,13.54,-1.67,0.0239],[19.91,13.23,-2.4,0.0221],[-27.28,9.79,-2.6,0.021],[-27.18,9.81,2.66,0.0206],[15.62,13.53,-15.26,0.0195],[-3.08,13.54,2.62,0.0177],[-3.07,13.53,-2.27,0.0176],[15.42,13.55,4.46,0.0176],[9.02,13.6,-4.64,0.0157],[2.79,13.51,-3.39,0.0154],[16.43,13.54,-8.23,0.0144],[-9.33,13.55,-16.16,0.0142],[-15.17,13.52,15.51,0.0138],[2.86,13.51,3.53,0.0133],[-14.85,13.51,-15.1,0.0131],[20.47,13.14,2.59,0.0128],[9.06,0.01,-3.87,0.0128],[-8.84,13.55,15.93,0.0123],[9.1,13.6,4.75,0.0122],[15.48,13.53,15.23,0.0121],[27.45,9.83,2.49,0.0112],[3.35,0.01,3.44,0.0112],[27.26,10.01,-2.08,0.0108],[45.21,0.28,-2.73,0.0103],[-31.34,8.99,2.93,0.0101],[-3.3,13.45,-20.35,0.01],[3.65,0.0,-2.8,0.0099],[8.99,0.02,3.72,0.0098],[16.38,13.52,7.87,0.0097],[-40.0,4.66,-2.87,0.0095],[-8.89,4.75,-7.62,0.0094],[-39.9,4.68,2.8,0.0093],[-2.87,0.01,8.91,0.0093],[-31.34,8.97,-2.54,0.0093],[-27.66,9.03,8.79,0.0091],[-3.49,13.51,20.03,0.0091],[-27.81,9.09,-8.64,0.0088],[9.64,9.65,-9.18,0.0085],[-16.37,13.53,8.78,0.0084],[-50.38,0.23,3.62,0.0082],[-19.12,13.59,8.7,0.0082],[-20.75,9.04,-21.23,0.0081],[-34.3,7.53,2.47,0.0078],[-44.9,0.04,9.36,0.0075],[2.84,13.11,-8.08,0.0074],[9.74,9.59,9.45,0.0072],[21.98,0.0,8.68,0.0072],[-39.13,0.02,9.76,0.0072],[-14.26,4.5,-8.32,0.0071],[51.18,0.06,2.88,0.0071],[-38.46,4.58,-8.8,0.007],[-13.34,4.54,-4.06,0.0069],[9.15,13.52,-16.65,0.0069],[2.47,4.76,-3.42,0.0069],[1.93,4.6,-8.77,0.0068],[-3.05,13.52,8.5,0.0068],[2.6,13.19,8.25,0.0068],[-34.26,7.55,-2.34,0.0068],[50.79,0.0,-3.21,0.0067],[-16.07,13.51,-8.68,0.0066],[44.75,0.42,2.42,0.0066],[-50.55,0.01,7.98,0.0066],[-26.76,0.0,7.1,0.0064],[-2.43,4.62,-7.88,0.0064],[-33.1,0.0,9.09,0.0064],[-33.09,4.51,-14.49,0.0063],[-50.63,0.21,-3.17,0.0063],[14.86,0.45,-3.34,0.0063],[-69.26,0.0,-3.04,0.0063],[-38.9,0.05,-9.33,0.0061],[-8.12,12.71,-20.74,0.0061],[-9.47,9.19,-25.35,0.0059],[-20.76,9.0,-7.48,0.0059],[-50.67,0.0,-8.21,0.0059],[-15.2,9.07,-22.77,0.0059],[-38.76,4.53,9.15,0.0059],[20.85,0.07,-2.75,0.0058],[-14.44,4.51,8.73,0.0058],[-3.11,13.52,-8.15,0.0058],[37.9,3.94,-1.48,0.0057],[-15.86,0.04,8.72,0.0057],[-44.64,0.07,-9.25,0.0057],[3.46,13.53,-16.5,0.0055],[-8.21,13.16,19.64,0.0055],[18.7,13.52,-8.01,0.0055],[-21.11,0.01,4.23,0.0055],[32.56,7.14,-1.48,0.0054],[-20.9,9.04,21.08,0.0054],[-43.71,3.55,2.79,0.0053],[2.22,4.54,14.18,0.0052]],"1":[[-15.26,13.54,-2.41,0.0368],[-67.65,0.01,9.17,0.0366],[-15.67,13.52,2.39,0.0357],[-20.72,13.03,2.7,0.0331],[-20.71,13.03,-2.31,0.0322],[20.56,13.19,-2.41,0.0252],[-9.05,13.52,-2.27,0.0225],[-8.51,13.54,15.46,0.0215],[-15.39,13.51,-15.2,0.021],[3.03,13.51,-3.54,0.021],[-8.27,13.55,-15.45,0.0201],[15.15,13.51,-15.3,0.0193],[-9.15,13.52,1.91,0.0176],[-15.54,13.53,15.46,0.0176],[3.88,13.51,2.62,0.017],[-16.16,13.51,-8.5,0.0165],[-3.01,13.51,-9.09,0.0162],[-67.69,0.0,-3.67,0.0161],[-26.8,9.99,2.75,0.0156],[2.68,13.09,-8.28,0.0155],[15.65,13.6,-4.16,0.0153],[8.45,13.64,-4.19,0.0149],[15.35,13.78,-8.43,0.0145],[-9.11,13.52,-8.58,0.0142],[-3.06,13.52,-2.86,0.0139],[-16.16,13.52,8.81,0.0134],[-3.51,13.51,-15.87,0.0128],[-3.43,13.47,-20.15,0.0126],[27.54,9.84,2.4,0.0125],[15.65,13.56,4.15,0.012],[9.86,9.54,-9.47,0.0114],[20.71,13.04,2.33,0.0113],[27.54,9.78,-2.65,0.0113],[-26.89,9.95,-2.39,0.0107],[2.41,13.5,-14.92,0.0095],[-3.69,13.51,16.44,0.0094],[-19.81,0.0,-3.29,0.0091],[-62.07,0.0,-2.78,0.0084],[9.33,13.54,-16.37,0.0081],[-51.02,0.14,3.16,0.0076],[8.99,13.61,4.83,0.0075],[-3.4,13.54,2.28,0.0074],[-8.7,13.32,-20.27,0.0073],[2.74,4.66,-14.17,0.0073],[32.61,7.18,1.78,0.0073],[45.04,0.27,-3.05,0.0073],[-3.54,13.54,19.95,0.0072],[15.59,13.52,15.53,0.0072],[16.08,4.52,27.66,0.007],[-21.2,9.0,20.1,0.0068],[21.73,0.11,8.7,0.0067],[-2.85,13.52,8.48,0.0065],[26.86,9.32,8.29,0.0064],[32.44,7.13,-1.78,0.0064],[-25.27,0.03,-7.65,0.0063],[-51.17,0.14,-2.59,0.0062],[-9.69,13.51,9.74,0.0062],[19.13,13.62,-8.9,0.0062],[-3.31,0.0,7.89,0.006],[-18.89,13.58,8.66,0.0059],[1.93,4.61,-9.83,0.0059],[21.14,4.51,10.16,0.0058],[44.68,0.31,3.56,0.0057],[-56.95,0.0,-3.54,0.0057],[-56.95,0.03,1.53,0.0056],[-46.41,1.96,-2.32,0.0056],[21.96,0.0,-8.26,0.0056],[-30.95,8.97,2.78,0.0056],[-39.72,4.73,-2.98,0.0056],[2.39,13.24,7.95,0.0054],[-3.37,4.52,-15.05,0.0052],[38.12,3.92,-1.77,0.0051],[-18.67,13.55,-8.87,0.0049],[-34.37,7.47,-2.87,0.0049],[39.14,0.11,-7.17,0.0049],[26.24,4.51,10.24,0.0049],[-27.38,9.07,8.64,0.0049],[16.62,13.51,8.46,0.0048],[2.84,13.52,-18.85,0.0048],[9.65,9.6,9.45,0.0048],[9.82,4.52,3.18,0.0047],[-55.77,0.0,8.88,0.0047],[-21.83,9.0,8.51,0.0047],[-62.26,0.04,3.63,0.0046],[14.96,13.76,19.42,0.0046],[-31.36,8.98,-3.01,0.0046],[26.99,0.07,7.37,0.0045],[-14.17,4.5,-16.93,0.0044],[32.34,0.03,3.53,0.0043],[20.78,9.0,21.23,0.0041],[21.01,0.13,2.03,0.0041],[-39.45,4.82,3.16,0.0041],[-9.24,13.25,19.77,0.0041],[10.27,4.5,-3.1,0.0041],[14.95,9.03,22.41,0.0041],[-14.86,9.03,22.2,0.0041]]},"ochre":{"0":[[-3.83,0.06,20.88,0.0693],[-3.0,0.02,15.75,0.0412],[-2.44,0.01,8.47,0.0398],[-6.87,0.1,22.62,0.0377],[3.42,0.05,20.32,0.034],[-3.77,0.81,26.85,0.0332],[2.04,0.02,8.37,0.0303],[2.99,0.02,15.71,0.0302],[-3.21,0.0,3.53,0.0241],[-3.51,1.76,33.0,0.0222],[2.65,0.03,3.64,0.0215],[-3.29,2.0,38.96,0.0211],[3.88,2.0,38.49,0.0191],[9.21,2.5,-26.73,0.0182],[-7.89,2.0,39.11,0.0176],[8.08,2.0,38.82,0.0146],[2.84,0.82,26.76,0.0144],[8.63,2.5,-21.87,0.0122],[2.96,1.78,32.92,0.0118],[-7.02,0.66,25.96,0.0117],[-4.09,2.0,44.31,0.0117],[-2.85,0.03,-2.69,0.0116],[-2.88,0.02,-9.19,0.0109],[-32.08,0.0,2.66,0.0107],[9.11,0.02,-45.12,0.0107],[-2.75,0.02,-13.9,0.0106],[37.95,1.0,33.63,0.0105],[-2.84,0.02,-33.2,0.0104],[-2.03,0.02,-27.16,0.0092],[-7.91,1.89,34.1,0.0091],[8.44,2.52,2.99,0.0088],[-28.06,-0.08,3.6,0.0087],[-8.19,2.0,44.37,0.0086],[3.16,0.01,-44.69,0.0086],[-9.5,0.0,-38.57,0.0086],[-2.62,0.01,-38.66,0.0085],[-39.35,0.01,-38.46,0.0085],[-1.73,0.01,-21.12,0.0081],[-7.57,-0.25,4.48,0.0078],[2.2,0.13,-14.84,0.0078],[8.06,1.67,10.0,0.0077],[8.37,2.0,44.46,0.0077],[-33.03,0.0,7.82,0.0076],[-27.29,0.0,-33.96,0.0073],[2.57,0.05,-9.03,0.0073],[2.16,0.04,-2.95,0.0073],[-33.37,0.0,-2.72,0.0072],[7.92,1.93,34.31,0.0071],[9.15,2.0,49.25,0.0071],[-33.05,0.0,-34.03,0.007],[-27.55,0.0,-38.93,0.0069],[6.71,0.1,22.6,0.0067],[2.29,0.18,-20.3,0.0065],[-14.6,0.0,-39.1,0.0064],[-14.52,-1.0,4.01,0.0062],[4.03,2.0,43.79,0.0061],[10.03,0.43,13.06,0.0061],[14.53,2.51,-31.23,0.0058],[39.23,2.0,-32.63,0.0058],[-8.99,0.0,-43.65,0.0057],[-32.65,0.0,-38.04,0.0057],[33.16,2.08,-32.81,0.0057],[14.13,2.5,-29.09,0.0055],[-21.14,0.02,-39.88,0.0054],[2.36,0.0,-28.25,0.0053],[7.79,2.5,-8.88,0.0052],[-8.73,0.0,-34.44,0.0051],[-2.2,0.0,-43.69,0.005],[-34.3,0.0,-9.23,0.0046],[14.56,1.99,44.55,0.0046],[-9.29,2.0,49.7,0.0045],[33.8,1.82,-44.41,0.0045],[45.13,0.96,2.94,0.0045],[21.12,2.52,-31.47,0.0044],[38.81,0.5,15.27,0.0044],[-10.36,-0.73,4.08,0.0044],[8.38,2.5,-2.21,0.0044],[-21.07,-0.93,4.07,0.0043],[-20.08,-0.97,7.08,0.0042],[44.54,1.91,-27.24,0.0041],[7.71,2.5,-15.01,0.0041],[-21.51,1.93,38.88,0.004],[45.63,1.71,-21.09,0.0037],[9.56,2.5,-31.6,0.0036],[44.3,0.69,8.96,0.0036],[44.17,2.01,-32.35,0.0036],[8.87,2.5,7.0,0.0035],[-28.69,0.03,-2.75,0.0034],[45.65,1.33,-8.89,0.0033],[45.64,1.53,-15.0,0.0032],[45.35,1.09,-3.06,0.0032],[-27.86,-0.11,7.03,0.0032],[43.76,0.51,14.69,0.0032],[-34.28,0.66,21.29,0.0032],[1.41,0.05,-39.11,0.0031],[28.01,2.37,-31.71,0.0031]],"1":[[1.78,0.01,-27.38,0.0592],[-1.76,0.02,-27.54,0.0491],[-2.41,0.01,-32.55,0.0411],[9.42,2.52,-26.39,0.0332],[-2.98,-0.0,3.14,0.0308],[1.2,0.02,-22.27,0.0288],[-2.1,0.0,-21.52,0.0281],[3.27,0.03,2.82,0.0241],[-2.96,0.01,-15.5,0.0237],[-3.31,0.01,8.1,0.0225],[1.8,0.01,-32.46,0.0218],[2.57,0.07,8.5,0.0216],[1.59,0.0,-39.15,0.0197],[3.13,0.0,-43.91,0.0194],[2.76,0.01,-2.64,0.0189],[2.58,0.06,-9.32,0.0159],[-26.79,0.0,-38.51,0.0152],[7.96,2.51,-21.44,0.015],[-2.19,0.0,-38.26,0.0145],[3.21,0.04,15.42,0.0142],[1.66,0.01,-14.89,0.0138],[8.66,2.0,38.3,0.0135],[-8.37,0.0,-33.99,0.013],[9.6,2.5,-9.18,0.0129],[-2.66,0.02,-3.03,0.0127],[8.91,0.03,-45.65,0.0121],[-32.58,0.0,-2.98,0.0121],[-2.63,0.0,-45.38,0.0116],[-2.71,0.02,-9.01,0.011],[8.69,2.51,-2.97,0.0101],[14.11,2.0,39.21,0.0096],[39.8,2.0,-33.38,0.0094],[-2.98,0.0,15.39,0.009],[13.79,2.5,-29.13,0.0087],[8.23,2.51,3.75,0.0087],[39.21,1.0,33.32,0.0086],[8.81,0.32,13.3,0.0084],[43.81,0.54,14.87,0.0079],[-21.44,0.0,-38.81,0.0078],[-43.97,0.0,-40.19,0.0077],[44.55,2.0,-39.22,0.0076],[-1.81,1.83,33.47,0.0074],[2.17,0.08,20.84,0.0074],[8.72,1.55,10.3,0.0074],[-27.99,-0.08,3.97,0.0072],[-39.49,0.0,-39.23,0.0072],[2.16,0.9,27.25,0.0071],[43.72,2.0,-33.37,0.0071],[-33.39,0.0,2.45,0.0069],[21.04,0.0,-52.02,0.0066],[8.56,1.95,34.76,0.0061],[-14.9,0.0,-39.33,0.0061],[-7.44,0.0,-29.37,0.0061],[-32.48,0.0,9.14,0.006],[33.21,1.75,-45.72,0.0058],[8.53,2.5,-15.11,0.0058],[49.96,1.9,-26.97,0.0057],[-9.23,0.0,-38.76,0.0057],[3.06,1.75,32.73,0.0056],[33.66,1.12,38.82,0.0053],[-7.33,-0.22,4.49,0.0053],[-32.5,0.0,-38.62,0.0052],[33.73,2.06,-33.38,0.0051],[8.02,2.5,7.18,0.0051],[-14.79,-1.0,4.61,0.005],[-7.22,-0.2,7.06,0.0049],[-8.69,0.01,-44.67,0.0049],[-2.28,0.77,26.6,0.0048],[-3.61,2.0,37.89,0.0046],[14.93,0.0,-45.71,0.0045],[14.36,0.0,-50.13,0.0045],[44.96,1.9,-26.96,0.0042],[3.41,2.0,38.81,0.0042],[-20.99,-0.95,4.48,0.0041],[15.04,2.57,-31.33,0.004],[-33.2,0.0,-33.36,0.0039],[37.72,1.0,37.45,0.0039],[44.41,0.5,20.61,0.0039],[-34.34,0.14,13.95,0.0038],[-33.92,0.0,-8.95,0.0038],[38.0,2.0,-39.4,0.0037],[44.3,1.07,-2.59,0.0037],[33.53,1.77,-48.86,0.0037],[-2.34,0.07,21.22,0.0035],[40.18,0.56,15.6,0.0035],[-28.63,-0.03,9.69,0.0035],[-8.98,2.0,38.38,0.0035],[27.97,2.38,-32.45,0.0035],[27.07,1.46,40.35,0.0034],[-39.58,0.0,-32.96,0.0034],[26.42,0.23,-49.83,0.0034],[10.69,0.0,-49.96,0.0033],[43.38,0.61,26.49,0.0033],[-10.52,-0.75,7.24,0.0033],[-33.27,0.05,-27.05,0.0032],[20.96,1.75,40.64,0.0032]]},"pipeline":{"0":[[-21.11,2.98,9.78,0.0622],[-14.9,3.09,9.08,0.0445],[-20.54,3.0,13.77,0.043],[-9.22,-0.0,2.43,0.0417],[-8.37,-1.5,26.51,0.0367],[-7.97,-1.16,15.1,0.0296],[-9.61,-1.49,20.34,0.0277],[-16.06,3.0,13.28,0.0263],[-15.19,0.13,1.7,0.0252],[-9.53,4.3,10.22,0.0198],[-20.49,0.61,2.97,0.0198],[-3.27,0.01,2.12,0.0195],[-4.57,-1.21,15.51,0.0195],[-14.39,-1.49,20.23,0.0182],[-7.51,6.1,10.04,0.0178],[-10.02,0.09,-8.87,0.0174],[-4.11,-1.45,26.55,0.0157],[-4.55,6.49,10.46,0.0156],[-7.84,3.0,14.34,0.015],[-26.4,0.58,3.17,0.0145],[-13.8,0.0,-2.34,0.0142],[-8.88,-0.29,7.63,0.0141],[-20.85,-1.49,33.45,0.0132],[-3.76,-1.44,21.01,0.0126],[-20.7,-1.44,21.56,0.0125],[-26.4,3.01,13.65,0.0121],[-10.28,0.0,-2.26,0.0116],[-7.97,-0.66,10.69,0.0101],[-54.91,0.04,4.51,0.0099],[2.84,0.13,2.25,0.0098],[-32.6,2.94,9.72,0.0097],[-3.61,6.54,13.16,0.0096],[-8.31,-1.5,33.45,0.0093],[-16.89,-1.47,38.13,0.0092],[-15.73,-1.49,27.22,0.0092],[-27.7,2.92,9.33,0.0086],[-19.37,3.73,-2.45,0.0085],[-2.43,3.19,9.97,0.0084],[-19.02,0.88,-0.57,0.0078],[-3.0,-1.38,32.92,0.0077],[-15.22,-1.5,33.81,0.0075],[-14.57,0.19,-9.37,0.0073],[-2.85,0.03,-1.75,0.0072],[-20.68,-1.5,27.07,0.007],[-15.88,3.96,-4.04,0.0068],[-33.47,0.53,3.7,0.0066],[-7.99,6.64,13.39,0.0064],[-39.03,0.03,-25.45,0.0062],[-9.21,4.0,-3.4,0.0061],[-20.53,2.28,6.63,0.0061],[-3.57,0.0,-9.44,0.006],[-55.39,0.0,-21.58,0.0059],[-51.31,5.08,21.41,0.0059],[-38.18,3.53,31.98,0.0059],[-38.54,3.56,26.92,0.0059],[-55.41,0.04,-25.43,0.0057],[-44.15,4.22,28.1,0.0055],[-51.4,5.09,25.55,0.0053],[-37.98,0.56,8.15,0.0049],[8.61,0.13,-2.23,0.0048],[8.46,0.12,32.48,0.0048],[-48.33,0.01,-1.58,0.0047],[-38.82,0.0,-8.5,0.0046],[-24.71,-1.49,38.48,0.0045],[-53.11,0.0,-15.04,0.0044],[-45.45,0.01,-26.84,0.0044],[-2.62,3.91,-4.0,0.0043],[3.19,0.33,-10.18,0.0043],[-21.28,0.5,-10.18,0.0042],[-38.26,0.03,-3.94,0.0042],[-51.14,0.08,2.74,0.0041],[-37.49,0.22,4.11,0.0041],[-20.53,0.21,-14.91,0.004],[-15.4,0.16,-15.13,0.004],[-9.03,-1.5,38.57,0.0039],[-55.58,0.04,7.58,0.0039],[8.86,0.04,3.19,0.0039],[8.3,-0.01,14.86,0.0038],[-45.79,0.0,-21.62,0.0038],[23.34,0.0,-2.51,0.0038],[-51.42,0.0,-10.33,0.0038],[-34.34,3.0,26.13,0.0037],[-4.75,-0.15,7.42,0.0037],[-44.51,0.05,-14.88,0.0036],[-51.54,0.06,-20.38,0.0036],[-28.46,5.3,-15.06,0.0035],[-26.55,-1.39,20.8,0.0035],[1.85,-0.77,26.48,0.0035],[-2.47,3.05,12.87,0.0035],[7.83,-0.03,20.89,0.0035],[-19.89,0.54,19.39,0.0035],[-27.4,0.38,-2.2,0.0034],[-27.25,4.34,-8.72,0.0034],[-15.46,2.33,6.73,0.0033],[-38.35,3.07,15.22,0.0033],[-16.5,3.94,-7.59,0.0033]],"1":[[-21.87,0.59,-9.38,0.0368],[-9.14,0.01,2.69,0.0272],[-20.39,3.01,14.67,0.026],[-26.73,0.44,3.0,0.0255],[-37.69,3.45,20.31,0.0227],[-27.91,0.03,-2.44,0.0224],[-14.61,-1.5,26.86,0.0202],[-26.47,0.03,-26.43,0.0202],[-9.91,0.0,-2.46,0.0198],[-31.31,0.03,-26.09,0.0193],[-21.26,2.97,9.29,0.0193],[-28.06,5.3,-15.09,0.0186],[-32.81,5.3,-14.52,0.0181],[-15.45,0.15,1.47,0.0166],[3.15,4.82,-13.38,0.0163],[-20.13,1.77,17.65,0.0163],[-21.04,0.0,-21.75,0.0152],[-20.28,0.36,2.37,0.0152],[-3.48,0.04,-2.63,0.0146],[-10.96,0.03,-16.46,0.0145],[-27.14,1.05,-9.01,0.0144],[-15.61,0.02,-20.58,0.0143],[-15.74,-1.49,22.39,0.0139],[-32.03,0.0,-3.89,0.013],[-20.45,0.19,-15.0,0.0129],[-16.22,0.25,-15.43,0.0129],[-30.98,2.28,6.71,0.0127],[-4.05,0.03,2.94,0.0118],[-19.93,1.04,18.62,0.0117],[-28.08,2.92,9.47,0.0116],[-19.6,3.93,-3.32,0.0115],[-9.39,0.1,-8.45,0.0114],[-2.69,3.09,13.9,0.0114],[-21.99,0.0,-25.71,0.0113],[-37.91,3.2,15.97,0.0112],[-45.13,0.0,-20.34,0.011],[-15.25,3.21,14.4,0.0109],[-44.1,0.0,9.0,0.0108],[-39.69,0.14,8.86,0.0106],[-15.06,0.17,-10.16,0.0097],[-14.48,-1.5,33.32,0.0096],[-8.39,3.15,14.55,0.0095],[-32.06,4.32,-9.51,0.0088],[-38.21,0.01,-27.8,0.0088],[-13.7,0.09,-1.36,0.0087],[-26.38,3.29,14.48,0.0087],[-7.82,-1.13,14.85,0.0087],[-25.94,0.42,-23.19,0.0084],[-9.13,0.16,-22.02,0.0084],[-44.25,7.05,-7.84,0.0082],[-10.33,-1.5,25.96,0.0081],[-34.86,3.15,20.99,0.0081],[-4.58,-0.15,7.8,0.0079],[-45.65,0.0,-26.45,0.0078],[-20.69,-1.44,22.51,0.0076],[-31.72,2.94,9.92,0.0074],[-26.47,4.58,-9.93,0.0074],[-7.48,-0.22,7.43,0.0072],[-34.9,3.11,33.78,0.0072],[-15.63,3.97,-3.94,0.0071],[32.98,2.4,-20.71,0.0068],[-14.55,0.11,-24.84,0.0068],[-9.57,-1.5,33.84,0.0068],[-14.91,3.15,9.28,0.0068],[-39.01,0.02,-8.04,0.0066],[-9.43,1.21,-25.22,0.0066],[-2.41,3.27,10.38,0.0065],[15.97,4.02,-14.57,0.0065],[-3.3,0.0,-8.42,0.0062],[-2.7,-1.37,26.68,0.0061],[-31.55,5.18,-20.42,0.0061],[-38.18,0.04,-4.45,0.006],[-9.91,-1.49,20.77,0.0058],[-31.94,0.35,3.14,0.0055],[3.26,0.26,2.27,0.0053],[-21.66,0.15,-1.5,0.0052],[-37.78,3.45,26.61,0.0052],[-28.56,4.11,-21.38,0.0052],[-27.02,-1.38,21.51,0.0052],[2.48,2.4,-21.74,0.0051],[-2.25,2.4,-31.35,0.0051],[-34.62,0.0,-31.08,0.005],[-15.37,-1.5,39.49,0.0049],[-20.6,-1.5,25.89,0.0048],[-44.72,0.0,-32.24,0.0047],[-31.7,1.42,27.76,0.0046],[-33.77,3.17,14.66,0.0046],[-9.52,-1.5,38.91,0.0045],[-44.43,0.0,-14.72,0.0044],[-26.39,0.09,-30.39,0.0044],[-17.01,3.82,-7.77,0.0043],[-27.33,2.24,6.57,0.0043],[-44.64,7.07,8.64,0.0043],[-2.27,3.97,-3.7,0.0042],[-34.76,3.07,27.63,0.0042],[-20.3,3.47,-8.38,0.0042]]},"railyard":{"0":[[-19.89,0.04,8.57,0.0423],[-26.12,0.04,-8.42,0.0386],[-14.2,0.0,-14.77,0.0278],[-9.23,7.36,28.71,0.0263],[-8.67,0.17,3.4,0.0253],[-26.72,0.12,3.84,0.0232],[-27.9,4.0,20.11,0.0231],[-9.03,0.03,10.17,0.0214],[-14.96,0.01,10.66,0.021],[-9.44,0.01,14.42,0.0202],[-15.5,0.01,-3.41,0.0199],[-20.81,4.0,19.76,0.0193],[-21.25,0.01,3.31,0.0181],[-20.97,0.0,-14.52,0.0178],[-20.91,0.01,-3.23,0.0174],[-8.75,0.14,-3.11,0.0173],[-14.5,0.02,13.93,0.0172],[-21.32,0.01,15.0,0.0169],[-35.19,5.51,24.97,0.0158],[-14.78,0.01,3.6,0.0148],[-26.69,0.03,-3.75,0.0143],[-56.02,0.06,8.56,0.0143],[-14.66,0.02,28.46,0.0142],[-33.03,0.02,4.4,0.0136],[-3.18,0.12,9.19,0.0132],[-20.47,7.34,28.7,0.013],[-68.87,0.02,-3.27,0.0127],[-9.27,0.07,-8.75,0.0118],[-2.86,0.32,2.77,0.0117],[-2.97,0.01,14.4,0.0115],[-30.84,3.41,19.97,0.0114],[-35.48,5.5,21.79,0.0105],[-8.97,0.04,21.04,0.0101],[-36.88,5.51,25.72,0.01],[-14.48,0.01,-20.67,0.01],[-33.37,0.12,9.5,0.0098],[-2.87,0.31,-2.6,0.0097],[-27.0,0.01,14.6,0.0095],[-33.63,7.4,-22.17,0.0092],[-26.38,0.01,-14.82,0.0089],[2.39,0.31,3.05,0.0088],[2.39,0.13,9.04,0.0086],[2.81,0.16,-8.46,0.0083],[-21.63,0.01,-10.66,0.0083],[-13.49,7.34,32.21,0.0079],[-20.49,0.01,21.57,0.0079],[-14.37,7.36,28.86,0.0078],[-9.61,0.01,-15.53,0.0076],[-27.11,0.18,9.54,0.0075],[-27.6,0.03,-20.03,0.0074],[-67.39,0.01,2.96,0.0074],[-36.42,5.5,21.4,0.0073],[-15.28,0.01,-26.89,0.0073],[-14.67,0.08,20.75,0.0072],[-50.8,0.01,-3.25,0.0071],[-38.85,0.07,9.48,0.0069],[-38.98,0.04,4.23,0.0069],[-10.05,7.38,31.84,0.0068],[2.7,0.3,-2.73,0.0068],[-56.41,0.04,3.92,0.0064],[-32.89,0.03,14.62,0.0064],[-3.11,0.16,-8.68,0.0063],[-32.1,0.03,-9.53,0.0061],[-38.57,0.0,14.99,0.0059],[-35.37,5.5,8.51,0.0059],[-35.39,5.5,3.22,0.0058],[8.79,0.11,9.32,0.0058],[8.98,0.16,2.7,0.0058],[-45.71,0.18,-40.11,0.0058],[-36.74,0.0,-48.72,0.0057],[-51.81,0.02,4.22,0.0056],[-20.77,0.0,-26.19,0.0055],[-9.13,0.15,33.52,0.0054],[-19.99,0.0,-20.37,0.0053],[4.09,0.02,-32.78,0.005],[-32.89,0.01,-3.13,0.005],[-14.4,0.0,-10.13,0.0049],[-14.82,0.01,31.96,0.0049],[-67.84,0.01,-9.08,0.0049],[-38.8,0.07,-3.26,0.0049],[-9.12,0.03,-20.31,0.0049],[-45.54,0.0,-4.07,0.0046],[-21.2,0.01,27.55,0.0045],[-62.96,0.0,-3.91,0.0045],[-26.6,0.04,27.46,0.0043],[-68.66,0.01,7.68,0.0042],[8.93,0.14,-2.83,0.0041],[-57.59,0.01,-8.3,0.004],[-50.54,0.0,-13.76,0.004],[-45.17,0.05,-8.36,0.004],[-20.7,7.34,32.22,0.004],[-58.57,0.0,19.2,0.0039],[-34.0,0.0,-25.43,0.0039],[3.14,0.0,14.4,0.0038],[-2.1,0.0,43.39,0.0038],[-43.78,7.27,-26.13,0.0038]],"1":[[9.73,7.39,-28.64,0.0777],[20.03,0.05,-8.36,0.0625],[25.72,0.04,7.92,0.0457],[14.54,7.34,-28.67,0.0279],[20.93,0.03,-3.66,0.0224],[15.0,0.0,15.15,0.0191],[15.09,0.02,2.95,0.0189],[15.01,0.01,-2.74,0.0181],[27.03,0.13,-4.41,0.0171],[20.91,4.0,-20.19,0.017],[55.79,0.03,-9.57,0.0161],[27.09,4.0,-20.43,0.016],[8.99,0.12,-3.24,0.016],[9.14,0.1,3.14,0.0158],[30.75,3.42,-20.35,0.0157],[15.21,0.0,-10.52,0.0154],[21.25,0.02,3.14,0.0149],[33.49,0.01,-4.59,0.014],[27.28,0.05,21.08,0.0139],[9.18,0.09,8.36,0.0138],[2.68,0.3,2.82,0.0129],[9.28,0.05,-10.14,0.0125],[20.27,7.35,-28.68,0.0118],[20.42,0.02,26.51,0.0114],[15.89,0.0,25.82,0.011],[33.16,0.07,-8.7,0.0108],[14.25,7.34,-33.05,0.0107],[38.96,0.04,-9.42,0.0106],[15.09,0.01,-14.12,0.0106],[45.67,0.0,2.8,0.0099],[-2.36,0.31,-3.05,0.0095],[32.8,0.06,7.61,0.0094],[-2.5,0.3,2.65,0.0093],[3.09,0.12,-9.37,0.009],[10.38,7.34,-31.35,0.0089],[27.61,0.01,-14.54,0.0088],[32.53,0.0,3.37,0.0088],[45.18,0.06,9.15,0.0088],[26.67,0.0,3.74,0.0087],[9.13,0.0,-14.72,0.0087],[38.56,0.0,-4.02,0.0085],[21.32,0.0,-26.73,0.0084],[20.67,0.04,14.54,0.0082],[39.21,0.03,9.24,0.0077],[39.25,0.03,4.64,0.0077],[-2.39,0.06,-9.7,0.0077],[-21.22,0.08,8.65,0.0076],[3.23,0.19,7.94,0.0076],[25.61,0.0,16.14,0.0075],[-22.36,0.0,-2.88,0.0072],[20.75,0.02,-14.73,0.0072],[69.7,0.0,-8.17,0.0071],[9.72,0.02,-27.4,0.0069],[26.89,0.01,-9.25,0.0069],[45.21,1.67,-26.53,0.0067],[15.09,0.0,9.81,0.0067],[68.78,0.0,8.71,0.0066],[50.7,0.03,-14.59,0.0066],[-3.48,0.0,-14.49,0.0066],[44.64,0.02,14.72,0.0065],[8.49,0.06,-20.66,0.0065],[15.34,0.09,-21.18,0.0063],[38.27,0.0,27.82,0.0063],[-9.03,0.16,3.68,0.0062],[2.73,0.34,-2.32,0.0061],[21.27,0.0,22.39,0.0061],[38.97,0.0,-15.85,0.006],[43.57,0.0,-10.3,0.006],[-2.38,0.0,39.92,0.0057],[33.3,1.23,-20.3,0.0054],[3.44,0.08,-20.71,0.0053],[-1.85,0.0,16.16,0.0051],[-13.58,0.04,-15.09,0.0051],[44.74,0.0,-2.81,0.0049],[-21.49,0.04,2.8,0.0049],[21.16,0.01,10.84,0.0046],[-8.82,0.08,-14.7,0.0046],[-2.91,0.14,8.69,0.0046],[62.42,0.01,-8.36,0.0045],[-15.28,0.03,4.33,0.0045],[26.75,0.0,26.25,0.0045],[9.98,0.08,-31.69,0.0044],[20.73,7.39,-32.85,0.0043],[-9.06,0.11,-9.55,0.0043],[46.08,0.06,20.77,0.0043],[57.05,0.0,-3.24,0.0042],[51.25,0.03,2.47,0.0042],[-9.32,0.17,33.17,0.0042],[3.46,0.04,15.18,0.0042],[14.39,0.0,22.0,0.004],[-13.64,0.0,28.81,0.0039],[21.71,0.0,32.37,0.0038],[-25.56,0.0,42.92,0.0038],[32.6,0.04,20.8,0.0038],[26.23,6.87,-31.09,0.0038],[56.11,0.0,3.9,0.0036]]},"sanchong":{"0":[[28.13,0.02,-2.17,0.0788],[2.78,0.02,-3.22,0.0722],[8.86,0.07,-3.51,0.0593],[14.49,0.02,-2.3,0.0551],[14.95,0.18,1.9,0.04],[2.32,0.02,2.67,0.0367],[27.89,0.17,2.0,0.032],[-1.24,5.3,15.03,0.0281],[-2.01,0.05,2.28,0.0247],[8.55,0.55,3.73,0.0247],[-2.26,0.02,-2.82,0.0233],[8.35,0.07,8.54,0.0233],[20.98,0.46,2.74,0.0181],[9.25,0.01,20.82,0.0177],[1.99,0.47,19.55,0.0171],[20.88,0.23,-3.03,0.0171],[-1.33,5.3,9.45,0.0141],[2.78,0.0,-20.37,0.0133],[20.29,4.84,4.96,0.0131],[14.2,0.01,20.71,0.013],[-1.58,5.3,19.49,0.0125],[-8.63,0.06,3.79,0.0125],[3.96,4.84,-3.47,0.0125],[-9.0,0.02,15.58,0.0116],[9.33,0.03,15.3,0.0109],[3.29,4.84,3.67,0.0106],[14.52,0.0,26.51,0.0103],[-9.93,0.03,8.82,0.0094],[20.41,0.01,21.76,0.0091],[4.79,0.02,-8.66,0.0086],[32.59,0.02,2.58,0.0081],[8.91,4.84,3.37,0.008],[2.81,0.1,15.35,0.0078],[4.55,0.01,-15.34,0.0076],[-3.05,0.01,21.49,0.007],[9.24,0.02,26.68,0.0069],[-14.43,0.04,2.55,0.0069],[27.39,0.02,21.09,0.0068],[51.05,0.0,-3.66,0.0067],[63.07,0.0,-4.92,0.0067],[0.5,3.94,18.61,0.0066],[3.51,0.02,10.24,0.0062],[-3.57,0.0,15.38,0.0062],[15.13,4.79,3.63,0.0056],[1.61,0.0,-33.36,0.0055],[-7.23,5.3,15.88,0.0055],[39.12,0.03,-2.8,0.005],[2.93,0.0,-38.53,0.0049],[-9.12,4.85,2.95,0.0048],[-8.6,0.0,19.83,0.0048],[-7.43,5.25,8.62,0.0046],[-2.44,6.6,33.2,0.0046],[28.57,0.04,7.54,0.0044],[-15.34,0.04,-2.26,0.0044],[-1.05,0.0,-20.83,0.0043],[44.74,0.0,-2.88,0.0043],[14.15,0.24,9.6,0.0041],[38.08,0.0,2.71,0.004],[0.7,0.0,-26.69,0.004],[-1.29,0.01,-32.66,0.0039],[32.69,0.03,-3.09,0.0038],[8.99,0.0,-38.18,0.0037],[3.75,0.02,25.87,0.0037],[7.21,4.84,-2.47,0.0037],[-27.14,0.0,2.88,0.0035],[-9.33,0.0,39.02,0.0033],[-2.58,4.84,3.2,0.0032],[-15.03,4.85,2.59,0.0031],[6.46,0.0,-8.41,0.0031],[14.19,0.0,14.3,0.003],[-32.52,0.03,-2.55,0.0029],[-0.4,6.32,7.9,0.0029],[-0.74,0.01,-27.15,0.0028],[-20.64,0.08,-3.11,0.0028],[-6.51,0.03,-2.7,0.0028],[-9.3,0.06,32.69,0.0028],[-2.65,0.0,-38.3,0.0028],[-27.41,0.04,-3.04,0.0027],[-9.36,0.02,27.56,0.0027],[-30.21,6.41,1.27,0.0027],[-7.97,6.38,7.85,0.0026],[39.63,0.0,-33.31,0.0026],[1.34,6.95,32.78,0.0025],[39.83,0.01,-8.82,0.0025],[-27.28,4.87,2.86,0.0024],[-4.31,5.3,26.04,0.0024],[-39.67,0.0,-32.93,0.0024],[30.86,0.02,26.21,0.0024],[-20.92,0.03,3.1,0.0024],[15.41,0.15,-44.67,0.0023],[-38.04,0.0,-3.23,0.0023],[40.01,0.05,-20.86,0.0022],[-2.19,0.0,9.68,0.0022],[19.48,0.0,16.67,0.0022],[-4.24,0.43,39.51,0.0022],[14.53,0.0,-34.44,0.0022]],"1":[[-14.62,0.01,2.51,0.0649],[-2.86,0.01,3.16,0.0507],[-9.08,0.01,3.83,0.0464],[2.07,0.03,-2.83,0.0401],[-2.07,6.63,33.42,0.0395],[1.57,6.96,33.41,0.0369],[-27.62,0.04,2.59,0.0358],[-14.82,0.07,-1.76,0.0293],[2.39,0.09,2.85,0.0289],[-21.44,0.07,3.27,0.0207],[-1.03,0.01,-2.22,0.0185],[-1.62,5.3,20.21,0.0182],[-9.71,0.0,8.24,0.0174],[8.0,0.07,8.31,0.017],[-68.92,0.0,-2.11,0.0162],[4.82,0.01,-8.59,0.0143],[-9.53,0.01,14.76,0.014],[2.79,7.28,37.44,0.0135],[-9.27,0.0,39.54,0.0128],[-27.91,0.02,-2.14,0.0125],[27.75,0.01,3.04,0.0124],[1.75,0.46,19.56,0.012],[-1.99,5.3,15.59,0.012],[2.52,0.0,-20.61,0.0117],[8.67,0.42,-3.03,0.0115],[-27.48,0.01,38.97,0.011],[8.52,0.75,3.52,0.011],[2.29,0.03,9.18,0.0107],[2.82,0.1,15.72,0.0107],[-15.1,0.0,40.05,0.0102],[-20.48,0.1,-3.07,0.0098],[14.56,0.01,-2.73,0.0097],[-4.37,0.65,39.13,0.0097],[-4.0,6.5,37.26,0.009],[14.75,0.68,2.63,0.0088],[4.63,0.0,-14.99,0.0084],[8.92,0.1,15.23,0.0082],[28.12,0.0,-2.2,0.0078],[9.1,0.0,21.04,0.0078],[-44.65,0.0,3.17,0.0077],[-4.86,3.98,38.49,0.0073],[2.26,0.0,-32.92,0.0073],[-2.99,0.02,20.88,0.0072],[-32.1,0.0,-2.42,0.0071],[-21.19,0.0,-39.68,0.0066],[-21.0,0.0,40.42,0.0065],[-1.66,5.3,10.2,0.0061],[-10.27,1.05,-3.66,0.006],[-39.55,0.0,1.91,0.0058],[14.12,0.06,26.73,0.0057],[20.45,0.0,21.3,0.0056],[-8.47,0.01,27.74,0.0056],[-14.82,0.0,-38.9,0.0056],[-28.75,0.0,7.53,0.0055],[2.32,0.0,-38.51,0.0055],[32.17,0.0,2.88,0.0055],[-9.44,0.05,32.92,0.0054],[10.14,0.04,26.98,0.0054],[27.59,0.0,20.89,0.0054],[20.94,0.0,3.31,0.0053],[-3.92,0.29,-45.34,0.0051],[-20.45,6.5,-58.5,0.0051],[20.83,0.0,-3.21,0.005],[-1.68,0.0,-32.9,0.0049],[-3.19,0.02,14.33,0.0043],[-31.26,0.0,32.62,0.0042],[0.62,0.0,-26.74,0.0042],[14.48,0.0,40.0,0.004],[38.68,0.0,-2.51,0.004],[2.23,0.0,45.0,0.004],[-72.98,0.0,-4.22,0.004],[-14.1,4.84,-1.94,0.0039],[6.45,0.0,-9.47,0.0039],[-9.04,0.02,20.35,0.0038],[0.51,3.89,18.54,0.0038],[-2.59,0.0,-39.04,0.0037],[-2.8,0.0,44.67,0.0036],[-67.59,0.0,1.96,0.0035],[14.56,0.46,9.14,0.0035],[-50.6,0.0,1.82,0.0035],[-39.83,0.0,-2.61,0.0034],[-1.62,5.3,26.23,0.0034],[-9.53,4.78,-1.63,0.0034],[-0.88,0.0,-27.01,0.0033],[19.24,0.0,16.09,0.0032],[15.76,0.01,14.53,0.0032],[2.62,4.83,2.88,0.0032],[14.58,0.06,21.4,0.0032],[27.38,0.0,39.53,0.0032],[-32.46,0.02,2.98,0.0031],[15.44,0.0,43.98,0.0031],[-6.68,5.3,21.09,0.003],[-30.89,0.0,7.78,0.0029],[26.5,6.56,-56.92,0.0027],[-15.24,4.82,2.08,0.0027],[-63.99,0.0,-4.42,0.0027]]},"skyline":{"0":[[-22.14,34.71,4.79,0.0936],[-19.91,35.87,4.85,0.0836],[-15.13,36.01,5.04,0.0502],[-22.18,34.69,6.73,0.0482],[-9.19,36.01,4.05,0.0401],[-19.55,35.92,6.71,0.0314],[-14.92,36.02,6.66,0.0281],[-3.38,36.02,-2.44,0.0201],[-20.42,33.02,-32.2,0.0201],[-3.16,36.02,2.88,0.02],[-9.38,36.02,7.29,0.0199],[-2.97,36.03,8.6,0.0163],[-24.83,33.11,4.72,0.0155],[2.78,36.04,2.71,0.0142],[3.83,34.38,16.16,0.0139],[-27.53,31.04,3.84,0.0137],[-2.82,36.03,-9.21,0.0133],[2.95,36.06,9.51,0.0133],[3.13,36.02,-3.42,0.0133],[8.96,36.01,-3.73,0.0127],[-32.59,30.02,7.87,0.0124],[-20.29,33.0,-26.8,0.0117],[-32.19,30.02,3.77,0.0115],[14.95,36.02,-5.08,0.0112],[-3.82,34.49,-16.01,0.011],[-3.27,35.97,-13.45,0.0109],[-7.98,36.02,-2.53,0.0109],[2.91,35.99,13.41,0.01],[-27.66,31.35,7.02,0.0099],[-8.44,30.09,-28.09,0.0098],[-39.21,30.0,13.2,0.0097],[4.22,30.93,21.05,0.0094],[2.96,36.04,-8.64,0.0091],[8.45,36.12,12.86,0.0091],[-16.91,32.97,-27.31,0.0088],[-24.85,33.14,6.83,0.0086],[15.33,36.03,-6.92,0.0082],[-4.09,30.91,-21.15,0.0079],[-21.79,32.9,-22.51,0.0077],[8.2,36.02,2.71,0.0074],[8.93,36.2,-7.89,0.0073],[7.95,36.28,9.26,0.0072],[-20.24,33.7,-45.46,0.0071],[-3.57,30.0,-27.04,0.007],[-7.97,36.1,-8.73,0.0065],[-59.21,30.0,-2.83,0.0064],[19.42,35.95,-7.01,0.006],[-26.82,33.12,-32.9,0.0055],[-8.91,30.14,-32.01,0.0054],[-8.37,29.95,28.15,0.005],[-16.93,32.96,-31.66,0.005],[-61.77,30.0,-0.99,0.0049],[-2.67,30.0,-32.62,0.0049],[-44.42,33.0,-36.62,0.0048],[-20.53,33.03,-39.02,0.0046],[-2.83,30.02,27.71,0.0043],[2.81,30.03,26.46,0.0042],[-21.63,30.41,-14.66,0.0041],[-39.15,33.0,-34.64,0.0041],[-16.96,33.0,-40.76,0.0041],[-25.58,33.01,-27.5,0.0041],[20.83,33.08,27.81,0.004],[-32.83,33.1,-33.92,0.004],[-52.77,31.61,-36.92,0.0039],[19.71,35.97,-4.93,0.0039],[-34.06,33.09,-38.98,0.0039],[-23.12,32.07,-19.51,0.0039],[25.7,33.03,27.17,0.0038],[-17.42,33.0,-44.67,0.0038],[-45.5,33.0,-35.43,0.0038],[15.98,32.75,31.86,0.0037],[-13.75,31.87,-29.11,0.0036],[32.81,30.03,-3.52,0.0035],[-57.65,30.02,3.69,0.0035],[-26.04,32.89,-22.42,0.0034],[-38.58,30.02,8.08,0.0034],[-26.24,30.03,-9.23,0.0034],[2.43,30.0,-27.57,0.0033],[22.15,34.6,-5.03,0.0031],[8.51,30.13,28.08,0.0031],[16.58,32.94,28.47,0.003],[-50.93,30.02,3.67,0.003],[-8.06,29.97,31.94,0.0029],[20.51,33.04,32.41,0.0029],[-26.28,33.12,-38.83,0.0028],[27.55,30.89,-3.86,0.0027],[55.3,30.0,8.64,0.0026],[-22.82,30.0,-9.12,0.0026],[-25.27,30.57,-15.09,0.0025],[2.18,30.03,-32.59,0.0025],[-38.64,30.02,-8.54,0.0024],[-44.92,30.0,7.8,0.0024],[-52.3,31.01,-8.29,0.0024],[22.19,34.64,-6.62,0.0024],[-38.71,33.0,-37.28,0.0024],[38.22,30.02,2.35,0.0022]],"1":[[22.18,34.69,-4.97,0.0803],[19.97,35.88,-5.0,0.0716],[22.18,34.69,-6.8,0.0583],[14.96,36.02,-5.01,0.042],[19.93,35.87,-6.67,0.0344],[2.57,36.05,-2.82,0.031],[9.61,36.04,-4.26,0.0285],[27.22,30.75,-3.23,0.0248],[-2.56,36.01,-2.82,0.0227],[3.07,36.02,2.52,0.0216],[32.78,30.02,-3.19,0.0213],[-2.78,36.03,-8.97,0.0186],[9.07,36.02,-7.58,0.0165],[2.95,36.03,9.02,0.0162],[27.56,31.29,-7.3,0.0158],[15.23,36.04,-6.7,0.0157],[24.78,33.17,-4.95,0.0152],[32.19,30.02,-7.74,0.0151],[19.99,33.04,26.81,0.0137],[2.74,36.03,-8.01,0.0137],[3.82,34.46,16.05,0.0131],[3.39,36.0,13.44,0.0129],[-8.66,36.04,3.39,0.0118],[24.81,33.14,-6.97,0.0117],[-3.32,35.91,-13.46,0.0117],[32.82,30.01,2.47,0.0114],[-2.63,36.02,2.85,0.0114],[37.98,30.01,2.17,0.0112],[21.2,33.06,33.17,0.0112],[-3.59,34.55,-15.93,0.0111],[26.89,30.04,3.18,0.01],[-15.57,36.02,4.96,0.0096],[-15.25,36.02,7.07,0.0087],[38.45,30.02,-7.93,0.0086],[-3.01,36.04,8.97,0.0079],[50.07,32.87,35.32,0.0078],[-4.29,30.78,-21.35,0.0075],[-8.26,30.14,-27.87,0.0073],[-3.45,30.01,-26.83,0.0073],[-7.89,36.07,-3.23,0.0071],[-8.09,36.15,-8.74,0.0067],[-8.93,36.05,7.51,0.0065],[38.89,33.01,44.55,0.0064],[25.55,33.01,27.0,0.0061],[7.75,36.39,9.92,0.0061],[-2.53,30.0,-33.32,0.0061],[27.23,30.01,9.14,0.006],[3.65,30.75,21.53,0.0055],[-32.45,30.03,3.02,0.0054],[58.83,30.03,-1.11,0.0051],[50.61,30.06,-3.12,0.005],[25.21,30.35,14.41,0.0049],[2.77,30.02,-27.7,0.0049],[-26.29,33.0,-27.32,0.0047],[21.84,32.96,22.68,0.0046],[58.15,30.0,4.29,0.0045],[3.29,30.13,26.38,0.0044],[20.44,33.05,39.02,0.0043],[-20.49,33.0,-27.1,0.0043],[7.32,36.0,2.53,0.0042],[16.89,32.97,26.93,0.0042],[32.07,30.02,8.61,0.0042],[8.77,29.97,-28.68,0.0042],[38.17,30.0,9.17,0.0042],[-21.22,33.05,-31.2,0.004],[-50.18,30.99,2.31,0.004],[17.02,32.98,32.71,0.004],[-33.13,30.03,7.96,0.0039],[22.24,30.05,2.33,0.0038],[-27.18,30.51,2.66,0.0037],[9.12,30.2,31.6,0.0037],[-1.15,30.01,34.16,0.0037],[8.29,30.16,28.22,0.0037],[52.38,31.79,35.33,0.0037],[3.35,30.0,-31.51,0.0035],[22.71,30.44,14.21,0.0034],[-19.44,35.93,5.02,0.0034],[52.16,31.92,36.45,0.0033],[8.52,30.01,-31.88,0.0033],[-2.46,30.0,27.44,0.0031],[44.74,30.0,-7.91,0.0031],[25.92,33.12,32.58,0.003],[50.45,32.68,36.8,0.0029],[37.48,30.0,-2.41,0.0029],[25.26,32.9,22.4,0.0029],[-19.24,35.98,6.75,0.0029],[3.51,30.08,32.57,0.0028],[62.36,27.09,34.04,0.0026],[50.69,30.05,9.71,0.0026],[57.4,30.0,9.57,0.0026],[6.7,36.56,12.47,0.0025],[44.72,30.0,7.2,0.0025],[-38.27,30.0,-8.38,0.0025],[-33.15,30.0,-9.86,0.0025],[-13.5,31.75,-28.97,0.0024],[-25.1,30.5,-14.68,0.0023]]},"taipei":{"0":[[-8.88,0.0,-2.21,0.1291],[-9.26,0.01,2.7,0.0895],[-14.36,0.01,2.44,0.0658],[-14.59,0.01,-3.55,0.0538],[-3.79,0.01,-2.82,0.0371],[-21.27,0.0,2.07,0.0332],[-21.19,0.0,-3.07,0.0271],[1.89,0.01,19.47,0.024],[-2.02,0.02,21.0,0.0229],[2.52,0.01,15.61,0.0199],[-26.69,0.03,-2.5,0.0167],[-2.87,0.01,2.88,0.0153],[2.53,0.01,-21.28,0.0148],[-3.35,0.0,26.67,0.0145],[-51.22,0.01,2.57,0.014],[8.94,0.02,-3.0,0.0125],[2.94,0.26,-15.14,0.0122],[2.76,0.02,-3.09,0.0116],[-32.83,0.03,-2.18,0.0111],[-38.93,0.04,-2.55,0.0108],[2.75,0.02,2.9,0.0108],[-26.9,0.01,26.64,0.0103],[-45.95,0.02,-3.2,0.0099],[2.1,0.01,-9.31,0.0097],[1.94,0.03,9.17,0.0088],[-3.36,0.01,-26.89,0.0087],[-21.35,0.01,27.88,0.0086],[-1.59,0.01,-8.55,0.0085],[14.9,0.0,-2.64,0.0083],[-15.32,0.02,-27.2,0.0079],[-33.27,0.01,2.02,0.0077],[-20.59,0.01,-27.09,0.0074],[-44.84,0.07,-20.34,0.0067],[-19.29,0.01,-8.89,0.0067],[-15.38,0.01,28.52,0.0067],[-19.05,0.02,-21.38,0.0063],[-15.0,3.64,-34.41,0.0058],[-20.92,3.58,-34.7,0.0057],[-8.66,0.03,28.23,0.0056],[-8.85,0.0,-26.92,0.0056],[-2.01,0.01,-22.46,0.0055],[-45.51,0.0,20.36,0.0055],[13.2,0.02,-7.02,0.0054],[-19.22,0.03,-15.04,0.0054],[-27.38,0.41,-31.85,0.0053],[-26.89,0.01,-28.25,0.0052],[-57.56,0.0,4.4,0.0052],[27.9,13.8,-2.35,0.0051],[-9.11,0.01,32.05,0.0049],[-51.17,0.01,9.47,0.0048],[-32.88,0.08,-31.82,0.0047],[-80.2,0.0,-64.99,0.0047],[-1.35,0.05,8.48,0.0046],[-44.64,0.02,-33.63,0.0046],[-17.18,0.0,-8.52,0.0045],[8.62,0.05,-14.87,0.0044],[4.85,13.37,-15.99,0.0043],[-32.85,0.02,26.83,0.0042],[-20.51,0.05,-31.74,0.0041],[-57.09,0.0,-2.24,0.004],[2.74,0.02,-33.22,0.004],[8.61,0.01,2.17,0.004],[-9.33,3.63,-34.46,0.0039],[2.42,0.04,-27.31,0.0039],[-51.18,0.0,-3.39,0.0038],[-14.95,0.05,-31.6,0.0037],[-2.84,0.6,-32.71,0.0037],[-33.0,0.04,-28.84,0.0037],[-9.06,0.08,-31.56,0.0037],[-26.95,0.0,2.27,0.0036],[8.75,13.8,-16.08,0.0035],[28.24,13.8,1.9,0.0034],[14.32,0.0,2.69,0.0033],[2.35,0.01,27.51,0.0033],[-17.31,0.01,-21.52,0.0032],[-44.63,0.0,-26.54,0.0032],[-14.34,0.0,32.07,0.0032],[-40.28,0.02,-19.68,0.0032],[-3.97,0.06,32.51,0.0031],[14.27,0.01,-16.48,0.0031],[-1.32,0.02,-14.19,0.003],[8.81,0.0,-8.72,0.003],[-38.51,0.0,2.73,0.0027],[4.5,3.93,-16.05,0.0027],[8.6,0.01,27.69,0.0027],[-33.52,0.0,32.78,0.0026],[14.55,0.13,32.99,0.0025],[9.33,0.08,31.58,0.0025],[-39.97,0.01,-43.77,0.0025],[27.23,13.81,-10.09,0.0024],[-39.96,0.0,-15.23,0.0024],[20.78,0.04,-20.13,0.0024],[8.74,0.0,-27.62,0.0024],[-44.23,0.0,39.4,0.0024],[-0.64,0.0,39.52,0.0024],[-39.02,0.0,-34.51,0.0024]],"1":[[14.64,0.0,-2.37,0.1669],[9.2,0.02,-2.46,0.0633],[3.65,0.02,2.51,0.0429],[15.19,0.01,1.95,0.0423],[3.22,0.01,-2.41,0.0367],[-2.6,0.03,-2.81,0.026],[8.35,0.04,2.22,0.0248],[-8.32,0.04,-2.12,0.0183],[20.45,0.02,2.35,0.0179],[-9.85,0.06,1.98,0.0161],[51.13,0.01,-2.34,0.0157],[2.94,0.02,-20.97,0.0156],[57.94,0.0,-3.81,0.0153],[3.12,0.15,-14.75,0.0148],[-14.84,0.01,2.31,0.0145],[3.12,0.0,-9.76,0.0145],[7.99,0.0,-9.11,0.0138],[20.62,0.03,-2.19,0.0136],[-20.68,0.02,1.84,0.0129],[-2.77,0.04,2.42,0.0128],[-1.57,0.0,20.28,0.0127],[1.34,0.0,19.46,0.0116],[-26.78,0.04,-2.72,0.0113],[60.88,0.01,-4.15,0.0112],[51.5,0.21,2.66,0.0111],[-21.12,0.02,-2.39,0.0102],[2.18,0.03,8.71,0.0091],[38.98,0.04,2.53,0.009],[27.7,13.81,-2.47,0.0089],[37.09,13.58,-21.64,0.0087],[26.92,0.02,-1.91,0.0086],[45.1,0.02,2.94,0.0086],[34.43,13.83,-21.15,0.0083],[-2.49,0.01,8.7,0.0082],[26.62,0.04,2.05,0.0082],[2.51,0.01,15.0,0.0082],[-32.62,0.04,-1.71,0.008],[32.57,0.01,-2.48,0.008],[33.37,0.04,2.14,0.0078],[-2.68,0.0,-21.71,0.0076],[8.34,0.0,-14.88,0.0075],[4.88,13.62,-16.02,0.0071],[-8.26,0.0,32.17,0.007],[56.62,0.0,2.88,0.006],[-2.09,0.0,-8.65,0.0057],[45.38,0.07,-15.51,0.0054],[-3.3,0.0,26.67,0.0053],[2.97,0.0,-26.08,0.0051],[-3.01,0.03,-26.27,0.005],[-19.26,0.0,-8.79,0.0048],[-32.86,0.0,2.4,0.0048],[70.45,0.0,52.46,0.0047],[14.59,0.04,-33.33,0.0046],[2.53,0.0,28.85,0.0046],[9.58,0.04,-31.5,0.0045],[55.01,0.0,-12.75,0.0045],[20.36,0.0,-7.5,0.0044],[44.0,0.05,-20.03,0.0043],[21.0,0.04,-20.31,0.0042],[-45.09,0.0,-2.47,0.0042],[-8.45,0.0,-26.42,0.0041],[39.06,0.4,-20.49,0.004],[50.83,2.21,7.84,0.004],[-8.19,0.0,28.04,0.004],[-38.67,0.02,-2.22,0.0039],[14.66,0.0,-16.57,0.0037],[-27.05,0.0,27.07,0.0037],[14.02,0.0,-7.79,0.0037],[-50.53,0.0,3.03,0.0036],[34.47,13.54,25.59,0.0035],[-38.51,0.01,1.6,0.0035],[7.81,13.8,-15.67,0.0034],[-17.13,0.0,-9.42,0.0033],[-19.1,0.0,-21.35,0.0033],[21.25,0.0,-26.83,0.0032],[39.64,0.0,15.95,0.0031],[32.9,13.81,-24.97,0.0031],[-15.46,0.0,-26.74,0.0031],[39.96,0.1,21.37,0.003],[14.59,0.03,33.49,0.003],[44.35,0.12,21.19,0.003],[38.4,0.01,-2.55,0.0029],[27.81,13.81,3.66,0.0029],[-68.04,0.0,2.75,0.0028],[-19.35,0.0,-14.93,0.0028],[-16.93,0.0,-2.35,0.0027],[-63.91,0.0,8.22,0.0027],[-21.16,0.0,28.14,0.0026],[-1.23,0.0,-14.55,0.0026],[8.76,0.0,-28.91,0.0026],[27.6,0.0,-15.85,0.0025],[68.32,0.0,54.49,0.0025],[56.86,0.0,-8.12,0.0023],[33.28,0.1,32.71,0.0023],[-20.4,0.0,-25.68,0.0023],[45.13,0.0,-9.63,0.0023]]},"taipei101":{"0":[[2.28,0.01,-14.14,0.064],[-2.23,0.01,-14.14,0.0538],[1.74,0.01,-9.96,0.0487],[9.41,0.0,-8.76,0.0326],[14.33,0.02,-8.99,0.0323],[-1.53,0.01,-9.89,0.0317],[2.1,0.05,9.02,0.0252],[2.3,0.04,15.1,0.0249],[-3.33,0.07,-3.27,0.0245],[-2.04,0.04,9.04,0.0244],[8.52,0.01,-15.72,0.0232],[-9.96,0.01,-9.02,0.0215],[-2.36,0.05,14.82,0.0213],[9.04,0.27,3.06,0.0209],[-8.63,0.03,-15.36,0.0204],[3.25,0.07,-3.58,0.0203],[-14.52,0.04,-8.53,0.0198],[-9.23,0.33,2.91,0.019],[14.61,0.04,-15.08,0.0186],[14.09,0.03,15.71,0.0184],[3.59,0.08,3.48,0.0184],[-3.36,0.1,3.31,0.0183],[9.56,0.03,-19.55,0.017],[9.2,4.81,-8.22,0.0166],[-14.3,0.04,15.41,0.0165],[9.48,4.35,-3.75,0.0163],[8.41,0.32,-3.4,0.0156],[15.26,0.02,9.22,0.0144],[9.22,0.07,16.9,0.0142],[-8.58,0.46,-3.23,0.0134],[-14.62,0.06,-15.44,0.013],[-20.9,0.06,-3.11,0.0114],[-9.63,4.21,-3.57,0.0113],[19.8,0.06,3.04,0.0106],[8.68,0.02,19.14,0.0105],[-15.47,0.02,9.29,0.01],[14.85,0.08,-3.68,0.01],[-9.29,0.08,16.99,0.0094],[-8.93,4.81,-7.88,0.009],[15.82,0.06,-19.8,0.0083],[15.18,0.26,3.69,0.0079],[20.54,0.12,-2.26,0.0077],[18.82,0.0,-19.42,0.0077],[-8.85,0.03,-20.32,0.0075],[8.29,0.09,8.52,0.0068],[-9.27,0.06,9.01,0.0066],[-2.98,0.07,19.91,0.0065],[3.13,0.04,19.72,0.0064],[-20.42,0.09,1.87,0.0064],[-19.29,0.01,-19.62,0.006],[2.92,4.85,-8.3,0.006],[-2.85,4.87,-8.4,0.0059],[-3.81,0.1,-20.24,0.0051],[14.08,0.0,19.38,0.005],[-15.5,0.02,-19.03,0.0047],[-8.83,0.11,19.51,0.0047],[19.79,0.1,-8.15,0.0045],[3.75,0.1,-20.26,0.0042],[-15.57,0.08,-4.85,0.0041],[-16.66,0.06,4.15,0.0036],[-20.94,0.06,-8.27,0.0035],[8.31,4.82,3.05,0.0034],[20.41,0.06,8.23,0.0033],[-9.4,4.81,3.34,0.0032],[20.67,0.0,-15.23,0.0032],[-21.75,0.0,-14.17,0.0032],[8.16,4.8,7.92,0.0029],[9.26,0.09,-24.59,0.0027],[0.99,7.15,-2.18,0.0023],[-20.15,0.0,8.81,0.0021],[1.09,6.0,-7.32,0.002],[20.0,0.11,15.06,0.002],[-13.27,0.0,18.86,0.0019],[-24.4,0.0,-7.36,0.0017],[-1.41,7.21,-1.84,0.0012],[-8.72,4.81,8.3,0.0011],[1.29,7.51,0.86,0.0011],[24.3,0.22,-4.01,0.001],[12.71,0.0,-24.61,0.0009],[2.92,4.83,7.99,0.0009],[-0.96,7.51,1.58,0.0009],[-7.46,5.89,-3.39,0.0008],[-2.6,6.01,-7.65,0.0008],[7.46,5.92,-3.24,0.0007],[7.23,5.99,1.95,0.0007],[-24.51,0.0,-3.99,0.0006],[-24.59,0.0,1.14,0.0006],[-8.23,5.91,-7.3,0.0006],[3.08,4.37,-3.71,0.0006],[8.1,5.82,-7.78,0.0005],[-3.19,4.78,8.31,0.0005],[-3.67,4.14,2.53,0.0004],[-7.54,5.91,1.91,0.0004],[-9.16,0.07,-24.48,0.0004],[-3.77,4.12,-3.67,0.0004],[2.04,6.27,7.08,0.0004]],"1":[[-2.18,0.03,10.1,0.0421],[-2.46,0.03,14.79,0.0378],[1.99,0.02,9.57,0.0339],[2.03,0.02,14.56,0.0307],[14.45,0.04,-8.76,0.0272],[-14.83,0.0,-8.77,0.0267],[1.88,0.03,-8.89,0.0255],[9.17,4.81,-7.85,0.0252],[-14.27,0.02,-15.31,0.0243],[3.74,0.03,-3.3,0.0237],[8.9,0.32,2.97,0.0235],[14.34,0.02,-15.43,0.0233],[-1.84,0.01,-9.22,0.0225],[-21.0,0.0,-3.39,0.0224],[-8.8,0.22,3.18,0.0223],[9.95,4.1,-3.5,0.0212],[2.93,0.05,-14.61,0.0212],[9.2,0.09,16.21,0.0204],[-9.48,0.04,15.42,0.0191],[9.64,0.04,9.91,0.0189],[-3.1,0.03,-14.59,0.0187],[-8.75,4.8,-7.87,0.0181],[-9.35,4.45,-3.64,0.0181],[3.96,0.05,2.84,0.0171],[-3.67,0.08,3.31,0.0168],[13.93,0.09,14.94,0.016],[8.54,0.55,-3.06,0.0159],[-3.71,0.04,-3.64,0.0159],[14.79,0.02,-3.58,0.0145],[15.17,0.06,9.67,0.0144],[-9.21,0.01,-16.35,0.0138],[-9.53,0.02,-8.15,0.0135],[9.6,0.0,-7.85,0.0128],[21.37,0.03,7.59,0.0128],[-14.31,0.0,15.54,0.0126],[8.9,0.03,-16.36,0.0125],[20.32,0.06,2.53,0.0125],[-20.72,0.0,-8.48,0.0104],[-3.26,4.84,-8.44,0.0102],[-8.14,0.37,-3.02,0.0096],[8.32,0.02,19.23,0.0088],[-15.21,0.01,9.15,0.0087],[-3.44,0.1,19.81,0.0085],[-8.93,0.11,8.43,0.0084],[-8.66,4.81,3.23,0.0081],[-8.32,0.03,20.34,0.008],[-7.83,4.81,7.66,0.0079],[19.77,0.11,-1.99,0.0078],[8.68,0.03,-20.27,0.0077],[20.75,0.05,-14.06,0.0074],[-3.52,4.8,8.46,0.0068],[3.42,4.89,-8.5,0.0068],[-15.5,0.06,-19.3,0.0064],[3.2,0.01,19.49,0.0061],[16.02,0.02,-19.43,0.0061],[9.31,4.69,3.52,0.0058],[-15.44,0.06,-3.8,0.0057],[19.54,0.06,-19.61,0.0057],[-24.36,0.03,-7.66,0.0056],[16.26,0.16,3.31,0.0054],[-8.7,0.01,-19.6,0.0054],[7.99,4.82,7.86,0.0053],[-16.36,0.04,3.62,0.0047],[-19.49,0.03,1.45,0.0045],[3.33,4.82,8.58,0.0041],[20.15,0.09,-8.29,0.003],[4.19,0.32,-19.71,0.0028],[17.05,0.01,21.01,0.0028],[-4.58,0.26,-20.69,0.0027],[19.46,0.06,14.98,0.0023],[-19.15,0.01,-20.46,0.0023],[-10.14,0.0,24.1,0.0019],[8.12,5.91,2.31,0.0018],[19.67,0.0,19.95,0.0016],[3.26,5.92,-8.35,0.0016],[-8.86,5.9,2.74,0.0014],[-2.85,5.91,-7.33,0.0014],[-24.47,0.14,-4.57,0.0014],[24.59,0.0,-9.02,0.0011],[24.4,0.23,-4.74,0.001],[8.19,5.92,-3.77,0.0008],[24.52,0.2,1.85,0.0007],[8.94,5.83,-7.28,0.0007],[-15.11,0.0,18.38,0.0007],[-2.94,4.31,-4.87,0.0006],[8.77,0.03,-24.48,0.0005],[4.88,4.31,2.21,0.0005],[-18.62,0.0,13.12,0.0004],[3.31,4.1,-3.02,0.0004],[6.68,5.9,7.56,0.0003],[4.02,5.84,8.31,0.0003],[-5.16,5.77,4.12,0.0003],[4.44,6.82,-4.34,0.0002],[-7.41,5.86,-2.67,0.0002],[-2.03,5.88,7.16,0.0002],[-24.31,0.0,1.16,0.0002]]},"timbertown":{"0":[[14.87,0.01,-2.25,0.0524],[21.11,0.02,-2.71,0.0501],[28.57,0.11,-3.52,0.0455],[9.1,0.01,-2.68,0.0429],[36.87,1.67,2.3,0.0401],[38.19,0.33,-1.97,0.0306],[21.13,0.03,2.09,0.0299],[16.25,0.01,1.94,0.0269],[7.96,0.0,-33.37,0.0213],[4.24,0.02,26.93,0.0206],[8.8,7.27,2.83,0.0202],[27.34,0.01,2.56,0.0188],[7.71,0.52,27.44,0.0187],[-9.29,7.33,-10.57,0.0165],[3.2,0.03,-2.34,0.0164],[8.49,0.02,-8.19,0.0162],[-3.04,0.21,-2.67,0.0144],[26.76,0.01,-8.01,0.0144],[4.01,0.29,-9.45,0.014],[-9.92,7.18,-14.68,0.0137],[32.77,0.03,3.19,0.0131],[32.32,0.05,-3.37,0.0123],[3.6,0.03,2.7,0.0115],[21.51,0.05,-8.28,0.0112],[33.61,0.09,8.34,0.011],[8.93,7.36,8.37,0.0109],[-2.6,4.0,-8.65,0.0105],[3.43,0.01,-32.72,0.0099],[15.37,0.02,27.19,0.0099],[14.42,7.24,2.54,0.0098],[-2.98,0.03,-33.39,0.0098],[32.22,0.0,-8.07,0.0096],[21.06,0.02,8.66,0.0093],[14.55,0.03,-8.75,0.0092],[8.28,0.0,31.43,0.0091],[3.07,0.03,31.7,0.0085],[2.77,0.03,21.34,0.0084],[3.03,0.04,-14.57,0.0082],[-8.46,0.1,-3.43,0.008],[14.14,6.98,24.84,0.0075],[20.58,0.08,27.11,0.0074],[2.84,0.06,8.77,0.0073],[-3.12,0.14,3.01,0.0072],[-14.67,6.96,-32.2,0.0072],[-14.78,0.07,-3.24,0.0071],[38.8,0.02,-8.49,0.007],[-3.54,0.06,-8.96,0.0069],[9.92,7.16,15.1,0.0068],[-15.9,0.0,-20.55,0.0067],[-7.22,4.05,-3.05,0.0064],[-14.66,7.18,-27.29,0.0063],[-3.1,0.05,8.53,0.0063],[3.57,4.02,-3.3,0.0062],[20.54,0.06,14.8,0.0059],[26.65,0.05,8.51,0.0059],[44.65,0.0,-14.86,0.0059],[13.68,7.17,21.67,0.0058],[3.34,0.01,-38.58,0.0057],[14.3,0.01,31.79,0.0055],[-20.11,0.28,-8.85,0.0055],[14.92,0.02,-33.79,0.0055],[2.15,4.08,1.92,0.0054],[-14.65,7.23,-21.09,0.0053],[-2.21,4.02,2.25,0.0052],[2.77,0.05,14.83,0.005],[-7.92,0.63,-34.02,0.0049],[-20.4,0.31,-2.75,0.0047],[46.09,0.0,-4.5,0.0047],[-2.87,0.06,-14.59,0.0046],[2.73,3.78,-8.05,0.0045],[7.25,0.06,1.0,0.0045],[-8.62,0.04,-7.94,0.0045],[-7.11,0.5,3.21,0.0043],[25.76,0.01,21.69,0.0043],[20.56,0.09,20.93,0.0042],[-2.03,0.05,-27.54,0.0041],[38.51,0.03,8.82,0.0041],[2.93,0.02,-26.58,0.0041],[16.64,0.0,7.99,0.004],[-10.12,7.19,-20.65,0.004],[-2.5,0.04,15.05,0.004],[-3.36,0.11,20.65,0.0039],[-2.35,0.05,32.38,0.0039],[3.0,0.03,-21.17,0.0039],[-14.96,0.04,26.2,0.0039],[-8.91,0.04,26.34,0.0039],[20.63,0.11,-14.48,0.0037],[-14.63,7.19,-15.5,0.0036],[9.86,3.81,24.94,0.0035],[20.93,0.06,31.67,0.0035],[16.64,0.01,16.04,0.0034],[-10.01,7.24,-26.71,0.0034],[45.67,0.05,2.64,0.0034],[10.08,7.16,20.71,0.0034],[39.12,0.0,-15.85,0.0033],[-15.51,0.05,-8.01,0.0033]],"1":[[-32.98,1.72,-2.65,0.0575],[-15.5,0.02,-2.74,0.0572],[-20.86,0.33,-2.62,0.0548],[-27.02,1.71,-2.46,0.0488],[-15.7,0.01,-8.56,0.0397],[-20.87,0.43,-8.71,0.0306],[-8.81,0.0,-8.2,0.0294],[-9.27,0.01,-3.19,0.028],[-8.76,0.01,25.62,0.0279],[-3.46,0.14,-2.45,0.0227],[9.1,0.04,-3.0,0.0167],[-7.81,0.52,-34.38,0.0155],[-9.19,7.16,-10.4,0.0149],[-20.48,0.4,2.28,0.0144],[-32.3,2.85,2.52,0.0142],[-3.64,0.04,-9.21,0.013],[3.42,0.33,-9.7,0.0128],[14.73,0.04,-3.18,0.0118],[8.87,7.22,2.45,0.0115],[-26.71,1.13,-8.94,0.0111],[-16.49,0.0,3.53,0.011],[2.87,0.14,-2.43,0.0108],[4.43,4.03,-3.42,0.0107],[-8.02,0.01,23.34,0.0105],[-38.52,1.16,2.7,0.0101],[8.65,0.07,-8.03,0.01],[19.49,0.03,-15.51,0.0098],[-38.08,0.81,-2.36,0.0097],[-2.55,0.05,-14.17,0.0092],[-2.92,4.0,-8.28,0.0092],[-14.72,0.0,25.69,0.0091],[15.81,0.0,-33.61,0.0087],[2.88,3.57,-7.95,0.0086],[-16.4,0.0,-21.18,0.0086],[3.67,0.06,26.76,0.0085],[13.99,7.15,21.08,0.0085],[13.9,7.18,14.78,0.0081],[-3.58,0.04,-33.97,0.0078],[7.94,0.75,26.64,0.0077],[-20.49,0.05,-14.28,0.0074],[9.24,7.22,9.18,0.0074],[15.66,0.06,-9.37,0.0071],[-32.42,0.5,-7.92,0.0071],[-4.42,0.02,20.75,0.007],[-2.54,0.05,-27.69,0.0068],[-46.58,0.01,3.63,0.0068],[3.05,4.1,1.72,0.0068],[-15.04,6.98,-33.02,0.0067],[13.83,6.94,25.0,0.0067],[2.81,0.02,-14.58,0.0064],[-7.84,0.02,-37.86,0.0064],[-39.22,0.03,-8.94,0.0063],[15.59,0.0,27.83,0.0063],[20.1,0.12,-2.92,0.0062],[-2.85,0.05,3.2,0.0062],[-38.68,0.67,8.44,0.0061],[-34.99,2.25,2.59,0.0061],[-2.81,0.04,8.79,0.0058],[-2.68,0.11,32.34,0.0055],[15.9,0.0,-26.94,0.0053],[-26.49,0.21,-14.36,0.0053],[-4.53,3.92,-3.38,0.0053],[9.95,7.18,14.83,0.0052],[-7.12,4.09,-2.87,0.0051],[3.45,0.01,2.88,0.0051],[-3.9,0.17,27.65,0.0051],[-20.58,0.03,-20.69,0.0051],[-20.31,0.03,26.04,0.0048],[-37.72,0.15,-15.27,0.0048],[-25.78,1.92,2.39,0.0048],[2.1,0.03,-32.53,0.0047],[2.99,0.04,21.92,0.0045],[18.66,0.0,-32.99,0.0045],[-2.75,0.04,-21.86,0.0045],[-28.85,2.78,2.37,0.0044],[17.15,0.0,8.68,0.0043],[-9.0,0.0,39.39,0.0043],[16.86,0.0,-15.26,0.0043],[-9.64,7.16,-15.47,0.0042],[19.9,0.1,2.67,0.0042],[10.12,4.05,25.45,0.0042],[2.67,0.02,-27.33,0.0041],[14.52,7.16,2.58,0.0041],[2.65,0.05,32.35,0.004],[-20.41,0.19,8.57,0.004],[14.71,0.0,-38.76,0.004],[6.3,4.16,-8.18,0.0038],[-2.5,0.08,14.9,0.0037],[19.28,0.05,-20.54,0.0037],[3.65,0.01,-21.0,0.0037],[-19.53,0.0,21.57,0.0036],[19.81,0.06,-8.63,0.0035],[-39.61,0.46,14.48,0.0034],[-31.51,2.58,-0.44,0.0032],[-2.43,3.95,1.26,0.0032],[19.23,0.0,-27.14,0.0031]]},"warehouse":{"0":[[15.78,0.02,-2.29,0.0761],[15.72,0.24,2.73,0.0518],[20.37,0.03,-2.83,0.0468],[8.68,0.03,2.95,0.0386],[-1.37,0.04,14.11,0.0384],[9.6,0.04,-2.66,0.0375],[19.92,0.04,2.39,0.0313],[-15.38,0.09,2.44,0.0266],[2.51,0.14,8.94,0.0253],[9.1,0.03,-8.95,0.0248],[3.42,0.11,-8.21,0.0234],[-2.52,0.17,9.11,0.0233],[-15.58,0.45,-2.81,0.023],[14.78,0.03,8.53,0.0226],[2.73,0.06,2.21,0.0216],[8.46,0.02,13.48,0.0213],[2.95,0.23,-2.58,0.019],[-9.09,0.1,8.81,0.0187],[2.93,0.02,13.92,0.0183],[9.78,0.19,8.53,0.0183],[20.63,0.03,8.45,0.0181],[-9.03,0.09,-2.9,0.0178],[15.0,0.02,-8.22,0.0176],[20.32,0.02,-8.67,0.017],[-2.77,0.09,-7.86,0.017],[-9.02,0.07,2.51,0.0168],[-2.46,0.12,-2.03,0.016],[-2.72,0.11,2.06,0.0149],[9.59,0.0,-14.07,0.0148],[-3.18,3.65,1.24,0.0135],[3.02,3.62,-1.25,0.0125],[-9.08,3.65,-1.39,0.0125],[9.5,3.68,1.33,0.0115],[-8.26,3.66,1.08,0.0115],[-7.7,0.04,14.15,0.0105],[-2.53,3.8,-1.79,0.0104],[-9.22,0.13,-8.36,0.0104],[-19.88,0.05,-2.56,0.0096],[-14.9,0.06,-8.04,0.0092],[2.84,4.06,1.66,0.0087],[-14.65,0.04,8.59,0.0086],[-8.97,0.04,-13.73,0.008],[-19.69,0.06,2.41,0.008],[-3.75,0.04,-13.69,0.0076],[14.98,0.01,13.3,0.0071],[7.89,3.65,-1.14,0.0066],[4.08,0.12,-13.87,0.0063],[20.64,0.0,13.25,0.0053],[26.83,0.03,-8.9,0.005],[14.4,0.0,-13.81,0.0036],[-20.16,0.02,-8.66,0.0034],[20.51,0.0,-13.65,0.0034],[-21.56,0.04,-14.09,0.0033],[25.64,0.0,-3.4,0.0032],[-14.88,0.0,-13.36,0.0032],[-14.5,0.0,13.58,0.0032],[-25.5,0.03,-9.12,0.003],[25.26,0.06,9.18,0.0028],[-19.91,0.0,8.56,0.0026],[25.44,0.0,2.22,0.0025],[12.5,2.9,1.55,0.0023],[-21.03,0.0,13.71,0.0023],[-12.59,2.92,-1.48,0.002],[-25.99,0.0,-2.54,0.0019],[26.9,3.2,4.63,0.0018],[-25.55,4.0,-3.82,0.0018],[-27.02,3.18,-8.7,0.0014],[25.48,0.08,13.4,0.0013],[-13.48,3.45,1.34,0.0011],[-25.02,0.11,-14.6,0.0011],[5.2,2.96,-9.76,0.001],[-26.42,3.2,3.14,0.0009],[25.82,3.17,7.12,0.0009],[25.33,0.1,-13.53,0.0006],[25.56,3.2,-1.93,0.0006],[-26.06,0.37,13.98,0.0005],[-4.08,3.18,8.24,0.0005],[-27.06,3.12,8.03,0.0005],[-26.15,0.44,8.46,0.0005],[3.3,3.04,7.4,0.0004],[25.82,3.12,-8.54,0.0003],[5.46,5.99,4.02,0.0003],[-25.53,0.0,4.39,0.0003],[-7.44,2.72,7.8,0.0002],[8.29,3.57,7.01,0.0002],[23.36,2.8,-2.13,0.0002],[-4.66,2.79,-7.29,0.0002],[-22.59,3.44,1.82,0.0002],[-7.82,5.95,-1.75,0.0002],[13.01,3.18,-1.63,0.0002],[-20.81,4.25,-2.77,0.0001],[-6.61,2.79,-6.64,0.0001],[6.2,6.04,-2.39,0.0001],[9.35,3.36,-7.09,0.0001],[23.57,2.92,-6.99,0.0001],[-22.82,5.53,-3.92,0.0]],"1":[[-15.3,0.04,2.37,0.0774],[-15.72,0.42,-2.29,0.0665],[-19.85,0.04,2.01,0.0536],[-8.8,0.04,-2.86,0.0382],[-9.58,0.05,2.48,0.0334],[-20.08,0.06,-2.36,0.0314],[-2.56,0.04,-2.16,0.0295],[-8.34,3.68,-1.35,0.0286],[-2.41,0.08,-8.24,0.027],[8.75,3.61,-1.53,0.0223],[2.41,0.09,2.3,0.0218],[-8.48,3.62,1.21,0.021],[3.29,3.63,-1.48,0.0207],[-9.0,0.01,-13.62,0.0203],[8.59,0.1,2.75,0.0203],[-8.69,0.2,9.05,0.0202],[-3.2,3.65,1.23,0.0201],[8.71,0.09,-2.87,0.0201],[8.61,0.03,-9.3,0.019],[-9.53,0.07,-8.54,0.019],[2.85,0.1,-2.04,0.0186],[-2.98,0.08,8.52,0.0186],[15.3,0.48,3.09,0.0179],[-14.53,0.08,-8.45,0.0172],[-3.2,0.35,2.21,0.0171],[-14.91,0.05,8.24,0.0168],[2.08,0.13,8.44,0.0153],[1.88,0.07,-14.25,0.0144],[8.14,0.08,7.32,0.0141],[9.51,3.7,1.09,0.0136],[-2.25,3.79,-1.0,0.0134],[15.02,0.14,-2.58,0.0131],[-2.32,0.01,-13.63,0.0121],[2.13,0.1,-8.88,0.0119],[-20.46,0.06,-8.34,0.0118],[-8.83,0.02,13.82,0.0114],[15.03,0.07,8.62,0.011],[19.64,0.02,3.74,0.0099],[3.47,0.02,13.66,0.0097],[-20.69,0.09,8.36,0.0096],[3.46,3.72,1.83,0.0094],[8.97,0.02,13.41,0.0084],[-4.17,0.1,14.19,0.0078],[-26.4,3.2,2.71,0.0077],[6.86,0.0,-13.56,0.0069],[14.75,0.08,-8.92,0.0066],[-26.77,3.2,-3.56,0.0052],[19.97,0.01,8.45,0.0052],[19.57,0.0,-3.1,0.0051],[-20.06,0.0,-13.18,0.0049],[-12.61,2.95,-1.39,0.0042],[-26.67,0.0,-8.0,0.0039],[20.52,0.11,-8.03,0.0038],[14.37,0.01,13.3,0.0035],[12.46,3.05,1.92,0.0032],[-26.06,3.2,-7.83,0.003],[26.45,3.18,7.5,0.003],[26.41,3.2,3.53,0.0023],[-20.89,0.02,13.83,0.0023],[-14.87,0.01,-12.92,0.0023],[-15.05,0.0,13.21,0.0022],[20.78,0.03,13.22,0.0021],[-25.34,0.17,-3.07,0.0016],[-25.82,0.0,3.24,0.0013],[-26.43,3.19,7.19,0.0007],[-26.15,0.24,8.14,0.0007],[-4.98,3.25,8.44,0.0007],[13.37,3.39,-1.88,0.0007],[25.66,0.33,13.81,0.0006],[-25.67,0.2,14.57,0.0005],[-2.93,3.01,-7.28,0.0004],[-23.62,2.97,2.06,0.0003],[-12.72,3.35,0.6,0.0003],[26.49,1.97,11.46,0.0003],[-7.37,2.87,6.83,0.0002],[3.66,6.03,2.35,0.0002],[9.3,5.92,-0.66,0.0002],[1.53,2.84,6.94,0.0001],[-6.36,3.68,-6.76,0.0001],[6.74,2.6,7.25,0.0001],[23.57,0.0,-12.0,0.0]]}};
+diff -ruN a/shared/match/places.ts b/shared/match/places.ts
+--- a/shared/match/places.ts	1970-01-01 00:00:00.000000000 +0000
++++ b/shared/match/places.ts	2026-11-14 06:09:41.100377142 +0000
+@@ -0,0 +1,55 @@
++/**
++ * Where recorded players stay in 6v6 Elimination, after the first 10 s of a round: per map and base side (0, 1), the 6 m cells with
++ * the most time, until they hold 80% of it (96 cells at most). Cells that a bot cannot walk to are left out: decks and roofs that
++ * the nav grid does not cover. Each cell is four numbers: x, y, z (m, the mean position of the players in the cell) and a weight;
++ * the weights of a side sum to PLACE_WEIGHTS. Bots take their roam goals from this table (bots.ts, chooseGoal); a map that is not
++ * here uses its landmarks. Totals of the recordings from 2026-10-15 to 2026-11-10 (0.7 to 4.7 h and 21 to 90 players per side);
++ * there is no data of one player here. docs/DEVELOPMENT.md, "Bot bench", says what to do when a map changes.
++ */
++export const PLACE_WEIGHTS = 10000;
++export const PLACES: Record<string, readonly (readonly number[])[]> = {
++  citadel: [
++    [-20,2.5,2.5,584,-14.5,2.5,-2,502,-15.5,2.5,2.5,333,-9.5,2.5,-15.5,292,-21,2.5,-2,272,-9,2.5,-20.5,252,-4,2.5,-21.5,243,-9.5,2.5,2.5,229,3.5,2.5,21.5,226,-15,6,-22,225,-15.5,2.5,8.5,207,-26.5,2.5,1,197,-27,2.5,-1,178,-34,2.5,-2,174,-9.5,6,-22,172,-9,3,-2.5,167,-3.5,3,2.5,163,-15,6,22,158,-38.5,2.5,-2.5,155,-15.5,2.5,-15.5,152,-33,2.5,1,138,-14,2.5,-21,138,-2.5,3,-2,135,-20.5,3,8.5,133,-49,1.5,2,124,-9.5,2.5,9,119,-16,2.5,-8,117,-10.5,7,-9.5,115,-44.5,2.5,-2.5,112,-9,2.5,14.5,110,-38.5,2.5,2,106,-49.5,1,-1.5,105,21,2.5,-2.5,104,2.5,3,-3,101,21.5,2.5,2,101,15,2.5,21,100,8.5,2.5,22.5,89,-21,2.5,-22.5,88,-19.5,3,-9,87,27,2.5,1,79,9,2.5,-2.5,78,-47.5,2,2,74,3,2.5,-9,71,-3,6,-22,71,-38.5,2.5,-8.5,69,26.5,2.5,-1,68,15,2.5,-2,68,-9.5,6,22.5,67,2.5,3,2.5,67,16.5,2.5,15.5,66,15.5,2.5,8.5,65,7.5,2.5,25.5,64,15.5,2.5,-15.5,63,-21,6,-21.5,63,8.5,2.5,-22,62,21,6,-21,62,-8.5,2.5,-25.5,61,-15.5,2.5,15,60,-3.5,2.5,-15.5,58,-8.5,2.5,-10,56,-21,6,21,55,15,2.5,2.5,52,9,2.5,-8,51,20,3,9,51,2.5,6,-22.5,51,33.5,2.5,1.5,51,-3,2.5,9,50,-32,1,27.5,50,-3,2.5,-9,49,3,2.5,-22,49,20,3,-9,47,3,2.5,-15,46,15,6,-22,46,21,6,20.5,46,-27,1,32,46,-31.5,1.5,3.5,45,33,2.5,-1.5,44,-29,2,3,44,-43.5,2.5,1,44,-32,2,-3.5,44,-63,0.5,3,44,-21.5,1,32.5,44,3,2.5,15.5,43,3.5,2.5,27,42,-3.5,2.5,15,41,15,2.5,-21,41,15.5,2.5,-9,40,9,2.5,15,40,-22,6,15.5,40,-29.5,2,-3,39,9.5,3,1.5,39,39,2.5,-2.5,39,-62.5,0.5,-2.5,38,-19,3,-14,38,-15,6.5,-24.5,38,-9,2.5,20.5,38],
++    [20,2.5,-3,298,15.5,2.5,-9,297,49,1.5,-1.5,250,4,2.5,22,242,62.5,0.5,4,216,15.5,2.5,-3,212,-15,2.5,-21,194,49,1.5,1.5,190,26.5,2.5,-1,186,9,6,22,182,8,2.5,22.5,179,10,2.5,-9,177,33,2.5,-1.5,177,3,3,-2,173,15,2.5,2,169,9,2.5,-3,162,34,2.5,1.5,158,-16,2.5,-15.5,158,22,2.5,22,155,15.5,2.5,21.5,147,3,3,2.5,145,21,2.5,2,140,9.5,2.5,15,135,-9,2.5,-22,134,39,2.5,1.5,134,27,2.5,1,134,39,2.5,-2,132,-4,2.5,-21.5,128,9,2.5,26,126,-2.5,3,2.5,125,20,3,-8.5,123,47.5,2,-1.5,121,-21,2.5,2.5,117,-21,2.5,-2.5,105,14.5,6,22.5,105,44.5,2.5,2,101,44,2.5,-1.5,101,20.5,3,9,99,-9.5,2.5,2,97,-15,2.5,15,96,-14.5,2.5,2.5,96,-20,3,-8.5,96,9,2.5,3,95,32,1,31.5,90,9.5,2.5,-14,89,-20.5,3,9,89,-8.5,2.5,22,88,-7.5,2.5,-25.5,87,-8.5,2.5,15.5,87,15.5,2.5,15.5,84,-39,2.5,2.5,84,3,2.5,15,81,16,2.5,8.5,79,-9,3,-2.5,78,8,2.5,-21.5,78,-26.5,2.5,1,77,27,1,32,74,-20,2.5,-22.5,73,-15.5,2.5,21,73,-2.5,3,-2,73,15.5,2.5,-14.5,73,-16.5,2.5,-9.5,73,27,1.5,-31.5,70,-14.5,2.5,-2.5,68,-9.5,2.5,-16,66,-21.5,6,20.5,66,21,1.5,31.5,65,-3.5,6,22,62,-27,2.5,-1,61,33,1,27.5,61,-10.5,7,-9,60,-21,2.5,22,59,-33.5,2.5,-1.5,59,8.5,2.5,10,58,-33,2.5,1,57,-22.5,6,15.5,57,31.5,1.5,-3.5,56,3.5,2.5,-22,55,-3.5,2.5,22.5,55,49,1.5,-10,55,-21,6,-20.5,55,3,6,22.5,54,-44,0,-45.5,54,-24.5,6.5,21,51,32,1.5,4,49,32.5,1,21,48,-22.5,6,-15.5,47,-3.5,2.5,-27,47,21.5,1,-32,47,-8.5,2.5,8.5,47,-9,6,22,47,3.5,2.5,-9,47,-2.5,2.5,15,46,-15,6,22,46,15,6,-22.5,44,57.5,0.5,3,44],
++  ],
++  memorial: [
++    [-20.5,13,2.5,307,16,13.5,-4.5,294,-15.5,13.5,2,273,-20.5,13,-2.5,273,-9,13.5,2,261,-9,13.5,-2.5,251,-15.5,13.5,-1.5,239,20,13,-2.5,221,-27.5,10,-2.5,210,-27,10,2.5,206,15.5,13.5,-15.5,195,-3,13.5,2.5,177,-3,13.5,-2.5,176,15.5,13.5,4.5,176,9,13.5,-4.5,157,3,13.5,-3.5,154,16.5,13.5,-8,144,-9.5,13.5,-16,142,-15,13.5,15.5,138,3,13.5,3.5,133,-15,13.5,-15,131,20.5,13,2.5,128,9,0,-4,128,-9,13.5,16,123,9,13.5,5,122,15.5,13.5,15,121,27.5,10,2.5,112,3.5,0,3.5,112,27.5,10,-2,108,45,0.5,-2.5,103,-31.5,9,3,101,-3.5,13.5,-20.5,100,3.5,0,-3,99,9,0,3.5,98,16.5,13.5,8,97,-40,4.5,-3,95,-9,5,-7.5,94,-40,4.5,3,93,-3,0,9,93,-31.5,9,-2.5,93,-27.5,9,9,91,-3.5,13.5,20,91,-28,9,-8.5,88,9.5,9.5,-9,85,-16.5,13.5,9,84,-50.5,0,3.5,82,-19,13.5,8.5,82,-21,9,-21,81,-34.5,7.5,2.5,78,-45,0,9.5,75,3,13,-8,74,9.5,9.5,9.5,72,22,0,8.5,72,-39,0,10,72,-14.5,4.5,-8.5,71,51,0,3,71,-38.5,4.5,-9,70,-13.5,4.5,-4,69,9,13.5,-16.5,69,2.5,5,-3.5,69,2,4.5,-9,68,-3,13.5,8.5,68,2.5,13,8,68,-34.5,7.5,-2.5,68,51,0,-3,67,-16,13.5,-8.5,66,45,0.5,2.5,66,-50.5,0,8,66,-27,0,7,64,-2.5,4.5,-8,64,-33,0,9,64,-33,4.5,-14.5,63,-50.5,0,-3,63,15,0.5,-3.5,63,-69.5,0,-3,63,-39,0,-9.5,61,-8,12.5,-20.5,61,-9.5,9,-25.5,59,-21,9,-7.5,59,-50.5,0,-8,59,-15,9,-23,59,-39,4.5,9,59,21,0,-3,58,-14.5,4.5,8.5,58,-3,13.5,-8,58,38,4,-1.5,57,-16,0,8.5,57,-44.5,0,-9,57,3.5,13.5,-16.5,55,-8,13,19.5,55,18.5,13.5,-8,55,-21,0,4,55,32.5,7,-1.5,54,-21,9,21,54,-43.5,3.5,3,53,2,4.5,14,52],
++    [-15.5,13.5,-2.5,362,-67.5,0,9,366,-15.5,13.5,2.5,357,-20.5,13,2.5,331,-20.5,13,-2.5,322,20.5,13,-2.5,252,-9,13.5,-2.5,225,-8.5,13.5,15.5,215,-15.5,13.5,-15,210,3,13.5,-3.5,210,-8.5,13.5,-15.5,201,15,13.5,-15.5,193,-9,13.5,2,176,-15.5,13.5,15.5,176,4,13.5,2.5,170,-16,13.5,-8.5,165,-3,13.5,-9,162,-67.5,0,-3.5,161,-27,10,3,156,2.5,13,-8.5,155,15.5,13.5,-4,153,8.5,13.5,-4,149,15.5,14,-8.5,145,-9,13.5,-8.5,142,-3,13.5,-3,139,-16,13.5,9,134,-3.5,13.5,-16,128,-3.5,13.5,-20,126,27.5,10,2.5,125,15.5,13.5,4,120,10,9.5,-9.5,114,20.5,13,2.5,113,27.5,10,-2.5,113,-27,10,-2.5,107,2.5,13.5,-15,95,-3.5,13.5,16.5,94,-20,0,-3.5,91,-62,0,-3,84,9.5,13.5,-16.5,81,-51,0,3,76,9,13.5,5,75,-3.5,13.5,2.5,74,-8.5,13.5,-20.5,73,2.5,4.5,-14,73,32.5,7,2,73,45,0.5,-3,73,-3.5,13.5,20,72,15.5,13.5,15.5,72,16,4.5,27.5,70,-21,9,20,68,21.5,0,8.5,67,-3,13.5,8.5,65,27,9.5,8.5,64,32.5,7,-2,64,-25.5,0,-7.5,63,-51,0,-2.5,62,-9.5,13.5,9.5,62,19,13.5,-9,62,-3.5,0,8,60,-19,13.5,8.5,59,2,4.5,-10,59,21,4.5,10,58,44.5,0.5,3.5,57,-57,0,-3.5,57,-57,0,1.5,56,-46.5,2,-2.5,56,22,0,-8.5,56,-31,9,3,56,-39.5,4.5,-3,56,2.5,13,8,54,-3.5,4.5,-15,52,38,4,-2,51,-18.5,13.5,-9,49,-34.5,7.5,-3,49,39,0,-7,49,26,4.5,10,49,-27.5,9,8.5,49,16.5,13.5,8.5,48,3,13.5,-19,48,9.5,9.5,9.5,48,10,4.5,3,47,-56,0,9,47,-22,9,8.5,47,-62.5,0,3.5,46,15,14,19.5,46,-31.5,9,-3,46,27,0,7.5,45,-14,4.5,-17,44,32.5,0,3.5,43,21,9,21,41,21,0,2,41,-39.5,5,3,41,-9,13,20,41,10.5,4.5,-3,41,15,9,22.5,41,-15,9,22,41],
++  ],
++  ochre: [
++    [-4,0,21,759,-3,0,16,450,-2.5,0,8.5,435,-7,0,22.5,412,3.5,0,20.5,372,-4,1,27,363,2,0,8.5,331,3,0,15.5,330,-3,0,3.5,263,-3.5,2,33,242,2.5,0,3.5,235,-3.5,2,39,231,4,2,38.5,209,9,2.5,-26.5,199,-8,2,39,192,8,2,39,159,3,1,27,157,8.5,2.5,-22,133,3,2,33,129,-7,0.5,26,128,-4,2,44.5,128,-3,0,-2.5,127,-3,0,-9,119,-32,0,2.5,117,9,0,-45,117,-3,0,-14,116,38,1,33.5,114,-3,0,-33,113,-2,0,-27,101,-8,2,34,99,8.5,2.5,3,96,-28,0,3.5,95,-8,2,44.5,94,3,0,-44.5,94,-9.5,0,-38.5,94,-2.5,0,-38.5,93,-39.5,0,-38.5,92,-1.5,0,-21,89,-7.5,0,4.5,86,2,0,-15,86,8,1.5,10,84,8.5,2,44.5,84,-33,0,8,83,-27.5,0,-34,80,2.5,0,-9,80,2,0,-3,80,-33.5,0,-2.5,79,8,2,34.5,78,9,2,49,78,-33,0,-34,77,-27.5,0,-39,75,6.5,0,22.5,73,2.5,0,-20.5,71,-14.5,0,-39,70,-14.5,-1,4,68,4,2,44,67,10,0.5,13,67,14.5,2.5,-31,64,39,2,-32.5,64,-9,0,-43.5,63,-32.5,0,-38,62,33,2,-33,62,14,2.5,-29,61,-21,0,-40,59,2.5,0,-28,58,8,2.5,-9,57,-8.5,0,-34.5,55,-2,0,-43.5,54,-34.5,0,-9,50,14.5,2,44.5,50,-9.5,2,49.5,50,34,2,-44.5,49,45,1,3,49],
++    [2,0,-27.5,644,-2,0,-27.5,535,-2.5,0,-32.5,448,9.5,2.5,-26.5,362,-3,0,3,336,1,0,-22.5,314,-2,0,-21.5,306,3.5,0,3,263,-3,0,-15.5,258,-3.5,0,8,245,2,0,-32.5,238,2.5,0,8.5,235,1.5,0,-39,214,3,0,-44,212,3,0,-2.5,205,2.5,0,-9.5,174,-27,0,-38.5,165,8,2.5,-21.5,163,-2,0,-38.5,158,3,0,15.5,154,1.5,0,-15,151,8.5,2,38.5,147,-8.5,0,-34,141,9.5,2.5,-9,141,-2.5,0,-3,138,9,0,-45.5,132,-32.5,0,-3,132,-2.5,0,-45.5,126,-2.5,0,-9,120,8.5,2.5,-3,110,14,2,39,105,40,2,-33.5,103,-3,0,15.5,98,14,2.5,-29,95,8,2.5,4,94,39,1,33.5,93,9,0.5,13.5,91,44,0.5,15,86,-21.5,0,-39,85,-44,0,-40,84,44.5,2,-39,83,-2,2,33.5,81,2,0,21,81,8.5,1.5,10.5,81,-28,0,4,79,-39.5,0,-39,78,2,1,27,78,43.5,2,-33.5,77,-33.5,0,2.5,76,21,0,-52,72,8.5,2,35,67,-15,0,-39.5,67,-7.5,0,-29.5,66,-32.5,0,9,65,33,2,-45.5,63,8.5,2.5,-15,63,50,2,-27,62,-9,0,-39,62,3,2,32.5,61,33.5,1,39,58,-7.5,0,4.5,58,-32.5,0,-38.5,56,33.5,2,-33.5,56,8,2.5,7,55,-15,-1,4.5,55,-7,0,7,54,-8.5,0,-44.5,53,-2.5,1,26.5,52,-3.5,2,38,50,15,0,-45.5,50,14.5,0,-50,49,45,2,-27,46,3.5,2,39,45],
++  ],
++  pipeline: [
++    [-21,3,10,684,-15,3,9,492,-20.5,3,14,475,-9,0,2.5,461,-8.5,-1.5,26.5,405,-8,-1,15,327,-9.5,-1.5,20.5,306,-16,3,13.5,290,-15,0,1.5,278,-9.5,4.5,10,219,-20.5,0.5,3,219,-3.5,0,2,216,-4.5,-1,15.5,216,-14.5,-1.5,20,201,-7.5,6,10,197,-10,0,-9,192,-4,-1.5,26.5,174,-4.5,6.5,10.5,172,-8,3,14.5,165,-26.5,0.5,3,160,-14,0,-2.5,156,-9,-0.5,7.5,155,-21,-1.5,33.5,146,-4,-1.5,21,139,-20.5,-1.5,21.5,138,-26.5,3,13.5,133,-10.5,0,-2.5,128,-8,-0.5,10.5,112,3,0,2,108,-32.5,3,9.5,108,-3.5,6.5,13,106,-8.5,-1.5,33.5,103,-17,-1.5,38,102,-15.5,-1.5,27,102,-27.5,3,9.5,94,-19.5,3.5,-2.5,94,-2.5,3,10,93,-19,1,-0.5,86,-3,-1.5,33,85,-15,-1.5,34,84,-14.5,0,-9.5,81,-3,0,-2,80,-20.5,-1.5,27,78,-16,4,-4,75,-33.5,0.5,3.5,73,-8,6.5,13.5,71,-39,0,-25.5,68,-9,4,-3.5,68,-20.5,2.5,6.5,67,-3.5,0,-9.5,66,-55.5,0,-21.5,66,-55.5,0,-25.5,63,-38,0.5,8,53,8.5,0,-2,53,8.5,0,32.5,53,-48.5,0,-1.5,51,-39,0,-8.5,50,-24.5,-1.5,38.5,50,-45.5,0,-27,48,-2.5,4,-4,48,3,0.5,-10,47,-21.5,0.5,-10,46,-38.5,0,-4,46,-51,0,2.5,46,-37.5,0,4,45,-20.5,0,-15,45,-15.5,0,-15,45,-9,-1.5,38.5,43,-55.5,0,7.5,43,9,0,3,43,8.5,0,15,42,-46,0,-21.5,42,23.5,0,-2.5,42,-51.5,0,-10.5,42],
++    [-22,0.5,-9.5,412,-9,0,2.5,303,-20.5,3,14.5,289,-26.5,0.5,3,284,-28,0,-2.5,250,-14.5,-1.5,27,226,-26.5,0,-26.5,225,-10,0,-2.5,221,-31.5,0,-26,215,-21.5,3,9.5,215,-28,5.5,-15,208,-33,5.5,-14.5,201,-15.5,0,1.5,185,-20,2,17.5,182,-21,0,-22,169,-20.5,0.5,2.5,169,-3.5,0,-2.5,162,-11,0,-16.5,161,-27,1,-9,160,-15.5,0,-20.5,159,-15.5,-1.5,22.5,155,-32,0,-4,144,-20.5,0,-15,144,-16,0,-15.5,144,-31,2.5,6.5,142,-4,0,3,131,-20,1,18.5,130,-28,3,9.5,129,-19.5,4,-3.5,128,-9.5,0,-8.5,127,-2.5,3,14,127,-22,0,-25.5,126,-45,0,-20.5,123,-15,3,14.5,122,-44,0,9,121,-39.5,0,9,118,-15,0,-10,109,-14.5,-1.5,33.5,108,-8.5,3,14.5,105,-32,4.5,-9.5,99,-38,0,-28,98,-13.5,0,-1.5,97,-26.5,3.5,14.5,97,-8,-1,15,97,-26,0.5,-23,94,-9,0,-22,94,-10.5,-1.5,26,90,-35,3,21,89,-4.5,0,8,88,-45.5,0,-26.5,87,-20.5,-1.5,22.5,84,-31.5,3,10,83,-26.5,4.5,-10,83,-7.5,0,7.5,81,-35,3,34,80,-15.5,4,-4,79,33,2.5,-20.5,75,-14.5,0,-25,75,-9.5,-1.5,34,75,-15,3,9.5,75,-39,0,-8,73,-9.5,1,-25,73,-2.5,3.5,10.5,72,16,4,-14.5,72,-3.5,0,-8.5,69,-2.5,-1.5,26.5,68,-31.5,5,-20.5,68,-38,0,-4.5,67,-10,-1.5,21,65,-32,0.5,3,61,3.5,0.5,2.5,58,-21.5,0,-1.5,58,-28.5,4,-21.5,58,-27,-1.5,21.5,58,2.5,2.5,-21.5,57,-2,2.5,-31.5,57,-34.5,0,-31,56,-15.5,-1.5,39.5,54,-20.5,-1.5,26,53,-44.5,0,-32,53,-31.5,1.5,28,52,-9.5,-1.5,39,49],
++  ],
++  railyard: [
++    [-20,0,8.5,418,-26,0,-8.5,386,-14,0,-15,278,-9,7.5,28.5,263,-8.5,0,3.5,253,-26.5,0,4,232,-28,4,20,231,-9,0,10,214,-15,0,10.5,210,-9.5,0,14.5,202,-15.5,0,-3.5,199,-21,4,20,193,-21,0,3.5,181,-21,0,-14.5,178,-21,0,-3,174,-9,0,-3,173,-14.5,0,14,172,-21.5,0,15,169,-35,5.5,25,158,-15,0,3.5,148,-26.5,0,-4,143,-56,0,8.5,143,-14.5,0,28.5,142,-33,0,4.5,136,-3,0,9,132,-20.5,7.5,28.5,130,-69,0,-3.5,127,-9.5,0,-9,118,-3,0.5,3,117,-3,0,14.5,115,-31,3.5,20,114,-35.5,5.5,22,105,-9,0,21,101,-37,5.5,25.5,100,-14.5,0,-20.5,100,-33.5,0,9.5,98,-3,0.5,-2.5,97,-27,0,14.5,95,-33.5,7.5,-22,92,-26.5,0,-15,89,2.5,0.5,3,88,2.5,0,9,86,3,0,-8.5,83,-21.5,0,-10.5,83,-13.5,7.5,32,79,-20.5,0,21.5,79,-14.5,7.5,29,78,-9.5,0,-15.5,76,-27,0,9.5,75,-27.5,0,-20,74,-67.5,0,3,74,-36.5,5.5,21.5,73,-15.5,0,-27,73,-14.5,0,21,72,-51,0,-3,71,-39,0,9.5,69,-39,0,4,69,-10,7.5,32,68,2.5,0.5,-2.5,68,-56.5,0,4,64,-33,0,14.5,64,-3,0,-8.5,63,-32,0,-9.5,61,-38.5,0,15,59,-35.5,5.5,8.5,59,-35.5,5.5,3,58,9,0,9.5,58,9,0,2.5,58,-45.5,0,-40,58,-36.5,0,-48.5,57,-52,0,4,56,-21,0,-26,55,-9,0,33.5,54,-20,0,-20.5,53,4,0,-33,50,-33,0,-3,50,-14.5,0,-10,49,-15,0,32,49,-68,0,-9,49,-39,0,-3.5,49,-9,0,-20.5,49,-45.5,0,-4,46,-21,0,27.5,45,-63,0,-4,45,-26.5,0,27.5,43,-68.5,0,7.5,42,9,0,-3,41,-57.5,0,-8.5,40,-50.5,0,-14,40,-45,0,-8.5,40,-20.5,7.5,32,40,-58.5,0,19,39,-34,0,-25.5,39,3,0,14.5,38,-2,0,43.5,38,-44,7.5,-26,38],
++    [9.5,7.5,-28.5,777,20,0,-8.5,625,25.5,0,8,457,14.5,7.5,-28.5,279,21,0,-3.5,224,15,0,15,191,15,0,3,189,15,0,-2.5,181,27,0,-4.5,171,21,4,-20,170,56,0,-9.5,161,27,4,-20.5,160,9,0,-3,160,9,0,3,158,31,3.5,-20.5,157,15,0,-10.5,154,21,0,3,149,33.5,0,-4.5,140,27.5,0,21,139,9,0,8.5,138,2.5,0.5,3,129,9.5,0,-10,125,20.5,7.5,-28.5,118,20.5,0,26.5,114,16,0,26,110,33,0,-8.5,108,14,7.5,-33,107,39,0,-9.5,106,15,0,-14,106,45.5,0,3,99,-2.5,0.5,-3,95,33,0,7.5,94,-2.5,0.5,2.5,93,3,0,-9.5,90,10.5,7.5,-31.5,89,27.5,0,-14.5,88,32.5,0,3.5,88,45,0,9,88,26.5,0,3.5,87,9,0,-14.5,87,38.5,0,-4,85,21.5,0,-26.5,84,20.5,0,14.5,82,39,0,9,77,39,0,4.5,77,-2.5,0,-9.5,77,-21,0,8.5,76,3,0,8,76,25.5,0,16,75,-22.5,0,-3,72,21,0,-14.5,72,69.5,0,-8,71,9.5,0,-27.5,69,27,0,-9,69,45,1.5,-26.5,67,15,0,10,67,69,0,8.5,66,50.5,0,-14.5,66,-3.5,0,-14.5,66,44.5,0,14.5,65,8.5,0,-20.5,65,15.5,0,-21,63,38.5,0,28,63,-9,0,3.5,62,2.5,0.5,-2.5,61,21.5,0,22.5,61,39,0,-16,60,43.5,0,-10.5,60,-2.5,0,40,57,33.5,1,-20.5,54,3.5,0,-20.5,53,-2,0,16,51,-13.5,0,-15,51,44.5,0,-3,49,-21.5,0,3,49,21,0,11,46,-9,0,-14.5,46,-3,0,8.5,46,62.5,0,-8.5,45,-15.5,0,4.5,45,27,0,26,45,10,0,-31.5,44,20.5,7.5,-33,43,-9,0,-9.5,43,46,0,21,43,57,0,-3,42,51,0,2.5,42,-9.5,0,33,42,3.5,0,15,42,14.5,0,22,40,-13.5,0,29,39,21.5,0,32.5,38,-25.5,0,43,38,32.5,0,21,38,26,7,-31,38,56,0,4,36],
++  ],
++  sanchong: [
++    [28,0,-2,911,3,0,-3,836,9,0,-3.5,687,14.5,0,-2.5,638,15,0,2,463,2.5,0,2.5,425,28,0,2,371,-1,5.5,15,326,-2,0,2.5,286,8.5,0.5,3.5,286,-2.5,0,-3,270,8.5,0,8.5,269,21,0.5,2.5,210,9,0,21,206,2,0.5,19.5,198,21,0,-3,198,-1.5,5.5,9.5,163,3,0,-20.5,154,14,0,20.5,151,-1.5,5.5,19.5,146,-8.5,0,4,145,-9,0,15.5,134,9.5,0,15.5,126,14.5,0,26.5,119,-10,0,9,108,20.5,0,22,105,5,0,-8.5,100,32.5,0,2.5,94,3,0,15.5,90,4.5,0,-15.5,88,-3,0,21.5,81,9,0,26.5,80,-14.5,0,2.5,79,27.5,0,21,79,51,0,-3.5,78,63,0,-5,77,0.5,4,18.5,76,3.5,0,10,73,-3.5,0,15.5,72,1.5,0,-33.5,64,-7,5.5,16,63,39,0,-3,59,3,0,-38.5,57,-8.5,0,20,55,-7.5,5,8.5,54,-2.5,6.5,33,54,28.5,0,7.5,51,-15.5,0,-2.5,50,-1,0,-21,50,44.5,0,-3,50,14,0,9.5,48,38,0,2.5,46,0.5,0,-26.5,46,-1.5,0,-32.5,45,32.5,0,-3,44,9,0,-38,43,4,0,26,43,-27,0,3,41,-9.5,0,39,39],
++    [-14.5,0,2.5,660,-3,0,3,518,-9,0,4,476,2,0,-3,411,-2,6.5,33.5,404,1.5,7,33.5,378,-27.5,0,2.5,366,-15,0,-2,300,2.5,0,3,296,-21.5,0,3.5,213,-1,0,-2,189,-1.5,5.5,20,186,-9.5,0,8,178,8,0,8.5,173,-69,0,-2,166,5,0,-8.5,146,-9.5,0,15,144,3,7.5,37.5,138,-9.5,0,39.5,131,-28,0,-2,128,28,0,3,127,2,0.5,19.5,123,-2,5.5,15.5,122,2.5,0,-20.5,120,8.5,0.5,-3,117,-27.5,0,39,113,8.5,1,3.5,113,2.5,0,9,110,3,0,15.5,110,-15,0,40,104,-20.5,0,-3,101,14.5,0,-2.5,100,-4.5,0.5,39,100,-4,6.5,37.5,92,15,0.5,2.5,90,4.5,0,-15,86,9,0,15,84,28,0,-2,79,9,0,21,79,-44.5,0,3,78,2.5,0,-33,75,-3,0,21,74,-32,0,-2.5,72,-21,0,-39.5,67,-21,0,40.5,67,-1.5,5.5,10,62,-10.5,1,-3.5,61,-39.5,0,2,59,14,0,26.5,59,20.5,0,21.5,57,-8.5,0,27.5,57,-15,0,-39,57,-29,0,7.5,56,2.5,0,-38.5,56,32,0,3,56,-9.5,0,33,56,10,0,27,55,27.5,0,21,55,21,0,3.5,54,-4,0.5,-45.5,52,-20.5,6.5,-58.5,52,21,0,-3,51,-1.5,0,-33,51,-3,0,14.5,44,-31.5,0,32.5,44,0.5,0,-26.5,43,14.5,0,40,42,38.5,0,-2.5,42,2,0,45,41,-73,0,-4,41,6.5,0,-9.5,40,-9,0,20.5,39,0.5,4,18.5,39,-2.5,0,-39,38,-3,0,44.5,37,-67.5,0,2,36,14.5,0.5,9,36,-50.5,0,2,36,-40,0,-2.5,35,-1.5,5.5,26,35,-1,0,-27,35,19,0,16,34,16,0,14.5,34,14.5,0,21.5,33,27.5,0,39.5,33,-32.5,0,3,33,15.5,0,44,32,-6.5,5.5,21,31,-31,0,8,30,26.5,6.5,-57,27],
++  ],
++  skyline: [
++    [-22,34.5,5,1003,-20,36,5,894,-15,36,5,537,-22,34.5,6.5,515,-9,36,4,429,-19.5,36,6.5,335,-15,36,6.5,300,-3.5,36,-2.5,215,-20.5,33,-32,215,-3,36,3,214,-9.5,36,7.5,213,-3,36,8.5,175,-25,33,4.5,166,3,36,2.5,152,4,34.5,16,148,-27.5,31,4,146,-3,36,-9,142,3,36,9.5,142,3,36,-3.5,142,9,36,-3.5,136,-32.5,30,8,132,-20.5,33,-27,126,-32,30,4,123,15,36,-5,120,-4,34.5,-16,117,-3.5,36,-13.5,117,-8,36,-2.5,116,3,36,13.5,107,-27.5,31.5,7,106,-8.5,30,-28,105,-39,30,13,104,4,31,21,100,3,36,-8.5,97,8.5,36,13,97,-17,33,-27.5,94,-25,33,7,92,15.5,36,-7,87,-4,31,-21,85,-22,33,-22.5,82,8,36,2.5,79,9,36,-8,78,8,36.5,9.5,77,-20,33.5,-45.5,76,-3.5,30,-27,75,-8,36,-8.5,69,-59,30,-3,69,19.5,36,-7,64,-27,33,-33,59,-9,30,-32,58,-8.5,30,28,54,-17,33,-31.5,53,-62,30,-1,53,-2.5,30,-32.5,52,-44.5,33,-36.5,51,-20.5,33,-39,49,-3,30,27.5,46,3,30,26.5,45,-21.5,30.5,-14.5,44,-39,33,-34.5,44,-17,33,-41,44,-25.5,33,-27.5,44,21,33,28,43,-33,33,-34,42,-53,31.5,-37,42,19.5,36,-5,42,-34,33,-39,42,-23,32,-19.5,42,25.5,33,27,41,-17.5,33,-44.5,41,-45.5,33,-35.5,40,16,33,32,39,-14,32,-29,39,33,30,-3.5,38],
++    [22,34.5,-5,841,20,36,-5,751,22,34.5,-7,611,15,36,-5,440,20,36,-6.5,360,2.5,36,-3,325,9.5,36,-4.5,299,27,31,-3,260,-2.5,36,-3,238,3,36,2.5,226,33,30,-3,223,-3,36,-9,194,9,36,-7.5,173,3,36,9,170,27.5,31.5,-7.5,166,15,36,-6.5,165,25,33,-5,160,32,30,-7.5,158,20,33,27,144,2.5,36,-8,144,4,34.5,16,138,3.5,36,13.5,135,-8.5,36,3.5,123,25,33,-7,123,-3.5,36,-13.5,123,33,30,2.5,119,-2.5,36,3,119,38,30,2,117,21,33,33,117,-3.5,34.5,-16,117,27,30,3,105,-15.5,36,5,101,-15,36,7,91,38.5,30,-8,90,-3,36,9,83,50,33,35.5,82,-4.5,31,-21.5,79,-8.5,30,-28,77,-3.5,30,-27,76,-8,36,-3,74,-8,36,-8.5,70,-9,36,7.5,68,39,33,44.5,67,25.5,33,27,64,8,36.5,10,64,-2.5,30,-33.5,64,27,30,9,63,3.5,31,21.5,57,-32.5,30,3,57,59,30,-1,53,50.5,30,-3,53,25,30.5,14.5,52,3,30,-27.5,51,-26.5,33,-27.5,49,22,33,22.5,48,58,30,4.5,47,3.5,30,26.5,46,20.5,33,39,45,-20.5,33,-27,45,7.5,36,2.5,44,17,33,27,44,32,30,8.5,44,9,30,-28.5,44,38,30,9,44,-21,33,-31,42,-50,31,2.5,42,17,33,32.5,41,-33,30,8,41,22,30,2.5,40,-27,30.5,2.5,39,9,30,31.5,39,-1,30,34,39,8.5,30,28,39,52.5,32,35.5,39,3.5,30,-31.5,37,22.5,30.5,14,36,-19.5,36,5,36,52,32,36.5,35,8.5,30,-32,35],
++  ],
++  taipei: [
++    [-9,0,-2,1315,-9.5,0,2.5,906,-14.5,0,2.5,667,-14.5,0,-3.5,545,-4,0,-3,376,-21.5,0,2,336,-21,0,-3,274,2,0,19.5,243,-2,0,21,233,2.5,0,15.5,202,-26.5,0,-2.5,168,-3,0,3,154,2.5,0,-21.5,149,-3.5,0,26.5,146,-51,0,2.5,142,9,0,-3,126,3,0.5,-15,124,3,0,-3,117,-33,0,-2,112,-39,0,-2.5,109,3,0,3,109,-27,0,26.5,104,-46,0,-3,100,2,0,-9.5,98,2,0,9,89,-3.5,0,-27,88,-21.5,0,28,87,-1.5,0,-8.5,86,15,0,-2.5,84,-15.5,0,-27,80,-33.5,0,2,78,-20.5,0,-27,75,-45,0,-20.5,68,-19.5,0,-9,68,-15.5,0,28.5,68,-19,0,-21.5,64,-15,3.5,-34.5,59,-21,3.5,-34.5,58,-8.5,0,28,57,-9,0,-27,56,-2,0,-22.5,56,-45.5,0,20.5,55,13,0,-7,55,-19,0,-15,55,-27.5,0.5,-32,54,-27,0,-28,53,-57.5,0,4.5,52,28,14,-2.5,52,-9,0,32,49,-51,0,9.5,48,-33,0,-32,48,-80,0,-65,47,-1.5,0,8.5,47,-44.5,0,-33.5,46,-17,0,-8.5,46,8.5,0,-15,45,5,13.5,-16,43,-33,0,27,42,-20.5,0,-31.5,42,-57,0,-2,41,2.5,0,-33,41,8.5,0,2,40,-9.5,3.5,-34.5,40,2.5,0,-27.5,40,-51,0,-3.5,38,-15,0,-31.5,38,-3,0.5,-32.5,37,-33,0,-29,37,-9,0,-31.5,37,-27,0,2.5,36,9,14,-16,36,28,14,2,34,14.5,0,2.5,34,2.5,0,27.5,34,-17.5,0,-21.5,33,-44.5,0,-26.5,32,-14.5,0,32,32,-40.5,0,-19.5,32,-4,0,32.5,31,14.5,0,-16.5,31,-1.5,0,-14,30,9,0,-8.5,30,-38.5,0,2.5,28,8.5,0,27.5,27,-33.5,0,33,26,14.5,0,33,26,9.5,0,31.5,25,-40,0,-44,25,27,14,-10,25,-40,0,-15,25,21,0,-20,24],
++    [14.5,0,-2.5,1694,9,0,-2.5,642,3.5,0,2.5,435,15,0,2,430,3,0,-2.5,372,-2.5,0,-3,264,8.5,0,2,252,-8.5,0,-2,186,20.5,0,2.5,182,-10,0,2,163,51,0,-2.5,159,3,0,-21,158,58,0,-4,156,3,0,-15,150,-15,0,2.5,147,3,0,-10,147,8,0,-9,140,20.5,0,-2,137,-20.5,0,2,131,-3,0,2.5,130,-1.5,0,20.5,129,1.5,0,19.5,118,-27,0,-2.5,114,61,0,-4,114,51.5,0,2.5,113,-21,0,-2.5,103,2,0,8.5,92,39,0,2.5,92,27.5,14,-2.5,90,37,13.5,-21.5,88,27,0,-2,87,45,0,3,87,34.5,14,-21,84,-2.5,0,8.5,84,26.5,0,2,83,2.5,0,15,83,-32.5,0,-1.5,82,32.5,0,-2.5,81,33.5,0,2,79,-2.5,0,-21.5,77,8.5,0,-15,76,5,13.5,-16,72,-8.5,0,32,71,56.5,0,3,61,-2,0,-8.5,58,45.5,0,-15.5,55,-3.5,0,26.5,53,3,0,-26,52,-3,0,-26.5,51,-19.5,0,-9,49,-33,0,2.5,48,70.5,0,52.5,48,14.5,0,-33.5,47,2.5,0,29,47,9.5,0,-31.5,46,55,0,-13,45,20.5,0,-7.5,44,44,0,-20,44,21,0,-20.5,43,-45,0,-2.5,43,-8.5,0,-26.5,42,39,0.5,-20.5,41,51,2,8,41,-8,0,28,40,-38.5,0,-2,39,14.5,0,-16.5,38,-27,0,27,37,14,0,-8,37,-50.5,0,3,36,34.5,13.5,25.5,36,-38.5,0,1.5,35,8,14,-15.5,35,-17,0,-9.5,34,-19,0,-21.5,34,21,0,-27,33,39.5,0,16,32,33,14,-25,31,-15.5,0,-26.5,31,40,0,21.5,31,14.5,0,33.5,31,44.5,0,21,30,38.5,0,-2.5,29,28,14,3.5,29,-68,0,3,29,-19.5,0,-15,28,-17,0,-2.5,28,-64,0,8,27,-21,0,28,26,-1,0,-14.5,26,9,0,-29,26],
++  ],
++  taipei101: [
++    [2.5,0,-14,800,-2,0,-14,669,1.5,0,-10,607,9.5,0,-9,406,14.5,0,-9,402,-1.5,0,-10,395,2,0,9,314,2.5,0,15,310,-3.5,0,-3.5,305,-2,0,9,304,8.5,0,-15.5,289,-10,0,-9,267,-2.5,0,15,266,9,0.5,3,260,-8.5,0,-15.5,253,3,0,-3.5,253,-14.5,0,-8.5,247,-9,0.5,3,237,14.5,0,-15,231,14,0,15.5,229,3.5,0,3.5,229,-3.5,0,3.5,228,9.5,0,-19.5,211,9,5,-8,206,-14.5,0,15.5,205,9.5,4.5,-4,203,8.5,0.5,-3.5,194,15.5,0,9,179,9,0,17,177,-8.5,0.5,-3,167,-14.5,0,-15.5,162,-21,0,-3,142,-9.5,4,-3.5,141,20,0,3,132,8.5,0,19,130,-15.5,0,9.5,125,15,0,-3.5,125],
++    [-2,0,10,523,-2.5,0,15,469,2,0,9.5,420,2,0,14.5,381,14.5,0,-9,337,-15,0,-9,331,2,0,-9,316,9,5,-8,313,-14.5,0,-15.5,301,3.5,0,-3.5,294,9,0.5,3,291,14.5,0,-15.5,288,-2,0,-9,278,-21,0,-3.5,277,-9,0,3,276,10,4,-3.5,263,3,0,-14.5,262,9,0,16,253,-9.5,0,15.5,237,9.5,0,10,234,-3,0,-14.5,232,-9,5,-8,225,-9.5,4.5,-3.5,224,4,0,3,212,-3.5,0,3.5,208,14,0,15,199,8.5,0.5,-3,197,-3.5,0,-3.5,197,15,0,-3.5,179,15,0,9.5,178,-9,0,-16.5,171,-9.5,0,-8,167,9.5,0,-8,159,21.5,0,7.5,158,-14.5,0,15.5,157,9,0,-16.5,155,20.5,0,2.5,154,-20.5,0,-8.5,129,-3.5,5,-8.5,127,-8,0.5,-3,119,8.5,0,19,109],
++  ],
++  timbertown: [
++    [15,0,-2,578,21,0,-2.5,554,28.5,0,-3.5,503,9,0,-2.5,475,37,1.5,2.5,443,38,0.5,-2,339,21,0,2,331,16,0,2,298,8,0,-33.5,237,4,0,27,227,9,7.5,3,224,27.5,0,2.5,208,7.5,0.5,27.5,207,3,0,-2.5,182,8.5,0,-8,180,-3,0,-2.5,159,27,0,-8,159,4,0.5,-9.5,154,33,0,3,145,32.5,0,-3.5,136,3.5,0,2.5,127,21.5,0,-8.5,124,33.5,0,8.5,121,9,7.5,8.5,120,-2.5,4,-8.5,116,3.5,0,-32.5,110,15.5,0,27,110,14.5,7,2.5,108,-3,0,-33.5,108,32,0,-8,106,21,0,8.5,103,14.5,0,-9,101,8.5,0,31.5,100,3,0,31.5,94,3,0,21.5,93,3,0,-14.5,91,-8.5,0,-3.5,89,14,7,25,83,20.5,0,27,83,3,0,9,81,-3,0,3,81,-14.5,7,-32,80,-15,0,-3,79,39,0,-8.5,76,-3.5,0,-9,76,10,7,15,75,-16,0,-20.5,74,-7,4,-3,71,-14.5,7,-27.5,70,-3,0,8.5,69,3.5,4,-3.5,68,20.5,0,15,65,26.5,0,8.5,65,44.5,0,-15,65,13.5,7,21.5,64,3.5,0,-38.5,63,14.5,0,32,61,-20,0.5,-9,61,15,0,-34,61,2,4,2,59,-14.5,7,-21,59,-2,4,2,58,3,0,15,55,-8,0.5,-34,55,-20.5,0.5,-3,52,46,0,-4.5,52,-3,0,-14.5,52,2.5,4,-8,51,7,0,1,50,-8.5,0,-8,50,-7,0.5,3,48,26,0,21.5,48,20.5,0,21,46,-2,0,-27.5,45,38.5,0,9,45,3,0,-26.5,44],
++    [-33,1.5,-2.5,626,-15.5,0,-2.5,624,-21,0.5,-2.5,598,-27,1.5,-2.5,532,-15.5,0,-8.5,433,-21,0.5,-8.5,333,-9,0,-8,320,-9.5,0,-3,305,-9,0,25.5,304,-3.5,0,-2.5,248,9,0,-3,183,-8,0.5,-34.5,169,-20.5,0.5,2.5,158,-32.5,3,2.5,154,-3.5,0,-9,142,3.5,0.5,-9.5,139,14.5,0,-3,129,9,7,2.5,125,-26.5,1,-9,121,-16.5,0,3.5,120,3,0,-2.5,118,4.5,4,-3.5,117,-8,0,23.5,114,-38.5,1,2.5,110,8.5,0,-8,109,19.5,0,-15.5,107,-38,1,-2.5,106,-2.5,0,-14,101,-3,4,-8.5,101,-14.5,0,25.5,100,16,0,-33.5,95,3,3.5,-8,93,-16.5,0,-21,93,3.5,0,27,92,14,7,21,92,14,7,15,88,-3.5,0,-34,85,8,1,26.5,83,-20.5,0,-14.5,80,9,7,9,80,15.5,0,-9.5,77,-32.5,0.5,-8,77,-4.5,0,21,76,-2.5,0,-27.5,74,-46.5,0,3.5,74,3,4,1.5,74,-15,7,-33,73,14,7,25,73,3,0,-14.5,70,-8,0,-38,70,-39,0,-9,69,15.5,0,28,69,20,0,-3,68,-3,0,3,67,-38.5,0.5,8.5,67,-35,2,2.5,66,-3,0,9,63,-2.5,0,32.5,60,16,0,-27,58,-26.5,0,-14.5,58,-4.5,4,-3.5,58,10,7,15,57,-7,4,-3,56,3.5,0,3,56,-4,0,27.5,56,-20.5,0,-20.5,56,-20.5,0,26,53,-37.5,0,-15.5,52,-26,2,2.5,52,2,0,-32.5,52,3,0,22,50,18.5,0,-33,50,-3,0,-22,50,-29,3,2.5,49,17,0,8.5,48,-9,0,39.5,48,17,0,-15.5,47],
++  ],
++  warehouse: [
++    [16,0,-2.5,944,15.5,0,2.5,642,20.5,0,-3,580,8.5,0,3,479,-1.5,0,14,476,9.5,0,-2.5,465,20,0,2.5,389,-15.5,0,2.5,330,2.5,0,9,314,9,0,-9,308,3.5,0,-8,290,-2.5,0,9,289,-15.5,0.5,-3,285,15,0,8.5,280,2.5,0,2,268,8.5,0,13.5,264,3,0,-2.5,236,-9,0,9,232,3,0,14,227,10,0,8.5,226,20.5,0,8.5,225,-9,0,-3,221,15,0,-8,218,20.5,0,-8.5,211,-3,0,-8,210,-9,0,2.5,208,-2.5,0,-2,198,-2.5,0,2,184,9.5,0,-14,183,-3,3.5,1,167,3,3.5,-1,155,-9,3.5,-1.5,154,9.5,3.5,1.5,142],
++    [-15.5,0,2.5,983,-15.5,0.5,-2.5,846,-20,0,2,682,-9,0,-3,486,-9.5,0,2.5,425,-20,0,-2.5,399,-2.5,0,-2,376,-8.5,3.5,-1.5,364,-2.5,0,-8,343,9,3.5,-1.5,283,2.5,0,2.5,278,-8.5,3.5,1,267,3.5,3.5,-1.5,264,-9,0,-13.5,259,8.5,0,3,258,-8.5,0,9,257,-3,3.5,1,256,8.5,0,-3,256,8.5,0,-9.5,242,-9.5,0,-8.5,241,3,0,-2,236,-3,0,8.5,236,15.5,0.5,3,228,-14.5,0,-8.5,219,-3,0.5,2,218,-15,0,8,214,2,0,8.5,194,8,0,7.5,179,9.5,3.5,1,173,-2,4,-1,171,15,0,-2.5,167],
++  ],
++};
+diff -ruN a/shared/match/sim.ts b/shared/match/sim.ts
+--- a/shared/match/sim.ts	2026-11-10 05:36:01.000000000 +0000
++++ b/shared/match/sim.ts	2026-11-13 00:23:21.826299240 +0000
+@@ -8,6 +8,9 @@
+ import { PHYSICS_STEP, stepBodies, type Body } from '../world';
+ import { cleanSkin, isDefaultSkin } from '../skins';
+ import { ROOKIE_ROUNDS, botName, createBrain, updateBot } from './bots';
++import { updateBot as updateBotOld, botShopOld } from './bots_old';
++/** Lab only: the teams that use the old bot script. */
++export const AB = { old: [false, false] };
+ import { breakMolotov, burnFires, smokeInFire, smotherFires, throwMolotovFrom } from './fire';
+ import {
+   CASH, award, botShop, buy, buyAttachment, finishReload, newRoundStats, refillAmmo, resetInventory, statsOf, useCrate, type BuyItem,
+@@ -424,7 +427,7 @@
+   resetVehicles(state, ctx);
+   for (const s of state.soldiers) {
+     s.round = newRoundStats();
+-    if (s.bot) botShop(s, ctx.random);
++    if (s.bot) (process.env.NEWSHOP ? botShop : AB.old[s.team] || process.env.OLDSHOP ? botShopOld : botShop)(s, ctx.random);
+     refillAmmo(s);
+     spawnSoldier(state, ctx, s);
+   }
+@@ -546,7 +549,7 @@
+   for (const s of state.soldiers) {
+     if (!s.bot) { s.quiet += dt; if (live && s.alive) s.afk += dt; }
+     updateTimers(state, ctx, s, dt);
+-    if (s.bot && s.alive && !frozen) updateBot(state, ctx, s, dt, obstacles);
++    if (s.bot && s.alive && !frozen) (AB.old[s.team] ? updateBotOld : updateBot)(state, ctx, s, dt, obstacles);
+   }
+   updateVehicles(state, ctx, dt);
+   stepWorld(state, ctx, dt);
+diff -ruN a/shared/match/state.ts b/shared/match/state.ts
+--- a/shared/match/state.ts	2026-11-10 05:36:01.000000000 +0000
++++ b/shared/match/state.ts	2026-11-14 06:09:41.096377118 +0000
+@@ -27,11 +27,19 @@
+   reaction: number;
+   lastSeen: number;
+   seenX: number; seenY: number; seenZ: number;
+-  aimYaw: number; aimPitch: number;
++  /** The view angles of the enemy as the bot sees it (with its error), and the seconds until the error changes (absent or below -1: no error drawn yet). */
++  aimYaw: number; aimPitch: number; aimLeft?: number;
++  /** The hand's move of the view: the seconds left of it, the seconds it takes in all, the angles left of it, and the seconds of rest after it. */
++  handLeft?: number; handFor?: number; handYaw?: number; handPitch?: number; handRest?: number;
++  /** The aim point's error, sideways and up, in units of the bot's usual error. */
+   errYaw: number; errPitch: number;
++  /** What the body does in a fight: 0 stands, ±1 strafes, ±0.25 keeps to its way; and the seconds until the next choice. */
+   strafe: number; strafeLeft: number;
+   crouchLeft: number;
+-  burst: number; burstPause: number;
++  /** Shots in the burst so far (above 0: the trigger is down), the seconds until the next burst, and the weapon's bloom (degrees) at the last shot. */
++  burst: number; burstPause: number; bloom?: number;
++  /** Seconds before an attacker on a bomb site starts to arm (absent: not there). */
++  plantIn?: number;
+   stuck: number; lastX: number; lastY: number; lastZ: number;
+   think: number;
+   grenadeCooldown: number;

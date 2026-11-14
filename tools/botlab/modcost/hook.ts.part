@@ -1,0 +1,142 @@
+
+// ---- The cost hook (lab only) ----
+/** The clock of the measures: ms. The module has only Date.now (1 ms steps); a Bun script sets performance.now. */
+export const CLOCK = { now: (): number => Date.now(), fine: false };
+/** The work done in each slot of ticks. `rows`: the enemy rows; `scan`: all candidates each N ticks; `feat`: features; `net`: the model; `all`: a forward pass for each living bot (not only the ones with an enemy in sight). */
+export const MODES = [
+  { name: 'off', rows: false, scan: 1, feat: false, net: -1, all: false },
+  { name: 'rows1', rows: true, scan: 1, feat: false, net: -1, all: false },
+  { name: 'rows6', rows: true, scan: 6, feat: false, net: -1, all: false },
+  { name: 'full1', rows: true, scan: 1, feat: true, net: 0, all: false },
+  { name: 'full6', rows: true, scan: 6, feat: true, net: 0, all: false },
+  { name: 'all6', rows: true, scan: 6, feat: true, net: 0, all: true },
+  { name: 'cap6', rows: true, scan: 6, feat: true, net: 1, all: true },
+] as const;
+export const SLOT_TICKS = 150, SKIP_TICKS = 30;
+const DELAY = 5, SN = 16, DT = 1 / 30, SKILL = 0, TEMP = 1, CAND_CAP = 10;
+const WIDX: Record<string, number> = Object.fromEntries(WEAPON_IDS.map((w, i) => [w, i]));
+let nets: AimNet[] | undefined;
+function rngOf(seed: number) {
+  let a = seed >>> 0;
+  return () => { a = (a + 0x6D2B79F5) >>> 0; let t = a; t = Math.imul(t ^ (t >>> 15), t | 1); t ^= t + Math.imul(t ^ (t >>> 7), t | 61); return ((t ^ (t >>> 14)) >>> 0) / 4294967296; };
+}
+const prand = rngOf(12345);
+
+class Ctl {
+  st = new AimState(); row = new Float32Array(NA); hasPrev = false; lastYaw = 0; lastPitch = 0; v0 = -1; v1 = -1; v2 = -1;
+  px = new Float32Array(SN); py = new Float32Array(SN); pz = new Float32Array(SN); pc = new Float32Array(SN); ph = new Float32Array(SN); pa = new Uint8Array(SN);
+  dyaw = 0; dpitch = 0; key = false;
+  resetRun() { this.st.reset(); this.hasPrev = false; this.v0 = this.v1 = this.v2 = -1; }
+}
+interface Acc { ticks: number; live: number; hookMs: number; tickMs: number; rows: number; cands: number; fwd: number; feat: number; fillMs: number; featMs: number; fwdMs: number }
+class RoomAim {
+  ctls = new Map<number, Ctl>(); acc: Acc[] = MODES.map(() => ({ ticks: 0, live: 0, hookMs: 0, tickMs: 0, rows: 0, cands: 0, fwd: 0, feat: 0, fillMs: 0, featMs: 0, fwdMs: 0 }));
+  mode = -1; counted = false; mapId = ''; soldiers = 0; bots = 0; tick = -1; lastLog = -1; calls = 0;
+  lists: [Seen[], Seen[]] = [[], []]; few: Seen[] = [];
+}
+const rooms = new Map<number, RoomAim>();
+let candCount = 0;
+
+/** Run the learned aim's work for each living bot of this room (after the tick). The action is sampled and dropped. */
+export function aimHook(roomId: number, state: MatchState, sim: SimContext): void {
+  let r = rooms.get(roomId);
+  if (!r) { r = new RoomAim(); rooms.set(roomId, r); }
+  const mi = Math.floor(state.tick / SLOT_TICKS) % MODES.length, mode = MODES[mi];
+  if (mi !== r.mode) { r.mode = mi; for (const c of r.ctls.values()) c.resetRun(); }
+  // Not counted: the start of each slot (the history fills again) and the first cycle (the JIT compiler warms up).
+  r.counted = state.tick % SLOT_TICKS >= SKIP_TICKS && state.tick >= SLOT_TICKS * MODES.length; r.tick = state.tick;
+  r.mapId = state.mapId; r.soldiers = state.soldiers.length; r.calls++;
+  const live = state.phase === 'live' && state.roundPhase === 'live';
+  if (r.counted && live) r.acc[mi].live++;
+  if (!mode.rows) return;
+  const t0 = CLOCK.now();
+  nets ??= MODELS.map(m => new AimNet(m));
+  const net = mode.net >= 0 ? nets[mode.net] : undefined;
+  const k0 = state.tick % SN, kd = (((state.tick - DELAY) % SN) + SN) % SN;
+  // 1. The positions now, and the two teams as they were DELAY ticks before (what a human sees).
+  const L = r.lists; let n0 = 0, n1 = 0, bots = 0;
+  for (const s of state.soldiers) {
+    let c = r.ctls.get(s.id);
+    if (!c) { c = new Ctl(); r.ctls.set(s.id, c); }
+    if (s.bot) bots++;
+    c.px[k0] = s.m.x; c.py[k0] = s.m.y; c.pz[k0] = s.m.z; c.pc[k0] = s.m.crouch; c.ph[k0] = s.health; c.pa[k0] = s.alive ? 1 : 0;
+    if (!c.pa[kd]) continue;
+    const list = L[s.team], i = s.team === 0 ? n0++ : n1++;
+    const q = list[i] ??= { id: 0, bot: 1, x: 0, y: 0, z: 0, crouch: 0, health: 0 };
+    q.id = s.id; q.bot = s.bot ? 1 : 0; q.x = c.px[kd]; q.y = c.py[kd]; q.z = c.pz[kd]; q.crouch = c.pc[kd]; q.health = c.ph[kd];
+  }
+  r.bots = bots;
+  const clouds = state.bodies.some(b => b.kind === 'smokeCloud') ? state.bodies.filter(b => b.kind === 'smokeCloud') : undefined;
+  let rows = 0, fwd = 0, feat = 0, fillMs = 0, featMs = 0, fwdMs = 0; candCount = 0;
+  const fine = CLOCK.fine;
+  // 2. One aim row for each living bot in a live round; then the features and the forward pass.
+  for (const s of state.soldiers) {
+    const c = r.ctls.get(s.id)!;
+    if (!(live && s.alive && s.bot)) { c.hasPrev = false; continue; }
+    rows++;
+    const R = c.row, newRun = !c.hasPrev, m = s.m, w = weaponOf(s);
+    R.fill(0);
+    const yaw = wrap(s.yaw), pitch = s.pitch;
+    R[A.t] = state.roundClock; R[A.dt] = newRun ? 0 : DT; R[A.yaw] = yaw; R[A.pitch] = pitch;
+    if (!newRun) { R[A.mdyaw] = wrap(s.yaw - c.lastYaw); R[A.mdpitch] = pitch - c.lastPitch; }
+    R[A.fire] = s.sinceShot < 0.15 ? 1 : 0;
+    R[A.weapon] = WIDX[w.id] ?? 0; R[A.ads] = s.ads ? 1 : 0; R[A.crouch] = m.crouch;
+    const fx = -Math.sin(yaw), fz = -Math.cos(yaw), rx = Math.cos(yaw), rz = -Math.sin(yaw);
+    R[A.speed] = Math.hypot(m.vx, m.vz); R[A.vf] = m.vx * fx + m.vz * fz; R[A.vs] = m.vx * rx + m.vz * rz;
+    R[A.grounded] = m.grounded ? 1 : 0; R[A.health] = s.health; R[A.ammo] = s.weapon === 2 ? 0 : s.ammo[s.weapon]; R[A.reloading] = s.reloadLeft > 0 ? 1 : 0;
+    const foes = L[1 - s.team], nFoes = s.team === 0 ? n1 : n0;
+    const scanTick = mode.scan <= 1 || newRun || (state.tick + s.id) % mode.scan === 0;
+    let seen = foes, n = nFoes;
+    if (!scanTick) {
+      // Between two scans: only the enemies that were in sight.
+      seen = r.few; n = 0;
+      for (let i = 0; i < nFoes; i++) { const f = foes[i]; if (f.id === c.v0 || f.id === c.v1 || f.id === c.v2) seen[n++] = f; }
+    }
+    const eye = eyeOf(s);
+    const tA = fine ? CLOCK.now() : 0;
+    R[A.nvis] = fillEnemies(R, OWN, sim.world, clouds as never, eye.x, eye.y, eye.z, yaw, pitch, s.team, seen, n, CAND_CAP);
+    if (fine) fillMs += CLOCK.now() - tA;
+    if (mode.scan > 1) { c.v0 = R[OWN + 6] > 0 ? R[OWN] : -1; c.v1 = R[OWN + SLOT + 6] > 0 ? R[OWN + SLOT] : -1; c.v2 = R[OWN + 2 * SLOT + 6] > 0 ? R[OWN + 2 * SLOT] : -1; }
+    R[A.nenemy] = nFoes; R[A.nframes] = 1; R[A.tick] = state.tick; R[A.aimkey] = s.ads ? 1 : 0;
+    R[OV] = R[OWN + 3]; R[OV + 1] = R[OWN + 4]; R[OV + 2] = R[OWN + 6];
+    c.lastYaw = s.yaw; c.lastPitch = pitch; c.hasPrev = true;
+    if (!mode.feat || !net) continue;
+    const tB = fine ? CLOCK.now() : 0;
+    c.st.rows.set(R, c.st.push(newRun));
+    c.st.features(net.x); net.x[NF] = SKILL; feat++;
+    if (fine) featMs += CLOCK.now() - tB;
+    if (mode.all || c.st.sinceAny < 30) {
+      const tC = fine ? CLOCK.now() : 0;
+      const out = net.forward();
+      c.dyaw = net.classValue(net.sampleClass(out, 0, TEMP, prand()), prand());
+      c.dpitch = net.classValue(net.sampleClass(out, net.nc, TEMP, prand()), prand());
+      c.key = prand() < 1 / (1 + Math.exp(-out[2 * net.nc]));
+      fwd++;
+      if (fine) fwdMs += CLOCK.now() - tC;
+    }
+  }
+  if (r.counted) { const a = r.acc[mi]; a.hookMs += CLOCK.now() - t0; a.rows += rows; a.cands += candCount; a.fwd += fwd; a.feat += feat; a.fillMs += fillMs; a.featMs += featMs; a.fwdMs += fwdMs; }
+}
+
+export function aimReport(roomId: number) {
+  const r = rooms.get(roomId);
+  if (!r) return undefined;
+  const us = (ms: number, n: number) => +(ms * 1000 / Math.max(1, n)).toFixed(1);
+  return {
+    room: roomId, map: r.mapId, soldiers: r.soldiers, bots: r.bots, calls: r.calls, tick: r.tick,
+    modes: Object.fromEntries(MODES.map((m, i) => { const a = r.acc[i]; return [m.name, {
+      ticks: a.ticks, liveShare: +(a.live / Math.max(1, a.ticks)).toFixed(3), tickUs: us(a.tickMs, a.ticks), hookUs: us(a.hookMs, a.ticks),
+      rowsPerTick: +(a.rows / Math.max(1, a.ticks)).toFixed(2), candsPerRow: +(a.cands / Math.max(1, a.rows)).toFixed(2), fwdPerRow: +(a.fwd / Math.max(1, a.rows)).toFixed(3), fwdPerTick: +(a.fwd / Math.max(1, a.ticks)).toFixed(2),
+      ...(CLOCK.fine ? { fillUsPerRow: us(a.fillMs, a.rows), fillUsPerCand: us(a.fillMs, a.cands), featUs: us(a.featMs, a.feat), fwdUs: us(a.fwdMs, a.fwd), otherUsPerRow: us(a.hookMs - a.fillMs - a.featMs - a.fwdMs, a.rows) } : {}),
+    }]; })),
+  };
+}
+
+/** The end of the tick reducer: `t0` is CLOCK.now() at its start. Writes one log line at the end of each cycle of modes. */
+export function aimTickEnd(roomId: number, t0: number, log: (s: string) => void = s => console.log(s)): void {
+  const r = rooms.get(roomId);
+  if (!r || r.mode < 0) return;
+  if (r.counted) { const a = r.acc[r.mode]; a.tickMs += CLOCK.now() - t0; a.ticks++; }
+  const cycle = SLOT_TICKS * MODES.length;
+  if (r.tick % cycle === cycle - 1 && r.tick !== r.lastLog) { r.lastLog = r.tick; log('AIMCOST ' + JSON.stringify(aimReport(roomId))); }
+}
