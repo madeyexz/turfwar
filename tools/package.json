@@ -2,7 +2,7 @@
   "name": "lawbreaker-asset-tools",
   "private": true,
   "type": "module",
-  "packageManager": "bun@1.3.10",
+  "packageManager": "bun@1.4.4",
   "scripts": {
     "import-assets": "bun import-assets.ts",
     "import-guns": "bun import-guns.ts",
