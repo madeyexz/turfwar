@@ -26,6 +26,18 @@ export async function loadSegment(c: S3Client, key: string, sha256?: string): Pr
   return decodeSegment(new Uint8Array(Bun.zstdDecompressSync(zst)));
 }
 
+/**
+ * Decoded input sessions, shared by neighbouring segments; only the latest few are kept (the processor's service
+ * has 400 MB, and a pass over every segment, such as a reprocess or the recount, would otherwise hold every session).
+ */
+export class RecentSessions<K, V> extends Map<K, V> {
+  override set(k: K, v: V) {
+    super.delete(k); super.set(k, v);
+    while (this.size > 24) this.delete(this.keys().next().value as K);
+    return this;
+  }
+}
+
 type InputBatch = ReturnType<typeof decodeBatch>;
 const DAY = 86_400_000;
 /** Per input session read in this run: its batch keys and the rooms and soldiers it covers (small; kept while the decoded batches come and go). */
