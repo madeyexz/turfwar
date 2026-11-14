@@ -182,6 +182,7 @@ menu.innerHTML = `
       <button type="button" class="way" id="open-solo" aria-haspopup="dialog" aria-expanded="false" aria-controls="solo-pop">${L('lobby.solo', 'b')}</button>
       <button type="button" class="way" id="go-range" title="${t('lobby.rangeHint')}" data-i18n-title="lobby.rangeHint">${L('lobby.sub.range', 'b')}</button>
     </nav>
+    ${CRAZYGAMES ? '' : '<p class="closed-note" id="closed-note" hidden><span data-i18n="lobby.closedShort"></span><a href="/thanks" data-i18n="lobby.thanks"></a></p>'}
     ${CRAZYGAMES ? '' : '<p class="clickwrap" id="clickwrap"></p>'}
     <div class="unreachable" id="unreachable" hidden>
       <div class="unreachable-say" role="status" aria-live="polite">
@@ -190,7 +191,6 @@ menu.innerHTML = `
       </div>
       <button type="button" class="sub unreachable-retry" id="unreachable-retry"></button>
     </div>
-    <p class="unavailable" id="online-off"></p>
     <div class="status" id="status" role="status"></div>
   </section>
   <section class="page">
@@ -239,6 +239,7 @@ menu.innerHTML = `
     <span class="dot" aria-hidden="true">·</span>`}
     <a href="${privacyHref()}" id="privacy-link"${CRAZYGAMES ? ' target="_blank" rel="noopener"' : ''}>${L('lobby.privacy')}</a>
   </footer>
+  <div class="closed-tip" id="closed-tip" role="tooltip" hidden></div>
   ${pop('profile-pop', 'lobby.profile', `<label class="callsign">${L('lobby.callsign', 'span', 'class="label"')}<input type="text" id="callsign" maxlength="16" autocomplete="off" spellcheck="false"></label>
     <div class="prog" id="prog"></div>
     <div class="field">${L('lobby.team', 'span', 'class="label"')}${choice('teams', 'team', [['auto', L('lobby.auto')], ['0', L('team.0', 'span', 'class="swat"')], ['1', L('team.1', 'span', 'class="militia"')]], 'lobby.team')}</div>
@@ -330,10 +331,13 @@ const roomCode = $<HTMLInputElement>('#roomcode');
 roomCode.value = cleanCode(params.get('room') ?? '');
 if (roomCode.value && !params.get('tab')) tab = 'join';
 const status = $('#status');
+// A build without a game server (the single-player site): the online ways in stay in view, grayed (markClosed);
+// Solo and Practice play, and a note links to the thank-you page.
 if (!online.ok) {
   menu.classList.add('no-server');
-  $('#online-off').dataset.i18n = 'lobby.noServer';
-  $('#online-off').textContent = t('lobby.noServer');
+  tab = 'quick';
+  const note = menu.querySelector<HTMLElement>('#closed-note');
+  if (note) { note.hidden = false; applyI18n(note); }
 }
 
 const perTeam = () => sizeOf(size).perTeam;
@@ -737,7 +741,57 @@ function refresh() {
   renderJoin();
   renderPings();
   renderOthers();
+  markClosed();
   showBackdrop();
+}
+
+/** The online ways in, which a build without a game server keeps in view, grayed. */
+const CLOSED = ['#quick-go', '#invite-go', '#tab-start', '#tab-join'];
+/**
+ * No game server: the online ways in stay where players know them, grayed and not usable (aria-disabled,
+ * not `disabled`, so that a hover, a focus or a tap still reaches them and shows why: showClosed).
+ */
+function markClosed() {
+  if (online.ok) return;
+  for (const sel of CLOSED) {
+    const b = $<HTMLButtonElement>(sel);
+    b.hidden = false;
+    b.disabled = false;
+    b.classList.add('closed');
+    b.setAttribute('aria-disabled', 'true');
+    b.setAttribute('aria-describedby', 'closed-tip');
+  }
+}
+let closedTimer: ReturnType<typeof setTimeout> | undefined;
+/** The "online rooms have closed" note beside a grayed button (below it where the side is too narrow). */
+function showClosed(b: HTMLElement, linger = 0) {
+  const tip = $('#closed-tip');
+  tip.textContent = t('lobby.noServer');
+  tip.hidden = false;
+  const r = b.getBoundingClientRect();
+  const label = b.querySelector<HTMLElement>('b, .deploy-l') ?? b;
+  const right = Math.min(r.right, label.getBoundingClientRect().right + 24);
+  const beside = right + 12 + tip.offsetWidth <= innerWidth - 8;
+  tip.style.left = `${beside ? right + 12 : Math.max(8, r.left)}px`;
+  tip.style.top = `${beside ? r.top + r.height / 2 - tip.offsetHeight / 2 : r.bottom + 6}px`;
+  clearTimeout(closedTimer);
+  if (linger) closedTimer = setTimeout(hideClosed, linger);
+}
+function hideClosed() { clearTimeout(closedTimer); $('#closed-tip').hidden = true; }
+if (!online.ok) {
+  const closedOf = (e: Event) => (e.target as HTMLElement | null)?.closest?.<HTMLElement>('.closed') ?? undefined;
+  // A press (mouse, tap, Enter) does nothing but show the note for a few seconds; caught before any other handler.
+  menu.addEventListener('click', e => {
+    const b = closedOf(e);
+    if (!b) return;
+    e.preventDefault();
+    e.stopPropagation();
+    showClosed(b, 3500);
+  }, true);
+  menu.addEventListener('pointerover', e => { const b = closedOf(e); if (b && e.pointerType === 'mouse') showClosed(b); });
+  menu.addEventListener('pointerout', e => { if (closedOf(e) && e.pointerType === 'mouse' && !closedOf({ target: e.relatedTarget } as unknown as Event)) hideClosed(); });
+  menu.addEventListener('focusin', e => { const b = closedOf(e); if (b?.matches(':focus-visible')) showClosed(b); });
+  menu.addEventListener('focusout', e => { if (closedOf(e)) hideClosed(); });
 }
 
 // ---- The form and the filters ----
@@ -837,7 +891,7 @@ function askRoomCode(room: number) {
 $('#tabs').addEventListener('keydown', e => {
   const step = e.key === 'ArrowDown' ? 1 : e.key === 'ArrowUp' ? -1 : 0;
   if (!step) return;
-  const items = Array.from($('#tabs').querySelectorAll<HTMLButtonElement>('button:not(:disabled):not(.server-chip)'));
+  const items = Array.from($('#tabs').querySelectorAll<HTMLButtonElement>('button:not(:disabled):not(.server-chip)')).filter(b => b.offsetParent);
   const i = items.indexOf(document.activeElement as HTMLButtonElement);
   if (i < 0) return;
   e.preventDefault();
