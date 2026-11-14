@@ -87,7 +87,7 @@ browser shooter *BeGone*. It runs on TypeScript and Three.js in the browser and 
 
 ## Getting started
 
-**Prerequisites:** [Bun 1.3.10](https://bun.sh) (use `bun` / `bunx`, never npm or npx). For local
+**Prerequisites:** [Bun 1.4.4](https://bun.sh) (use `bun` / `bunx`, never npm or npx). For local
 online play, also the [SpacetimeDB CLI](https://spacetimedb.com/install) 2.10.2.
 
 ```sh

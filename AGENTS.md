@@ -15,7 +15,7 @@ requests.
 
 ## Stack
 
-- **Bun 1.3.10** for packages and scripts. Use `bun` / `bunx`, never npm/npx.
+- **Bun 1.4.4** for packages and scripts. Use `bun` / `bunx`, never npm/npx.
 - **TypeScript + Vite + Three.js** for the browser. No React or Unity runtime.
 - **Shared TypeScript simulation**, used by Solo and the server. Rapier was removed
   in the rebuild; do not assume the original prototype's physics engine remains.
