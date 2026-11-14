@@ -4,6 +4,7 @@ import { MOVE, stepMovement, type MoveInput } from '../movement';
 import { peekOf } from '../peek';
 import { blocksHeight, near, penetration, type Obstacle } from '../obstacles';
 import { GRENADE, STAMINA } from '../weapons';
+import { LEARNED, learnedHand, learnedLook } from './aim';
 import { eyeOf, feetOf, onSite, shapeOf, resolvePellets, resolveShot, sideOf, smokeBlocks, spreadFor, throwGrenadeFrom, traceShot, weaponOf, type SimContext } from './combat';
 import { fireNear, throwMolotovFrom } from './fire';
 import { findPath, nearestNode } from './nav';
@@ -388,6 +389,9 @@ export function updateBot(state: MatchState, ctx: SimContext, bot: Soldier, dt: 
 
   // ---- Combat ----------------------------------------------------------------------
   const w = weaponOf(bot);
+  // A learned bot (aim.ts): while an enemy is in sight, the network has the view, the trigger and the sights, and the script's hand rests.
+  const ease = brain.learned && target ? rookieEase(target) : 0;
+  const hand = brain.learned ? learnedHand(state, ctx, bot, dt, ease > 0 ? ROOKIE_EASE.spread : 1) : undefined;
   let wantAds = false, pull = false, stop = FIRE.release;
   if (target && engaged) {
     const eye = eyeOf(bot);
@@ -410,7 +414,7 @@ export function updateBot(state: MatchState, ctx: SimContext, bot: Soldier, dt: 
     brain.aimPitch = Math.atan2(chest.y + AIM.up * (1 + 2 * brain.skill) - eye.y, distance) + brain.errPitch * sd * AIM.vertical / reach;
     // How fast the enemy crosses the view (rad/s), from its speed and the bot's own: a move of the hand goes a part of the way ahead of it.
     const crossing = (dz * (target.m.vx - bot.m.vx) - dx * (target.m.vz - bot.m.vz)) / (reach * reach);
-    turnView(ctx, bot, brain, wrapAngle(brain.aimYaw - bot.yaw), brain.aimPitch - bot.pitch, Math.max(AIM.fine, AIM.rest / reach),
+    if (!hand) turnView(ctx, bot, brain, wrapAngle(brain.aimYaw - bot.yaw), brain.aimPitch - bot.pitch, Math.max(AIM.fine, AIM.rest / reach),
       brain.burst > 0 ? HAND.restFire : HAND.restSeen, crossing * Math.min(1, AIM.lead + AIM.leadSkill * brain.skill), dt);
     const near = Math.max(AIM.fireMin, AIM.fire / reach);
     const aligned = Math.abs(wrapAngle(brain.aimYaw - bot.yaw)) < near && Math.abs(brain.aimPitch - bot.pitch) < near * 1.5;
@@ -439,12 +443,13 @@ export function updateBot(state: MatchState, ctx: SimContext, bot: Soldier, dt: 
     }
 
     // The trigger goes down when the view is on the aim point, and stays down for a burst: a few shots at long range, many up close.
-    pull = brain.burst > 0 || (aligned && brain.burstPause <= 0 && distance < w.range * 0.6);
+    pull = !hand && (brain.burst > 0 || (aligned && brain.burstPause <= 0 && distance < w.range * 0.6));
     stop = !w.auto || w.class === 'melee' ? 1 : brain.burst + 1 < FIRE.min ? 0 : distance < 30 ? FIRE.stop : distance < 60 ? FIRE.stopFar : FIRE.stopVeryFar;
   } else {
     // The finger comes off late when the enemy drops or goes out of sight; the hand ends its move and no more for those shots.
-    pull = brain.burst > 0;
-    if (pull) turnView(ctx, bot, brain, 0, 0, 1, HAND.restFire, 0, dt);
+    pull = !hand && brain.burst > 0;
+    if (hand) { /* the network has the view */ }
+    else if (pull) turnView(ctx, bot, brain, 0, 0, 1, HAND.restFire, 0, dt);
     else {
       // Look where we are going when not fighting, a little below level.
       const far = lookX * lookX + lookZ * lookZ > 1;
@@ -469,6 +474,8 @@ export function updateBot(state: MatchState, ctx: SimContext, bot: Soldier, dt: 
       brain.grenadeCooldown = 9 + ctx.random() * 8;
     }
   }
+
+  if (hand) { wantAds = hand.sights; brain.burst = 0; }
 
   // ---- Fire: the weapon's own spread with its bloom, and the part of the recoil that the hand does not hold ----
   if (pull && bot.reloadLeft <= 0 && bot.switchLeft <= 0 && bot.fireCooldown <= 0) {
@@ -538,7 +545,7 @@ export function updateBot(state: MatchState, ctx: SimContext, bot: Soldier, dt: 
   const fx = -Math.sin(bot.yaw), fz = -Math.cos(bot.yaw), rx = Math.cos(bot.yaw), rz = -Math.sin(bot.yaw);
   const forward = moveX * fx + moveZ * fz, strafe = moveX * rx + moveZ * rz;
   // Sprint out of the base, and to an armed bomb; walk the rest of the way, as most players do.
-  const hurry = !target && (state.roundClock < BODY.dash || state.bomb.armed);
+  const hurry = !target && !hand?.sights && (state.roundClock < BODY.dash || state.bomb.armed);
   const input: MoveInput = {
     forward, strafe, yaw: bot.yaw, jump: brain.jump, crouch: brain.crouchLeft > 0,
     sprint: hurry && len > 0.5 && forward > 0.7 && bot.stamina > (bot.sprint ? 0 : STAMINA.tired),
@@ -549,4 +556,6 @@ export function updateBot(state: MatchState, ctx: SimContext, bot: Soldier, dt: 
   stepMovement(ctx.world, bot.m, input, dt, bot.team, obstacles);
   // Safety net: never let a bot fall out of the world.
   if (bot.m.y < -60) bot.m.y = ctx.world.groundHeight(bot.m.x, bot.m.z, 100, MOVE.radius);
+  // A learned bot looks last, with its body where the tick left it. With a rookie in front it asks less of the network.
+  if (brain.learned) learnedLook(state, ctx, bot, LEARNED.outcome - ease * LEARNED.rookie);
 }

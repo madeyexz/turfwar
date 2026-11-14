@@ -65,6 +65,7 @@ export function addSoldier(state: MatchState, ctx: SimContext, opts: { name: str
   resetInventory(s);
   refillAmmo(s);
   if (opts.bot) s.brain = createBrain(clamp(state.config.botSkill + (ctx.random() - 0.5) * 0.3, 0.15, 0.95));
+  if (s.brain && state.config.learnedAim && ctx.random() < state.config.learnedAim) s.brain.learned = true;
   state.soldiers.push(s);
   ctx.emit({ type: 'join', id: s.id, name: s.name, team, bot: s.bot });
   // Joining mid-round: you deploy at the next round start (BeGone has no mid-round respawn), except

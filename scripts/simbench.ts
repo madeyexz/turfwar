@@ -2,7 +2,9 @@
  * Times the shared match simulation alone (no database, no rendering) on a map at the largest
  * room size (6v6): how much of a 33 ms server tick the bots and the lawful world use.
  *
- *   bun scripts/simbench.ts taipei 60
+ *   bun scripts/simbench.ts taipei 60 [1]
+ *
+ * The third number is the share of the bots with the learned aim (shared/match/aim.ts).
  */
 import { rng } from '../shared/math';
 import { encodeFrame } from '../shared/match/frame';
@@ -11,11 +13,12 @@ import { ONLINE_CONFIG } from '../shared/match/state';
 
 const mapId = process.argv[2] ?? 'taipei';
 const seconds = Number(process.argv[3] ?? 60);
+const learnedAim = Number(process.argv[4] ?? ONLINE_CONFIG.learnedAim ?? 0);
 const random = rng(7);
 let events = 0;
 const ctx = createContext(mapId, random, () => { events++; });
 // Full team size: 6v6.
-const state = createMatch(mapId, { ...ONLINE_CONFIG, teamSize: 6, warmup: 1 });
+const state = createMatch(mapId, { ...ONLINE_CONFIG, teamSize: 6, warmup: 1, learnedAim });
 balanceTeams(state, ctx);
 const times: number[] = [];
 for (let i = 0; i < seconds * TICK_RATE; i++) {
@@ -30,7 +33,7 @@ const serialize = (performance.now() - t0) / 100;
 times.sort((a, b) => a - b);
 const pct = (q: number) => times[Math.floor(q * (times.length - 1))].toFixed(2);
 console.log(JSON.stringify({
-  mapId, soldiers: state.soldiers.length, kills: state.soldiers.reduce((a, s) => a + s.kills, 0), events,
+  mapId, soldiers: state.soldiers.length, learned: state.soldiers.filter(s => s.brain?.learned).length, kills: state.soldiers.reduce((a, s) => a + s.kills, 0), events,
   tickMs: { mean: (times.reduce((a, b) => a + b, 0) / times.length).toFixed(2), p50: pct(0.5), p95: pct(0.95), p99: pct(0.99), max: pct(1) },
   serializeMsPerTick: serialize.toFixed(2),
 }));

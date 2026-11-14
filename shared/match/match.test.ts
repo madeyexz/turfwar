@@ -15,6 +15,7 @@ import { ATTACKERS, ELIMINATION, PRACTICE_CONFIG, SABOTAGE, type MatchConfig, ty
 import { MOVE_SLACK, feetOf, killSoldier, sideOf, smokeBlocks, type SimContext } from './combat';
 import { firePatches, inFire } from './fire';
 import { updateBot } from './bots';
+import { aimScores } from './aim';
 import { CASH, newRoundStats } from './economy';
 import { decodeFrame, encodeFrame } from './frame';
 
@@ -99,6 +100,40 @@ describe('maps and navigation', () => {
         expect(sum, `${id} side ${side}`).toBe(PLACE_WEIGHTS);
       });
     }
+  });
+});
+
+describe('the learned aim (aim.ts)', () => {
+  it('the stored network gives the scores of the trained one', () => {
+    // The input sin(1), sin(2), … with an outcome of 1. The scores are those of the trained network before its weights were stored as 16-bit numbers.
+    const input = Array.from({ length: 119 }, (_, i) => Math.sin(i + 1));
+    input[118] = 1;
+    const scores = aimScores(input);
+    expect(scores.length).toBe(71);
+    for (const [i, score] of [[0, 2.139], [1, -8.255], [17, -7.258], [35, 5.066], [36, -3.334], [52, 5.472], [70, -8.01]]) expect(scores[i]).toBeCloseTo(score, 1);
+  });
+
+  it('bots with it fight rounds to a result, and the same seed gives the same match', () => {
+    const play = () => {
+      const { ctx, state, events } = setup({ ...ELIMINATION, teamSize: 3, warmup: 0, learnedAim: 1 }, 7);
+      balanceTeams(state, ctx);
+      tick(state, ctx, 90);
+      return { state, events };
+    };
+    const first = play(), again = play();
+    expect(first.state.soldiers.every(s => s.brain?.learned)).toBe(true);
+    expect(first.events.filter(e => e.type === 'kill').length).toBeGreaterThan(4);
+    expect(first.events.filter(e => e.type === 'round' && e.phase === 'over' && e.winner !== -1).length).toBeGreaterThan(0);
+    const end = (state: MatchState) => JSON.stringify([state.scores, state.soldiers.map(s => [s.m.x, s.m.z, s.yaw, s.pitch, s.health, s.ammo])]);
+    expect(end(again.state)).toBe(end(first.state));
+  });
+
+  it('only the share of the bots that the room asks for has it', () => {
+    const none = setup({ ...ELIMINATION, teamSize: 6, warmup: 0 }, 3), half = setup({ ...ELIMINATION, teamSize: 6, warmup: 0, learnedAim: 0.5 }, 3);
+    balanceTeams(none.state, none.ctx); balanceTeams(half.state, half.ctx);
+    expect(none.state.soldiers.some(s => s.brain?.learned)).toBe(false);
+    const learned = half.state.soldiers.filter(s => s.brain?.learned).length;
+    expect(learned).toBeGreaterThan(1); expect(learned).toBeLessThan(11);
   });
 });
 

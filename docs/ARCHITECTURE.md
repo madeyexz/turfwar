@@ -76,6 +76,13 @@ Back to the [README](../README.md) · [Gameplay](GAMEPLAY.md) · [Development](D
   sight through static geometry, a claimed point within a speed-scaled tolerance of the target's hit
   volumes, and no friendly fire. Damage, kills, rounds, the bomb, cash, purchases and crates are
   authoritative. Bot shots are simulated entirely on the server.
+- The learned aim (`shared/match/aim.ts`, off unless a room's `learnedAim` gives a share of the bots) runs in the
+  same tick: a network of 16,455 weights (`aimnet.ts`) gives a bot's next turn of the view and its trigger while an
+  enemy was in sight in the last second. It checks all enemies for a line of sight each 6 ticks, and between two
+  checks only those that were in sight. The 1.5 s of history that it needs is in the module's memory by soldier id,
+  not in a table: it survives from tick to tick (checked on a local database), and after a restart of the module a
+  bot aims again after a moment. With all 12 soldiers of a 6v6 room on it, the simulation tick goes from 0.16 ms to
+  0.48 ms (mean) in an orb (`bun scripts/simbench.ts taipei 120 1`); it is not measured on the Taipei VM.
 - Vehicles follow the same pattern: the driver's client predicts its vehicle with the shared physics
   (`shared/vehicles.ts`) and reports it at 20 Hz; the server accepts it only for the vehicle's own
   driver, within a distance budget from the kind's top speed against server time, in bounds, clear of
@@ -127,7 +134,7 @@ Back to the [README](../README.md) · [Gameplay](GAMEPLAY.md) · [Development](D
 - Load test (local only): `bun scripts/loadtest.ts --uri ws://127.0.0.1:3100 --db <name> --clients 100`
   runs headless clients that move with the shared controller, fire validated shots and report the
   server tick rate, bytes per client, report round trips and corrections; it refuses non-local URIs.
-  `bun scripts/simbench.ts taipei` times the simulation alone (a 6v6 room). Measured before the BeGone
+  `bun scripts/simbench.ts taipei` times the simulation alone (a 6v6 room; a third argument is the share of the bots with the learned aim). Measured before the BeGone
   conversion (Domination, 100 clients on Meridian, M3 Pro, local server): 30 ticks/s, ~84 KB/s per
   client, report round trips of 6 / 9 / 12 ms (p50/p95/p99) and zero corrections. These are
   single-machine numbers, not a production load test.

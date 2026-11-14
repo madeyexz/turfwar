@@ -1378,7 +1378,7 @@ async function start(action: Action, retried = false) {
         ? new OfflineLink(duel.mapId, name, undefined, { ...ELIMINATION, teamSize: 1, botSkill }, false, duel.c.name)
       : via === 'lab'
         ? new OfflineLink(rules.mapId, name, teamChoice, {}, true)
-        : new OfflineLink(rules.mapId, name, teamChoice, { ...(rules.mode === 'sabotage' ? SABOTAGE : ELIMINATION), teamSize: perTeam(), botSkill, freeBuy: params.has('freebuy') });
+        : new OfflineLink(rules.mapId, name, teamChoice, { ...(rules.mode === 'sabotage' ? SABOTAGE : ELIMINATION), teamSize: perTeam(), botSkill, freeBuy: params.has('freebuy'), learnedAim: Number(params.get('learned')) || undefined });
   } catch (error) {
     // The challenger's room is gone, full or unreachable: their bot double instead, on the same map.
     if (duel?.kind === 'join') {
