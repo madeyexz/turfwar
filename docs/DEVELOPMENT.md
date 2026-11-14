@@ -135,7 +135,7 @@ The bots copy the habits of recorded mouse players, and the skill still sets how
 recoil, the sights, standing still, sprint). They buy from a table of the players' choices (`BOT_BUY` in
 `shared/match/economy.ts`), and in Elimination they go where the players stay (`shared/match/places.ts`).
 
-`bun scripts/botbench.ts` (about one minute; `--rounds`, `--matches`, `--seed`, `--skill`) plays bot-only 6v6
+`bun scripts/botbench.ts` (about one minute; `--rounds`, `--matches`, `--seed`, `--skill`, `--learned`, `--duel`) plays bot-only 6v6
 rooms in the shared simulation and prints the bots next to the players' totals in `scripts/botbench/human.json`.
 Run it before and after a change to the bots, the buy table or the places, and compare the two outputs.
 
@@ -158,6 +158,30 @@ half of the kills on taipei, ochre and memorial together, but about 0.35 on taip
 spread out and stand still to shoot, and the script of before ran at the enemy in a group. A longer sprint out
 of the base helps one side of taipei and puts the sprint time above the mouse players'. If the bots are too
 easy or too hard for the players, change `botSkill` (`shared/match/state.ts`).
+
+**The learned aim** (`shared/match/aim.ts`, weights in `shared/match/aimnet.ts`). A bot with `brain.learned` gives
+its view, trigger and sights to a small network while an enemy was in sight in the last second; the script keeps
+the legs, the store, the knife, grenades and the bomb. `MatchConfig.learnedAim` is the share of the bots that get
+it when they are made. No config sets it, so it is off in every room; `&learned=1` (or a share such as `0.5`) turns
+it on in a Solo match. `LEARNED` in `aim.ts` has its controls: `outcome` is the difficulty (the network was trained
+with the hits of the next 1.5 s as an input; 2 is the most), `steady` and `trigger` set how sure the hand and the
+finger are. `--learned <share>` runs parts 1 and 2 of the bench with it, and `--duel` adds part 3 (some minutes): a
+team with the learned aim against a team with the script's aim, 432 rounds with the MP5 on three maps.
+
+Measured on 2026-11-14 (`--learned 1 --duel`), the learned aim / the script's aim / the players: distance of the
+aim 0.261 / 0.306 (two groups of players: 0.131); hit rate 0.128 / 0.201 / 0.137; head share 0.082 / 0.127 / 0.085;
+shots a minute 91.9 / 53.0 / 51.7; in the sights with an enemy in sight 0.950 / 0.354 / 0.359. In the duel the
+learned team takes 0.412 ± 0.026 of the kills and 130 of 432 rounds (taipei 0.49, ochre 0.35, memorial 0.39). So the
+learned aim is nearer to the players and weaker than the script's aim at skill 0.3, and it has two signs of a bot:
+it fires too often, and its sights are up almost always. With the script's habit for the sights the time in the
+sights is 0.442, but the kill share falls to 0.303: do not change that without the duel. The skill of a bot does not
+change its learned aim.
+
+The network is trained outside the repository (PyTorch on the CPU, about 100 s) on 29.7 h of aim-clean play of 184
+mouse players, with 52 other players held out, and stored as 16-bit numbers. The training scripts are in
+`tools/botlab/` (`train.py`, `st2/export_ts.py`; its README says how to run them). The test "the stored network gives the scores of the trained one" pins
+the stored weights; a new network must keep the 118 inputs of `learnedLook` in the same order and scale, or change
+the two together.
 
 `human.json` and `places.ts` are totals of the clean-v2 recordings of 2026-10-15 to 2026-11-10
 ([docs/RECORDING.md](RECORDING.md)): the aim and the shooting are from 42 h of aim-clean mouse play, the
