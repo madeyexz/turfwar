@@ -104,7 +104,7 @@ describe('the game page', () => {
     expect(meta(html, 'name', 'twitter:description')).toBeTruthy();
   });
 
-  it('describes a free multiplayer / single-player browser VideoGame under both names, and a WebSite', () => {
+  it('describes a free single-player browser VideoGame under both names, and a WebSite', () => {
     const graph = jsonLd(html);
     const game = graph.find(n => n['@type'] === 'VideoGame')!;
     expect(game).toBeTruthy();
@@ -114,7 +114,7 @@ describe('the game page', () => {
     expect(game.gamePlatform).toBe('Web browser');
     expect(game.operatingSystem).toBe('Any');
     expect(game.applicationCategory).toBe('GameApplication');
-    expect(game.playMode).toEqual(['https://schema.org/MultiPlayer', 'https://schema.org/SinglePlayer']);
+    expect(game.playMode).toEqual(['https://schema.org/SinglePlayer']);
     expect(game.inLanguage).toEqual(['zh-TW', 'en']);
     expect(game.offers).toMatchObject({ '@type': 'Offer', price: '0' });
     expect(game.isAccessibleForFree).toBe(true);
