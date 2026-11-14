@@ -9,6 +9,7 @@
     { "source": "/admin", "destination": "/admin/index.html" },
     { "source": "/privacy", "destination": "/privacy/index.html" },
     { "source": "/terms", "destination": "/terms/index.html" },
+    { "source": "/thanks", "destination": "/thanks/index.html" },
     { "source": "/about", "destination": "/about/index.html" },
     { "source": "/en/about", "destination": "/en/about/index.html" },
     { "source": "/guide", "destination": "/guide/index.html" },

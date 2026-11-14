@@ -39,7 +39,7 @@ const pageRoutes: Plugin = {
   name: 'page-routes',
   configureServer(server) {
     server.middlewares.use((req, _res, next) => {
-      for (const page of ['/admin', '/privacy', '/terms', ...INFO_PAGES.flatMap(p => [`/${p}`, `/en/${p}`])]) {
+      for (const page of ['/admin', '/privacy', '/terms', '/thanks', ...INFO_PAGES.flatMap(p => [`/${p}`, `/en/${p}`])]) {
         if (req.url === page || req.url?.startsWith(`${page}?`)) req.url = `${page}/${req.url.slice(page.length)}`;
       }
       const invite = /^(?:\/r\/[A-Za-z]{4}|\/c)\/?(\?.*)?$/.exec(req.url ?? '');
@@ -171,6 +171,8 @@ const crazygamesPrune: Plugin = {
     for (const f of readdirSync(options.dir!)) {
       if (/^(og|robots\.txt|sitemap\.xml|llms.*\.txt|manifest\.webmanifest|[0-9a-f]{32}\.txt)$/.test(f)) rmSync(join(options.dir!, f), { recursive: true });
     }
+    // The farewell page's clips (thanks/index.html is not in this build, and its notice stays off CrazyGames).
+    rmSync(join(options.dir!, 'media', 'thanks'), { recursive: true, force: true });
   },
 };
 
@@ -225,7 +227,7 @@ export default defineConfig(async ({ command, mode }): Promise<UserConfig> => {
       rollupOptions: {
         // The game, the privacy notice at /privacy, the info pages (/about, /guide, /maps, /begone in 繁體中文 and under /en/ in English; static text for search and answer engines, docs/SEO.md), the owner's admin dashboard at /admin (not linked from the game) and the service worker at /sw.js.
         input: crazygames ? { main: resolve(__dirname, 'index.html') } : {
-          main: resolve(__dirname, 'index.html'), privacy: resolve(__dirname, 'privacy/index.html'), terms: resolve(__dirname, 'terms/index.html'),
+          main: resolve(__dirname, 'index.html'), privacy: resolve(__dirname, 'privacy/index.html'), terms: resolve(__dirname, 'terms/index.html'), thanks: resolve(__dirname, 'thanks/index.html'),
           ...Object.fromEntries(INFO_PAGES.flatMap(p => [[p, resolve(__dirname, `${p}/index.html`)], [`${p}En`, resolve(__dirname, `en/${p}/index.html`)]])),
           admin: resolve(__dirname, 'admin/index.html'), sw: resolve(__dirname, 'src/pwa/sw.ts'),
         },
