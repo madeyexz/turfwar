@@ -2,7 +2,7 @@ import * as THREE from 'three';
 import type { Assets } from '../assets';
 import { ATTACHMENT_SLOTS, BOBA, WEAPONS, WEAPON_IDS, type Attachments, type WeaponId } from '../../shared/weapons';
 import type { LocalPlayer } from '../game/player';
-import { curlFingers, orientHand, restorePose, sampleKeys, solveArm, type Bones, type Ease, type Keyframe } from './rig';
+import { curlFingers, orientHand, restorePose, sampleKeys, solveArm, wristFor, type Bones, type Ease, type Keyframe } from './rig';
 import { GUN_FIT, fitAttachments, overlayFor, vec, type Fitted, type Overlay } from './optics';
 import { opticFov, settings } from '../game/settings';
 import { requestScope } from './sights';
@@ -70,6 +70,8 @@ const SLAP_WRIST: Key[] = [
 ];
 /** Where the right elbow points (a point it bends toward, view space). */
 const ELBOW_REST = [0.6, -0.7, 0.2];
+/** How far the crew's trigger hand points below the bore (the classic mitten hangs from the grip instead). */
+const CREW_GRIP = -0.25;
 const SLAP_ELBOW: Key[] = [
   [0, ELBOW_REST], [0.22, [0.75, -0.55, 0.1], 'out'], [0.29, [0.78, -0.5, 0.1]], [0.39, [0.7, -0.5, -0.2], 'in'],
   [0.58, [0.2, -0.9, 0], 'out'], [1, ELBOW_REST],
@@ -138,6 +140,8 @@ export class ViewModel {
   /** The knife skin in hand (shared/skins.ts). */
   private knifeSkin: KnifeSkin = 'knife';
   private attachments: Attachments = {};
+  /** The arms are the crew's (a full glove), not the classic rig's mitten. */
+  private crew = false;
   private arms: { root: THREE.Object3D; bones: Bones; bindPose: Map<string, THREE.Quaternion> };
   private grenade: THREE.Object3D;
   /** The 燃燒彈, rag alight, in the left hand while throwing one. */
@@ -188,6 +192,7 @@ export class ViewModel {
       this.mags.set(name, mag);
     }
     this.arms = createArms(assets, team);
+    this.crew = !!(assets.crew && assets.crewArms);
     // The rig faces +Z; turn it to look down -Z with the shoulders just behind the camera.
     this.arms.root.rotation.y = Math.PI;
     this.root.add(this.arms.root);
@@ -429,16 +434,29 @@ export class ViewModel {
     if (p.throwLeft > 0) foreW = new THREE.Vector3(-0.2, -0.08 + Math.sin(throwing * Math.PI) * 0.25, -0.3 - throwing * 0.25);
     // A swing moves the elbow too (the slap lifts it out to the right); otherwise it rests down and back.
     const elbow = knife && this.slashT < 1 && p.windup <= 0 && p.slipperFollow <= 0 ? this.elbow : this.elbow.fromArray(ELBOW_REST);
-    if (knife) solveArm(bones, 'r', gripW.clone().addScaledVector(gunFwd, -0.07).addScaledVector(gunUp, -0.02).addScaledVector(gunRight, 0.02), elbow);
-    else solveArm(bones, 'r', gripW.clone().addScaledVector(gunRight, 0.03).addScaledVector(gunUp, -0.02), new THREE.Vector3(0.6, -0.7, 0.2));
-    solveArm(bones, 'l', foreW.clone().addScaledVector(gunFwd, -0.05).addScaledVector(gunUp, -0.07).addScaledVector(gunRight, -0.025), new THREE.Vector3(-0.7, -0.6, -0.1));
     // A knife is held in a fist, wrist behind the handle; guns with the wrist under the grip.
-    orientHand(bones, 'r', gunFwd.clone().addScaledVector(gunUp, knife ? -0.3 : -1.1).normalize(), gunRight.clone().negate());
-    if (p.throwLeft > 0) orientHand(bones, 'l', new THREE.Vector3(0.2, 0.6, -1).normalize(), new THREE.Vector3(0.6, 0, -0.4));
-    else if (broom) orientHand(bones, 'l', gunFwd.clone().addScaledVector(gunUp, -0.3).normalize(), gunRight.clone());
-    else if (knife) orientHand(bones, 'l', new THREE.Vector3(0.2, -0.6, -0.8).normalize(), new THREE.Vector3(1, 0, 0));
-    else if (pistol && !leftTarget) orientHand(bones, 'l', gunFwd.clone().addScaledVector(gunUp, -0.9).normalize(), gunRight);
-    else orientHand(bones, 'l', gunFwd.clone().addScaledVector(gunRight, 0.5).addScaledVector(gunUp, 0.3).normalize(), gunUp.clone().add(gunRight).normalize());
+    // The crew's glove is a full hand: it lies along the grip and closes round it (wristFor).
+    const crew = this.crew, free = knife && !broom || p.throwLeft > 0;
+    // The crew's fist closes across a knife handle: the hand points up the gun, at a right angle to the blade.
+    const fist = crew && knife && this.knifeSkin !== 'broom';
+    const aimR = fist ? gunUp.clone() : gunFwd.clone().addScaledVector(gunUp, knife ? -0.3 : crew ? CREW_GRIP : -1.1).normalize(), palmR = gunRight.clone().negate();
+    let aimL: THREE.Vector3, palmL: THREE.Vector3;
+    if (p.throwLeft > 0) { aimL = new THREE.Vector3(0.2, 0.6, -1).normalize(); palmL = new THREE.Vector3(0.6, 0, -0.4); }
+    else if (broom) { aimL = gunFwd.clone().addScaledVector(gunUp, -0.3).normalize(); palmL = gunRight.clone(); }
+    else if (knife) { aimL = new THREE.Vector3(0.2, -0.6, -0.8).normalize(); palmL = new THREE.Vector3(1, 0, 0); }
+    else if (pistol && !leftTarget) { aimL = gunFwd.clone().addScaledVector(gunUp, crew ? -0.5 : -0.9).normalize(); palmL = gunRight.clone(); }
+    else { aimL = gunFwd.clone().addScaledVector(gunRight, 0.5).addScaledVector(gunUp, 0.3).normalize(); palmL = gunUp.clone().add(gunRight).normalize(); }
+    const poleR = knife ? elbow : new THREE.Vector3(0.6, -0.7, 0.2), poleL = new THREE.Vector3(-0.7, -0.6, -0.1);
+    if (crew) {
+      solveArm(bones, 'r', wristFor(gripW, aimR, palmR), poleR);
+      solveArm(bones, 'l', free ? foreW : wristFor(pistol && !leftTarget ? gripW.clone().addScaledVector(gunFwd, 0.02).addScaledVector(gunUp, -0.035) : foreW, aimL, palmL), poleL);
+    } else {
+      if (knife) solveArm(bones, 'r', gripW.clone().addScaledVector(gunFwd, -0.07).addScaledVector(gunUp, -0.02).addScaledVector(gunRight, 0.02), poleR);
+      else solveArm(bones, 'r', gripW.clone().addScaledVector(gunRight, 0.03).addScaledVector(gunUp, -0.02), poleR);
+      solveArm(bones, 'l', foreW.clone().addScaledVector(gunFwd, -0.05).addScaledVector(gunUp, -0.07).addScaledVector(gunRight, -0.025), poleL);
+    }
+    orientHand(bones, 'r', aimR, palmR);
+    orientHand(bones, 'l', aimL, palmL);
     curlFingers(bones, 'r', knife ? 0.9 : 0.62, 0.55);
     curlFingers(bones, 'l', leftTarget || broom ? 0.75 : knife ? 0.3 : 0.62, 0.45);
 

@@ -99,8 +99,8 @@ const refused = async (size: number, mode: string, mapId: string) => {
 for (const [name, args, want] of [
   ['unknown size', [5, '', ''], 'Unknown room size'],
   ['unknown mode', [6, 'domination', ''], 'Unknown mode'],
-  ['big map in 6v6', [6, '', 'meridian'], 'That map does not host this room'],
-  ['small map in 24v24', [24, '', 'crane'], 'That map does not host this room'],
+  ['the removed 24v24', [24, '', ''], 'Unknown room size'],
+  ['a retired map (Meridian) in 6v6', [6, '', 'meridian'], 'That map does not host this room'],
   ['Sabotage on a map without sites', [6, 'sabotage', 'tower'], 'That map does not host this room'],
   ['unknown map', [6, '', 'atlantis'], 'That map does not host this room'],
 ] as const) {

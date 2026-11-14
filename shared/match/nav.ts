@@ -164,7 +164,8 @@ export function nearestNode(nav: NavGraph, x: number, y: number, z: number) {
   // Always search the neighbouring ring too: the closest column can hold an unreachable roof.
   for (let ring = 0; ring <= 5 && (best < 0 || ring <= 1); ring++) {
     for (let dz = -ring; dz <= ring; dz++) for (let dx = -ring; dx <= ring; dx++) {
-      if (Math.max(Math.abs(dx), Math.abs(dz)) !== ring) continue;
+      // A column past the west or east edge has the key of a column at the other edge, one row away: skip it.
+      if (Math.max(Math.abs(dx), Math.abs(dz)) !== ring || ix + dx < 0 || ix + dx >= nav.nx) continue;
       const ids = nav.columns.get((iz + dz) * nav.nx + ix + dx);
       if (!ids) continue;
       for (const id of ids) {

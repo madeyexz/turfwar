@@ -23,12 +23,10 @@ describe('taipei101: an office floor high up Taipei 101', () => {
     expect(2 * H).toBeGreaterThanOrEqual(50); expect(2 * H).toBeLessThanOrEqual(60);
     expect(def.bounds.maxX - def.bounds.minX).toBeLessThan(60);
     expect(FLOOR_Y).toBeGreaterThan(370); expect(FLOOR_Y).toBeLessThan(395);
-    expect(def.big).toBeFalsy();
     expect(def.vehicles ?? []).toEqual([]);
     expect(def.name).toBe('Taipei 101 · 88F');
     expect(def.region).toContain(TAIPEI101_NAME_ZH);
     for (const size of [1, 6]) for (const mode of ['elimination', 'sabotage'] as const) expect(mapsFor(size, mode)).toContain(ID);
-    expect(mapsFor(24)).not.toContain(ID);
   });
 
   it('has no open sightline longer than 45 m between places a soldier can stand, on either floor', () => {

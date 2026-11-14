@@ -6,7 +6,7 @@ import { weaponModel, type Assets } from '../assets';
 import { DEFAULT_SKIN, isSlipper, MILITIA_LOOKS, SWING, type KnifeSkin, type Skin } from '../../shared/skins';
 import { dirFromAngles } from '../../shared/math';
 import { riderTwist } from '../../shared/vehicles';
-import { curlFingers, orientHand, restorePose, rotateWorld, sampleKeys, snapshotPose, solveArm, solveLimb, type Keyframe } from './rig';
+import { curlFingers, orientHand, restorePose, rotateWorld, sampleKeys, snapshotPose, solveArm, solveLimb, wristFor, type Keyframe } from './rig';
 import { ATTACHMENT_SLOTS, WEAPONS, type Attachments, type WeaponId } from '../../shared/weapons';
 import { GUN_FIT, fitAttachments, vec, type Fitted } from './optics';
 import { BROOM_CHOKE } from './meme';
@@ -34,7 +34,7 @@ const lookOf = (team: number, variant: number) => team === 0 ? SWAT : MILITIA[va
  * (shared/skins.ts `look`), else in rotation. One skinned mesh, one draw call per soldier.
  */
 /** Where the glove holds, from the wrist: metres along the hand and out of the palm. */
-const PALM = [0.08, 0.03];
+const CREW_FORE = [0.22, 0.01], CREW_SHRUG = -0.6, CREW_TWIST = -1.2;
 const MILITIA_TINTS = [0xffffff, 0xd9c7a0, 0xb9c4a2, 0xe6d2b8, 0xc2b79a, 0xa9b0a0];
 const crewMaterials = new Map<number, THREE.Material>();
 /** Which Militia variant a skin asks for, or the next in rotation. */
@@ -677,6 +677,8 @@ export class SoldierView {
     // ---- Two-bone IK: hands onto the weapon ----
     const gripWorld = grip.applyMatrix4(this.gun.matrixWorld);
     let foreWorld = fore.applyMatrix4(this.gun.matrixWorld);
+    // The crew's glove is a full hand: it takes a long gun's handguard further forward than the classic rig's mitten (short guns have no room for that).
+    if (this.crew && fit.kind === 'long') foreWorld.addScaledVector(fwd, Math.max(0, Math.min(CREW_FORE[0], fit.fore[0] - fit.muzzle[0] - 0.12))).addScaledVector(gunUp, CREW_FORE[1]);
     // The knife leaves the support hand at guard by the chest.
     // The broom takes both hands, the left down by the butt.
     if (broom) foreWorld = vec([BROOM_CHOKE - 0.08, 0, 0]).applyMatrix4(this.gun.matrixWorld);
@@ -691,11 +693,19 @@ export class SoldierView {
     this.debug = { chest: chest.clone(), grip: gripWorld.clone(), fore: foreWorld.clone() };
     const aimR = fwd.clone().addScaledVector(gunUp, -0.8).normalize().applyQuaternion(wrist), palmR = right.clone().negate().applyQuaternion(wrist);
     const aimL = knife ? fwd.clone().addScaledVector(gunUp, 0.5).normalize() : fwd.clone().addScaledVector(right, 0.3).normalize(), palmL = knife ? right : gunUp;
-    // The crew's glove closes round the point PALM: its wrist sits behind the grip. (The classic rig takes the grip at the wrist.)
-    const wristAt = (hold: THREE.Vector3, aim: THREE.Vector3, palm: THREE.Vector3) => this.crew ? hold.clone().addScaledVector(aim, -PALM[0]).addScaledVector(palm, -PALM[1]) : hold;
+    // The crew's glove closes round the hold point: its wrist sits behind the grip. (The classic rig takes the grip at the wrist.)
+    const wristAt = (hold: THREE.Vector3, aim: THREE.Vector3, palm: THREE.Vector3) => this.crew ? wristFor(hold, aim, palm) : hold;
+    // The crew's arm is short: the support shoulder comes forward to reach the handguard.
+    if (this.crew && fit.kind === 'long' && !broom) rotateWorld(this.bones.get('clavicle_l')!, up, CREW_SHRUG);
     solveArm(this.bones, 'r', wristAt(gripWorld, aimR, palmR), pole(1));
     solveArm(this.bones, 'l', wristAt(foreWorld, aimL, palmL), pole(-1));
     orientHand(this.bones, 'r', aimR, palmR);
+    // At full reach the forearm comes in from the side: the support hand turns part of the way to it, so the cuff does not pinch.
+    if (this.crew && fit.kind === 'long' && !broom) {
+      const arm = this.bones.get('hand_l')!.getWorldPosition(new THREE.Vector3()).sub(this.bones.get('lowerarm_l')!.getWorldPosition(new THREE.Vector3())).normalize();
+      aimL.lerp(arm, 0.45).normalize();
+      rotateWorld(this.bones.get('lowerarm_l')!, arm, CREW_TWIST);
+    }
     orientHand(this.bones, 'l', aimL, palmL);
     const curl = this.crew ? CREW_CURL : 1;
     curlFingers(this.bones, 'r', (knife ? 0.85 : 0.55) * curl, 0.5);
@@ -715,8 +725,19 @@ const ARM_BONE = /^(upperarm|lowerarm|hand|index|middle|ring|pinky|thumb)_/;
 /**
  * First-person arms cut from the same rigged soldier: only triangles driven by arm bones are kept,
  * so the viewmodel shows the team's sleeves, gloves (SWAT) or bare hands (Militia) posed with IK.
+ * The crew's arms are a model of their own (operator-arms.glb).
  */
 export function createArms(assets: Assets, team: number) {
+  if (assets.crew && assets.crewArms) {
+    // The crew's arms are their own model (the soldier's sleeves and gloves, in more detail), in the soldier's material.
+    const root = SkeletonUtils.clone(assets.crewArms);
+    const bones: Map<string, THREE.Bone> = new Map();
+    root.traverse(o => { if ((o as THREE.Bone).isBone) bones.set(o.name, o as THREE.Bone); });
+    const body = bodyOf(root);
+    body.material = bodyOf(assets.crew.getObjectByName(team === 0 ? 'Swat' : 'Militia')!).material;
+    body.castShadow = false; body.receiveShadow = false; body.frustumCulled = false;
+    return { root, bones, bindPose: snapshotPose(bones) };
+  }
   const kit = gearOf(assets, team);
   const look = lookOf(team, 0);
   const root = SkeletonUtils.clone(assets.soldier.scene);

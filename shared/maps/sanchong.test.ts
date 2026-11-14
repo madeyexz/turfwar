@@ -22,18 +22,16 @@ function walk(nav: NavGraph, a: { x: number; y: number; z: number }, b: { x: num
 const EYE = 1.55;
 
 describe('sanchong: Sanchong (三重), New Taipei', () => {
-  it('is a compact city map for 1v1 and 6v6 in Elimination and Sabotage, not 24v24: about 150 × 115 m', () => {
+  it('is a compact city map for 1v1 and 6v6 in Elimination and Sabotage: about 150 × 115 m', () => {
     const { def } = loadMap('sanchong');
     expect(SANCHONG_NAME_ZH).toBe('三重');
     const b = def.bounds;
     expect(b.maxX - b.minX).toBeGreaterThan(140); expect(b.maxX - b.minX).toBeLessThan(160);
     expect(b.maxZ - b.minZ).toBeGreaterThan(105); expect(b.maxZ - b.minZ).toBeLessThan(135);
-    expect(def.big).toBeFalsy();
     for (const size of [1, 6]) {
       expect(mapsFor(size)).toContain('sanchong');
       expect(mapsFor(size, 'sabotage')).toContain('sanchong');
     }
-    expect(mapsFor(24)).not.toContain('sanchong');
     expect(def.sabotage).toEqual({ sites: ['A', 'B'], attackerSpawn: 1 });
     // Drivable scooters wait at both bases.
     for (const team of [0, 1]) {

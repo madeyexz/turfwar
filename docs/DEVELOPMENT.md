@@ -35,8 +35,8 @@ when a release brings something players will notice: short, player-facing (not a
 languages, with a new `id`.
 
 Lobby URL flags: `?tab=quick|start|join` (the open tab), `?mode=offline|online|lab` (what `&autostart=1`
-starts: Solo, Quick Play or Practice), `&game=elimination|sabotage`, `&size=duel|squad|war` and `&map=<id>`
-(the Start a Server form; a 24v24 map picks 24v24 unless `size` says otherwise), `&room=CODE` (opens Join a
+starts: Solo, Quick Play or Practice), `&game=elimination|sabotage`, `&size=duel|squad` and `&map=<id>`
+(the Start a Server form; a retired map's id opens it in Solo and Practice only), `&room=CODE` (opens Join a
 server with the code filled in; with `autostart` joins it), `&team=0|1|auto`, `&skill=0.25…0.75`, `&name=…`,
 `&autostart=1`, `&server=tw|us` (the game server for this visit; Settings → Server saves a choice).
 發起單挑 challenge links (`src/game/challenge.ts`): `/c?ch=<callsign>&map=<id>&beat=<kills>&ref=<share code>` (older links: `/?c=1&…`)
@@ -58,7 +58,7 @@ keep their map (and mode) while Any rooms rotate (it ends matches early with `sp
 `bun scripts/mapcheck.ts ws://127.0.0.1:<port> <db> <map> <size>` checks two independent clients
 spawn in their bases, walk to a common point without corrections, and replicate a shot that spends
 ammo and damages the target. A false shot origin must be refused or replaced with the shooter's
-own eye. Use `taipei 6`, `xinyi 24`, and `taipei101 6` for the replaced maps. The check stops after
+own eye. Use `taipei 6` and `taipei101 6` for the replaced maps. The check stops after
 180 seconds. Scripted clients and bot tests do not replace human playtesting or a device FPS check.
 `bun scripts/slippercheck.ts ws://127.0.0.1:<port> <db>` (local only) checks the thrown 藍白拖 with two
 identities in a private 1v1 (placed with `spacetime sql`, owner-only): no wind-up does 30, a second throw
@@ -95,8 +95,9 @@ side, camouflage for the Militia, whose six looks are tints (`src/game/crew.ts`,
 and clips of Quaternius' Modular Men (`soldiers.glb`, which only the importer reads, and `soldier-anims.glb`; `bun tools/import-modular.ts`
 with the pack's `Individual Characters/glTF` folder at `MODULAR_SRC`). That importer renames the bones to the Universal Base Characters
 rig's names, so the IK in `src/render/rig.ts` drives both. The store's guns are `public/assets/arsenal.glb` (`bun tools/import-arsenal.ts`).
-After either importer, run `bun tools/make-model-textures.ts`. `?soldiers=classic` brings back the older soldier with procedural gear; first-person arms always
-use that classic soldier.
+After either importer, run `bun tools/make-model-textures.ts`. The first-person arms are the same soldier's sleeves and gloves in more detail
+(`public/assets/operator-arms.glb`, `ARMS=1 bun tools/import-operator.ts`; no textures of its own, it takes the soldier's material).
+`?soldiers=classic` brings back the older soldier with procedural gear, in both views.
 
 The map picker shows a picture of each map (`public/media/maps/<id>.webp`, 480×270, under 40 KB).
 `bun scripts/mapshots.ts [--url <dev server>] [map …]` shoots them from the level preview through the
@@ -126,6 +127,50 @@ bun tools/make-model-textures.ts  # the GLBs' textures; re-run after import-asse
 ```
 
 It also copies three's Basis transcoder into `public/assets/basis/`, so it is versioned like any asset.
+
+### Bot bench
+
+The bots copy the habits of recorded mouse players, and the skill still sets how strong a bot is
+(`shared/match/bots.ts`: when a bot notices an enemy, how its hand turns the view, the aim error, bursts and
+recoil, the sights, standing still, sprint). They buy from a table of the players' choices (`BOT_BUY` in
+`shared/match/economy.ts`), and in Elimination they go where the players stay (`shared/match/places.ts`).
+
+`bun scripts/botbench.ts` (about one minute; `--rounds`, `--matches`, `--seed`, `--skill`) plays bot-only 6v6
+rooms in the shared simulation and prints the bots next to the players' totals in `scripts/botbench/human.json`.
+Run it before and after a change to the bots, the buy table or the places, and compare the two outputs.
+
+- **Part 1, the aim.** All bots carry the MP5 on taipei, because the players' windows have that map and
+  weapon (2,203 windows of 88 mouse players). A window is 3 s of one soldier with an enemy in sight for 0.5 s
+  or more, and it has 26 features (how far and how fast the view turns, the pitch, shots, hits, the sights).
+  "Distance to the players" is, for each feature, the Wasserstein-1 distance between the bots' values and the
+  players' values divided by the players' standard deviation, as a mean of the 26 features. Two groups of
+  players are 0.13 apart (0.10 to 0.18): no bot can do better than that. "Farthest features" are the next
+  things to work on.
+- **Part 2, full matches.** Online rules with the store on taipei, ochre and memorial: the primaries that the
+  bots carry, how they shoot and how they move, each next to the players' number, and the share of the
+  rounds that team 0 wins on each map (the two sides of a map are not equal, and the bots must not make that worse).
+
+The bench compares habits. It does not show how strong the bots are against people, and equal numbers do
+not prove that a bot looks like a person: play a Solo match against them too. Bots at a high skill are
+weaker than before 2026-11-13, because their hits now depend on the weapon's spread and recoil as a player's do.
+In bot-only duels against the script of before at the same skill (0.3, all with the MP5), the bots take about
+half of the kills on taipei, ochre and memorial together, but about 0.35 on taipei and 0.6 on ochre: they walk,
+spread out and stand still to shoot, and the script of before ran at the enemy in a group. A longer sprint out
+of the base helps one side of taipei and puts the sprint time above the mouse players'. If the bots are too
+easy or too hard for the players, change `botSkill` (`shared/match/state.ts`).
+
+`human.json` and `places.ts` are totals of the clean-v2 recordings of 2026-10-15 to 2026-11-10
+([docs/RECORDING.md](RECORDING.md)): the aim and the shooting are from 42 h of aim-clean mouse play, the
+movement from 40 h of mouse play and 75 h of touch play, the buying from 23,370 soldier-rounds, and the places
+from 6v6 Elimination after the first 10 s of a round (0.7 to 4.7 h per map side). They hold no player ids
+and no data of one player. The scripts that made them read the private recordings; they are in `tools/botlab/`
+(its README says how to run them), without any recording or trained weight.
+
+`places.ts` has 11 maps; a map that is not there (Meridian and the other maps with too little play) uses
+its landmarks. The test "bots can walk from their base to every place of the recorded players" fails when a
+map changes and a place has no nav node at it (within 4 m, and 2.5 m in height) or no path from the base.
+Then remove the four numbers of that place from `places.ts` and add its weight to another place of the same
+side, so that the side still sums to `PLACE_WEIGHTS`. After a new layout, remove the map from the table.
 
 ## Deploy
 

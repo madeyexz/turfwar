@@ -1,0 +1,28 @@
+	.lc {
+		display: block;
+		overflow: visible;
+		outline: none;
+		touch-action: pan-y;
+	}
+	.lc:focus-visible {
+		outline: 2px solid var(--link);
+		outline-offset: 1px;
+	}
+	.lc text {
+		font-size: 11px;
+		fill: var(--muted-foreground);
+		font-variant-numeric: tabular-nums;
+	}
+	.lc .halo {
+		paint-order: stroke;
+		stroke: var(--background);
+		stroke-width: 3px;
+	}
+	.key {
+		display: flex;
+		flex-wrap: wrap;
+		gap: 4px 16px;
+		margin: 0 0 8px;
+		font-size: 12px;
+		font-variant-numeric: tabular-nums;
+	}

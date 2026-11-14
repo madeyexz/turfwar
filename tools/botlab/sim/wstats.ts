@@ -1,0 +1,2 @@
+import { weaponStats, WEAPON_IDS } from './shared/weapons';
+for (const id of WEAPON_IDS) { const w = weaponStats(id as never); console.log(id, JSON.stringify({ interval: +w.interval.toFixed(3), auto: w.auto, range: w.range, spread: w.spread, recoil: { pitch: +w.recoil.pitch.toFixed(2), yaw: +w.recoil.yaw.toFixed(2), recover: w.recoil.recover }, dmg: w.damage, botRange: w.botRange, adsTime: w.adsTime })); }

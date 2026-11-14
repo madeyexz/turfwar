@@ -27,19 +27,17 @@ function walk(nav: NavGraph, a: { x: number; y: number; z: number }, b: { x: num
 const onRing = (x: number, z: number) => Math.abs(x) > 68 || Math.abs(z) > 50;
 
 describe('taipei: Ximending (西門町), our own layout', () => {
-  it('is a compact city map for 1v1 and 6v6 in Elimination and Sabotage, not 24v24: about 162 × 132 m', () => {
+  it('is a compact city map for 1v1 and 6v6 in Elimination and Sabotage: about 162 × 132 m', () => {
     const { def } = loadMap(ID);
     expect(XIMENDING_NAME_ZH).toBe('西門町');
     expect(def.name).toBe('Taipei'); // unchanged: the lobby lists the map as Taipei (西門町 in Chinese)
     const b = def.bounds;
     expect(b.maxX - b.minX).toBeGreaterThan(150); expect(b.maxX - b.minX).toBeLessThan(170);
     expect(b.maxZ - b.minZ).toBeGreaterThan(120); expect(b.maxZ - b.minZ).toBeLessThan(140);
-    expect(def.big).toBeFalsy();
     for (const size of [1, 6]) {
       expect(mapsFor(size)).toContain(ID);
       expect(mapsFor(size, 'sabotage')).toContain(ID);
     }
-    expect(mapsFor(24)).not.toContain(ID);
     expect(def.sabotage).toEqual({ sites: ['A', 'B'], attackerSpawn: 1 });
     expect(def.points.map(p => p.id)).toEqual(['A', 'B', 'C', 'D', 'E']);
     // Cars, scooters and the helicopter.

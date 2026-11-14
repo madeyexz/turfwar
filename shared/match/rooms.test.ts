@@ -8,12 +8,12 @@ const any = (size = 6): RoomFilter => ({ size, mode: '', map: '' });
 const seeded = (seed: number) => () => ((seed = (seed * 1103515245 + 12345) % 2 ** 31) / 2 ** 31);
 
 describe('maps per room size', () => {
-  it('24v24 plays only big maps; 1v1 and 6v6 every other map; retired maps nowhere', () => {
-    const big = PLAYABLE_MAP_IDS.filter(id => loadMap(id).def.big);
-    expect(big.length).toBeGreaterThan(0);
-    expect(mapsFor(24).sort()).toEqual([...big].sort());
-    for (const size of [1, 6]) expect(mapsFor(size).sort()).toEqual(PLAYABLE_MAP_IDS.filter(id => !loadMap(id).def.big).sort());
+  it('1v1 and 6v6 play every playable map; retired maps (Meridian and Xinyi too) and the removed 24v24 nowhere', () => {
+    expect(ROOM_SIZES.map(s => s.perTeam)).toEqual([1, 6]);
+    for (const size of [1, 6]) expect(mapsFor(size)).toEqual([...PLAYABLE_MAP_IDS]);
     for (const s of ROOM_SIZES) for (const id of RETIRED_MAPS) expect(mapsFor(s.perTeam)).not.toContain(id);
+    for (const id of ['meridian', 'xinyi']) { expect(RETIRED_MAPS.has(id)).toBe(true); expect(loadMap(id).def.id).toBe(id); }
+    expect(mapsFor(24)).toEqual([]);
     expect(filterError({ size: 6, mode: '', map: 'crane' })).toBeTruthy();
   });
 
@@ -28,12 +28,12 @@ describe('maps per room size', () => {
 
   it('validates filters the way the server does', () => {
     expect(filterError({ size: 6, mode: '', map: '' })).toBeUndefined();
-    expect(filterError({ size: 24, mode: 'sabotage', map: 'meridian' })).toBeUndefined();
+    expect(filterError({ size: 24, mode: 'sabotage', map: 'meridian' })).toBe('Unknown room size');
+    expect(filterError({ size: 24, mode: '', map: '' })).toBe('Unknown room size');
     expect(filterError({ size: 6, mode: 'elimination', map: 'taipei' })).toBeUndefined();
     expect(filterError({ size: 5, mode: '', map: '' })).toBe('Unknown room size');
     expect(filterError({ size: 6, mode: 'domination', map: '' })).toBe('Unknown mode');
     expect(filterError({ size: 6, mode: '', map: 'meridian' })).toBe('That map does not host this room');
-    expect(filterError({ size: 24, mode: '', map: 'crane' })).toBe('That map does not host this room');
     expect(filterError({ size: 6, mode: '', map: 'nowhere' })).toBe('That map does not host this room');
     const noSites = mapsFor(6).find(id => !hasSites(id))!;
     expect(filterError({ size: 6, mode: 'sabotage', map: noSites })).toBe('That map does not host this room');
@@ -42,9 +42,8 @@ describe('maps per room size', () => {
 
 describe('Play Online matchmaking', () => {
   it('Any picks the fullest open room of the size, as Quick Play always has', () => {
-    const rooms = [room({ room: 0, humans: 3 }), room({ room: 1, humans: 7, mapId: 'tower' }), room({ room: 2, humans: 9, size: 24, mapId: 'meridian' })];
+    const rooms = [room({ room: 0, humans: 3 }), room({ room: 1, humans: 7, mapId: 'tower' }), room({ room: 2, humans: 9, size: 1 })];
     expect(pickRoom(rooms, any())?.room).toBe(1);
-    expect(pickRoom(rooms, any(24))?.room).toBe(2);
     expect(pickRoom(rooms, any(1))).toBeUndefined();
   });
 
@@ -131,7 +130,12 @@ describe('new rooms and rotation', () => {
       seen.add(n.mapId); at = n.mapId;
     }
     expect(seen.size).toBe(mapsFor(6, 'sabotage').length);
-    expect(nextRoomRules('meridian', 'elimination', 24, { fixedMode: true }).mode).toBe('elimination');
+  });
+
+  it('a stored room of the removed 24v24 size stays on its map (no size plays it) and never throws', () => {
+    expect(nextRoomRules('meridian', 'elimination', 24)).toEqual({ mapId: 'meridian', mode: 'sabotage' });
+    expect(nextRoomRules('xinyi', 'sabotage', 24)).toEqual({ mapId: 'xinyi', mode: 'elimination' });
+    expect(nextRoomRules('meridian', 'sabotage', 24, { fixedMode: true })).toEqual({ mapId: 'meridian', mode: 'sabotage' });
   });
 
   it('a fixed map and mode replay', () => {
@@ -147,6 +151,12 @@ describe('Quick Play (anything open)', () => {
       room({ room: 2, size: 24, humans: 3, mapId: 'meridian' }),
     ];
     expect(pickAnyRoom(rooms)?.room).toBe(1);
+  });
+
+  it('never puts anyone in a stored room of the removed 24v24 size, even the fullest', () => {
+    const rooms = [room({ room: 0, size: 24, humans: 9, mapId: 'meridian' }), room({ room: 1, size: 6, humans: 2 })];
+    expect(pickAnyRoom(rooms)?.room).toBe(1);
+    expect(pickAnyRoom(rooms.slice(0, 1))).toBeUndefined();
   });
 
   it('opens a new 6v6 room with bots, on a random map and mode, when nothing is open', () => {
@@ -181,15 +191,16 @@ describe('Quick Play (anything open)', () => {
 describe('Start a server', () => {
   it('validates size, mode and map the way the server does', () => {
     expect(startRoomError({ size: 6, mode: 'sabotage', map: 'taipei' })).toBeUndefined();
-    expect(startRoomError({ size: 24, mode: 'elimination', map: 'meridian' })).toBeUndefined();
+    expect(startRoomError({ size: 24, mode: 'elimination', map: 'meridian' })).toBe('Unknown room size');
     expect(startRoomError({ size: 5, mode: 'elimination', map: 'taipei' })).toBe('Unknown room size');
     expect(startRoomError({ size: 6, mode: '', map: 'taipei' })).toBe('Unknown mode');
     expect(startRoomError({ size: 6, mode: 'capture', map: 'taipei' })).toBe('Unknown mode');
     expect(startRoomError({ size: 6, mode: 'elimination', map: '' })).toBe('That map does not host this room');
     expect(startRoomError({ size: 6, mode: 'elimination', map: 'nowhere' })).toBe('That map does not host this room');
-    // 24v24 plays big maps only, and a small room no big map.
-    expect(startRoomError({ size: 24, mode: 'elimination', map: 'taipei' })).toBe('That map does not host this room');
+    // 24v24 was removed, and its two big maps retired with it.
+    expect(startRoomError({ size: 24, mode: 'elimination', map: 'taipei' })).toBe('Unknown room size');
     expect(startRoomError({ size: 6, mode: 'elimination', map: 'meridian' })).toBe('That map does not host this room');
+    expect(startRoomError({ size: 1, mode: 'sabotage', map: 'xinyi' })).toBe('That map does not host this room');
     // Sabotage needs bomb sites.
     const noSites = mapsFor(6).find(id => !hasSites(id))!;
     expect(startRoomError({ size: 6, mode: 'sabotage', map: noSites })).toBe('That map does not host this room');

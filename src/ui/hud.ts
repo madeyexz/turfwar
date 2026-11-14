@@ -460,7 +460,7 @@ export class Hud {
   /**
    * Touch screens: the score bar shares the top edge with the round buttons (menu, scoreboard, chat,
    * store, wherever the player put them), so it shrinks to the room between them, and when the soldier
-   * chips would get too small to read (6v6 on a small phone, every 24v24) it drops them and keeps the
+   * chips would get too small to read (6v6 on a small phone) it drops them and keeps the
    * scores and the clock. Twice a second is plenty: it changes with the roster, the layout or a turn.
    */
   private fitScoreBar() {
@@ -621,7 +621,7 @@ export class Hud {
   scoreboard(show: boolean, state: MatchState, myId: number) {
     const wasHidden = this.el.board.hidden;
     this.el.board.hidden = !show;
-    // Touch screens lift the open board over the controls so a finger can scroll a 24-a-side list.
+    // Touch screens lift the open board over the controls so a finger can scroll a long list.
     if (wasHidden === show) document.body.classList.toggle('hud-board', show);
     const now = performance.now();
     if (!show || (!wasHidden && now - this.boardAt < 250)) return;

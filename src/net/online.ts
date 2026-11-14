@@ -1,7 +1,7 @@
 import type { Identity, Infer } from 'spacetimedb';
 import type { Vec3 } from '../../shared/math';
 import type { ClientReport, MatchEvent, MatchState, Mode, ShotClaim, Soldier, Team, VehicleReport } from '../../shared/match/state';
-import { sizeLabel, type RoomView } from '../../shared/match/rooms';
+import { isRoomSize, sizeLabel, type RoomView } from '../../shared/match/rooms';
 import type { Body } from '../../shared/world';
 import { maxSlack, type Vehicle } from '../../shared/vehicles';
 import type { CareerStats, GameLink } from '../game/link';
@@ -564,6 +564,8 @@ export function watchRooms(onChange: (rooms: PublicRoom[]) => void, lost: () => 
     for (const r of conn.db.match.iter()) {
       let config: { mode?: Mode; teamSize?: number; fixedMap?: boolean; fixedMode?: boolean; noBots?: boolean } = {};
       try { config = JSON.parse(r.configJson); } catch { /* malformed row: listed with defaults */ }
+      // A room of a removed size (24v24) plays on until it empties, but takes no one new: not listed.
+      if (!isRoomSize(config.teamSize ?? 6)) continue;
       rooms.push({
         room: r.id, mapId: r.mapId, mode: config.mode === 'sabotage' ? 'sabotage' : 'elimination', size: config.teamSize ?? 6, humans: r.humans,
         phase: r.phase, round: r.score0 + r.score1 + 1, fixedMap: !!config.fixedMap, fixedMode: !!config.fixedMode, noBots: !!config.noBots, server: uri,

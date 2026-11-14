@@ -22,7 +22,7 @@ describe('score bar on touch screens', () => {
     expect(fit.scale * 608).toBeLessThanOrEqual(scoreBarRoom(844, topButtons(844)) + 1e-6);
   });
 
-  it('24v24 drops the chips and shows the scores and clock at the usual size', () => {
+  it('a roster too wide for the room drops the chips and shows the scores and clock at the usual size', () => {
     const fit = scoreBarFit(scoreBarRoom(844, topButtons(844)), 908, () => 224);
     expect(fit).toEqual({ scale: SCORE_BAR_MAX, tight: true });
   });

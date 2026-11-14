@@ -37,7 +37,7 @@
 
 ## About
 
-Turf War: Taipei is an open-source, browser-first team shooter. Two teams of up to 24 fight short,
+Turf War: Taipei is an open-source, browser-first team shooter. Two teams of up to six fight short,
 one-life rounds across Taipei — Ximending's neon streets, an office floor 383 m up Taipei 101, the
 Chiang Kai-shek Memorial Hall — with cash, a store and weapon attachments in the spirit of the classic
 browser shooter *BeGone*. It runs on TypeScript and Three.js in the browser and a server-authoritative
@@ -49,7 +49,7 @@ browser shooter *BeGone*. It runs on TypeScript and Three.js in the browser and 
 
 - **Two modes:** *Elimination* and *Sabotage* (Militia arms the bomb at site A or B; SWAT defends or
   disarms). First to 10 rounds, one life per round, a 4 s freeze and 20 s of buy time.
-- **Fourteen maps:** Ximending (西門町), Taipei 101 · Xinyi, Taipei 101 · 88F with its tuned mass damper,
+- **Twelve maps:** Ximending (西門町), Taipei 101 · 88F with its tuned mass damper,
   Memorial Hall (中正紀念堂), Sanchong (三重) across the river, the photoscanned Back Alley (後巷), homages to BeGone's maps and original
   battlefields — see [Maps](docs/GAMEPLAY.md#maps).
 - **Vehicles:** cars and taxis with handbrake drifts, scooters you can shoot from, and a helicopter.
@@ -58,7 +58,7 @@ browser shooter *BeGone*. It runs on TypeScript and Three.js in the browser and 
 
 **Multiplayer**
 
-- **Rooms of every size:** 1v1, 6v6 and 24v24. *Quick play* joins the fullest open room, *Start a server*
+- **Two room sizes:** 1v1 and 6v6. *Quick play* joins the fullest open room, *Start a server*
   opens a public room or a private one with a 4-letter code, and *Join a server* lists every live room with its ping.
 - **Bots fill empty slots,** online and offline, at three difficulties.
 - **Server-authoritative:** damage, cash, purchases, rounds and the bomb run on the server; movement is
@@ -81,7 +81,7 @@ browser shooter *BeGone*. It runs on TypeScript and Three.js in the browser and 
   </tr>
   <tr>
     <td><img src="docs/media/screenshot-memorial-hall.jpg" alt="Memorial Hall: the white hall and its grand staircase seen from Liberty Square"><br><sub><b>Memorial Hall</b> (中正紀念堂): the grand staircase from Liberty Square</sub></td>
-    <td><img src="docs/media/screenshot-xinyi.jpg" alt="Taipei 101 seen from the authored Xinyi plaza"><br><sub><b>Xinyi</b>: the plaza beside Taipei 101</sub></td>
+    <td><img src="docs/media/screenshot-xinyi.jpg" alt="Taipei 101 seen from the authored Xinyi plaza"><br><sub><b>Xinyi</b> (retired with 24v24): the plaza beside Taipei 101</sub></td>
   </tr>
 </table>
 
@@ -117,7 +117,7 @@ bun run typecheck:module # the SpacetimeDB server module
 
 ```text
 shared/          Simulation shared by the browser and the server: movement, collision,
-  maps/          weapons, vehicles, bots, rounds and the fourteen maps
+  maps/          weapons, vehicles, bots, rounds and the maps (twelve offered, eight retired)
   match/         Match state, economy, rooms, the packed per-tick frame and the tick itself
 spacetimedb/     The SpacetimeDB server module: tables, reducers, admin views, scheduled tick
 src/             The browser game: rendering, HUD, input, audio, lobby, online client
@@ -217,7 +217,7 @@ texture, sound and line of code here is original or CC0/OFL.
   meshopt-compressed); see `public/assets/LICENSE.txt`.
 - Soldiers: *Soldier* by Grab3D — CC0 1.0; its licence file states that the base mesh and textures are
   AI-assisted (generated with Meshy). `tools/import-operator.ts` converts it into `public/assets/operator.glb`
-  (a navy SWAT uniform and the Militia's camouflage). It moves on the skeleton and the idle, walk, run and death
+  (a navy SWAT uniform and the Militia's camouflage) and its sleeves and gloves into `public/assets/operator-arms.glb` (the first-person arms). It moves on the skeleton and the idle, walk, run and death
   animations of Quaternius' *Ultimate Modular Men* — CC0 1.0 (https://quaternius.com/packs/ultimatemodularcharacters.html;
   `tools/import-modular.ts`, `soldiers.glb` and `soldier-anims.glb`). `?soldiers=classic` brings back the
   Universal Base Characters soldier.

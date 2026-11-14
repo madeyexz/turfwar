@@ -1,0 +1,2 @@
+import { WEAPONS } from '/home/user/workspace/repo/shared/weapons';
+for (const w of Object.values(WEAPONS) as any[]) console.log(w.id.padEnd(7), w.class.padEnd(8), 'int', w.interval.toFixed(3), 'mag', w.magazine, 'dmg', JSON.stringify(w.damage), 'range', w.range, 'botRange', w.botRange, 'spd', w.speed, 'spread', JSON.stringify(Object.fromEntries(Object.entries(w.spread).map(([k, v]: any) => [k, +v.toFixed(2)]))), 'recoil', w.recoil.pitch.toFixed(2), w.recoil.adsPitch.toFixed(2), w.recoil.yaw.toFixed(2), 'ads', w.adsTime, 'price', w.price, 'auto', w.auto);

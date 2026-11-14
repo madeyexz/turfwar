@@ -10,7 +10,7 @@
  * With the dev server running (`bun run dev`, or `bunx vite --port 5217`):
  *
  *   bun scripts/mapshots.ts                         # every map, dev server at http://127.0.0.1:5173
- *   bun scripts/mapshots.ts --url http://127.0.0.1:5217 taipei xinyi
+ *   bun scripts/mapshots.ts --url http://127.0.0.1:5217 taipei alley
  *   bun scripts/mapshots.ts --out /tmp/try 'taipei@40,30,60@0,0,0@55'   # try a camera (cam@look@fov)
  */
 import { mkdirSync, writeFileSync } from 'node:fs';
@@ -20,7 +20,7 @@ type Vec = [number, number, number];
 interface Shot { id: string; cam: Vec; look: Vec; fov?: number; note: string }
 
 /**
- * One camera per playable map (shared/maps/index.ts PLAYABLE_MAP_IDS: the 24v24 maps included), in
+ * One camera per playable map (shared/maps/index.ts PLAYABLE_MAP_IDS), in
  * metres (+x east, +z south). Keep the sky's moon (towards -x, -z, 31° up) out of frame: it reads as
  * a dark blot at this size.
  */
@@ -32,9 +32,7 @@ export const SHOTS: readonly Shot[] = [
   { id: 'citadel', cam: [40, 18, 32], look: [0, 7, 0], note: 'the hilltop keep' },
   { id: 'railyard', cam: [55, 16, -40], look: [0, 2, 8], note: 'the freight yard and its ramps' },
   { id: 'skyline', cam: [56, 54, 58], look: [0, 33, 0], note: 'the rooftops above the city' },
-  { id: 'meridian', cam: [-160, 75, 100], look: [-30, 0, -10], note: 'the downtown blocks and the tower' },
   { id: 'taipei', cam: [-70, 45, 70], look: [-10, 0, 0], fov: 60, note: "Ximending's neon lanes and the Red House" },
-  { id: 'xinyi', cam: [140, 70, 160], look: [-60, 200, 6], fov: 60, note: 'Taipei 101 over Xinyi at night' },
   { id: 'taipei101', cam: [8, 6.8, 8], look: [0, 5.4, 0], fov: 65, note: "88F's damper hall from the 89F gallery" },
   { id: 'memorial', cam: [60, 16, 34], look: [-14, 6, 0], note: 'the Memorial Hall and its blue roof' },
   { id: 'sanchong', cam: [-36, 8, -39], look: [14, 3.5, -45], fov: 50, note: 'down the main street to the temple' },

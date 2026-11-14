@@ -7,13 +7,14 @@
  * textures were generated with Meshy, then rigged). Download the rigged GLB into its own directory:
  *
  *   OPERATOR_SRC=/path/soldier-rigged.glb bun tools/import-operator.ts
+ *   ARMS=1 OPERATOR_SRC=/path/soldier-rigged.glb bun tools/import-operator.ts   (operator-arms.glb, the first-person arms)
  *   then `bun tools/make-model-textures.ts` (moves the textures out to assets/modeltex as KTX2).
  *
  * The skeleton comes from public/assets/soldiers.glb (tools/import-modular.ts). The source has other
  * bones, an A-pose and other proportions, so its mesh is posed onto the crew's bind pose: each source
  * bone moves to a target point, turns to the crew bone's direction and stretches along its length;
  * then each vertex takes the crew joints of its source bones. The glove's fingers are
- * curled to a grip here (the crew's clips do not move fingers).
+ * curled to a grip here and the thumb closes under them (the crew's clips do not move fingers).
  */
 import { Document, NodeIO, type Accessor, type Node } from '@gltf-transform/core';
 import { ALL_EXTENSIONS } from '@gltf-transform/extensions';
@@ -26,7 +27,9 @@ import { join } from 'node:path';
 
 const SRC = process.env.OPERATOR_SRC ?? '/tmp/operator-src/soldier-rigged.glb';
 const ASSETS = join(import.meta.dir, '../public/assets');
-const TRIS = 14000, SIZE = 1024;
+/** `ARMS=1` writes operator-arms.glb instead: the sleeves and gloves alone, in the detail the first-person view needs. */
+const ARMS = !!process.env.ARMS;
+const TRIS = ARMS ? 110000 : 14000, SIZE = 1024;
 
 await Promise.all([MeshoptEncoder.ready, MeshoptDecoder.ready, MeshoptSimplifier.ready]);
 const io = new NodeIO().registerExtensions(ALL_EXTENSIONS).registerDependencies({ 'meshopt.encoder': MeshoptEncoder, 'meshopt.decoder': MeshoptDecoder });
@@ -143,7 +146,7 @@ const torso = (name: string) => {
 const ankle = (side: 'l' | 'r', name: string) => { const f = at(`foot_${side}`); return new Vector3(f.x, GROUND + sPos.get(name)!.y, f.z - 0.03); };
 interface Bone { target: Vector3; to: Record<string, number>; child?: string; like?: string; turn?: string; scale?: number }
 /** The glove is a little larger than the source's (it reads better at range); REACH would move its wrist past the crew's wrist joint. */
-const REACH = 0, HAND = 1.1, ROLL = -Math.PI / 2;
+const REACH = 0, HAND = 1.1, ROLL = Math.PI / 2, THUMB = 0.6;
 const BONES: Record<string, Bone> = {
   Hips: { target: torso('Hips'), to: { Hips: 1 }, child: 'Spine02' },
   Spine02: { target: torso('Spine02'), to: { spine_02: 1 }, child: 'Spine01' },
@@ -225,12 +228,19 @@ for (let i = 0; i < count; i++) {
     const share = out.get(jointIndex.get(`hand_${s}`)!) ?? 0;
     if (share <= 0) continue;
     const dir = Math.sign(at(`hand_${s}`).x), wrist = at(`hand_${s}`).add(new Vector3(dir * REACH, 0, 0));
-    // The posed glove has its thumb down: roll it (the cuff twists with it) so the palm is down and the thumb in front, as on the crew's hand.
+    // The posed glove has its palm to the back: roll it (the cuff twists with it) so the palm is down and the thumb in front, as on the crew's hand.
     const roll = new Matrix4().makeTranslation(0, wrist.y, wrist.z).multiply(new Matrix4().makeRotationX(ROLL * share)).multiply(new Matrix4().makeTranslation(0, -wrist.y, -wrist.z));
     sum.applyMatrix4(roll); nsum.transformDirection(roll);
     if (share < 0.5) continue;
+    // The thumb stands off the palm, in front of it and below: bring it in under the fingers, so the hand closes round what it holds.
+    const off = (sum.z - wrist.z - (sum.y - wrist.y)) / Math.SQRT2, thumb = Math.min(1, Math.max(0, (off - 0.055 * HAND) / (0.03 * HAND)));
+    if (thumb > 0) {
+      const y = wrist.y - 0.02 * HAND, z = wrist.z + 0.045 * HAND;
+      const close = new Matrix4().makeTranslation(0, y, z).multiply(new Matrix4().makeRotationX(THUMB * thumb)).multiply(new Matrix4().makeTranslation(0, -y, -z));
+      sum.applyMatrix4(close); nsum.transformDirection(close);
+      if (thumb > 0.5) continue;
+    }
     // The posed hand runs along X, palm down: knuckles at about 0.085 m of the source's hand, fingertips at about 0.19 m. The thumb is in front (+Z).
-    if (sum.z - wrist.z > 0.045 * HAND && (sum.x - wrist.x) * dir < 0.12 * HAND) continue;
     for (const [joint, angle] of [[0.125, 1.1], [0.085, 0.9]]) {
       const knuckle = joint * HAND, f = Math.min(1, Math.max(0, ((sum.x - wrist.x) * dir - knuckle + 0.01) / 0.02));
       if (f <= 0) continue;
@@ -299,6 +309,37 @@ const attrs = {
   POSITION: acc('VEC3', pos), NORMAL: acc('VEC3', nor), TEXCOORD_0: acc('VEC2', new Float32Array(UV.getArray()!)),
   JOINTS_0: acc('VEC4', jnt), WEIGHTS_0: acc('VEC4', wgt),
 };
+if (ARMS) {
+  // Only the triangles that arm bones drive, on one root, without textures (the view takes the soldier's material).
+  const arm = crewJoints.map(name => /^(upperarm|lowerarm|hand|index|middle|ring|pinky|thumb)_/.test(name));
+  const isArm = (i: number) => { let best = 0; for (let k = 1; k < 4; k++) if (wgt[i * 4 + k] > wgt[i * 4 + best]) best = k; return arm[jnt[i * 4 + best]]; };
+  const all = prim.getIndices()!.getArray()!, map = new Map<number, number>(), kept: number[] = [];
+  for (let t = 0; t < all.length; t += 3) {
+    if (!isArm(all[t]) || !isArm(all[t + 1]) || !isArm(all[t + 2])) continue;
+    for (let k = 0; k < 3; k++) { const i = all[t + k]; if (!map.has(i)) map.set(i, map.size); kept.push(map.get(i)!); }
+  }
+  const pick = <T extends Float32Array | Uint16Array>(from: T, size: number) => { const to = new (from.constructor as new (n: number) => T)(map.size * size); for (const [i, j] of map) for (let k = 0; k < size; k++) to[j * size + k] = from[i * size + k]; return to; };
+  const p = doc.createPrimitive().setMaterial(doc.createMaterial('OperatorArms').setRoughnessFactor(1).setMetallicFactor(0)).setIndices(acc('SCALAR', new Uint32Array(kept)));
+  p.setAttribute('POSITION', acc('VEC3', pick(pos, 3))).setAttribute('NORMAL', acc('VEC3', pick(nor, 3))).setAttribute('TEXCOORD_0', acc('VEC2', pick(new Float32Array(UV.getArray()!), 2)))
+    .setAttribute('JOINTS_0', acc('VEC4', pick(jnt, 4))).setAttribute('WEIGHTS_0', acc('VEC4', pick(wgt, 4)));
+  const bones = new Map<string, Node>();
+  const copy = (node: Node): Node => {
+    const c = doc.createNode(node.getName()).setTranslation(node.getTranslation()).setRotation(node.getRotation()).setScale(node.getScale());
+    bones.set(node.getName(), c);
+    for (const k of node.listChildren()) if (!k.getMesh()) c.addChild(copy(k));
+    return c;
+  };
+  const root = copy(crewRoot).setName('Arms');
+  const skin = doc.createSkin().setInverseBindMatrices(acc('MAT4', new Float32Array(ibms.flatMap(m => m.toArray()))));
+  for (const j of crewJoints) skin.addJoint(bones.get(j)!);
+  bones.get('CharacterArmature')!.addChild(doc.createNode('Soldier').setMesh(doc.createMesh('Soldier').addPrimitive(p)).setSkin(skin));
+  scene.addChild(root);
+  // This material has no textures: prune would drop the texture coordinates, and quantized ones would need a transform on a texture.
+  await doc.transform(quantize({ pattern: /^(?!TEXCOORD)/, quantizeWeight: 8, quantizePosition: 14, quantizeNormal: 10 }), dedup(), prune({ keepAttributes: true }), meshopt({ encoder: MeshoptEncoder, level: 'medium' }));
+  await io.write(join(ASSETS, 'operator-arms.glb'), doc);
+  console.log(`wrote operator-arms.glb: ${kept.length / 3} triangles, ${map.size} vertices`);
+  process.exit(0);
+}
 const indices = acc('SCALAR', new Uint32Array(prim.getIndices()!.getArray()!));
 const ibm = acc('MAT4', new Float32Array(ibms.flatMap(m => m.toArray())));
 for (const [name, colorBytes] of [['Swat', textures.swat], ['Militia', textures.militia]] as const) {

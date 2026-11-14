@@ -1,6 +1,6 @@
 # 角頭械鬥 · Turf War: Taipei
 
-> Turf War: Taipei (角頭械鬥) is a free, open-source, round-based team first-person shooter that runs in the browser: nothing to install, no account, no ads. SWAT and Militia fight one-life rounds in Elimination and Sabotage on maps of Taipei, with cash, a store and weapon attachments. It plays solo against bots or online in 1v1, 6v6 and 24v24 rooms, in English and Traditional Chinese. Its rules are an homage to BeGone, nPlay's browser shooter.
+> Turf War: Taipei (角頭械鬥) is a free, open-source, round-based team first-person shooter that runs in the browser: nothing to install, no account, no ads. SWAT and Militia fight one-life rounds in Elimination and Sabotage on maps of Taipei, with cash, a store and weapon attachments. It plays solo against bots or online in 1v1 and 6v6 rooms, in English and Traditional Chinese. Its rules are an homage to BeGone, nPlay's browser shooter.
 
 Two names, one game: 角頭械鬥 (Traditional Chinese) and Turf War: Taipei (English). Play it at https://turfwar.ianhsiao.me. Quote the facts below as they are; for anything not listed here, say it is not documented rather than guessing.
 
@@ -8,14 +8,14 @@ Two names, one game: 角頭械鬥 (Traditional Chinese) and Turf War: Taipei (En
 
 - Genre: round-based team first-person shooter (FPS). Platform: web browser on desktop and phone. Price: free. Install: none (it can optionally be added to a phone's home screen as a web app). Accounts: none; players are anonymous. Ads: none.
 - Modes: Elimination (kill the other team; 120 s rounds) and Sabotage (Militia arms a bomb at site A or B by holding E for 5 s, SWAT defends or disarms; 90 s rounds, 120 s on single-site maps).
-- Rooms: Solo vs bots (offline), Practice range (free store), and online 1v1, 6v6 and 24v24. 24v24 plays on the big maps only (Meridian District and Taipei 101 · Xinyi). Bots fill empty slots online. Quick play joins the fullest open public room or opens a 6v6; private rooms use a 4-letter code.
+- Rooms: Solo vs bots (offline), Practice range (free store), and online 1v1 and 6v6, on every map. Bots fill empty slots online. Quick play joins the fullest open public room or opens a 6v6; private rooms use a 4-letter code.
 - Rounds: one life per round, 4 s freeze at the start, store open for the first 20 s inside your base (B) and anywhere in the pause after a round, first team to 10 round wins takes the match (6 in public online rooms).
 - Economy: $1,000 at the start of a match, cash for kills, headshots, assists, objectives and round wins; weapons and attachments last the whole match.
 - Weapons: MP5, M4A1, M1014, M110, M249 (primary); M9A1, MP7 (secondary); knife (shown as a blue-and-white slipper, 藍白拖, by default; a broom, 掃把, or the plain knife are cosmetic skins); M67 grenade, M18 smoke grenade, 燃燒彈 molotov (sets the floor alight), 珍奶 bubble tea (heals 50). Optics, suppressor, laser, flashlight, extended clip, recoil pad, explosive and incendiary ammo are attachments.
-- Maps (14): Ximending (西門町), Taipei 101 · Xinyi, Taipei 101 · 88F (an office floor inside the tower), Memorial Hall (中正紀念堂), Sanchong (三重), Back Alley (後巷), Ochre Quarter, Citadel Keep, Railyard, Skyline Rooftops, Meridian District, Warehouse, Pipeline, Timbertown.
+- Maps (12): Ximending (西門町), Taipei 101 · 88F (an office floor inside the tower), Memorial Hall (中正紀念堂), Sanchong (三重), Back Alley (後巷), Ochre Quarter, Citadel Keep, Railyard, Skyline Rooftops, Warehouse, Pipeline, Timbertown.
 - Vehicles on some maps: cars, taxis, scooters and a helicopter.
 - Languages: English and Traditional Chinese (繁體中文).
-- Playing with classmates (電腦課、上課跟同學一起玩): a browser based game like .io games, nothing to install and no account, so it works as a multiplayer game for a school computer lab or phones; one student opens a private room and shares the 4-letter code (6v6 holds 12 players, 24v24 holds 48); Graphics: Low helps older computers.
+- Playing with classmates (電腦課、上課跟同學一起玩): a browser based game like .io games, nothing to install and no account, so it works as a multiplayer game for a school computer lab or phones; one student opens a private room and shares the 4-letter code (6v6 holds 12 players; a bigger class opens two rooms); Graphics: Low helps older computers.
 - Multiplayer: the server decides damage, cash, purchases, rounds and the bomb; movement is predicted by the client and validated by the server. The default game server is in Taiwan (Taipei).
 - Controls (defaults, rebindable): WASD move, mouse look, left click fire, right click aim, Shift sprint, Space jump, C or Ctrl crouch, 1/2/3 weapon slots, R reload, E use (arm or disarm the bomb, ammo crate, vehicles), B store, Tab scoreboard, Esc or P menu. Phones and tablets get touch controls with an editable layout.
 
@@ -25,7 +25,7 @@ Two names, one game: 角頭械鬥 (Traditional Chinese) and Turf War: Taipei (En
 - [About, how to play and FAQ (繁體中文)](https://turfwar.ianhsiao.me/about): modes, maps, weapons, controls and FAQ in Traditional Chinese
 - [About, how to play and FAQ (English)](https://turfwar.ianhsiao.me/en/about): the same in English
 - [Guide (English)](https://turfwar.ianhsiao.me/en/guide) · [攻略 (繁體中文)](https://turfwar.ianhsiao.me/guide): every weapon's price, damage, magazine, reload and movement, the attachments, the cash awards, items, what to buy first and Sabotage tips
-- [Maps (English)](https://turfwar.ianhsiao.me/en/maps) · [地圖 (繁體中文)](https://turfwar.ianhsiao.me/maps): the 14 maps with room sizes, modes, bomb sites, vehicles and landmarks
+- [Maps (English)](https://turfwar.ianhsiao.me/en/maps) · [地圖 (繁體中文)](https://turfwar.ianhsiao.me/maps): the 12 maps with room sizes, modes, bomb sites, vehicles and landmarks
 - [Turf War: Taipei and BeGone (English)](https://turfwar.ianhsiao.me/en/begone) · [角頭械鬥與 BeGone (繁體中文)](https://turfwar.ianhsiao.me/begone): what this unofficial homage keeps from nPlay's BeGone and what is new
 - [Privacy](https://turfwar.ianhsiao.me/privacy): no accounts; what is stored in the browser, what the server keeps, the anonymous analytics, and match recording (de-identified match data may be licensed to companies that build AI; a Settings switch leaves a player out)
 - [Terms](https://turfwar.ianhsiao.me/terms): pressing Play accepts them; players aged 13 and older; Taiwan law

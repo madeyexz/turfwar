@@ -175,20 +175,24 @@ export function finishReload(s: Soldier, w: WeaponDef) {
   if (!s.bot) s.reserve[s.weapon] -= take;
 }
 
-/** Bots shop like casual players at the start of a round: the best primary they can afford, sometimes an optic and a frag. */
+/**
+ * How the bots choose a primary, from the recorded players. Players keep their primary from one round to the next in 88% of the
+ * rounds, and carry the MP5 in 56% of their rounds, the M4A1 in 20%, the M249 in 10%, the M1014 in 9% and the M110 in 4%.
+ * A bot chooses again in `change` of the rounds, with these chances (the free MP5 has the rest). A match starts with the MP5 and
+ * little cash, so the chances of the bought weapons are above the players' shares: over a match the bots then get those shares.
+ */
+const BOT_BUY = { change: 0.2, primaries: [['m4a1', 0.39], ['m249', 0.2], ['m1014', 0.15], ['m110', 0.075]] as const };
+
+/** Bots shop as the recorded players do at the start of a round: most keep their primary, and sometimes they add an optic, a frag or a molotov. */
 export function botShop(s: Soldier, random: () => number) {
-  const primaries = (Object.values(WEAPONS) as WeaponDef[]).filter(w => w.slot === 0 && w.price > 0);
-  if (random() < 0.7) {
-    const options = primaries.filter(w => w.price <= s.money && !s.owned.includes(w.id));
-    if (options.length) {
-      let best = options[0], bestScore = -Infinity;
-      for (const w of options) { const score = w.price + random() * 1500; if (score > bestScore) { bestScore = score; best = w; } }
-      s.money -= best.price; s.owned.push(best.id);
-    }
+  if (random() < BOT_BUY.change) {
+    let r = random(), pick: WeaponId = DEFAULT_WEAPONS[0];
+    for (const [id, chance] of BOT_BUY.primaries) { if (r < chance) { pick = id; break; } r -= chance; }
+    // A weapon that the bot has is free; one that it cannot pay for stays in the store, and the bot keeps what it carries.
+    if (s.owned.includes(pick)) s.weapons[0] = pick;
+    else if (WEAPONS[pick].price <= s.money) { s.money -= WEAPONS[pick].price; s.owned.push(pick); s.weapons[0] = pick; }
   }
-  const owned = primaries.filter(w => s.owned.includes(w.id));
-  if (owned.length) s.weapons[0] = owned[Math.floor(random() * owned.length)].id;
-  if (s.money > 2500 && random() < 0.4) {
+  if (s.money > 2500 && random() < 0.07) {
     const fitted = s.attachments[s.weapons[0]] ?? {};
     if (!fitted.optic) {
       const optic = (['holo', 'reflex', 'acog'] as const)[Math.floor(random() * 3)];
@@ -196,6 +200,6 @@ export function botShop(s: Soldier, random: () => number) {
       if (fitsWeapon(a, s.weapons[0]) && s.money >= a.price) { s.money -= a.price; s.attachments[s.weapons[0]] = { ...fitted, optic }; }
     }
   }
-  if (s.grenades < GRENADE.max && s.money > 3000 && random() < 0.5) { s.money -= GRENADE.price; s.grenades = 1; }
-  if (s.molotovs < MOLOTOV.max && s.money > 2000 && random() < 0.35) { s.money -= MOLOTOV.price; s.molotovs = 1; }
+  if (s.grenades < GRENADE.max && s.money > 3000 && random() < 0.08) { s.money -= GRENADE.price; s.grenades = 1; }
+  if (s.molotovs < MOLOTOV.max && s.money > 2000 && random() < 0.15) { s.money -= MOLOTOV.price; s.molotovs = 1; }
 }

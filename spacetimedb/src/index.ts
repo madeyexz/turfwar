@@ -31,7 +31,7 @@ import { AdminError, bumpPeak, dailyNetRows, playerMilestoneRows, playerPerfRows
 /**
  * Authoritative multiplayer: the same shared match simulation the offline client runs, executed
  * here on a 30 Hz scheduled reducer per room. One database holds many rooms: Play Online fills
- * public rooms of a size (1v1, 6v6, 24v24), optionally of a mode and a map; private rooms are joined
+ * public rooms of a size (1v1, 6v6), optionally of a mode and a map; private rooms are joined
  * with a four-letter code. A room
  * exists (and ticks) only while humans are in it. Player reducers only queue their input (a cheap private-row
  * write); the tick loads the match once, applies every queued report and command through the
@@ -939,6 +939,8 @@ function enterRoom(ctx: Ctx, room: number, name: string, team: number) {
   if (existing && existing.room === room && ctx.db.soldier.id.find(existing.soldierId)) return;
   if (existing && ctx.db.soldier.id.find(existing.soldierId)) leaveRoom(ctx, existing);
   const row = ctx.db.match.id.find(room)!;
+  // A room of a removed size (24v24, stored before it went) plays on for those in it, but takes no one new.
+  if (!isRoomSize(configOf(row).teamSize)) throw new SenderError('That room is gone; try Quick Play');
   if (humansIn(ctx, room) >= configOf(row).teamSize * 2) throw new SenderError('That room is full');
   withMatch(ctx, room, (state, sim) => {
     // A rookie (few rounds on this server's career stats) gets easier bots (bots.ts).
@@ -1144,7 +1146,7 @@ export const tick = spacetimedb.reducer({ onSchedule: tickTable }, { arg: tickTa
 /** Older clients' join: Quick Play 6v6. */
 export const join = spacetimedb.reducer({ name: t.string(), team: t.i8() }, (ctx, { name, team }) => { matchmake(ctx, name, { size: 6, mode: '', map: '' }, team); });
 
-/** Quick Play (older clients): the fullest public room of this size (1, 6 or 24 per team) with a free slot. */
+/** Quick Play (older clients): the fullest public room of this size (1 or 6 per team) with a free slot. */
 export const quickJoin = spacetimedb.reducer({ name: t.string(), size: t.u8(), team: t.i8() }, (ctx, { name, size, team }) => {
   matchmake(ctx, name, { size, mode: '', map: '' }, team);
 });
@@ -1210,7 +1212,10 @@ export const joinRoom = spacetimedb.reducer({ name: t.string(), code: t.string()
   if (!closed || fate === 'gone') throw new SenderError('No room with that code');
   if (fate === 'closed') throw new SenderError('That room closed when everyone left; ask for the new code');
   // Same map and rules, a fresh match; the host keeps it (their next private room comes back here).
-  const room = openRoom(ctx, closed.mapId, { ...ONLINE_CONFIG, ...JSON.parse(closed.configJson) } as MatchConfig, closed.code, closed.host, now);
+  const config = { ...ONLINE_CONFIG, ...JSON.parse(closed.configJson) } as MatchConfig;
+  // A room of a removed size (24v24) does not reopen.
+  if (!isRoomSize(config.teamSize)) throw new SenderError('That room is gone; try Quick Play');
+  const room = openRoom(ctx, closed.mapId, config, closed.code, closed.host, now);
   enterRoom(ctx, room, name, team);
 });
 

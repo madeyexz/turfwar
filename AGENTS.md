@@ -1,7 +1,7 @@
 # 角頭械鬥 · Turf War: Taipei
 
 Browser-first round-based team FPS modelled on BeGone (nplay): Elimination and Sabotage,
-cash and a store, attachments, 1v1 / 6v6 / 24v24 rooms. Repository:
+cash and a store, attachments, 1v1 / 6v6 rooms. Repository:
 `https://github.com/madeyexz/turfwar`. `README.md` is the public overview and asset attribution;
 `docs/GAMEPLAY.md` (rules, weapons, maps, vehicles, controls), `docs/ARCHITECTURE.md` (multiplayer,
 performance, known limits, layout) and `docs/DEVELOPMENT.md` (flags, check scripts, deploy, analytics,
@@ -32,7 +32,9 @@ requests.
 - `shared/`: environment-independent simulation, collision, movement, hit volumes,
   weapons, attachments and prices, thrown bodies, drivable vehicles, and map definitions (with ammo crates, bomb sites, ladders and vehicle spots). No browser APIs here.
 - `shared/match/`: match state, combat validation, economy (cash, store, crates), rounds and the bomb, bots,
-  navigation, the packed per-tick frame, and the simulation tick.
+  navigation, the packed per-tick frame, and the simulation tick. The bots' habits (`bots.ts`), buy table (`BOT_BUY`) and
+  places (`places.ts`) are measured from recorded players: run `bun scripts/botbench.ts` before and after a change to
+  them and compare (docs/DEVELOPMENT.md "Bot bench").
 - `src/game/`: client loop, player prediction/input, Solo link, settings, performance check.
 - `src/net/online.ts`: SpacetimeDB connection, replicated state, interpolation, and intents.
 - `src/crazygames.ts`: the CrazyGames build flag and SDK wrapper (`bun run build:crazygames`; docs/DEVELOPMENT.md "CrazyGames build"). Keep that build free of links back to the playable website.
@@ -48,7 +50,7 @@ requests.
 - `src/module_bindings/`: generated client bindings; regenerate after module API changes.
 - `public/assets/`, `public/fonts/`: runtime assets and licenses.
 - `shared/rec/`: match recording formats, clean rules, segmenter and export transform (docs/RECORDING.md). `tools/recorder/` (recorder, processor, export), `scripts/rec-*.ts` (recount, bias, deletion), `deploy/cloudflare/rec-ingest/` (ingest Worker) and `deploy/gcp-taipei/recorder/` run it; `src/game/consent.ts` and `src/game/inputlog.ts` are the client side. Keep `/privacy` and `/terms` true to what is recorded; never record chat, callsigns or players who are not subjects.
-- `tools/`: asset conversion/fetch tools with their own dependencies; not runtime code.
+- `tools/`: asset conversion/fetch tools with their own dependencies; not runtime code. `tools/botlab/` holds the research scripts behind the bots' habits (they read the private recordings; never commit data, trained weights or keys there).
 - `dev/`: development-only map, model, soldier, and first-person weapon preview pages.
 
 ## Gameplay and authority
@@ -56,7 +58,7 @@ requests.
 The rules follow BeGone (nplay): round-based Elimination and Sabotage (SWAT defends, Militia
 arms the bomb), first to 10 rounds, 4 s freeze and 20 s buy time, BeGone's cash awards, its
 weapons (knife, MP5, M4A1, M1014, M110, M249, M9A1, MP7, M67; plus our own M18 smoke and 燃燒彈 molotov) and attachments with their exact
-stats. Room sizes are 1v1, 6v6 and 24v24 (24v24 only on big maps: Meridian). Solo (bots fill
+stats. Room sizes are 1v1 and 6v6 (24v24 was removed on 2026-11-14; its big maps Meridian and Xinyi are retired). Solo (bots fill
 the room), Online (one database holds many rooms: Quick Play fills public rooms of a size and
 rotates map and mode; private rooms take a 4-letter code; a room ticks only while humans are in it)
 and a Practice range. Maps have ammo crates; bases are padded to
