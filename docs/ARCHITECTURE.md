@@ -127,7 +127,7 @@ Back to the [README](../README.md) · [Gameplay](GAMEPLAY.md) · [Development](D
 - Load test (local only): `bun scripts/loadtest.ts --uri ws://127.0.0.1:3100 --db <name> --clients 100`
   runs headless clients that move with the shared controller, fire validated shots and report the
   server tick rate, bytes per client, report round trips and corrections; it refuses non-local URIs.
-  `bun scripts/simbench.ts meridian` times the simulation alone. Measured before the BeGone
+  `bun scripts/simbench.ts taipei` times the simulation alone (a 6v6 room). Measured before the BeGone
   conversion (Domination, 100 clients on Meridian, M3 Pro, local server): 30 ticks/s, ~84 KB/s per
   client, report round trips of 6 / 9 / 12 ms (p50/p95/p99) and zero corrections. These are
   single-machine numbers, not a production load test.
@@ -173,11 +173,11 @@ once (a near shot takes the oldest's place). Every sound leaves the mix when its
 (`src/voices.ts`): Chrome otherwise keeps rendering finished voices until garbage collection, and a long
 firefight starved the audio thread into seconds-long dropouts. `?audiodebug` logs the mix's levels,
 compressor reduction and audio-clock rate (below 1 means the audio thread is falling behind). The largest
-room (24v24, 48 soldiers) is lighter than the 100-soldier matches this engine was
+room (6v6, 12 soldiers) is lighter than the 100-soldier matches this engine was
 measured with (Solo 50v50 on Meridian: 59.9 fps average on an M3 Pro, Chrome, medium).
 
 **Measure it yourself:** click *Run the 30-second performance check* in the lobby options (or open
-`/?bench`, optionally `&map=meridian&quality=high&size=war`). A scripted soldier patrols the map and
+`/?bench`, optionally `&map=taipei&quality=high&size=duel`). A scripted soldier patrols the map and
 fights through a solo Elimination match (6v6 unless `size` says otherwise) for 30 s after a
 warm-up, then a panel reports average fps, 1% low, frame-time median/p95/p99, frames slower than
 60 Hz, main-thread time per frame, hitches over 100 ms, shader compiles during the run, draw calls,
@@ -206,14 +206,13 @@ instead of downloading them again, and leaves the 512 px icons to the browser's 
   limits the server allows.
 - Every client receives every soldier's pose (no interest management), and every tick writes the
   full soldier set to the database's durable log.
-- The 24v24 room does not hold 30 ticks/s on the Taipei VM. In the recordings of 2026-10-16 to
-  2026-11-07 (399 rounds), 17 % of its ticks came 100 ms or more after the tick before (median
-  16 ticks/s), and because the module caps a tick's step at 0.1 s the room ran at about 77 % of real
-  speed. A 6v6 room open at the same time stalled with it (23 % of its ticks, against 2 % otherwise);
-  1v1 and 6v6 rooms alone hold 30 ticks/s. The stalls are as frequent during freeze time, when no bot
-  acts, and the simulation alone needs under 1 ms a tick (`bun scripts/simbench.ts meridian`), so the
-  cause is the host (CPU share, disk or memory) or the per-tick database work, not the bots. It has
-  not been measured on the VM.
+- The 24v24 room (removed on 2026-11-14) did not hold 30 ticks/s on the Taipei VM. In the recordings
+  of 2026-10-16 to 2026-11-07 (399 rounds), 17 % of its ticks came 100 ms or more after the tick before
+  (median 16 ticks/s), and because the module caps a tick's step at 0.1 s the room ran at about 77 % of
+  real speed. A 6v6 room open at the same time stalled with it (23 % of its ticks, against 2 % otherwise);
+  1v1 and 6v6 rooms alone hold 30 ticks/s. The stalls were as frequent during freeze time, when no bot
+  acts, and the simulation alone needed under 1 ms a tick (24v24 on Meridian), so the cause was the host
+  (CPU share, disk or memory) or the per-tick database work, not the bots. It was not measured on the VM.
 - Third-person camera (V) and the toggle/hold options for crouch and accuracy are not implemented.
 - First-person and third-person animation is code-driven on CC0 clips; there are no authored
   weapon-specific reload animations, fingers are posed procedurally, and a soldier on a ladder shows

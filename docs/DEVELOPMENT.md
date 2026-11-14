@@ -35,8 +35,8 @@ when a release brings something players will notice: short, player-facing (not a
 languages, with a new `id`.
 
 Lobby URL flags: `?tab=quick|start|join` (the open tab), `?mode=offline|online|lab` (what `&autostart=1`
-starts: Solo, Quick Play or Practice), `&game=elimination|sabotage`, `&size=duel|squad|war` and `&map=<id>`
-(the Start a Server form; a 24v24 map picks 24v24 unless `size` says otherwise), `&room=CODE` (opens Join a
+starts: Solo, Quick Play or Practice), `&game=elimination|sabotage`, `&size=duel|squad` and `&map=<id>`
+(the Start a Server form; a retired map's id opens it in Solo and Practice only), `&room=CODE` (opens Join a
 server with the code filled in; with `autostart` joins it), `&team=0|1|auto`, `&skill=0.25…0.75`, `&name=…`,
 `&autostart=1`, `&server=tw|us` (the game server for this visit; Settings → Server saves a choice).
 發起單挑 challenge links (`src/game/challenge.ts`): `/c?ch=<callsign>&map=<id>&beat=<kills>&ref=<share code>` (older links: `/?c=1&…`)
@@ -58,7 +58,7 @@ keep their map (and mode) while Any rooms rotate (it ends matches early with `sp
 `bun scripts/mapcheck.ts ws://127.0.0.1:<port> <db> <map> <size>` checks two independent clients
 spawn in their bases, walk to a common point without corrections, and replicate a shot that spends
 ammo and damages the target. A false shot origin must be refused or replaced with the shooter's
-own eye. Use `taipei 6`, `xinyi 24`, and `taipei101 6` for the replaced maps. The check stops after
+own eye. Use `taipei 6` and `taipei101 6` for the replaced maps. The check stops after
 180 seconds. Scripted clients and bot tests do not replace human playtesting or a device FPS check.
 `bun scripts/slippercheck.ts ws://127.0.0.1:<port> <db>` (local only) checks the thrown 藍白拖 with two
 identities in a private 1v1 (placed with `spacetime sql`, owner-only): no wind-up does 30, a second throw
