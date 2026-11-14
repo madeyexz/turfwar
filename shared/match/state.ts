@@ -13,6 +13,8 @@ export const ATTACKERS: Team = 1;
 
 export interface BotBrain {
   skill: number;
+  /** This bot aims with the learned aim (aim.ts): the network turns its view and holds its trigger while an enemy is in sight. */
+  learned?: boolean;
   /** What the bot is heading for: '' none, 'roam' a map area, 'hunt' an enemy, 'site' a bomb site. */
   goal: '' | 'roam' | 'hunt' | 'site';
   /** Seconds before the bot picks a new goal. */
@@ -168,6 +170,8 @@ export interface MatchConfig {
   buyTime: number;
   warmup: number;
   botSkill: number;
+  /** The share of the bots (0 to 1) that aim with the learned aim (aim.ts); the others aim by the script. Absent: none. */
+  learnedAim?: number;
   /** Practice range: no bots, no win limit. */
   practice?: boolean;
   /** Testing: everything in the store is free and buying works anywhere, any time. */

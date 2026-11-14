@@ -28,7 +28,7 @@ an issue first so we can agree on the approach.
 
 ## Setup
 
-You need **Bun 1.3.10** ([bun.sh](https://bun.sh)). Use `bun` / `bunx` for everything, never npm or npx.
+You need **Bun 1.4.4** ([bun.sh](https://bun.sh)). Use `bun` / `bunx` for everything, never npm or npx.
 
 ```sh
 bun install --frozen-lockfile

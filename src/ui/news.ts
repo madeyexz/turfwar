@@ -1,13 +1,16 @@
 import { lang, onLang, t, type Lang } from './i18n';
+import { CRAZYGAMES } from '../crazygames';
 
 /**
  * 最新更新 / Latest update: the lobby shows the newest entry, one line, with a NEW mark until the
  * player has seen it once. Hand-written for players (not commit messages): add an entry at the top
  * when a release brings something players will notice, in both languages, short.
  */
-export interface NewsItem { id: string; date: string; text: Record<Lang, string> }
+/** `link`: a page on this site the entry links to (not in the CrazyGames build, which links to no page of ours). */
+export interface NewsItem { id: string; date: string; text: Record<Lang, string>; link?: string }
 
 export const NEWS: readonly NewsItem[] = [
+  { id: 'online-closed', date: '2026-11-14', link: '/thanks', text: { 'zh-TW': '線上房間已經關閉，仍可單人對戰電腦和練習場。謝謝大家來玩！', en: 'Online rooms have closed. Solo vs bots and Practice still play. Thank you for playing!' } },
   { id: 'real-models', date: '2026-11-11', text: { 'zh-TW': '角色和槍換上新模型；後巷擴建成完整街區，爆炸更有威力', en: 'New soldier and gun models. Back Alley is now a full block, and explosions hit harder' } },
   { id: 'alley-scans', date: '2026-11-10', text: { 'zh-TW': '新地圖「後巷」：雨夜裡的後巷街區（1v1、6v6）；倉庫的畫面也更新了', en: 'New map: Back Alley, rain-wet back lanes at night (1v1, 6v6). Warehouse looks sharper too' } },
   { id: 'faster-chat-filter', date: '2026-10-15', text: { 'zh-TW': '手機載入更快（下載量少約四成），聊天會過濾髒話，設定裡也能關閉玩家聊天', en: 'Faster loading on phones, a chat swear filter, and a setting to turn player chat off' } },
@@ -37,7 +40,7 @@ export function mountNews(el: HTMLElement, items: readonly NewsItem[] = NEWS) {
   const render = () => {
     el.setAttribute('aria-label', t('news.title'));
     el.innerHTML = `<div class="news-head"><b>${esc(t('news.title'))}</b>${fresh ? `<span class="news-new">${esc(t('news.new'))}</span>` : ''}<time datetime="${item.date}">${shortDate(item.date)}</time></div>`
-      + `<p>${esc(item.text[lang()])}</p>`;
+      + `<p>${esc(item.text[lang()])}${item.link && !CRAZYGAMES ? ` <a href="${item.link}">${esc(t('news.more'))}</a>` : ''}</p>`;
   };
   render();
   onLang(render);

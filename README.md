@@ -40,8 +40,12 @@
 Turf War: Taipei is an open-source, browser-first team shooter. Two teams of up to six fight short,
 one-life rounds across Taipei — Ximending's neon streets, an office floor 383 m up Taipei 101, the
 Chiang Kai-shek Memorial Hall — with cash, a store and weapon attachments in the spirit of the classic
-browser shooter *BeGone*. It runs on TypeScript and Three.js in the browser and a server-authoritative
-[SpacetimeDB](https://spacetimedb.com) module online, with the same simulation powering offline play.
+browser shooter *BeGone*. It runs on TypeScript and Three.js in the browser.
+
+**The public site is now single player:** online rooms have closed, and
+[turfwar.ianhsiao.me](https://turfwar.ianhsiao.me) offers Solo vs bots and Practice, which run the whole
+match in the browser. The online code (a server-authoritative [SpacetimeDB](https://spacetimedb.com)
+module that runs the same simulation) stays in this repository and still runs on your own machine.
 
 ## Features
 
@@ -56,11 +60,12 @@ browser shooter *BeGone*. It runs on TypeScript and Three.js in the browser and 
 - **Economy:** cash for kills, headshots, assists and objectives; five primaries, two secondaries,
   grenades, and optics, suppressors, lasers and more ([weapons](docs/GAMEPLAY.md#weapons)).
 
-**Multiplayer**
+**Bots and multiplayer**
 
-- **Two room sizes:** 1v1 and 6v6. *Quick play* joins the fullest open room, *Start a server*
+- **Solo vs bots** in 1v1 and 6v6, with bots at three difficulties, and a Practice range with a free store.
+  Both need no server at all.
+- **Online play (in the code, not on the public site):** *Quick play* joins the fullest open room, *Start a server*
   opens a public room or a private one with a 4-letter code, and *Join a server* lists every live room with its ping.
-- **Bots fill empty slots,** online and offline, at three difficulties.
 - **Server-authoritative:** damage, cash, purchases, rounds and the bomb run on the server; movement is
   client-predicted and server-validated.
 
@@ -70,7 +75,6 @@ browser shooter *BeGone*. It runs on TypeScript and Three.js in the browser and 
 - **Rebindable controls** for every action, using physical key positions (AZERTY and Dvorak work).
 - **Phones and tablets:** touch controls with an editable layout, hold-to-aim firing, and an
   installable app (PWA) — see [Phones and tablets](docs/GAMEPLAY.md#phones-tablets-and-the-installable-app).
-- **Solo and practice** need no server at all.
 
 ## Screenshots
 
@@ -87,7 +91,7 @@ browser shooter *BeGone*. It runs on TypeScript and Three.js in the browser and 
 
 ## Getting started
 
-**Prerequisites:** [Bun 1.3.10](https://bun.sh) (use `bun` / `bunx`, never npm or npx). For local
+**Prerequisites:** [Bun 1.4.4](https://bun.sh) (use `bun` / `bunx`, never npm or npx). For local
 online play, also the [SpacetimeDB CLI](https://spacetimedb.com/install) 2.10.2.
 
 ```sh
@@ -138,8 +142,8 @@ docs/            Gameplay, architecture and development guides
   the shared rules and publishes one packed frame per room, which clients interpolate.
 - **Validated movement.** Clients predict their own movement and report it; the server checks every
   report against speed, collision and vehicle rules and corrects anything out of bounds.
-- **Always on.** The game server (Taipei) never sleeps; if the lobby cannot reach it, it says so
-  after 30 seconds and offers Retry.
+- **No server, no online ways in.** A build without `VITE_SPACETIMEDB_URI` and `VITE_SPACETIMEDB_DATABASE`
+  (the public site) grays the online ways in the lobby; only Solo vs bots and Practice play.
 
 The full design — validation, performance budgets and known trade-offs — is in
 [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md).
@@ -169,8 +173,8 @@ Please follow the [Code of Conduct](CODE_OF_CONDUCT.md). Bugs and ideas go to
 
 - **Security:** please report vulnerabilities privately as described in [SECURITY.md](SECURITY.md),
   not in a public issue.
-- **Privacy:** no accounts and no ads. The game keeps your settings and an anonymous ID in your browser,
-  gameplay stats on the game server, and uses anonymous analytics. The full statement is on the
+- **Privacy:** no accounts and no ads. The game keeps your settings, progress and an anonymous ID in your
+  browser and uses anonymous analytics. The full statement is on the
   [privacy page](https://turfwar.ianhsiao.me/privacy) ([source](privacy/index.html)).
 
 ## Support the project

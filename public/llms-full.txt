@@ -11,24 +11,21 @@
 
 ## What it is
 
-A browser game: no install, no account, no ads, free. Two teams, SWAT (navy tactical kit) and Militia (desert and olive irregulars), fight short rounds where nobody respawns until the next round. Between rounds players spend cash in a store on weapons and attachments. It is built with TypeScript and Three.js; online play uses a SpacetimeDB server module, and the same shared simulation powers offline play. Free to play on desktop (keyboard and mouse) and on phones and tablets (touch controls).
+A browser game: no install, no account, no ads, free. Two teams, SWAT (navy tactical kit) and Militia (desert and olive irregulars), fight short rounds where nobody respawns until the next round. Between rounds players spend cash in a store on weapons and attachments. It is built with TypeScript and Three.js. The public site is single player: the whole match, bots included, runs in the browser. Online rooms, which ran on a SpacetimeDB server module with the same shared simulation, have closed. Free to play on desktop (keyboard and mouse) and on phones and tablets (touch controls).
 
 ## Ways to play
 
-- Quick play: joins the fullest open public room of any size, map or mode, or opens a public 6v6 with bots on a random map and mode. Full and private rooms are never chosen.
-- Create room: choose the mode (Elimination or Sabotage), size (1v1 or 6v6), map, public or private (a 4-letter code) and bots on or off.
-- Join room: lists every live room with its map, mode, size, players and ping; private rooms are joined with their code.
-- Solo vs bots: offline, with bots at three difficulties (recruit, veteran, elite).
+- Solo vs bots: choose the mode (Elimination or Sabotage), size (1v1 or 6v6), map and bot difficulty (recruit, veteran, elite). Bots fill every slot but the player's.
 - Practice: a range with a free store and no bots.
-- 單挑我 / 發起單挑 (duel challenge): after an online match a player can open a private 1v1 room on the same map and share a link; a friend who opens it joins the room, or plays a Solo 1v1 against a bot carrying the challenger's name if the room is gone.
-- Room sizes: 1v1 (duel) and 6v6 (squad), on every map. Bots fill every slot without a human; private rooms can turn bots off.
-- With classmates (電腦課、上課跟同學一起玩): it is a browser based game, like .io games, with nothing to install and no account, so a class can play it as a multiplayer game on school computers or phones: one student opens a private room and reads out the 4-letter code (6v6 holds 12; a bigger class opens two rooms); Settings → Graphics → Low helps older computers.
-- Default online server: Taiwan (Taipei); new players in the Americas, Europe and Africa (by browser time zone) start on US East. Either can be chosen in Settings → Server.
+- 發起單挑 (duel challenge): after a match a player can share a 1v1 challenge link; a friend who opens it plays a Solo 1v1 against a bot carrying the challenger's name.
+- Sizes: 1v1 (duel) and 6v6 (squad), on every map.
+- In class (電腦課、上課玩): it is a browser based game, like .io games, with nothing to install and no account, so each student can play Solo vs bots on a school computer or phone; classmates do not share one match. Settings → Graphics → Low helps older computers.
+- Online rooms (Quick play, Create room, Join room, private rooms with a 4-letter code) have closed.
 
 ## Rules
 
-- Rounds: a new room has a short warmup; then each round starts with a 4-second freeze (buying allowed, no moving), then the round. The store (B) opens inside your own base during the first 20 seconds of a round, freeze time included. Weapons you own swap free during that window; attachments can be bought anywhere at any time. After a round there is a 5-second pause, during which everyone can buy weapons anywhere. The first team to 10 round wins takes the match (6 in public online rooms; private rooms and Solo use 10); then a 10-second result screen and a new match.
-- One life per round; everyone respawns at the next round start. A human who joins in a round's first 30 seconds (before the bomb is down) deploys at once. Dead players spectate their killer. No friendly fire.
+- Rounds: a new match has a short warmup; then each round starts with a 4-second freeze (buying allowed, no moving), then the round. The store (B) opens inside your own base during the first 20 seconds of a round, freeze time included. Weapons you own swap free during that window; attachments can be bought anywhere at any time. After a round there is a 5-second pause, during which everyone can buy weapons anywhere. The first team to 10 round wins takes the match; then a 10-second result screen and a new match.
+- One life per round; everyone respawns at the next round start. Dead players spectate their killer. No friendly fire.
 - Elimination: 120-second rounds. Kill the whole other team. If time runs out with both teams alive the round is a draw: it replays and nobody scores. When the last two players trade kills, the team that killed last wins.
 - Sabotage: Militia attacks, SWAT defends. 90-second rounds (120 s on single-site maps). Militia holds E for 5 seconds at site A or B to arm the bomb (no moving, shooting or aiming while arming; crouching is allowed). Arming sets the clock to 40 seconds and the other site goes inert. After that SWAT can only win by disarming (E for 5 seconds); killing every Militia no longer ends the round; if the bomb goes off Militia win. Before arming: all SWAT dead means a Militia win; all Militia dead or time out means a SWAT win. No draws. Only maps with bomb sites offer Sabotage (Warehouse does not).
 - Player: 100 health, no armor, no regeneration within a round, fall damage, head/body/limb damage per weapon. Stamina 100: sprinting and jumping cost stamina.
@@ -74,7 +71,7 @@ Phones and tablets: on-screen controls (a floating stick on the left, a look pad
 ## Languages, privacy, licence
 
 - English and Traditional Chinese (繁體中文): follows the browser, can be switched in Settings, and ?lang=en or ?lang=zh-TW picks one for a visit.
-- Privacy: no accounts or passwords. Settings and an anonymous game ID are kept in the browser; gameplay stats are kept on the game server; anonymous analytics are used. See https://turfwar.ianhsiao.me/privacy.
+- Privacy: no accounts or passwords. Settings, progress and an anonymous game ID are kept in the browser; anonymous analytics are used. See https://turfwar.ianhsiao.me/privacy.
 - Licence: code MIT (Copyright 2026 Ian Hsiao). The names 角頭械鬥 and Turf War: Taipei and the logo are not licensed for reuse; forks are welcome under a different name. Third-party assets keep their own licences (CC0 for Quaternius models and animations, Poly Haven textures and The Free Firearm Sound Library; SIL OFL for the Rajdhani, Oswald and Noto Sans TC fonts). No proprietary game assets are used.
 
 ## Credits
@@ -83,4 +80,4 @@ BeGone by nPlay (rules, numbers and maps this game pays homage to); Quaternius, 
 
 ## Known limits
 
-All rooms share one database's reducer thread and there is no full lag compensation. See https://github.com/madeyexz/turfwar/blob/main/docs/ARCHITECTURE.md.
+The public site has no online play. The online code remains in the repository; its limits (one reducer thread for all rooms, no full lag compensation) are described in https://github.com/madeyexz/turfwar/blob/main/docs/ARCHITECTURE.md.

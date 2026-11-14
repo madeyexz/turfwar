@@ -15,7 +15,7 @@ requests.
 
 ## Stack
 
-- **Bun 1.3.10** for packages and scripts. Use `bun` / `bunx`, never npm/npx.
+- **Bun 1.4.4** for packages and scripts. Use `bun` / `bunx`, never npm/npx.
 - **TypeScript + Vite + Three.js** for the browser. No React or Unity runtime.
 - **Shared TypeScript simulation**, used by Solo and the server. Rapier was removed
   in the rebuild; do not assume the original prototype's physics engine remains.
@@ -34,7 +34,9 @@ requests.
 - `shared/match/`: match state, combat validation, economy (cash, store, crates), rounds and the bomb, bots,
   navigation, the packed per-tick frame, and the simulation tick. The bots' habits (`bots.ts`), buy table (`BOT_BUY`) and
   places (`places.ts`) are measured from recorded players: run `bun scripts/botbench.ts` before and after a change to
-  them and compare (docs/DEVELOPMENT.md "Bot bench").
+  them and compare (docs/DEVELOPMENT.md "Bot bench"). `aim.ts` is the learned aim (a network trained on recorded
+  players, weights in the generated `aimnet.ts`; off unless a config sets `learnedAim`): after a change to it, run the
+  bench with `--learned 1 --duel`.
 - `src/game/`: client loop, player prediction/input, Solo link, settings, performance check.
 - `src/net/online.ts`: SpacetimeDB connection, replicated state, interpolation, and intents.
 - `src/crazygames.ts`: the CrazyGames build flag and SDK wrapper (`bun run build:crazygames`; docs/DEVELOPMENT.md "CrazyGames build"). Keep that build free of links back to the playable website.
