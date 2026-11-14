@@ -3,12 +3,15 @@
  * printed next to the players' totals in scripts/botbench/human.json (docs/DEVELOPMENT.md, "Bot bench"). Run it
  * before and after a change to the bots (shared/match/bots.ts, places.ts, botShop).
  *
- *   bun scripts/botbench.ts [--rounds 36] [--matches 2] [--seed 1] [--skill 0.3]
+ *   bun scripts/botbench.ts [--rounds 36] [--matches 2] [--seed 1] [--skill 0.3] [--learned 0.5] [--duel]
  *
  * Part 1 gives all bots the MP5 on taipei, because the players' aim windows have that weapon and map, and compares
- * 3-second windows of the aim. Part 2 plays full Online matches with the store on three maps.
+ * 3-second windows of the aim. Part 2 plays full Online matches with the store on three maps. `--learned` is the
+ * share of the bots with the learned aim (shared/match/aim.ts) in the two parts. Part 3 (`--duel`, some minutes) puts
+ * a team of bots with the learned aim against a team with the script's aim, all with the MP5.
  */
 import HUMAN from './botbench/human.json';
+import { handTurn } from '../shared/match/aim';
 import { eyeOf, smokeBlocks, weaponOf, type SimContext } from '../shared/match/combat';
 import { refillAmmo } from '../shared/match/economy';
 import { balanceTeams, createContext, createMatch, tickMatch, TICK_RATE } from '../shared/match/sim';
@@ -16,7 +19,8 @@ import { ELIMINATION, ONLINE_CONFIG, type MatchConfig, type MatchEvent, type Mat
 import { rng, wrapAngle, type Vec3 } from '../shared/math';
 
 const arg = (name: string, fallback: number) => { const i = process.argv.indexOf('--' + name); return i >= 0 ? Number(process.argv[i + 1]) : fallback; };
-const ROUNDS = arg('rounds', 36), MATCHES = arg('matches', 2), SEED = arg('seed', 1), SKILL = arg('skill', ONLINE_CONFIG.botSkill);
+const ROUNDS = arg('rounds', 36), MATCHES = arg('matches', 2), SEED = arg('seed', 1), SKILL = arg('skill', ONLINE_CONFIG.botSkill), LEARNED = arg('learned', ONLINE_CONFIG.learnedAim ?? 0);
+const DUEL = process.argv.includes('--duel');
 const MAPS = ['taipei', 'ochre', 'memorial'];
 
 // ---------------------------------------------------------------------------------------
@@ -41,6 +45,7 @@ interface Tally { rounds: number; liveSeconds: number; team0: number }
 function play(
   mapId: string, config: MatchConfig, seed: number, tally: Tally, done: (state: MatchState) => boolean,
   onEvent: (e: MatchEvent, state: MatchState) => void, afterTick: (state: MatchState, ctx: SimContext, live: boolean) => void,
+  ready?: (state: MatchState) => void,
 ) {
   let liveAt = 0;
   const ctx = createContext(mapId, rng(seed), e => {
@@ -50,6 +55,7 @@ function play(
   });
   const state = createMatch(mapId, config);
   balanceTeams(state, ctx);
+  ready?.(state);
   for (let i = 0; i < 3600 * TICK_RATE && !done(state); i++) {
     tickMatch(state, ctx, 1 / TICK_RATE);
     afterTick(state, ctx, state.phase === 'live' && state.roundPhase === 'live');
@@ -133,32 +139,34 @@ function distances(windows: number[][]): number[] {
 }
 
 function aimPart() {
-  const tally: Tally = { rounds: 0, liveSeconds: 0, team0: 0 }, windows: number[][] = [];
-  const lives = new Map<number, { rows: Float32Array; n: number; yaw: number; pitch: number }>(), shots = new Map<number, number>();
+  const tally: Tally = { rounds: 0, liveSeconds: 0, team0: 0 }, script: number[][] = [], learned: number[][] = [];
+  const lives = new Map<number, { rows: Float32Array; n: number; yaw: number; pitch: number; learned: boolean }>(), shots = new Map<number, number>();
   let written = 0;
   // The windows start each STEP rows of all the rows, in the order the lives end, as in the players' row files.
-  const close = (life: { rows: Float32Array; n: number }) => {
+  const close = (life: { rows: Float32Array; n: number; learned: boolean }) => {
     for (let at = Math.ceil(written / STEP) * STEP; at + TICKS <= written + life.n; at += STEP) {
       const w = windowFeatures(life.rows, (at - written) * COLS);
-      if (w) windows.push(w);
+      if (w) (life.learned ? learned : script).push(w);
     }
     written += life.n; life.n = 0;
   };
   const eyeToChest = { x: 0, y: 0, z: 0 };
-  play(HUMAN.windows.map, { ...ELIMINATION, teamSize: 6, botSkill: SKILL, warmup: 0.2, roundsToWin: 6 }, SEED, tally, () => tally.rounds >= ROUNDS, (e, state) => {
+  play(HUMAN.windows.map, { ...ELIMINATION, teamSize: 6, botSkill: SKILL, learnedAim: LEARNED, warmup: 0.2, roundsToWin: 6 }, SEED, tally, () => tally.rounds >= ROUNDS, (e, state) => {
     if (e.type === 'shot') shots.set(e.shooter, (shots.get(e.shooter) ?? 0) + 1);
     // The same weapon for all (no store, no grenades): the windows do not depend on cash.
     else if (e.type === 'round' && e.phase === 'freeze') for (const s of state.soldiers) { s.weapons[0] = HUMAN.windows.weapon as never; s.attachments = {}; s.grenades = 0; s.molotovs = 0; s.money = 0; s.weapon = 0; refillAmmo(s); }
   }, (state, ctx, live) => {
     for (const s of state.soldiers) {
       let life = lives.get(s.id);
-      if (!life) lives.set(s.id, life = { rows: new Float32Array(COLS * 4096), n: 0, yaw: 0, pitch: 0 });
+      if (!life) lives.set(s.id, life = { rows: new Float32Array(COLS * 4096), n: 0, yaw: 0, pitch: 0, learned: !!s.brain?.learned });
       const fired = shots.get(s.id) ?? 0;
       shots.set(s.id, 0);
       if (!live || !s.alive) { if (life.n) close(life); continue; }
       if ((life.n + 1) * COLS > life.rows.length) { const more = new Float32Array(life.rows.length * 2); more.set(life.rows); life.rows = more; }
       const r = life.rows, p = life.n * COLS, yaw = wrapAngle(s.yaw), eye = eyeOf(s);
-      r[p + DYAW] = life.n ? wrapAngle(s.yaw - life.yaw) : 0; r[p + DPITCH] = life.n ? s.pitch - life.pitch : 0;
+      // The hand's turn: a learned bot's view also has the recoil, which the players' windows do not count.
+      const hand = handTurn(s);
+      r[p + DYAW] = !life.n ? 0 : hand ? hand[0] : wrapAngle(s.yaw - life.yaw); r[p + DPITCH] = !life.n ? 0 : hand ? hand[1] : s.pitch - life.pitch;
       r[p + FIRE] = s.sinceShot < 0.15 ? 1 : 0; r[p + SHOTS] = fired; r[p + WEAPON] = weaponOf(s).id === HUMAN.windows.weapon ? 1 : 0;
       // The enemy of the row: one in sight before one out of sight, then the nearest to the centre of the view.
       const cp = Math.cos(s.pitch), fx = -Math.sin(yaw) * cp, fy = Math.sin(s.pitch), fz = -Math.cos(yaw) * cp;
@@ -179,7 +187,7 @@ function aimPart() {
     }
   });
   for (const life of lives.values()) if (life.n) close(life);
-  return { tally, windows, each: distances(windows) };
+  return { tally, script, learned };
 }
 
 // ---------------------------------------------------------------------------------------
@@ -196,7 +204,7 @@ function matchPart() {
     for (let m = 0; m < MATCHES; m++) {
       const last = new Map<number, string>(), side = new Map<number, { tick: number; sign: number }>();
       const tick = new Map<number, { shots: number; hits: number; heads: number; knife: boolean }>();
-      play(map, { ...ONLINE_CONFIG, teamSize: 6, botSkill: SKILL, warmup: 1 }, SEED * 31 + 7 + m, tally, state => state.phase === 'ended', (e, state) => {
+      play(map, { ...ONLINE_CONFIG, teamSize: 6, botSkill: SKILL, learnedAim: LEARNED, warmup: 1 }, SEED * 31 + 7 + m, tally, state => state.phase === 'ended', (e, state) => {
         if (e.type === 'shot') {
           let t = tick.get(e.shooter);
           if (!t) tick.set(e.shooter, t = { shots: 0, hits: 0, heads: 0, knife: false });
@@ -254,6 +262,28 @@ function matchPart() {
 }
 
 // ---------------------------------------------------------------------------------------
+// Part 3: the learned aim against the script's
+// ---------------------------------------------------------------------------------------
+
+/** One team with the learned aim, one with the script's: each map, each side and two seeds, ROUNDS rounds each with the players' weapon. The share of the kills that the learned team makes, run by run. */
+function duelPart() {
+  const runs: { map: string; share: number }[] = [];
+  let won = 0, rounds = 0;
+  for (const seed of [SEED, SEED + 100]) for (const [mi, map] of MAPS.entries()) for (const side of [0, 1]) {
+    const tally: Tally = { rounds: 0, liveSeconds: 0, team0: 0 }, kills = [0, 0], team = new Map<number, number>();
+    play(map, { ...ELIMINATION, teamSize: 6, botSkill: SKILL, warmup: 0.2, roundsToWin: 6 }, seed * 97 + mi * 10 + side, tally, () => tally.rounds >= ROUNDS, (e, state) => {
+      if (e.type === 'kill' && team.has(e.killer) && team.has(e.victim) && team.get(e.killer) !== team.get(e.victim)) kills[team.get(e.killer)!]++;
+      else if (e.type === 'round' && e.phase === 'freeze') for (const s of state.soldiers) { s.weapons[0] = HUMAN.windows.weapon as never; s.attachments = {}; s.grenades = 0; s.molotovs = 0; s.money = 0; s.weapon = 0; refillAmmo(s); }
+    }, () => {}, state => { for (const s of state.soldiers) { team.set(s.id, s.team); if (s.brain) s.brain.learned = s.team === side; } });
+    runs.push({ map, share: kills[side] / Math.max(1, kills[0] + kills[1]) });
+    won += side === 0 ? tally.team0 : tally.rounds - tally.team0; rounds += tally.rounds;
+  }
+  const shares = runs.map(r => r.share), mean = shares.reduce((a, b) => a + b, 0) / shares.length;
+  const error = Math.sqrt(shares.reduce((a, b) => a + (b - mean) ** 2, 0) / (shares.length - 1) / shares.length);
+  return { mean, error, won, rounds, maps: MAPS.map(map => { const of = runs.filter(r => r.map === map); return `${map} ${(of.reduce((a, r) => a + r.share, 0) / of.length).toFixed(2)}`; }) };
+}
+
+// ---------------------------------------------------------------------------------------
 // The report
 // ---------------------------------------------------------------------------------------
 
@@ -262,13 +292,14 @@ const line = (name: string, ...values: string[]) => console.log('  ' + name.padE
 const head = (...names: string[]) => names.map(n => n.padStart(8)).join('');
 
 const aim = aimPart();
-const mean = aim.each.reduce((a, b) => a + b, 0) / aim.each.length;
-const far = aim.each.map((d, i) => ({ d, name: HUMAN.features[i] })).sort((a, b) => b.d - a.d).slice(0, 4);
-console.log(`Bot bench: 6v6 bots of skill ${SKILL}, seed ${SEED} (docs/DEVELOPMENT.md, "Bot bench")\n`);
+console.log(`Bot bench: 6v6 bots of skill ${SKILL}, ${LEARNED ? `${Math.round(LEARNED * 100)}% of them with the learned aim, ` : ''}seed ${SEED} (docs/DEVELOPMENT.md, "Bot bench")\n`);
 console.log(`1. Aim: 3 s windows with the ${HUMAN.windows.weapon.toUpperCase()} on ${HUMAN.windows.map}, an enemy in sight for 0.5 s or more`);
-console.log(`  ${aim.tally.rounds} rounds of ${(aim.tally.liveSeconds / aim.tally.rounds).toFixed(0)} s, ${aim.windows.length} windows (players: ${HUMAN.windows.count} windows)`);
-line('distance to the players', f(mean), `   players to players: ${HUMAN.control.mean.toFixed(3)} (${HUMAN.control.p05.toFixed(3)} to ${HUMAN.control.p95.toFixed(3)})`);
-line('farthest features', '   ' + far.map(x => `${x.name} ${x.d.toFixed(2)}`).join(', '));
+console.log(`  ${aim.tally.rounds} rounds of ${(aim.tally.liveSeconds / aim.tally.rounds).toFixed(0)} s (players: ${HUMAN.windows.count} windows; players to players: ${HUMAN.control.mean.toFixed(3)}, ${HUMAN.control.p05.toFixed(3)} to ${HUMAN.control.p95.toFixed(3)})`);
+for (const [name, windows] of [['the script\'s aim', aim.script], ['the learned aim', aim.learned]] as const) {
+  if (!windows.length) continue;
+  const each = distances(windows), far = each.map((d, i) => ({ d, name: HUMAN.features[i] })).sort((a, b) => b.d - a.d).slice(0, 4);
+  line(`distance to the players, ${name}`, f(each.reduce((a, b) => a + b, 0) / each.length), `   ${windows.length} windows; farthest: ${far.map(x => `${x.name} ${x.d.toFixed(2)}`).join(', ')}`);
+}
 
 const m = matchPart(), H = HUMAN;
 console.log(`\n2. Full matches with the store: ${MATCHES} each on ${MAPS.join(', ')}`);
@@ -287,3 +318,10 @@ line('  body still', f(m.still), f(H.move.mouse.stillShare), f(H.move.touch.stil
 line('  sprint', f(m.sprint), f(H.move.mouse.sprintShare), f(H.move.touch.sprintShare));
 line('  strafe turns a second, an enemy in sight', f(m.turns), f(H.move.mouse.strafeFlipsPerSecondEnemy), f(H.move.touch.strafeFlipsPerSecondEnemy));
 line('  nearest ally, median (m)', f(m.ally, 1), f(H.move.mouse.nearestAllyMedian, 1), f(H.move.touch.nearestAllyMedian, 1));
+
+if (DUEL) {
+  const d = duelPart();
+  console.log(`\n3. The learned aim against the script's aim: ${d.rounds} rounds with the ${HUMAN.windows.weapon.toUpperCase()}, each side of ${MAPS.join(', ')}`);
+  line('share of the kills, learned team', f(d.mean), `   ± ${d.error.toFixed(3)} (standard error of ${MAPS.length * 4} runs); ${d.maps.join(', ')}`);
+  line('rounds won, learned team', f(d.won / d.rounds), `   ${d.won} of ${d.rounds}`);
+}
