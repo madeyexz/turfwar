@@ -24,19 +24,17 @@ const onGrandStairs = (x: number, z: number) => x > GRAND.flights[0][0] && x < -
 const onAxis = ([x, , z]: [number, number, number]) => x < -14.5 && Math.abs(z) < 15;
 
 describe('memorial: Memorial Hall (中正紀念堂)', () => {
-  it('is a compact arena for 1v1 and 6v6 in Elimination and Sabotage, not 24v24', () => {
+  it('is a compact arena for 1v1 and 6v6 in Elimination and Sabotage', () => {
     const { def } = loadMap('memorial');
     expect(MEMORIAL_NAME_ZH).toBe('中正紀念堂');
     const { bounds: b } = def;
     expect(b.maxX - b.minX).toBeGreaterThan(110); expect(b.maxX - b.minX).toBeLessThan(140);
     expect(b.maxZ - b.minZ).toBeGreaterThan(85); expect(b.maxZ - b.minZ).toBeLessThan(110);
-    expect(def.big).toBeFalsy();
     expect(def.vehicles ?? []).toEqual([]);
     for (const size of [1, 6]) {
       expect(mapsFor(size)).toContain('memorial');
       expect(mapsFor(size, 'sabotage')).toContain('memorial');
     }
-    expect(mapsFor(24)).not.toContain('memorial');
     expect(def.sabotage).toEqual({ sites: ['A', 'B'], attackerSpawn: 1 });
   });
 

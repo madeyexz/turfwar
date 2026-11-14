@@ -1,12 +1,11 @@
 import { describe, expect, it } from 'vitest';
-import { loadMap, loadNav } from './index';
+import { RETIRED_MAPS, loadMap, loadNav } from './index';
 import { findPath, nearestNode, type NavGraph } from '../match/nav';
 import { mapsFor } from '../match/rooms';
 import { rng } from '../math';
 import { MOVE } from '../movement';
 import { TICK_RATE, addSoldier, createContext, createMatch, resetMatch, tickMatch } from '../match/sim';
-import { ATTACKERS, ELIMINATION, SABOTAGE, type MatchEvent } from '../match/state';
-import { balanceTeams } from '../match/sim';
+import { ATTACKERS, SABOTAGE, type MatchEvent } from '../match/state';
 import { clearLine } from './sightlines';
 import { AMMO, SPAWNS, VEHICLES, XINYI_NAME_ZH } from './xinyi';
 import { B1, F2, SKY } from './xinyi-plan';
@@ -24,16 +23,15 @@ function walk(nav: NavGraph, a: { x: number; y: number; z: number }, b: { x: num
 }
 
 describe('xinyi: Taipei 101 · Xinyi, our own layout', () => {
-  it('is a big map for 24v24 (and smaller rooms) in Elimination and Sabotage: about 272 × 292 m', () => {
+  it('is a big map in Elimination and Sabotage, retired (offered to no room size): about 272 × 292 m', () => {
     const { def } = loadMap(ID);
     expect(XINYI_NAME_ZH).toBe('台北101・信義');
     expect(def.name).toBe('Taipei 101 · Xinyi');
     const b = def.bounds;
     expect(b.maxX - b.minX).toBeGreaterThan(260); expect(b.maxX - b.minX).toBeLessThan(285);
     expect(b.maxZ - b.minZ).toBeGreaterThan(280); expect(b.maxZ - b.minZ).toBeLessThan(300);
-    expect(def.big).toBe(true);
-    // Only big maps host 24v24, and big maps host nothing smaller.
-    expect(mapsFor(24)).toContain(ID); expect(mapsFor(24, 'sabotage')).toContain(ID);
+    // Retired with 24v24, the only size it hosted: still loadable, offered to no room.
+    expect(RETIRED_MAPS.has(ID)).toBe(true);
     for (const size of [1, 6]) expect(mapsFor(size)).not.toContain(ID);
     expect(def.sabotage).toEqual({ sites: ['A', 'B'], attackerSpawn: 1 });
     expect(def.points.map(p => p.id)).toEqual(['A', 'B', 'C', 'D', 'E']);
@@ -42,12 +40,12 @@ describe('xinyi: Taipei 101 · Xinyi, our own layout', () => {
     expect(def.ladders!.length).toBeGreaterThanOrEqual(2);
   });
 
-  it('deploys twelve slots of its own in each base (the loader pads to 24, none in a solid or on a stair) with an ammo crate close by', () => {
+  it('deploys twelve slots of its own in each base (none in a solid or on a stair) with an ammo crate close by', () => {
     const { def, world } = loadMap(ID);
     for (const team of [0, 1] as const) {
       expect(SPAWNS.filter(s => s[0] === team).length).toBe(12);
       const own = def.spawns.filter(s => s.team === team);
-      expect(own.length).toBe(24);
+      expect(own.length).toBe(12);
       for (const s of own) {
         expect(world.overlapsSolid({ x: s.x, y: s.y, z: s.z }, 0.45, 1.8), `${s.x},${s.z}`).toBe(false);
         expect(world.groundHeight(s.x, s.z, s.y + 0.5, 0.35)).toBeCloseTo(s.y, 1);
@@ -157,19 +155,4 @@ describe('xinyi: Taipei 101 · Xinyi, our own layout', () => {
       expect(events.find(e => e.type === 'bomb' && e.action === 'armed')).toMatchObject({ site });
     }, 60_000);
   }
-
-  it('runs 24v24: everyone deploys in the base at once without standing in each other or a wall, and the fight goes on without anyone stuck in a solid', () => {
-    const ctx = createContext(ID, rng(11), () => undefined);
-    const state = createMatch(ID, { ...ELIMINATION, teamSize: 24, warmup: 0 });
-    balanceTeams(state, ctx);
-    expect(state.soldiers.filter(s => s.team === 0).length).toBe(24);
-    expect(state.soldiers.filter(s => s.team === 1).length).toBe(24);
-    for (let i = 0; i < 3; i++) tickMatch(state, ctx, 1 / TICK_RATE);
-    for (const a of state.soldiers) {
-      expect(ctx.world.overlapsSolid(a.m, 0.3, 1.2)).toBe(false);
-      for (const b of state.soldiers) if (a !== b && a.team === b.team) expect(Math.hypot(a.m.x - b.m.x, a.m.z - b.m.z)).toBeGreaterThan(0.5);
-    }
-    for (let i = 0; i < 40 * TICK_RATE; i++) tickMatch(state, ctx, 1 / TICK_RATE);
-    for (const s of state.soldiers) if (s.alive) expect(ctx.world.overlapsSolid(s.m, 0.2, 1.2)).toBe(false);
-  }, 60_000);
 });

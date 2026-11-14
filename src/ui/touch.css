@@ -210,7 +210,7 @@ body.touch .vehicle .vrow > b { font-size: 14px; }
 body.touch .vehicle .vread b { font-size: 18px; }
 body.touch .spectate { bottom: 70px; }
 /* The scoreboard (toggled by its button) sits under the top row of buttons and over the other controls,
-   and scrolls under a finger: a 24-a-side list is taller than a sideways phone. */
+   and scrolls under a finger: a full list can be taller than a sideways phone. */
 body.touch.hud-board #hud { z-index: 4; }
 body.touch #hud .scoreboard {
   /* Just below the top buttons: their centre is 7.5% down and they are 40 px × the controls' scale (≈ 5.13vmin). */

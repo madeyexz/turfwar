@@ -2,26 +2,26 @@ import { PLAYABLE_MAP_IDS, loadMap } from '../maps/index';
 import type { Mode } from './state';
 
 /**
- * Room sizes (soldiers per team). Every room plays BeGone's rules; 24v24 needs a big map.
+ * Room sizes (soldiers per team). Every room plays BeGone's rules on every playable map.
  * Online, one database holds many rooms: Play Online fills public rooms of a size (optionally of a
- * mode and a map), private rooms are joined with a code.
+ * mode and a map), private rooms are joined with a code. A stored room of a removed size (24v24)
+ * plays on until its last human leaves: no map takes it, and Quick Play, the lobby and its code skip it.
  */
 export const ROOM_SIZES = [
   { id: 'duel', perTeam: 1, label: '1v1', name: 'Duel' },
   { id: 'squad', perTeam: 6, label: '6v6', name: 'Squad' },
-  { id: 'war', perTeam: 24, label: '24v24', name: 'War' },
 ] as const;
 export type RoomSize = (typeof ROOM_SIZES)[number]['perTeam'];
 export const isRoomSize = (n: number): n is RoomSize => ROOM_SIZES.some(s => s.perTeam === n);
 export const sizeLabel = (n: number) => ROOM_SIZES.find(s => s.perTeam === n)?.label ?? `${n}v${n}`;
 
-/** Maps a room of this size may play (retired maps never): 24v24 only on big maps, smaller rooms on the others. */
+/**
+ * Maps a room of this size may play: every playable map (retired maps never), only those with bomb
+ * sites in Sabotage. A removed size plays none, so a stored room of it stays on its map (`nextRoomRules`).
+ */
 export function mapsFor(perTeam: number, mode?: Mode): string[] {
-  return PLAYABLE_MAP_IDS.filter(id => {
-    const d = loadMap(id).def;
-    if (perTeam > 12 ? !d.big : d.big) return false;
-    return mode !== 'sabotage' || !!d.sabotage?.sites.length;
-  });
+  if (!isRoomSize(perTeam)) return [];
+  return PLAYABLE_MAP_IDS.filter(id => mode !== 'sabotage' || hasSites(id));
 }
 
 /** Room codes: four letters without look-alikes (no I, L, O). */
@@ -142,13 +142,14 @@ export const QUICK_PLAY_NEW: RoomFilter = { size: 6, mode: '', map: '' };
 /**
  * Quick Play: any public room (any size, map and mode) with a free slot, the fullest first; on a
  * tie the one on the lowest-ping server (`ping`, when the caller knows it; the server does not),
- * then the lowest room id. Private and full rooms are never picked. Undefined = open `QUICK_PLAY_NEW`.
+ * then the lowest room id. Private and full rooms, and stored rooms of a removed size, are never
+ * picked. Undefined = open `QUICK_PLAY_NEW`.
  */
 export function pickAnyRoom<R extends RoomView>(rooms: readonly R[], ping?: (r: R) => number | undefined): R | undefined {
   const lag = (r: R) => ping?.(r) ?? Infinity;
   let best: R | undefined;
   for (const r of rooms) {
-    if (r.private || roomFull(r)) continue;
+    if (r.private || roomFull(r) || !isRoomSize(r.size)) continue;
     if (!best || r.humans > best.humans
       || (r.humans === best.humans && (lag(r) < lag(best) || (lag(r) === lag(best) && r.room < best.room)))) best = r;
   }
@@ -171,7 +172,7 @@ export interface StartRules { size: number; mode: string; map: string; bots: boo
 
 /**
  * Why the server refuses a started room (the module's error text), or undefined: a known size, a
- * known mode, and a map that size and mode can play (24v24 big maps only, Sabotage bomb sites).
+ * known mode, and a map that size and mode can play (Sabotage needs bomb sites).
  */
 export function startRoomError(r: { size: number; mode: string; map: string }): string | undefined {
   if (!isRoomSize(r.size)) return 'Unknown room size';

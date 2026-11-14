@@ -64,7 +64,7 @@ const store = {
   set: (k: string, v: string) => { try { localStorage.setItem(`lawbreaker.${k}`, v); } catch { /* storage disabled */ } },
 };
 
-/** Room sizes (soldiers per team; bots fill every slot a human does not). 24v24 plays on big maps only. */
+/** Room sizes (soldiers per team; bots fill every slot a human does not). Both play every map. */
 const SIZES = ROOM_SIZES;
 type SizeId = (typeof SIZES)[number]['id'];
 const sizeOf = (id: string) => SIZES.find(s => s.id === id) ?? SIZES[1];
@@ -94,8 +94,8 @@ let server: GameServer | undefined = currentServer();
 /** More than one server to choose from: the server chips open Settings on the choice. */
 const choosable = gameServerList().length > 1;
 const online = onlineAvailable();
-/** Featured first in the map row's shortcuts: Taipei's two maps, then the usual order. */
-const FEATURED = ['taipei', 'xinyi', ...maps.map(m => m.id).filter(id => id !== 'taipei' && id !== 'xinyi')];
+/** Featured first in the map row's shortcuts: Ximending, then the usual order. */
+const FEATURED = ['taipei', ...maps.map(m => m.id).filter(id => id !== 'taipei')];
 
 const GEAR = '<svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="3.2"/><path d="M12 2.8v2.6M12 18.6v2.6M21.2 12h-2.6M5.4 12H2.8M18.5 5.5l-1.84 1.84M7.34 16.66 5.5 18.5M18.5 18.5l-1.84-1.84M7.34 7.34 5.5 5.5"/><circle cx="12" cy="12" r="6.4"/></svg>';
 /** A T-shirt: the 外觀 (skins) dialog. */
@@ -140,7 +140,7 @@ const choice = (group: string, attr: string, items: [string, string][], label: K
 /** Segmented buttons with a second line: `items` are [value, label HTML, small HTML]. */
 const choice2 = (group: string, attr: string, items: [string, string, string][], label: Key, cls = '') =>
   `<div class="choices segmented ${cls}" id="${group}" style="--n:${items.length}" role="group" aria-label="${t(label)}" data-i18n-aria-label="${label}">${items.map(([v, text, small]) => `<button type="button" class="choice" data-${attr}="${v}"><b>${text}</b><small>${small}</small></button>`).join('')}</div>`;
-const sizeItems = (): [string, string, string][] => SIZES.map(s => [s.id, s.label, `${L(`size.${s.id}`)}${s.perTeam > 12 ? ` · ${L('lobby.bigMaps')}` : ''}`]);
+const sizeItems = (): [string, string, string][] => SIZES.map(s => [s.id, s.label, L(`size.${s.id}`)]);
 const modeTag = (m: Mode) => `<span class="mtag">[${MODE_TAGS[m]}]</span> ${L(`mode.${m}`)}`;
 const pop = (id: string, label: Key, body: string) =>
   `<div class="pop" id="${id}" role="dialog" aria-label="${t(label)}" data-i18n-aria-label="${label}" hidden>${body}</div>`;
@@ -311,11 +311,8 @@ let isPublic = store.get('start.public', '1') !== '0';
 let bots = store.get('start.bots', store.get('botsFill', 'on')) !== 'off';
 // A remembered map that has since been retired is dropped (a ?map= link still opens it).
 if (map && (!maps.some(m => m.id === map) || (RETIRED_MAPS.has(map) && !params.get('map')))) map = '';
-// A map from the URL picks the size that plays it (?map=meridian is a 24v24 map) and drops a mode it cannot host.
-if (params.get('map') && map) {
-  if (!mapsFor(sizeOf(size).perTeam).includes(map) && !params.get('size')) size = SIZES.find(s => mapsFor(s.perTeam).includes(map))?.id ?? size;
-  if (mode === 'sabotage' && !hasSites(map)) mode = 'elimination';
-}
+// A map from the URL drops a mode it cannot host.
+if (params.get('map') && map && mode === 'sabotage' && !hasSites(map)) mode = 'elimination';
 /** Join a Server's optional list filters ('' = all; every visit starts with every room listed). */
 let joinSize: SizeId | '' = '';
 let joinMode: Mode | '' = '';
@@ -753,12 +750,12 @@ function notice(text: string) {
   clearTimeout(noticeTimer);
   if (text) noticeTimer = setTimeout(() => notice(''), 4500);
 }
-/** After a size or mode change: a map the form cannot host moves to the first one it can, with a note. */
-function checkMap(reason: 'size' | 'mode') {
+/** After a mode change: a map the mode cannot host (no bomb sites) moves to the first one it can, with a note. */
+function checkMap() {
   if (mapOk(map)) return;
   const was = mapName(map);
   map = firstMap();
-  notice(reason === 'size' ? t('start.mapSwitchSize', { map: was, size: sizeOf(size).label, next: mapName(map) }) : t('start.mapSwitchMode', { map: was, next: mapName(map) }));
+  notice(t('start.mapSwitchMode', { map: was, next: mapName(map) }));
 }
 function saveForm() {
   if (benchMode) return;
@@ -783,8 +780,8 @@ const onClick = (attr: string, fn: (value: string, el: HTMLElement) => void) => 
 });
 onClick('tab', v => setTab(v as Tab));
 onClick('go', v => setTab(v as Tab, true));
-onClick('smode', v => { mode = v === 'sabotage' ? 'sabotage' : 'elimination'; checkMap('mode'); changed(); });
-onClick('ssize', v => { size = sizeOf(v).id; checkMap('size'); changed(); });
+onClick('smode', v => { mode = v === 'sabotage' ? 'sabotage' : 'elimination'; checkMap(); changed(); });
+onClick('ssize', v => { size = sizeOf(v).id; changed(); });
 onClick('svis', v => { isPublic = v !== 'private'; changed(); });
 onClick('sbots', v => { bots = v !== 'off'; changed(); });
 onClick('pick', v => { if (mapOk(v)) map = v; notice(''); changed(); });
@@ -940,7 +937,7 @@ function renderMapGrid(grid = $('#map-grid')) {
   const key = `${fits.join()}|${map}|${mode}|${[...live].join()}|${isZh()}`;
   if (grid.dataset.key === key) return;
   grid.dataset.key = key;
-  // The featured maps first (Ximending, Xinyi), as Quick Play rotates them.
+  // The featured map first (Ximending), then the usual order.
   grid.innerHTML = maps.filter(m => fits.includes(m.id)).sort((a, b) => FEATURED.indexOf(a.id) - FEATURED.indexOf(b.id)).map(m => {
     const ok = mapOk(m.id), n = live.get(m.id) ?? 0, note = ok ? sites(m) : t('lobby.noSites');
     return `<button type="button" class="mcard" data-pick="${m.id}" data-theme="${m.theme}" aria-pressed="${m.id === map}"${ok ? '' : ` disabled title="${esc(t('lobby.noSites'))}"`}>

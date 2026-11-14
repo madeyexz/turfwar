@@ -10,7 +10,7 @@ import type { MapDef } from './types';
 export const XINYI_NAME_ZH = '台北101・信義';
 
 /**
- * Taipei 101 · Xinyi (台北101・信義): a big map (24v24) in a stylised Xinyi business district,
+ * Taipei 101 · Xinyi (台北101・信義): a big map (retired with the 24v24 rooms it hosted) in a stylised Xinyi business district,
  * laid out by this project in the spirit of the real one (not a survey, and not taken from any
  * other game): a department-store row and Xinyi Rd on the north, Heping Rd and an old village on
  * the south, Keelung Rd on the west and Songren Rd on the east, and between them Taipei 101, its
@@ -69,7 +69,6 @@ export function xinyi(): MapDef {
     description: 'Xinyi after dark: Taipei 101 over its podium mall with a sunken food court, a glazed skywalk over Xinyi Rd, the west plaza, a sunken garden and an old village under Elephant Mountain.',
     theme: 'xinyi', halfX: BOUNDS.maxX, halfZ: BOUNDS.maxZ, seed: 101, roll: 0, ridge: 0,
     sabotage: { sites: ['A', 'B'], attackerSpawn: 1 },
-    big: true,
     // Moonlight from the north-east, over the hills.
     sun: { x: 0.45, y: 0.62, z: -0.4 },
     // The street is flat; Elephant Mountain rises past the east road, eased down toward the terrain grid's edge.

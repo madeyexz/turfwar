@@ -45,9 +45,9 @@ describe('maps and navigation', () => {
       }
       for (const site of def.sabotage?.sites ?? []) expect(def.points.some(p => p.id === site), site).toBe(true);
     });
-    it(`${id}: each base fits its largest room (6v6 with spare slots; 24v24 on big maps)`, () => {
+    it(`${id}: each base fits its largest room (6v6 with spare slots)`, () => {
       const { def } = loadMap(id);
-      for (const team of [0, 1]) expect(def.spawns.filter(s => s.team === team).length).toBeGreaterThanOrEqual(def.big ? 24 : 12);
+      for (const team of [0, 1]) expect(def.spawns.filter(s => s.team === team).length).toBeGreaterThanOrEqual(12);
     });
     // Ochre Quarter, the BeGone homages and Taipei keep their source layouts' asymmetry on purpose.
     it.skipIf(ASYMMETRIC.includes(id))(`${id}: is rotationally symmetric for fairness`, () => {
@@ -185,22 +185,6 @@ describe('bot matches', () => {
       onDeck = bot.m.grounded && Math.abs(bot.m.y - 3.2) < 0.05 && bot.m.x < -24;
     }
     expect(onDeck).toBe(true);
-  });
-
-  it('24v24 rooms run on the big map', () => {
-    const { ctx, state, events } = setup({ ...ELIMINATION, teamSize: 24, warmup: 0 }, 11, 'meridian');
-    balanceTeams(state, ctx);
-    expect(state.soldiers.filter(s => s.team === 0).length).toBe(24);
-    expect(state.soldiers.filter(s => s.team === 1).length).toBe(24);
-    tick(state, ctx, 0.1);
-    // Everyone deploys in the base at once without standing inside each other or a wall.
-    for (const a of state.soldiers) {
-      expect(ctx.world.overlapsSolid(a.m, 0.3, 1.2)).toBe(false);
-      for (const b of state.soldiers) if (a !== b && a.team === b.team) expect(Math.hypot(a.m.x - b.m.x, a.m.z - b.m.z)).toBeGreaterThan(0.5);
-    }
-    tick(state, ctx, 60);
-    expect(events.filter(e => e.type === 'kill').length).toBeGreaterThan(3);
-    for (const s of state.soldiers) if (s.alive) expect(ctx.world.overlapsSolid(s.m, 0.2, 1.2)).toBe(false);
   });
 });
 

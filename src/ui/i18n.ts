@@ -23,7 +23,7 @@ const en = {
   'team.0': 'SWAT', 'team.1': 'Militia',
   'team.short.0': 'SWAT', 'team.short.1': 'MILITIA',
   'mode.elimination': 'Elimination', 'mode.sabotage': 'Sabotage',
-  'size.duel': 'Duel', 'size.squad': 'Squad', 'size.war': 'War',
+  'size.duel': 'Duel', 'size.squad': 'Squad',
   'common.join': 'Join', 'common.full': 'Full', 'common.free': 'Free', 'common.close': 'Close',
   'common.seconds': '{n}s', 'common.players': '{n}/{max} players',
 
@@ -92,13 +92,13 @@ const en = {
   'start.botsOn': 'On', 'start.botsOff': 'Off',
   'start.hintPublic': 'Listed for everyone; Quick Play can fill it. Keeps this map and mode.',
   'start.hintPrivate': 'Hidden from the list: share the 4-letter code shown in game.',
-  'start.mapSwitchSize': '{map} is not a {size} map — switched to {next}', 'start.mapSwitchMode': '{map} has no bomb sites — switched to {next}',
+  'start.mapSwitchMode': '{map} has no bomb sites — switched to {next}',
   'join.all': 'All', 'join.code': 'Private room code', 'join.empty': 'No open rooms yet', 'join.emptyFiltered': 'No rooms match these filters', 'join.noBots': 'No bots',
   'join.private': 'Private', 'join.enterCode': 'Code', 'join.privateTitle': 'Private room',
   'join.privateWhy': 'A private {size} room on {map}. Enter the four-letter code its host shared.', 'join.codeShort': 'A room code has four letters.',
   'join.hidden.one': '1 room hidden by the filters', 'join.hidden.other': '{n} rooms hidden by the filters',
   'lobby.sitesAB': 'Sites A · B', 'lobby.siteA': 'Site A',
-  'lobby.mapRotation': 'map rotation', 'lobby.bigMaps': 'big maps', 'lobby.newRoom': 'New room',
+  'lobby.mapRotation': 'map rotation', 'lobby.newRoom': 'New room',
   'lobby.bombSites.one': '1 bomb site', 'lobby.bombSites.other': '{n} bomb sites',
   'lobby.couldNotJoin': 'Could not join: {error}',
   'lobby.unableToStart': 'Could not start the game: {error}',
@@ -402,7 +402,7 @@ const zhTW: Record<Key, string> = {
   'team.0': '特警', 'team.1': '民兵',
   'team.short.0': '特警', 'team.short.1': '民兵',
   'mode.elimination': '殲滅戰', 'mode.sabotage': '爆破戰',
-  'size.duel': '單挑', 'size.squad': '小隊', 'size.war': '大戰',
+  'size.duel': '單挑', 'size.squad': '小隊',
   'common.join': '加入', 'common.full': '已滿', 'common.free': '免費', 'common.close': '關閉',
   'common.seconds': '{n} 秒', 'common.players': '{n}/{max} 名玩家',
 
@@ -464,13 +464,13 @@ const zhTW: Record<Key, string> = {
   'start.botsOn': '開', 'start.botsOff': '關',
   'start.hintPublic': '所有人都能在房間列表看到，快速遊戲也會帶人進來；地圖與模式固定。',
   'start.hintPrivate': '不列在房間列表：分享遊戲中顯示的 4 碼代碼即可加入。',
-  'start.mapSwitchSize': '{map} 不開放 {size}，地圖已改為 {next}', 'start.mapSwitchMode': '{map} 沒有炸彈點，地圖已改為 {next}',
+  'start.mapSwitchMode': '{map} 沒有炸彈點，地圖已改為 {next}',
   'join.all': '全部', 'join.code': '私人房間代碼', 'join.empty': '目前沒有開放的房間', 'join.emptyFiltered': '沒有符合篩選條件的房間', 'join.noBots': '無電腦玩家',
   'join.private': '私人', 'join.enterCode': '輸入代碼', 'join.privateTitle': '私人房間',
   'join.privateWhy': '{map}的私人 {size} 房間，請輸入房主分享的四碼代碼。', 'join.codeShort': '房間代碼是四個字母。',
   'join.hidden.one': '篩選隱藏了 1 個房間', 'join.hidden.other': '篩選隱藏了 {n} 個房間',
   'lobby.sitesAB': '炸彈點 A · B', 'lobby.siteA': '炸彈點 A',
-  'lobby.mapRotation': '地圖輪替', 'lobby.bigMaps': '大地圖', 'lobby.newRoom': '新房間',
+  'lobby.mapRotation': '地圖輪替', 'lobby.newRoom': '新房間',
   'lobby.bombSites.one': '1 個炸彈點', 'lobby.bombSites.other': '{n} 個炸彈點',
   'lobby.couldNotJoin': '無法加入：{error}',
   'lobby.unableToStart': '無法啟動遊戲：{error}',
@@ -917,7 +917,7 @@ export const escapeHtml = (s: string) => s.replace(/[&<>"']/g, c => `&#${c.charC
 export const teamName = (team: number) => t(team === 1 ? 'team.1' : 'team.0');
 export const teamShort = (team: number) => t(team === 1 ? 'team.short.1' : 'team.short.0');
 export const modeName = (mode: string) => t(mode === 'sabotage' ? 'mode.sabotage' : 'mode.elimination');
-export const sizeName = (id: 'duel' | 'squad' | 'war') => t(`size.${id}`);
+export const sizeName = (id: 'duel' | 'squad') => t(`size.${id}`);
 export const mapName = (id: string, english: string) => (isZh() && MAPS_ZH[id as MapId]?.name) || english;
 /** A map's Chinese name in any language (the share card shows it beside the English one), or undefined. */
 export const mapNameZh = (id: string): string | undefined => MAPS_ZH[id as MapId]?.name;

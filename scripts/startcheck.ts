@@ -98,8 +98,8 @@ for (const [name, args, want] of [
   ['any mode', [6, '', 'pipeline'], 'Unknown mode'],
   ['unknown mode', [6, 'domination', 'pipeline'], 'Unknown mode'],
   ['no map', [6, 'elimination', ''], 'That map does not host this room'],
-  ['big map in 6v6', [6, 'elimination', 'meridian'], 'That map does not host this room'],
-  ['small map in 24v24', [24, 'elimination', 'warehouse'], 'That map does not host this room'],
+  ['the removed 24v24', [24, 'elimination', 'warehouse'], 'Unknown room size'],
+  ['a retired map (Meridian) in 6v6', [6, 'elimination', 'meridian'], 'That map does not host this room'],
   ['Sabotage on a map without sites', [6, 'sabotage', 'warehouse'], 'That map does not host this room'],
 ] as const) {
   const c = await client();

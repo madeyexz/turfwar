@@ -27,10 +27,11 @@ import type { MapDef } from './types';
 export const MAP_IDS = ['crane', 'tower', 'warehouse', 'pipeline', 'courtyard', 'timbertown', 'cinder', 'frostline', 'verdant', 'ochre', 'citadel', 'railyard', 'skyline', 'meridian', 'taipei', 'xinyi', 'taipei101', 'memorial', 'sanchong', 'alley'] as const;
 export type MapId = (typeof MAP_IDS)[number];
 /**
- * Retired maps (soft delete): still defined and loadable (`?map=`, rooms already on them, tests),
- * but offered nowhere: not in the lobby, Solo or Practice choices, Quick Play or new rooms.
+ * Retired maps (soft delete): still defined and loadable (`?map=`, rooms already on them, recorded
+ * rounds, tests), but offered nowhere: not in the lobby, Solo or Practice choices, Quick Play or new
+ * rooms. Meridian and Xinyi were the 24v24 maps (about 270 m across, too big for 6v6); that size was removed.
  */
-export const RETIRED_MAPS: ReadonlySet<string> = new Set<MapId>(['crane', 'tower', 'courtyard', 'cinder', 'frostline', 'verdant']);
+export const RETIRED_MAPS: ReadonlySet<string> = new Set<MapId>(['crane', 'tower', 'courtyard', 'cinder', 'frostline', 'verdant', 'meridian', 'xinyi']);
 /** The maps players can choose and rooms rotate through. */
 export const PLAYABLE_MAP_IDS: readonly MapId[] = MAP_IDS.filter(id => !RETIRED_MAPS.has(id));
 const factories: Record<string, () => MapDef> = {
@@ -64,12 +65,12 @@ export function loadMap(id: string): LoadedMap {
   return loaded;
 }
 
-/** Spawn slots each base needs: 6v6 on every map (with room to spare), 24v24 on big maps. */
-export const BASE_SLOTS = 12, BIG_BASE_SLOTS = 24;
+/** Spawn slots each base needs: 6v6 (with room to spare). */
+export const BASE_SLOTS = 12;
 
 /**
  * Every round deploys the whole team in its base at once, so each base needs room for the largest
- * room the map hosts, plus an ammo crate. Maps built for fewer slots get extra ones on clear, level floor
+ * room (6v6), plus an ammo crate. Maps built for fewer slots get extra ones on clear, level floor
  * next to their own (deterministic, so Solo and the server agree).
  */
 function furnishBases(def: MapDef, world: CollisionWorld) {
@@ -85,14 +86,13 @@ function furnishBases(def: MapDef, world: CollisionWorld) {
     return floor;
   };
   const rings = [1.8, 3.4, 5, 6.6];
-  const slots = def.big ? BIG_BASE_SLOTS : BASE_SLOTS;
   for (const team of [0, 1] as const) {
     const own = def.spawns.filter(s => s.team === team);
     if (!own.length) continue;
     const taken = def.spawns.map(s => ({ x: s.x, z: s.z }));
-    for (const r of rings) for (let k = 0; k < 8 && own.length < slots; k++) {
+    for (const r of rings) for (let k = 0; k < 8 && own.length < BASE_SLOTS; k++) {
       for (const base of own.slice()) {
-        if (own.length >= slots) break;
+        if (own.length >= BASE_SLOTS) break;
         const a = (k / 8) * Math.PI * 2;
         const x = base.x + Math.cos(a) * r, z = base.z + Math.sin(a) * r;
         const y = fits(x, base.y, z, taken, 1.5);
@@ -145,6 +145,6 @@ function withParkedVehicles(def: MapDef, world: CollisionWorld) {
 export function mapSummaries() {
   return MAP_IDS.map(id => {
     const d = loadMap(id).def;
-    return { id, name: d.name, region: d.region, description: d.description, theme: d.theme, sites: d.sabotage?.sites.length ?? 0, big: !!d.big };
+    return { id, name: d.name, region: d.region, description: d.description, theme: d.theme, sites: d.sabotage?.sites.length ?? 0 };
   });
 }

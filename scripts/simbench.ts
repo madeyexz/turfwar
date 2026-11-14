@@ -1,22 +1,21 @@
 /**
- * Times the shared match simulation alone (no database, no rendering) on a battlefield at its
- * full team size: how much of a 33 ms server tick the bots and the lawful world use.
+ * Times the shared match simulation alone (no database, no rendering) on a map at the largest
+ * room size (6v6): how much of a 33 ms server tick the bots and the lawful world use.
  *
- *   bun scripts/simbench.ts meridian 60
+ *   bun scripts/simbench.ts taipei 60
  */
-import { loadMap } from '../shared/maps/index';
 import { rng } from '../shared/math';
 import { encodeFrame } from '../shared/match/frame';
 import { balanceTeams, createContext, createMatch, tickMatch, TICK_RATE } from '../shared/match/sim';
 import { ONLINE_CONFIG } from '../shared/match/state';
 
-const mapId = process.argv[2] ?? 'meridian';
+const mapId = process.argv[2] ?? 'taipei';
 const seconds = Number(process.argv[3] ?? 60);
 const random = rng(7);
 let events = 0;
 const ctx = createContext(mapId, random, () => { events++; });
-// Full team size: 24v24 on a battlefield, 6v6 on the other maps.
-const state = createMatch(mapId, { ...ONLINE_CONFIG, teamSize: loadMap(mapId).def.big ? 24 : 6, warmup: 1 });
+// Full team size: 6v6.
+const state = createMatch(mapId, { ...ONLINE_CONFIG, teamSize: 6, warmup: 1 });
 balanceTeams(state, ctx);
 const times: number[] = [];
 for (let i = 0; i < seconds * TICK_RATE; i++) {
