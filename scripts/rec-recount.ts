@@ -9,8 +9,9 @@
  * Reads with R2_REC_READ_* keys; `--write` stores the result as stats/recount.json (needs R2_REC_VM_* keys).
  * Exit code 1 when the totals differ by more than 1 % (or 0.01 h).
  */
+import type { InputSession } from '../shared/rec/clean';
 import { CLEAN_RULES, recPrefix, type RecEnv } from '../shared/rec/policy';
-import { loadSegment, manifestKey, qualityOf, type Manifest } from '../tools/recorder/lib';
+import { loadSegment, manifestKey, qualityOf, RecentSessions, type Manifest } from '../tools/recorder/lib';
 import { getJson, listAll, putChecked, r2 } from '../tools/recorder/r2';
 
 const env: RecEnv = process.argv.includes('--env') && process.argv[process.argv.indexOf('--env') + 1] === 'dev' ? 'dev' : 'tw';
@@ -18,20 +19,39 @@ const prefix = process.env.REC_PREFIX ?? recPrefix(env);
 const c = r2('turfwar-rec', 'R2_REC_READ');
 
 let movement = 0, aim = 0, segments = 0, badChecksum = 0, noManifest = 0, rounds = 0;
-const cache = new Map();
-for (const { key } of await listAll(c, `${prefix}/seg/`)) {
-  const m = await getJson<Manifest>(c, manifestKey(key));
-  if (!m) { noManifest++; continue; }
-  let seg;
-  try { seg = await loadSegment(c, key, m.sha256); } catch { badChecksum++; continue; }
-  segments++;
-  const q = await qualityOf(c, prefix, key, seg, CLEAN_RULES, cache);
-  for (const x of q.qualities) {
-    if (x.tier !== 'clean') continue;
-    rounds++;
-    movement += x.clean;
-    aim += x.aimClean;
+// Only the latest decoded input sessions are kept: with all of them the run needs more memory than an orb or the VM has.
+const cache = new RecentSessions<string, InputSession[]>();
+const keys = (await listAll(c, `${prefix}/seg/`)).map(x => x.key);
+// 24 segments at a time: each segment needs about 2 s of round trips to R2, so one at a time 18,000 segments take about 10 hours. The sums are made in key order.
+const clean = new Array<{ clean: number; aimClean: number }[] | 'noManifest' | 'badChecksum'>(keys.length);
+let next = 0;
+await Promise.all(Array.from({ length: 24 }, async () => {
+  while (next < keys.length) {
+    const i = next++, key = keys[i];
+    // R2 sometimes answers a request with an internal error: try a segment again, four times at most.
+    for (let attempt = 1; ; attempt++) {
+      try {
+        const m = await getJson<Manifest>(c, manifestKey(key));
+        if (!m) { clean[i] = 'noManifest'; break; }
+        let seg;
+        try { seg = await loadSegment(c, key, m.sha256); } catch (e) { if (String(e).includes('checksum mismatch')) { clean[i] = 'badChecksum'; break; } throw e; }
+        const q = await qualityOf(c, prefix, key, seg, CLEAN_RULES, cache);
+        clean[i] = q.qualities.filter(x => x.tier === 'clean').map(x => ({ clean: x.clean, aimClean: x.aimClean }));
+        break;
+      } catch (e) {
+        if (attempt >= 4) throw e;
+        console.error(`${key}: ${String(e).slice(0, 120)}; again (${attempt})`);
+        await Bun.sleep(2000 * attempt);
+      }
+    }
+    if ((i + 1) % 1000 === 0) console.error(`${i + 1} of ${keys.length} segments`);
   }
+}));
+for (const one of clean) {
+  if (one === 'noManifest') { noManifest++; continue; }
+  if (one === 'badChecksum') { badChecksum++; continue; }
+  segments++;
+  for (const x of one) { rounds++; movement += x.clean; aim += x.aimClean; }
 }
 const stats = await getJson<{ movementHours: number; aimHours: number; segments: number; updatedAt: number }>(c, `${prefix}/stats/clean-hours.json`);
 const result = {
